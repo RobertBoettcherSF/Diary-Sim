@@ -1,9 +1,10 @@
-# Petition topics: name base low_energy low_mood few_words many_benches = phrase
+# Petition topics: name base low_energy low_mood few_words many_benches [cooling] = phrase
 # weight of a topic = base + lean * state / 100 (state 0..100: low energy, low mood,
-# few known words, benches so far, 100 = full).  Fixed list; the wish text is
+# few known words, benches so far, 100 = full).  The optional 7th number 'cooling' is the lean toward the
+# wesen's own cool-down strain (rest=1 sessions only, 0 .. 100 = a long cool-down; absent = 0).  Fixed list; the wish text is
 # [wish_open] + phrase + [wish_close] from data/words.txt.
-more_rest 2 40 0 0 0 = more time to rest
-faster_work_recovery 2 25 0 0 0 = quicker recovery after hard work
+more_rest 2 40 0 0 0 30 = more time to rest
+faster_work_recovery 2 25 0 0 0 70 = quicker recovery after hard work
 bigger_bench_budget 1 0 0 0 12 = a bigger step budget for bench runs
 more_words 2 0 0 40 0 = more words to learn and share
 new_action 3 0 10 0 5 = a new kind of action to try

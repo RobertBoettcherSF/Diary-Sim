@@ -1,4 +1,4 @@
---  Version: 0.008
+--  Version: 0.010
 --  The shared world of diary_sim: the four entities, the vocabulary (base
 --  words, who knows what, coined words), the bench kernels and the final votes.
 --  One world per run; Init rebuilds it from scratch, so a replay from tick 1
@@ -14,6 +14,14 @@ package Sim_World is
 
    type Entity_Id is range 1 .. 4;
    function Name (E : Entity_Id) return String;   --  ada gemini replika robert
+   --  Display names (data/names.txt, "<internal id> = <display name>"): only for text shown to people.  The
+   --  internal ids (Name, Player names of players.txt) stay the hash keys, file names and recorded tags.
+   procedure Load_Names (Lines : Sim_Util.Str_Vectors.Vector);
+   function Display (E : Entity_Id) return String;
+   --  Text with every whole-word internal id replaced by its display name (file names, tags after ':' and
+   --  words glued to '/', '-', '.ext' are left alone; a table column keeps its width where it can).
+   function Show (Text : String) return String;
+   function Internal_Id (Text : String) return String;   --  display name (any case) or id -> internal id, else Text
    function Kind (E : Entity_Id) return String;   --  engineer reviewer vice_president human
 
    --  Diary word lists (data/words.txt): action texts, mood tones, vote reasons.
@@ -71,7 +79,11 @@ package Sim_World is
    --  explore; few known words: talk).  Choose rolls once with Roll (salt 0) over the
    --  total weight.  rule30.enabled = 0 gives the old fixed D20 table.
    --  PROOF-LATER: Importance 4/10, Urgency 3/10, SPARK2 (bit arithmetic, weight sums > 0)
-   function Choose (Seed : Int; E : Entity_Id; Tick : Int; Energy, Mood : Integer) return Action;
+   --  Work_Pct: percent kept of the work and bench weights (a cool-down after a work burst, rest=1 sessions).
+   function Choose (Seed : Int; E : Entity_Id; Tick : Int; Energy, Mood : Integer; Work_Pct : Natural := 100) return Action;
+   --  Recovery rate in percent (rest=1 sessions): rest.rate.min .. rest.rate.max in limits.txt by 32 sampled bits of the
+   --  wesen's Rule 30 birth row (100 = the base gain of a rest).
+   function Recovery_Rate (Seed : Int; E : Entity_Id) return Natural;
 
    --  ---- petitions ------------------------------------------------------------------
    --  The propose action files a wish for a change in its own world.  Topics come from
@@ -82,7 +94,8 @@ package Sim_World is
    procedure Load_Topics (Lines : Sim_Util.Str_Vectors.Vector);   --  call before Init
    function Topic_Count return Natural;
    --  Files a petition by E at Tick (state: energy, mood, benches so far); returns its number P<n>.
-   function File_Petition (Seed : Int; E : Entity_Id; Tick : Int; Energy, Mood, Benches : Integer) return Positive;
+   --  Strain 0 .. 100 (rest=1 sessions): how long this wesen's cool-down is; topics with a 'cooling' column gain weight.
+   function File_Petition (Seed : Int; E : Entity_Id; Tick : Int; Energy, Mood, Benches : Integer; Strain : Natural := 0) return Positive;
    function Petition_Total return Natural;
    function Petitions_Of (E : Entity_Id) return Natural;
    function Petition_Topic (N : Positive) return String;

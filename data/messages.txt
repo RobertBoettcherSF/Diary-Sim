@@ -154,3 +154,7 @@ warn.things_file = warning: data/things.txt is missing or incomplete; the world 
 menu.world = world words: {1}
 menu.places = at: {1}
 debug.wordsum = words (learned from the world): {1}
+warn.names_file = warning: data/names.txt not found; internal ids are shown (ada gemini replika robert iris sol noor)
+# Rest and cool-down (rest=1 sessions)
+rest.head = recovery since the rest model began: rate (100% = base rest gain) | cool-down length | taken | rests cut short | quick rests
+rest.line = {1} rate {2}% | cool-down {3} ticks | taken {4} | cut short {5} | quick rests {6}

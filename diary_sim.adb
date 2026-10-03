@@ -1,4 +1,4 @@
---  Version: 0.018
+--  Version: 0.019
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -36,6 +36,17 @@ procedure Diary_Sim is
    package Fx renames Ada.Strings.Fixed;
    use type Ada.Directories.File_Size;
 
+   --  Everything printed for people goes through Con: internal ids become display names (data/names.txt).
+   --  Files that are replay-verified or hashed (diaries, sessions.txt, inbox.txt, world.txt) never do.
+   package Con is
+      procedure Put_Line (S : String);
+      procedure Put (S : String);
+   end Con;
+   package body Con is
+      procedure Put_Line (S : String) is begin TIO.Put_Line (Sim_World.Show (S)); end Put_Line;
+      procedure Put (S : String) is begin TIO.Put (Sim_World.Show (S)); end Put;
+   end Con;
+
    type State is record
       Energy, Mood, Location : Integer;   --  ranges: data/limits.txt; location: office lab cafe home
    end record;
@@ -44,7 +55,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.018";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.019";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -93,6 +104,85 @@ procedure Diary_Sim is
    Last_Verb : List_Id := Rest;
    Verb_Count : array (Entity_Id, World_Verb) of Natural := [others => [others => 0]];
 
+   --  ---- rest and cool-down (rest=1 sessions): a recovery rate per wesen, a trade-off for rests, a refractory
+   --  period after a work burst (data/limits.txt rest.*).  All of it is a function of the replayed actions. ------
+   Rest_Active : Boolean := False;
+   Rate_Pct, Load, Hist, Cool, Streak, Since_Work, Cool_N, Cut_N, Quick_N : array (Entity_Id) of Natural := [others => 0];
+   function RL (Key : String; Default : Integer) return Integer is (Integer (Limit (Key, Int (Default))));
+   function Cool_Len (E : Entity_Id) return Positive is
+     (Positive'Max (1, RL ("rest.cool", 16) * 100 / Natural'Max (1, Rate_Pct (E))));   --  slow recoverers cool longer
+   function Work_Keep (E : Entity_Id) return Natural is   --  percent of the work / bench weights kept
+     (if Rest_Active and then Cool (E) > 0 then Natural (Integer'Max (1, RL ("rest.cool.work_pct", 35))) else 100);
+   --  0 .. 100: how long this wesen's cool-down is (a long one petitions more often)
+   function Rest_Strain (E : Entity_Id) return Natural is
+     (if Rest_Active then Natural'Min (100, Cool_Len (E) * 100 / Positive'Max (1, RL ("rest.petition_ref", 30)) + (if Cool (E) > 0 then 20 else 0))
+      else 0);
+
+   --  The energy and mood change of a rest: personal rate, quick / calm, diminishing returns.
+   --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (integer percent arithmetic)
+   procedure Rest_Effect (E : Entity_Id; En, Mo : in out Integer) is
+      Phase : Integer := 100;
+   begin
+      if Since_Work (E) < Natural (RL ("rest.quick", 3)) then
+         Phase := RL ("rest.quick.energy_pct", 60);
+         Mo := Mo + RL ("rest.quick.mood", -1);
+         Quick_N (E) := Quick_N (E) + 1;
+      elsif Since_Work (E) >= Natural (RL ("rest.calm", 8)) then
+         Phase := RL ("rest.calm.energy_pct", 120);
+         Mo := Mo + RL ("rest.calm.mood", 2);
+      end if;
+      En := En * Integer (Rate_Pct (E)) * Phase / 10_000;
+      for K in 1 .. Natural'Min (Streak (E), 12) loop En := En * RL ("rest.repeat_pct", 80) / 100; end loop;
+   end Rest_Effect;
+
+   --  After the action: work load, cool-down, rest streaks.
+   procedure Rest_After (E : Entity_Id; A : Action; Mood : Integer) is
+      Started : Boolean := False;
+   begin
+      if A in Work | Bench then
+         if Streak (E) in 1 .. RL ("rest.min_ticks", 2) - 1 then Cut_N (E) := Cut_N (E) + 1; end if;
+         Streak (E) := 0;
+         Since_Work (E) := 0;
+      else
+         Since_Work (E) := Natural'Min (1000, Since_Work (E) + 1);
+         Streak (E) := (if A = Rest then Streak (E) + 1 else 0);
+      end if;
+      --  the work load: work or bench ticks among the last rest.window ticks (a bit history)
+      Hist (E) := (Hist (E) * 2 + (if A in Work | Bench then 1 else 0)) mod 2 ** Natural'Min (28, Natural'Max (1, RL ("rest.window", 12)));
+      Load (E) := 0;
+      for I in 0 .. 27 loop
+         if (Hist (E) / 2 ** I) mod 2 = 1 then Load (E) := Load (E) + 1; end if;
+      end loop;
+      if Cool (E) = 0 and then Load (E) >= Natural (RL ("rest.burst", 5)) then   --  a work burst: cool down
+         Cool (E) := Cool_Len (E);
+         Hist (E) := 0;
+         Load (E) := 0;
+         Cool_N (E) := Cool_N (E) + 1;
+         Started := True;
+      end if;
+      if Cool (E) > 0 and then not Started then
+         Cool (E) := Natural'Max (0, Cool (E) - (if Mood >= RL ("rest.cool.good_mood", 40) then 2 else 1));
+      end if;
+   end Rest_After;
+
+   function Rest_Text (E : Entity_Id) return String is
+     (Msg ("rest.line", Name (E), Img (Rate_Pct (E)), Img (Cool_Len (E)), Img (Cool_N (E)), Img (Cut_N (E)), Img (Quick_N (E))));
+
+   procedure Rest_Begin (Seed : Int) is   --  the first rest=1 session: fresh counters (later sessions continue them)
+   begin
+      for E in Entity_Id loop
+         Rate_Pct (E) := Recovery_Rate (Seed, E);
+         Load (E) := 0;
+         Hist (E) := 0;
+         Cool (E) := 0;
+         Streak (E) := 0;
+         Since_Work (E) := 1000;
+         Cool_N (E) := 0;
+         Cut_N (E) := 0;
+         Quick_N (E) := 0;
+      end loop;
+   end Rest_Begin;
+
    --  Working folder files, append-only, "ensure present" (see header).
    package Str_Sets is new Ada.Containers.Indefinite_Hashed_Sets (String, Ada.Strings.Hash, "=");
    type Side_Kind is (Words_File, Bench_File);
@@ -115,7 +205,7 @@ procedure Diary_Sim is
 
    procedure Say (Line : String) is   --  console output, held back until the seed line is out
    begin
-      if Seed_Shown then TIO.Put_Line (Line); else Append (Pending, Line & ASCII.LF); end if;
+      if Seed_Shown then Con.Put_Line (Line); else Append (Pending, Line & ASCII.LF); end if;
    end Say;
 
    procedure Warn (Line : String) is
@@ -157,6 +247,10 @@ procedure Diary_Sim is
       end loop;
       Load_Keys (Lines);
       Read_Limits;
+      Lines.Clear;
+      Read_Lines (Data_Path ("names.txt"), Lines, Found);
+      if not Found then Warn (Msg ("warn.names_file")); end if;
+      Load_Names (Lines);
       Lines.Clear;
       Read_Lines (Data_Path ("things.txt"), Lines, Found);
       Sim_Things.Load (Lines);
@@ -268,7 +362,7 @@ procedure Diary_Sim is
    --  bench happen here; their working-folder lines are ensured as they occur.
    function Step (E : Entity_Id; Tick : Int) return String is
       A   : constant Action :=
-        (if Pending_Word (E) /= 0 then Learn else Choose (Seed, E, Tick, St (E).Energy, St (E).Mood));
+        (if Pending_Word (E) /= 0 then Learn else Choose (Seed, E, Tick, St (E).Energy, St (E).Mood, Work_Keep (E)));
       Pre_En : constant Integer := St (E).Energy;     --  state before this action
       Pre_Mo : constant Integer := St (E).Mood;
       S   : State renames St (E);
@@ -276,6 +370,8 @@ procedure Diary_Sim is
       Eid : constant Positive := Positive (E);
       World_Mode : constant Boolean := World_Active;
       Verb : List_Id := A;
+      Eff_En : Integer := Energy_D (A);   --  a rest=1 rest changes these (Rest_Effect)
+      Eff_Mo : Integer := Mood_D (A);
 
       procedure Add (Text : String) is
       begin
@@ -483,8 +579,9 @@ procedure Diary_Sim is
       if World_Mode and then (not Sim_Things.Placed (E) or else Sim_Things.Region_Of (E) /= S.Location) then
          Sim_Things.Place (E, Tick, Clamp (S.Location, 0, 3));   --  first step in the world, or reborn elsewhere
       end if;
-      S.Energy := Clamp (S.Energy + Energy_D (A), E_Min, E_Max);
-      S.Mood := Clamp (S.Mood + Mood_D (A), M_Min, M_Max);
+      if Rest_Active and then A = Rest then Rest_Effect (E, Eff_En, Eff_Mo); end if;
+      S.Energy := Clamp (S.Energy + Eff_En, E_Min, E_Max);
+      S.Mood := Clamp (S.Mood + Eff_Mo, M_Min, M_Max);
       if World_Mode then   --  one step on the grid; the place is the nearest landmark region
          if A in Explore | Wander then
             Sim_Things.Walk (E, Tick, False);
@@ -533,12 +630,13 @@ procedure Diary_Sim is
             end;
          when Propose =>
             declare
-               N : constant Positive := File_Petition (Seed, E, Tick, Pre_En, Pre_Mo, Act_Count (E, Bench));
+               N : constant Positive := File_Petition (Seed, E, Tick, Pre_En, Pre_Mo, Act_Count (E, Bench), Rest_Strain (E));
             begin
                Add (Msg ("detail.petition", Img (N), Petition_Topic (N)));
             end;
          when others => null;
       end case;
+      if Rest_Active then Rest_After (E, A, S.Mood); end if;
       declare
          Tone : constant List_Id := (if S.Mood <= Tone_Low then Mood_Low elsif S.Mood >= Tone_High then Mood_High
                                      else Mood_Neutral);
@@ -598,13 +696,13 @@ procedure Diary_Sim is
       for I in Text'Range loop
          if Text (I) = ASCII.LF then
             Count := Count + 1;
-            if Count <= 11 then TIO.Put_Line (Text (From .. I - 1)); end if;
+            if Count <= 11 then Con.Put_Line (Text (From .. I - 1)); end if;
             From := I + 1;
          end if;
       end loop;
-      if Count > 11 then TIO.Put_Line (Msg ("err.more", Img (Count - 11))); end if;
-      TIO.Put_Line (Msg ("crash.paste"));
-      TIO.Put_Line (Msg ("crash.backup"));
+      if Count > 11 then Con.Put_Line (Msg ("err.more", Img (Count - 11))); end if;
+      Con.Put_Line (Msg ("crash.paste"));
+      Con.Put_Line (Msg ("crash.backup"));
    end Report;
 
    --  "error: NAME: message" and the top 5 frames, for debug.txt.
@@ -680,7 +778,7 @@ procedure Diary_Sim is
    --  written before the answer (no diaries/, no debug.txt), and nothing for an N.
    function Ask_Yes (Prompt : String) return Boolean is
    begin
-      TIO.Put (Prompt & " ");
+      Con.Put (Prompt & " ");
       TIO.Flush;
       declare
          Answer : constant String :=
@@ -719,22 +817,22 @@ procedure Diary_Sim is
    begin
       if Length (Home_Opt) > 0 then
          Home_Path := To_Unbounded_String (Ada.Directories.Full_Name (To_String (Home_Opt)));
-         if Header then TIO.Put_Line (Msg ("start.folder", To_String (Home_Path))); TIO.Flush; end if;
+         if Header then Con.Put_Line (Msg ("start.folder", To_String (Home_Path))); TIO.Flush; end if;
       elsif Env /= "" then
          Home_Path := To_Unbounded_String (Ada.Directories.Full_Name (Env));
-         if Header then TIO.Put_Line (Msg ("start.folder", To_String (Home_Path))); TIO.Flush; end if;
+         if Header then Con.Put_Line (Msg ("start.folder", To_String (Home_Path))); TIO.Flush; end if;
       else
          Home_Path := To_Unbounded_String (Def);
-         if Header then TIO.Put_Line (Msg ("start.folder", Def)); TIO.Flush; end if;
+         if Header then Con.Put_Line (Msg ("start.folder", Def)); TIO.Flush; end if;
          if Ada.Directories.Exists (Src_Root & "/diaries") and then not Has_Jsonl_In (Def & "/diaries") then
             if Is_Tty (0) and then Is_Tty (1) then
                if Ask_Yes (Msg ("migrate.ask")) then
                   Copy_Tree (Src_Root & "/diaries", Def & "/diaries");
                   if Ada.Directories.Exists (Src_Root & "/entities") then Copy_Tree (Src_Root & "/entities", Def & "/entities"); end if;
-                  TIO.Put_Line (Msg ("migrate.done", Src_Root & "/diaries", Def));
+                  Con.Put_Line (Msg ("migrate.done", Src_Root & "/diaries", Def));
                end if;
             else
-               TIO.Put_Line (Msg ("migrate.hint", Src_Root & "/diaries", Def, Src_Root));
+               Con.Put_Line (Msg ("migrate.hint", Src_Root & "/diaries", Def, Src_Root));
             end if;
          end if;
       end if;
@@ -938,6 +1036,9 @@ procedure Diary_Sim is
          end loop;
          for L of Sim_Things.Treadmill_Now loop Dg_Add (V, "run", "map." & L, L, 9); end loop;
       end if;
+      if Rest_Active then
+         for E in Entity_Id loop Dg_Add (V, "run", "rest." & Name (E), Rest_Text (E), 7); end loop;
+      end if;
       Dg_Add (V, "run", "topics", "topics " & Top_Topics (3), 8);
       Dg_Lines (V, "run", "votes", To_String (Vote_Line), 8);
    end Digest_Entries;
@@ -946,7 +1047,7 @@ procedure Diary_Sim is
       F : TIO.File_Type;
    begin
       TIO.Create (F, TIO.Out_File, Name & ".tmp");
-      TIO.Put (F, (if Text'Length > 0 and then Text (Text'Last) = ASCII.LF then Text (Text'First .. Text'Last - 1) else Text));
+      TIO.Put (F, Sim_World.Show (if Text'Length > 0 and then Text (Text'Last) = ASCII.LF then Text (Text'First .. Text'Last - 1) else Text));
       TIO.Close (F);   --  Text_IO ends the last line itself
       if Ada.Directories.Exists (Name) then Ada.Directories.Delete_File (Name); end if;
       Ada.Directories.Rename (Name & ".tmp", Name);
@@ -1101,7 +1202,7 @@ procedure Diary_Sim is
                end if;
             end loop;
             Out_Text := To_Unbounded_String ("section " & Wanted & ASCII.LF) & Body_S;
-            TIO.Put (To_String (Out_Text));
+            Con.Put (To_String (Out_Text));
          end;
       end if;
       Write_Plain ("debug_digest.txt", To_String (Out_Text));
@@ -1111,14 +1212,14 @@ procedure Diary_Sim is
       end if;
       Digest_Note := To_Unbounded_String (Msg ("digest.path", Ada.Directories.Full_Name ("debug_digest.txt")));
    exception
-      when others => TIO.Put_Line (Msg ("debug.failed"));
+      when others => Con.Put_Line (Msg ("debug.failed"));
    end Write_Digest;
 
    --  The last console line(s): the digest path (only with --debug), then "Saved to <path>".
    procedure Put_Saved is
    begin
-      if Length (Digest_Note) > 0 then TIO.Put_Line (To_String (Digest_Note)); end if;
-      TIO.Put_Line (To_String (Saved_Line));
+      if Length (Digest_Note) > 0 then Con.Put_Line (To_String (Digest_Note)); end if;
+      Con.Put_Line (To_String (Saved_Line));
    end Put_Saved;
 
    --  --debug-section NAME on a saved run (nothing is simulated): print that block of debug_full.txt
@@ -1142,8 +1243,8 @@ procedure Diary_Sim is
          end if;
       end loop;
       Write_Plain ("debug_digest.txt", To_String (Out_Text));
-      TIO.Put (To_String (Out_Text));
-      TIO.Put_Line (Msg ("digest.path", Ada.Directories.Full_Name ("debug_digest.txt")));
+      Con.Put (To_String (Out_Text));
+      Con.Put_Line (Msg ("digest.path", Ada.Directories.Full_Name ("debug_digest.txt")));
    end Print_Section;
 
    --  debug.txt: ONE small file (<= 1500 bytes) on every exit path; Status is
@@ -1214,7 +1315,7 @@ procedure Diary_Sim is
       end loop;
       for P in Part_Id loop Append (Out_Text, Part (P)); end loop;
       TIO.Create (F, TIO.Out_File, "debug.tmp");
-      TIO.Put (F, To_String (Out_Text));
+      TIO.Put (F, Sim_World.Show (To_String (Out_Text)));
       TIO.Flush (F);
       TIO.Close (F);
       begin
@@ -1226,7 +1327,7 @@ procedure Diary_Sim is
       end;
       Write_Digest (Status, Err);   --  only with --debug, and only for a final status
    exception
-      when others => TIO.Put_Line (Msg ("debug.failed"));
+      when others => Con.Put_Line (Msg ("debug.failed"));
    end Write_Debug;
 
    --  One tick for all entities in id order: compare with the disk or append.
@@ -1374,7 +1475,7 @@ procedure Diary_Sim is
             Ada.Directories.Rename ("diaries/inbox.tmp", "diaries/inbox.txt");
       end;
    exception
-      when others => TIO.Put_Line (Msg ("debug.failed"));
+      when others => Con.Put_Line (Msg ("debug.failed"));
    end Write_Inbox;
 
    --  petitions.txt: a view of the petitions the replay filed (the last propose.file_cap lines;
@@ -1388,8 +1489,8 @@ procedure Diary_Sim is
       if Preview then return; end if;
       Write_Inbox;
       TIO.Create (F, TIO.Out_File, "petitions.tmp");
-      TIO.Put_Line (F, Msg ("pet.head", Img (Seed), Img (Integer (Total) - First + 1), Img (Total)));
-      for N in First .. Total loop TIO.Put_Line (F, Petition_Line (N)); end loop;
+      TIO.Put_Line (F, Sim_World.Show (Msg ("pet.head", Img (Seed), Img (Integer (Total) - First + 1), Img (Total))));
+      for N in First .. Total loop TIO.Put_Line (F, Sim_World.Show (Petition_Line (N))); end loop;
       TIO.Flush (F);
       TIO.Close (F);
       begin
@@ -1400,7 +1501,7 @@ procedure Diary_Sim is
             Ada.Directories.Rename ("petitions.tmp", "petitions.txt");
       end;
    exception
-      when others => TIO.Put_Line (Msg ("debug.failed"));
+      when others => Con.Put_Line (Msg ("debug.failed"));
    end Write_Petitions;
 
    --  Re-open what the run wrote and count it (not just a print).  Fails gets one
@@ -1454,6 +1555,7 @@ procedure Diary_Sim is
       By_Vote : Boolean := False;       --  src=vote (else explicit)
       Dharma : Boolean := False;        --  dharma=1: started by a build with the Buddhism layer (rebirth moves allowed)
       World : Boolean := False;         --  world=1: the treadmill world (Sim_Things) runs in this session
+      Rest : Boolean := False;          --  rest=1: recovery rates, rest trade-off and cool-downs
    end record;
    package Session_Vectors is new Ada.Containers.Vectors (Positive, Session_Rec);
    Sessions : Session_Vectors.Vector;
@@ -1466,7 +1568,7 @@ procedure Diary_Sim is
    function Session_Line (R : Session_Rec) return String is
      ("S" & Img (R.N) & " start=" & Img (R.Start) & " votes=" & Votes_Text (R.Votes) & " len=" & Img (R.Len)
       & " src=" & (if R.By_Vote then "vote" else "explicit") & (if R.Dharma then " dharma=1" else "")
-      & (if R.World then " world=1" else ""));
+      & (if R.World then " world=1" else "") & (if R.Rest then " rest=1" else ""));
    function Yuga (N : Positive) return String is (Msg ("yuga." & Img ((N - 1) mod 4)));
    --  The four votes of a session that starts after tick Start (state: St, known words).
    function Votes_At (Start : Int) return Kalpa_Votes is
@@ -1498,6 +1600,7 @@ procedure Diary_Sim is
       R.By_Vote := Token (L, "src") = "vote";
       R.Dharma := Token (L, "dharma") = "1";
       R.World := Token (L, "world") = "1";
+      R.Rest := Token (L, "rest") = "1";
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
         and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0;
       while OK and then K < 4 loop
@@ -1595,6 +1698,7 @@ procedure Diary_Sim is
       Word_Votes.Clear;
       Dharma_Stored.Clear;
       World_Active := False;
+      Rest_Active := False;
       if not Ada.Directories.Exists (Sessions_Path) then return; end if;
       Read_Lines (Sessions_Path, Lines, Found);
       for I in 1 .. Natural (Lines.Length) loop
@@ -1607,7 +1711,7 @@ procedure Diary_Sim is
                end if;
             elsif L'Length > Bmark'Length and then L (L'First .. L'First + Bmark'Length - 1) = Bmark then
                Disk_Build := To_Unbounded_String (L (L'First + Bmark'Length .. L'Last));
-            elsif L'Length > 0 and then L (L'First) in 'D' | 'C' | 'Y' | 'L' then
+            elsif L'Length > 0 and then L (L'First) in 'D' | 'C' | 'Y' | 'L' | 'R' then
                Dharma_Stored.Append (L);
             elsif L'Length > 0 and then L (L'First) = 'W' then
                declare
@@ -1631,6 +1735,8 @@ procedure Diary_Sim is
    begin
       Sim_Dharma.Begin_Life (Seed, R.Start, R.N, L_Max + 1, R.Dharma);
       World_Active := R.World;
+      if R.Rest and then not Rest_Active then Rest_Begin (Seed); end if;   --  the state runs on from session to session
+      Rest_Active := R.Rest;
       for E in Entity_Id loop
          if Sim_Dharma.Rebirth_Location (E) >= 0 then St (E).Location := Clamp (Sim_Dharma.Rebirth_Location (E), 0, L_Max); end if;
       end loop;
@@ -1649,10 +1755,21 @@ procedure Diary_Sim is
       return To_String (R);
    end World_Line;
 
+   --  The rest line of a session end (rest=1 sessions): "R3 tick=2300 ada=100/5/2/9 ..." = recovery rate percent /
+   --  cool-downs taken / rests cut short / quick rests, this session.
+   function Rest_Line (N : Positive; Tick : Int) return String is
+      R : Unbounded_String := To_Unbounded_String ("R" & Img (N) & " tick=" & Img (Tick));
+   begin
+      for E in Entity_Id loop
+         Append (R, " " & Name (E) & "=" & Img (Rate_Pct (E)) & "/" & Img (Cool_N (E)) & "/" & Img (Cut_N (E)) & "/" & Img (Quick_N (E)));
+      end loop;
+      return To_String (R);
+   end Rest_Line;
+
    --  The key of a D / C / Y / L line: its first two (C, L) or three (D, Y) words.
    function Key_Of (L : String) return String is
       Sp : Natural := 0;
-      Need : constant Positive := (if L'Length > 0 and then L (L'First) in 'C' | 'L' then 2 else 3);
+      Need : constant Positive := (if L'Length > 0 and then L (L'First) in 'C' | 'L' | 'R' then 2 else 3);
    begin
       for I in L'Range loop
          if L (I) = ' ' then
@@ -1683,6 +1800,7 @@ procedure Diary_Sim is
          Gen : Str_Vectors.Vector := Sim_Dharma.End_Life (Seed, T, Positive (N), Votes, En);
       begin
          if World_Active then Gen.Append (World_Line (Positive (N), T)); end if;
+         if Rest_Active then Gen.Append (Rest_Line (Positive (N), T)); end if;
          for G of Gen loop
             if not Stored.Contains (G) then
                declare
@@ -1776,6 +1894,7 @@ procedure Diary_Sim is
       for E in Entity_Id loop En (E) := St (E).Energy; end loop;
       for L of Sim_Dharma.End_Life (Seed, Tick, R.N, Votes, En) loop Append (Text, ASCII.LF & L); end loop;
       if World_Active then Append (Text, ASCII.LF & World_Line (R.N, Tick)); end if;
+      if Rest_Active then Append (Text, ASCII.LF & Rest_Line (R.N, Tick)); end if;
       Append_Text (To_String (Text));   --  W, D x4, C, Y x3 (and L in a world session) in one write
       Word_Votes.Append (R);
       Words_Text := To_Unbounded_String (Msg ("words.line", Img (R.N), Words_Short (R.Tok)));
@@ -1783,6 +1902,7 @@ procedure Diary_Sim is
 
    --  New sessions carry world=1 unless data/limits.txt says world.enabled = 0 (or data/things.txt is missing).
    function World_Wanted return Boolean is (Limit ("world.enabled", 1) /= 0 and then Sim_Things.Loaded);
+   function Rest_Wanted return Boolean is (World_Wanted and then Limit ("rest.enabled", 1) /= 0);   --  rest=1 needs the world
 
    --  After the replay of 1 .. Common: resume the unfinished session, or start one
    --  (explicit length, else the vote).  Sets Ticks and Kalpa_Line.
@@ -1802,7 +1922,7 @@ procedure Diary_Sim is
       Session_N := (if Sessions.Is_Empty then 0 else Sessions.Last_Element.N);
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
-               Dharma => True, World => World_Wanted);
+               Dharma => True, World => World_Wanted, Rest => Rest_Wanted);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -1818,7 +1938,7 @@ procedure Diary_Sim is
          Kalpa_Line := To_Unbounded_String (Msg ("kalpa.resume", Img (R.N), Yuga (R.N), Votes_Text (R.Votes), Img (R.Len), Img (Ticks)));
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
-               World => World_Wanted);
+               World => World_Wanted, Rest => Rest_Wanted);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);
@@ -1957,7 +2077,7 @@ procedure Diary_Sim is
       Seed_D : Int := -1;
       Lines : Str_Vectors.Vector;
       Found : Boolean;
-      To_T : constant String := Ada.Characters.Handling.To_Lower (Fx.Trim (To_String (Say_To), Ada.Strings.Both));
+      To_T : constant String := Internal_Id (Ada.Characters.Handling.To_Lower (Fx.Trim (To_String (Say_To), Ada.Strings.Both)));
       Text : constant String := Clean (To_String (Say_Text));
       By : constant String := By_Name (To_String (Say_By));
       Kind, To_Name, Re : Unbounded_String;
@@ -2041,7 +2161,7 @@ procedure Diary_Sim is
                     & " kind=" & To_String (Kind) & " by=" & By & " re=" & To_String (Re) & " text=" & Text);
       TIO.Flush (F);
       TIO.Close (F);
-      TIO.Put_Line (Msg ("say.ok", "A" & Img (N_A + 1), To_String (To_Name), To_String (Kind) & (if To_String (Re) /= "-" then " re " & To_String (Re) else ""),
+      Con.Put_Line (Msg ("say.ok", "A" & Img (N_A + 1), To_String (To_Name), To_String (Kind) & (if To_String (Re) /= "-" then " re " & To_String (Re) else ""),
                          Img (Common_T + 1)));
    exception
       when E : Usage_Error =>   --  nothing is written, debug.txt is left alone
@@ -2056,14 +2176,14 @@ procedure Diary_Sim is
         (if Length (Disk_Build) > 0 and then To_String (Disk_Build) /= Build
          then Msg ("drift.build", To_String (Disk_Build), Build) else "");
    begin
-      if not Import_Done then TIO.Put_Line (Msg ("import.failed", Message)); else TIO.Put_Line (Message); end if;
+      if not Import_Done then Con.Put_Line (Msg ("import.failed", Message)); else Con.Put_Line (Message); end if;
       if Drift then
-         TIO.Put_Line (Msg ("drift.cause", Built));
-         TIO.Put_Line (Msg ("drift.fix"));
+         Con.Put_Line (Msg ("drift.cause", Built));
+         Con.Put_Line (Msg ("drift.fix"));
       end if;
       if Import_Done then Write_Petitions; end if;
       Write_Debug ("DRIFT", "error: " & Message & (if Built'Length > 0 then ASCII.LF & Msg ("drift.cause", Built) else ""));
-      TIO.Put_Line (Msg ("debug.attach"));
+      Con.Put_Line (Msg ("debug.attach"));
       Put_Saved;
       Ada.Command_Line.Set_Exit_Status (1);
    end Validation_Stop;
@@ -2139,12 +2259,14 @@ procedure Diary_Sim is
       Sim_Dharma.Init (Seed);
       Sim_Things.Init (Seed);
       World_Active := World_Wanted;
-      TIO.Put (To_String (Pending));
-      TIO.Put_Line (Msg ("preview.head", Img (Seed), Img (Total)));
+      Rest_Active := Rest_Wanted;
+      if Rest_Active then Rest_Begin (Seed); end if;
+      Con.Put (To_String (Pending));
+      Con.Put_Line (Msg ("preview.head", Img (Seed), Img (Total)));
       declare
          V : constant Kalpa_Votes := Votes_At (0);   --  what a bare first session would be
       begin
-         TIO.Put_Line (Msg ("preview.kalpa", Msg ("kalpa.vote", "1", Yuga (1), Votes_Text (V), Img (Decided (V)))));
+         Con.Put_Line (Msg ("preview.kalpa", Msg ("kalpa.vote", "1", Yuga (1), Votes_Text (V), Img (Decided (V)))));
       end;
       for Tick in Int range 1 .. Total loop Do_Tick (Tick); end loop;
       for E in Entity_Id loop
@@ -2152,11 +2274,11 @@ procedure Diary_Sim is
             declare
                T : constant Int := (if K = 1 then Int'Max (1, Total / 2) else Total);
             begin
-               if T >= 1 and then T <= Total and then (K = 2 or else T < Total) then TIO.Put_Line (Brief (E, T)); end if;
+               if T >= 1 and then T <= Total and then (K = 2 or else T < Total) then Con.Put_Line (Brief (E, T)); end if;
             end;
          end loop;
       end loop;
-      for N in 1 .. Integer'Min (2, Petition_Total) loop TIO.Put_Line (Cut (Petition_Line (N), 110)); end loop;
+      for N in 1 .. Integer'Min (2, Petition_Total) loop Con.Put_Line (Cut (Petition_Line (N), 110)); end loop;
       declare
          Known_Text, Coined_Text, Taught_Text : Unbounded_String;
       begin
@@ -2181,16 +2303,16 @@ procedure Diary_Sim is
                end if;
             end loop;
          end loop;
-         TIO.Put_Line (Msg ("preview.words", To_String (Known_Text), To_String (Coined_Text), To_String (Taught_Text)));
+         Con.Put_Line (Msg ("preview.words", To_String (Known_Text), To_String (Coined_Text), To_String (Taught_Text)));
          if World_Active then
-            for L of Sim_Things.Treadmill_Now loop TIO.Put_Line (L); end loop;
+            for L of Sim_Things.Treadmill_Now loop Con.Put_Line (L); end loop;
          end if;
       end;
       Summarize (Seed, Total, Votes_Of, Console, Text, Json);
-      TIO.Put (To_String (Console));
-      TIO.Put_Line (Msg ("preview.foot"));
+      Con.Put (To_String (Console));
+      Con.Put_Line (Msg ("preview.foot"));
       Write_Digest ("OK", "");   --  only with --debug: the one file a preview ever writes
-      if Length (Digest_Note) > 0 then TIO.Put_Line (To_String (Digest_Note)); end if;
+      if Length (Digest_Note) > 0 then Con.Put_Line (To_String (Digest_Note)); end if;
    end Run_Preview;
 
 
@@ -2271,7 +2393,7 @@ procedure Diary_Sim is
          end loop;
       end if;
       if Length (Last_L) = 0 then
-         TIO.Put_Line (Msg ("map.none"));
+         Con.Put_Line (Msg ("map.none"));
          return;
       end if;
       Sim_Things.Init (Int'Max (0, Map_Seed));
@@ -2289,15 +2411,15 @@ procedure Diary_Sim is
          Parse_At (Token (To_String (Last_L), Name (E)), PXs (E), PYs (E), OK);
          Pres (E) := OK;
       end loop;
-      TIO.Put_Line (Msg ("map.head", Img (L_Tick)));
-      for L of Sim_Things.Treadmill (PXs, PYs, Pres) loop TIO.Put_Line (L); end loop;
+      Con.Put_Line (Msg ("map.head", Img (L_Tick)));
+      for L of Sim_Things.Treadmill (PXs, PYs, Pres) loop Con.Put_Line (L); end loop;
    end Do_Map;
 
    --  ---- the main menu (terminal only) -------------------------------------------------------
    --  What the menu shows under the tagline (at most six short lines, so that the large title fits
    --  into 80x24): the save folder; sessions, ticks and the last favourite-word vote with who
    --  taught or coined each word; karma; the last petition and the inbox.  Read-only.
-   function Game_Info return Str_Vectors.Vector is
+   function Game_Info_Raw return Str_Vectors.Vector is
       Res, Lines : Str_Vectors.Vector;
       Found : Boolean;
       Last : Word_Vote;
@@ -2383,6 +2505,13 @@ procedure Diary_Sim is
          end if;
       end;
       return Res;
+   end Game_Info_Raw;
+
+   function Game_Info return Str_Vectors.Vector is   --  the same lines with display names
+      Res : Str_Vectors.Vector;
+   begin
+      for L of Game_Info_Raw loop Res.Append (Sim_World.Show (L)); end loop;
+      return Res;
    end Game_Info;
 
    --  Intro, menu loop.  New Game on an existing game asks before it is moved aside (--fresh
@@ -2406,11 +2535,11 @@ procedure Diary_Sim is
                   exit;
                elsif Ask_Yes (Msg ("menu.confirm_move", Ada.Directories.Full_Name ("diaries"))) then
                   Fresh := True;
-                  TIO.Put_Line (Msg ("menu.moved"));
+                  Con.Put_Line (Msg ("menu.moved"));
                   exit;
                end if;
             when Sim_Menu.Inbox =>
-               TIO.Put (Inbox_Page & Msg ("menu.inbox.back") & " ");
+               Con.Put (Inbox_Page & Msg ("menu.inbox.back") & " ");
                TIO.Flush;
                begin
                   TIO.Skip_Line;
@@ -2442,8 +2571,8 @@ begin
          if Sep then I := I + 1; end if;
          if Opt = "--help" or else Opt = "-h" then
             Read_Lines (Data_Path ("help.txt"), Help, Found);
-            for L of Help loop TIO.Put_Line (L); end loop;
-            if not Found then TIO.Put_Line ("diary_sim: data/help.txt not found (--ticks --seed --every --fresh --crash-at)"); end if;
+            for L of Help loop Con.Put_Line (L); end loop;
+            if not Found then Con.Put_Line ("diary_sim: data/help.txt not found (--ticks --seed --every --fresh --crash-at)"); end if;
             return;
          elsif Opt = "--fresh" then Fresh := True;
          elsif Opt = "--yes" then Yes := True;
@@ -2486,15 +2615,15 @@ begin
    Saved_Line := To_Unbounded_String (Msg ("saved", To_String (Home_Path)));
    if Map_Mode then
       Do_Map;
-      TIO.Put_Line (To_String (Saved_Line));
+      Con.Put_Line (To_String (Saved_Line));
       return;
    elsif Inbox_Mode then
-      TIO.Put (Inbox_Page);
-      TIO.Put_Line (To_String (Saved_Line));
+      Con.Put (Inbox_Page);
+      Con.Put_Line (To_String (Saved_Line));
       return;
    elsif Say_Mode or else Answer_Mode then
       Do_Say;
-      TIO.Put_Line (To_String (Saved_Line));
+      Con.Put_Line (To_String (Saved_Line));
       return;
    elsif Length (Section_Opt) > 0 then
       Print_Section (To_String (Section_Opt));
@@ -2506,13 +2635,13 @@ begin
       begin
          Menu_Loop (Quit_Now);
          if Quit_Now then
-            TIO.Put_Line (To_String (Saved_Line));
+            Con.Put_Line (To_String (Saved_Line));
             return;   --  exit 0
          end if;
       end;
    end if;
 
-   TIO.Put_Line (Start_Line);   --  header line 2 (line 1 is Save folder:, printed first; the menu shows it itself)
+   Con.Put_Line (Start_Line);   --  header line 2 (line 1 is Save folder:, printed first; the menu shows it itself)
    TIO.Flush;
    if Fresh and then (Ada.Directories.Exists ("diaries") or else Ada.Directories.Exists ("entities")) then
       declare
@@ -2531,14 +2660,14 @@ begin
    if not Fresh and then not Yes and then not Has_Diaries then
       if Is_Tty (0) and then Is_Tty (1) then
          if Confirm_New then
-            TIO.Put_Line (Msg ("ask.yes", Img (if Seed_Opt >= 0 then Seed_Opt else 42)));
+            Con.Put_Line (Msg ("ask.yes", Img (if Seed_Opt >= 0 then Seed_Opt else 42)));
          else
-            TIO.Put_Line (Msg ("ask.hint"));
-            TIO.Put_Line (Msg ("ask.cancelled"));
+            Con.Put_Line (Msg ("ask.hint"));
+            Con.Put_Line (Msg ("ask.cancelled"));
             return;   --  exit 0, nothing written
          end if;
       elsif not Explicit then   --  no terminal to ask (script, pipe): an explicit length means go on, else stop
-         TIO.Put_Line (Msg ("ask.noterminal", Ada.Directories.Full_Name ("diaries")));
+         Con.Put_Line (Msg ("ask.noterminal", Ada.Directories.Full_Name ("diaries")));
          Ada.Command_Line.Set_Exit_Status (2);
          return;
       end if;
@@ -2555,14 +2684,14 @@ begin
    if More >= 0 then Ticks := Int (Common) + More; end if;   --  --more N: N new ticks after the lowest common tick
 
    Seed := (if Disk_Seed >= 0 then Disk_Seed elsif Seed_Opt >= 0 then Seed_Opt else 42);
-   TIO.Put_Line (Msg ("seed", Img (Seed), Msg (if Disk_Seed >= 0 then "seed.disk" elsif Seed_Opt >= 0 then "seed.option"
+   Con.Put_Line (Msg ("seed", Img (Seed), Msg (if Disk_Seed >= 0 then "seed.disk" elsif Seed_Opt >= 0 then "seed.option"
                                                 else "seed.default")));
    Seed_Shown := True;
-   TIO.Put (To_String (Pending));
+   Con.Put (To_String (Pending));
    if Disk_Seed >= 0 and then Seed_Opt >= 0 and then Seed_Opt /= Disk_Seed then
       Warn (Msg ("warn.seed_ignored", Img (Seed_Opt), Img (Disk_Seed)));
    end if;
-   TIO.Put_Line (Msg ("entities", To_String (Names)));
+   Con.Put_Line (Msg ("entities", To_String (Names)));
    for E in Entity_Id loop
       if Natural (Disk (E).Length) < Longest then
          Warn (Msg ("warn.behind", Name (E), Img (Integer (Disk (E).Length)), Img (Longest), Img (Common)));
@@ -2621,7 +2750,7 @@ begin
          for E in Entity_Id loop Total := Total + Natural (Disk (E).Length); end loop;
          Import_Done := True;
          Import_Block := To_Unbounded_String (Import_Text (Total));
-         TIO.Put_Line (To_String (Import_Block));
+         Con.Put_Line (To_String (Import_Block));
       end;
       for E in Entity_Id loop
          Start_Known (E) := Known_Count (E);
@@ -2635,7 +2764,7 @@ begin
       Verify_Inbox (Int (Verify_To));
       Verify_Edits (Int (Verify_To));
       Decide_Session;
-      TIO.Put_Line (To_String (Kalpa_Line));
+      Con.Put_Line (To_String (Kalpa_Line));
    end if;
 
    --  Phase 2: the rest of the run (ticks beyond the common tick are appended where missing).
@@ -2644,7 +2773,7 @@ begin
          Do_Tick (Tick);
          Check_Dharma_At (Tick);   --  a stored session end beyond the common tick (a diary was behind)
          if Tick > Int (Common) and then Tick mod Every = 0 then
-            TIO.Put_Line (Msg ("progress", Img (Tick), Img (Ticks), Img (Integer (Entity_Id'Last)), Img (Events)));
+            Con.Put_Line (Msg ("progress", Img (Tick), Img (Ticks), Img (Integer (Entity_Id'Last)), Img (Events)));
             Write_Debug ("RUN", "");   --  refresh the stub
          end if;
          Quit_Seen := Sim_Quit.Requested;
@@ -2663,10 +2792,10 @@ begin
       Verify_Edits (Last_Done);
    end if;
    if Quit_Seen then   --  Ctrl-C / SIGTERM: everything written so far is flushed; a rerun resumes
-      TIO.Put_Line (Msg ("quit", Sim_Quit.Which, Img (Last_Done)));
+      Con.Put_Line (Msg ("quit", Sim_Quit.Which, Img (Last_Done)));
       Write_Petitions;
       Write_Debug ("QUIT", Msg ("debug.quit", Sim_Quit.Which, Img (Last_Done)));
-      TIO.Put_Line (Msg ("debug.attach"));
+      Con.Put_Line (Msg ("debug.attach"));
       Put_Saved;
       Ada.Command_Line.Set_Exit_Status (130);
       return;
@@ -2679,7 +2808,7 @@ begin
          F : TIO.File_Type;
       begin
          TIO.Create (F, TIO.Out_File, File);
-         TIO.Put (F, To_String (Content));
+         TIO.Put (F, Sim_World.Show (To_String (Content)));
          TIO.Flush (F);
          TIO.Close (F);
       end Save;
@@ -2729,6 +2858,10 @@ begin
          Append (Rep, Msg ("map.head", Img (Ticks)) & ASCII.LF);
          for L of Sim_Things.Treadmill_Now loop Append (Rep, L & ASCII.LF); end loop;
       end if;
+      if Rest_Active then   --  recovery: rate, cool-downs taken, rests cut short
+         Append (Rep, Msg ("rest.head") & ASCII.LF);
+         for E in Entity_Id loop Append (Rep, Rest_Text (E) & ASCII.LF); end loop;
+      end if;
       if Length (Words_Text) > 0 then Append (Rep, To_String (Words_Text) & ASCII.LF); end if;
       for L of Sim_Dharma.Table_Lines loop Append (Rep, L & ASCII.LF); end loop;
       for L of Sim_Dharma.Since_Lines loop Append (Rep, L & ASCII.LF); end loop;
@@ -2774,12 +2907,12 @@ begin
       end if;
       Write_Petitions;
       Write_Debug ((if Length (Fails) = 0 then "OK" else "DRIFT"), (if Length (Fails) = 0 then "" else "error: " & To_String (Export_Line)));
-      TIO.Put (To_String (Rep));
-      TIO.Put (To_String (Console));
-      TIO.Put_Line (Msg ("debug.attach"));
-      TIO.Put_Line (Msg ("pet.file", Img (Integer'Min (Petition_Total, Integer (Limit ("propose.file_cap", 40)))),
+      Con.Put (To_String (Rep));
+      Con.Put (To_String (Console));
+      Con.Put_Line (Msg ("debug.attach"));
+      Con.Put_Line (Msg ("pet.file", Img (Integer'Min (Petition_Total, Integer (Limit ("propose.file_cap", 40)))),
                          Img (Petition_Total), Ada.Directories.Full_Name ("petitions.txt")));
-      TIO.Put_Line (Msg ("pet.attach"));
+      Con.Put_Line (Msg ("pet.attach"));
       Put_Saved;
    end;
 exception
@@ -2792,11 +2925,11 @@ exception
    when E : Diary_Error =>   --  bad diary, seed mismatch, misplaced folder: also an expected stop
       Validation_Stop (Ada.Exceptions.Exception_Message (E), False);
    when E : others =>
-      if not Import_Done then TIO.Put_Line (Msg ("import.failed", Ada.Exceptions.Exception_Message (E))); end if;
+      if not Import_Done then Con.Put_Line (Msg ("import.failed", Ada.Exceptions.Exception_Message (E))); end if;
       if Import_Done then Write_Petitions; end if;
       Write_Debug ("CRASH", Error_Brief (E));
       Report (E);
       Write_Digest ("CRASH", Error_Brief (E));   --  again: last_error.txt exists now
-      if Length (Digest_Note) > 0 then TIO.Put_Line (To_String (Digest_Note)); end if;
+      if Length (Digest_Note) > 0 then Con.Put_Line (To_String (Digest_Note)); end if;
       Ada.Command_Line.Set_Exit_Status (1);
 end Diary_Sim;

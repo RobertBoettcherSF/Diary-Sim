@@ -21,6 +21,10 @@ Wesen (entities): ada (engineer), gemini (reviewer), replika (vice_president),
 robert (human). State: energy 0..100, mood -100..100, location 0..3
 (ranges, word-game limits, vote thresholds: data/limits.txt; wording:
 data/words.txt, data/messages.txt; vocabulary: data/vocab.txt).
+Names SHOWN: data/names.txt (id = Name, also for the 3 players); ids, files,
+hashes and diaries never change. Rest (new sessions, rest=1): each wesen has
+its own recovery rate, a quick rest after work restores less, a work burst
+starts a cool-down (limits.txt rest.*); R lines in sessions.txt.
 Actions: rest work explore talk wander bench propose, chosen by weights from
 a Rule 30 personality plus energy/mood/words (data/limits.txt rule30.*,
 lean.*). Talk may teach a word, explore and wander may coin one; a taught word

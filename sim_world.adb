@@ -1,7 +1,7 @@
---  Version: 0.008
+--  Version: 0.010
 pragma Ada_2022;
 
-with Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
+with Ada.Characters.Handling, Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
 use Ada.Strings.Unbounded;
 use Sim_Util;
 
@@ -11,6 +11,112 @@ package body Sim_World is
 
    function Name (E : Entity_Id) return String is
      (case E is when 1 => "ada", when 2 => "gemini", when 3 => "replika", when 4 => "robert");
+   --  ---- display names -----------------------------------------------------------------------
+   type Pair is record
+      Id, Shown : Ada.Strings.Unbounded.Unbounded_String;
+   end record;
+   package Pair_Vectors is new Ada.Containers.Vectors (Positive, Pair);
+   Pairs : Pair_Vectors.Vector;
+
+   --  PROOF-LATER: Importance 2/10, Urgency 1/10, SPARK2 (parsing of data/names.txt)
+   procedure Load_Names (Lines : Sim_Util.Str_Vectors.Vector) is
+   begin
+      Pairs.Clear;
+      for L of Lines loop
+         declare
+            T : constant String := Fx.Trim (L, Ada.Strings.Both);
+            Eq : constant Natural := Fx.Index (T, "=");
+         begin
+            if T'Length > 0 and then T (T'First) /= '#' and then Eq > T'First then
+               declare
+                  Id : constant String := Fx.Trim (T (T'First .. Eq - 1), Ada.Strings.Both);
+                  Sh : constant String := Fx.Trim (T (Eq + 1 .. T'Last), Ada.Strings.Both);
+               begin
+                  if Id /= "" and then Sh /= "" and then (for all C of Sh => C > ' ' and then C /= '{' and then C /= '}') then
+                     Pairs.Append (Pair'(Id => Ada.Strings.Unbounded.To_Unbounded_String (Id),
+                                         Shown => Ada.Strings.Unbounded.To_Unbounded_String (Sh)));
+                  end if;
+               end;
+            end if;
+         end;
+      end loop;
+   end Load_Names;
+
+   function Display_Of (Id : String) return String is
+   begin
+      for P of Pairs loop
+         if Ada.Strings.Unbounded.To_String (P.Id) = Id then return Ada.Strings.Unbounded.To_String (P.Shown); end if;
+      end loop;
+      return Id;
+   end Display_Of;
+
+   function Display (E : Entity_Id) return String is (Display_Of (Name (E)));
+
+   function Internal_Id (Text : String) return String is
+      T : constant String := Ada.Characters.Handling.To_Lower (Fx.Trim (Text, Ada.Strings.Both));
+   begin
+      for P of Pairs loop
+         if Ada.Characters.Handling.To_Lower (Ada.Strings.Unbounded.To_String (P.Shown)) = T then
+            return Ada.Strings.Unbounded.To_String (P.Id);
+         end if;
+      end loop;
+      return Text;
+   end Internal_Id;
+
+   function Show (Text : String) return String is
+      function Word_Char (C : Character) return Boolean is (C in 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_');
+      R : Unbounded_String;
+      I : Positive := Text'First;
+   begin
+      if Pairs.Is_Empty then return Text; end if;
+      while I <= Text'Last loop
+         declare
+            Done : Boolean := False;
+         begin
+            if Text (I) in 'a' .. 'z'
+              and then (I = Text'First or else not (Word_Char (Text (I - 1)) or else Text (I - 1) in '/' | '-' | ':' | '.'))
+            then
+               for P of Pairs loop
+                  declare
+                     Id : constant String := To_String (P.Id);
+                     Sh : constant String := To_String (P.Shown);
+                     Last : constant Natural := I + Id'Length - 1;
+                  begin
+                     if not Done and then Last <= Text'Last and then Text (I .. Last) = Id
+                       and then (Last = Text'Last
+                                 or else not (Word_Char (Text (Last + 1)) or else Text (Last + 1) in '-' | '/'
+                                              or else (Text (Last + 1) = '.' and then Last + 2 <= Text'Last
+                                                       and then Text (Last + 2) in 'a' .. 'z')))
+                     then
+                        declare
+                           Sp : Natural := 0;
+                           Delta_W : constant Integer := Sh'Length - Id'Length;
+                        begin
+                           while Last + Sp + 1 <= Text'Last and then Text (Last + Sp + 1) = ' ' loop Sp := Sp + 1; end loop;
+                           Append (R, Sh);
+                           Done := True;
+                           I := Last + 1;
+                           if Sp >= 2 then   --  a table column: keep the width where possible
+                              if Delta_W > 0 then
+                                 I := I + Natural'Min (Delta_W, Sp - 1);
+                              elsif Delta_W < 0 then
+                                 Append (R, (-Delta_W) * ' ');
+                              end if;
+                           end if;
+                        end;
+                     end if;
+                  end;
+               end loop;
+            end if;
+            if not Done then
+               Append (R, Text (I));
+               I := I + 1;
+            end if;
+         end;
+      end loop;
+      return To_String (R);
+   end Show;
+
    function Kind (E : Entity_Id) return String is
      (case E is when 1 => "engineer", when 2 => "reviewer", when 3 => "vice_president", when 4 => "human");
 
@@ -38,7 +144,7 @@ package body Sim_World is
    Max_Topics : constant := 40;
    type Topic_Rec is record
       Name, Phrase : Unbounded_String;
-      Base, Low_En, Low_Mood, Few_Words, Benches : Integer := 0;
+      Base, Low_En, Low_Mood, Few_Words, Benches, Cooling : Integer := 0;   --  Cooling: the 7th column
    end record;
    type Topic_Array is array (1 .. Max_Topics) of Topic_Rec;
    Topics : Topic_Array;
@@ -294,7 +400,7 @@ package body Sim_World is
       return Cache_Row (E);
    end Row_At;
 
-   function Choose (Seed : Int; E : Entity_Id; Tick : Int; Energy, Mood : Integer) return Action is
+   function Choose (Seed : Int; E : Entity_Id; Tick : Int; Energy, Mood : Integer; Work_Pct : Natural := 100) return Action is
       Die : constant Positive := Roll (Seed, Positive (E), Tick, 0, 20);
       W : Weight_Array := Base_W;
       Total : Integer := 0;
@@ -337,6 +443,7 @@ package body Sim_World is
       end;
       for A in W'Range loop
          W (A) := Integer'Max (1, W (A));
+         if Work_Pct /= 100 and then A in Work | Bench then W (A) := Integer'Max (1, W (A) * Work_Pct / 100); end if;
          Total := Total + W (A);
       end loop;
       if Pet_Last (E) >= 0 and then Tick - Pet_Last (E) < Int (Pet_Cooldown) then   --  petition cooldown
@@ -388,6 +495,7 @@ package body Sim_World is
                               when 4 => Rec.Low_Mood := Num;
                               when 5 => Rec.Few_Words := Num;
                               when 6 => Rec.Benches := Num;
+                              when 7 => Rec.Cooling := Num;
                               when others => null;
                            end case;
                         end if;
@@ -403,12 +511,12 @@ package body Sim_World is
          end;
       end loop;
       if N_Topics = 0 then
-         Topics (1) := (To_Unbounded_String ("other"), To_Unbounded_String ("a small change"), 1, 0, 0, 0, 0);
+         Topics (1) := (To_Unbounded_String ("other"), To_Unbounded_String ("a small change"), 1, 0, 0, 0, 0, 0);
          N_Topics := 1;
       end if;
    end Load_Topics;
 
-   function File_Petition (Seed : Int; E : Entity_Id; Tick : Int; Energy, Mood, Benches : Integer) return Positive is
+   function File_Petition (Seed : Int; E : Entity_Id; Tick : Int; Energy, Mood, Benches : Integer; Strain : Natural := 0) return Positive is
       Eid : constant Positive := Positive (E);
       Topic : Positive := 1;
       Low_E : constant Integer := Integer'Max (0, 50 - Energy) * 2;          --  0 .. 100
@@ -427,7 +535,8 @@ package body Sim_World is
       else
          for T in 1 .. N_Topics loop
             W (T) := Integer'Max (1, Topics (T).Base + (Topics (T).Low_En * Low_E + Topics (T).Low_Mood * Low_M
-                                                         + Topics (T).Few_Words * Few + Topics (T).Benches * Ben) / 100);
+                                                         + Topics (T).Few_Words * Few + Topics (T).Benches * Ben
+                                                         + Topics (T).Cooling * Strain) / 100);
             Total := Total + W (T);
          end loop;
          Pick := Roll (Seed, Eid, Tick, 9, Total);
@@ -495,6 +604,18 @@ package body Sim_World is
       end loop;
       return N * 100 / R30_Width;
    end Core_Percent;
+
+   function Recovery_Rate (Seed : Int; E : Entity_Id) return Natural is
+      R : constant U64 := Start_Row (Seed, E);
+      N : Natural := 0;
+      Lo : constant Integer := Integer (Limit ("rest.rate.min", 60));
+      Hi : constant Integer := Integer'Max (Lo, Integer (Limit ("rest.rate.max", 140)));
+   begin
+      for I in 0 .. 31 loop   --  32 sampled bits; 10 .. 22 set bits span the whole range
+         if (Interfaces.Shift_Right (R, I * R30_Width / 32) and 1) = 1 then N := N + 1; end if;
+      end loop;
+      return Natural (Integer'Max (1, Lo + (Hi - Lo) * Integer'Max (0, Integer'Min (12, N - 10)) / 12));
+   end Recovery_Rate;
 
    function Ballot_For (Seed : Int; E : Entity_Id; Tick, Since : Int) return Natural is
       W : array (1 .. Max_Topics) of Natural := [others => 0];

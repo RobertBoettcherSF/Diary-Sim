@@ -109,3 +109,31 @@ world.eat.energy.0 = 8
 world.eat.energy.1 = 3
 world.eat.energy.2 = -4
 world.mutate_percent = 20
+# Rest and cool-down (rest=1 sessions: new diaries when world.enabled = 1 and rest.enabled = 1; rest.enabled = 0 keeps
+# the old behaviour exactly).  Every wesen has a recovery RATE (percent, 100 = the base gain) from 32 sampled bits of its Rule 30
+# birth row, between rate.min and rate.max.
+#  Work load: work or bench ticks among the last window ticks.  At load >= burst a COOL-DOWN starts (load resets): for
+#  cool*100/rate ticks (a slow recoverer cools longer) work and bench keep only cool.work_pct percent of their weight;
+#  while mood >= cool.good_mood the cool-down runs twice as fast.
+#  Trade-off: a rest within quick ticks after work is a QUICK rest (quick.energy_pct of the energy gain, quick.mood
+#  mood change on top); a rest with at least calm ticks since work is CALM (calm.energy_pct, calm.mood); each further
+#  consecutive rest keeps repeat_pct percent of the previous gain.  A rest streak shorter than min_ticks that is ended
+#  by work or bench is CUT SHORT (counted).  petition_ref: a cool-down of that many ticks = strain 100 for petitions
+#  (topics.txt column 7).
+rest.enabled = 1
+rest.rate.min = 60
+rest.rate.max = 140
+rest.window = 12
+rest.burst = 5
+rest.cool = 16
+rest.cool.work_pct = 12
+rest.cool.good_mood = 40
+rest.quick = 2
+rest.calm = 8
+rest.quick.energy_pct = 60
+rest.quick.mood = -1
+rest.calm.energy_pct = 120
+rest.calm.mood = 3
+rest.repeat_pct = 80
+rest.min_ticks = 2
+rest.petition_ref = 30

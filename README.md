@@ -1,7 +1,8 @@
 # diary-sim v1
 
-Four independent entities write one diary line per tick: **ada** (engineer),
-**gemini** (reviewer), **replika** (vice_president), **robert** (human).
+Four independent entities (the *wesen*) write one diary line per tick. Their internal ids are `ada`
+(engineer), `gemini` (reviewer), `replika` (vice_president) and `robert` (human); what you SEE are the
+display names from `data/names.txt` (default: Lemma, Corollary, Theorem, Axiom; see "Display names" below).
 Plain Ada, standard library only. Not pushed anywhere yet (local git repo).
 
 ## Where saves live and how to update
@@ -147,6 +148,50 @@ past the 275 starting words. Office, lab, cafe and home are four landmark region
 a neighbour. `make map` (`--map`) prints position, nearest landmark, biome and a 5x5 window per wesen; the same
 view ends the session report. `world.enabled = 0` in `data/limits.txt` (or an older diary) keeps the old
 behaviour byte for byte. Design and file formats: `docs/WORLD.md`.
+
+## Display names (`data/names.txt`)
+
+`data/names.txt` maps the internal id to the name that is SHOWN (one `id = Name` per line):
+
+```
+ada = Lemma        gemini = Corollary     replika = Theorem     robert = Axiom
+iris = Modulus     sol = Kernel           noor = Vertex          (the three in-sim players)
+```
+
+Edit the names freely (no rebuild, no `--fresh`). Only DISPLAY text uses them: the console, `run_report.txt`,
+`summary.txt`, `debug.txt` and the digest, `petitions.txt`, the menu, `make map` / `make inbox`, the vote table.
+The ids stay the keys of everything that is stored or hashed: `hash(seed, entity, tick)`, `diaries/<id>.jsonl`,
+`entities/<id>/`, the lines of `sessions.txt`, `inbox.txt`, `world.txt`, `says.txt`, the `src=...:ada` tags and
+the players' watch lists. So a changed `names.txt` never changes a diary byte (checked in `scripts/checks.sh`,
+scenario 27: the files are byte-identical, replay-verify still passes). `make say WESEN=Lemma` and
+`--say Lemma` accept a display name or an id; in the files it is recorded as the id. A missing `names.txt`
+gives a warning and shows the ids. Display is a plain whole-word text substitution of the ids in the
+output, so path-like names (`diaries/ada.jsonl`) and tags (`:ada`) are left alone; the examples further down
+this README still show the ids where they quote files.
+
+## Rest, recovery and the cool-down (`rest=1`, new sessions)
+
+Observed on the treadmill build: the engineer works most and sat at mood about -70 for the whole run while the
+others sat at +40..+70. New sessions carry `rest=1` (after `dharma=1 world=1`) and a per-wesen recovery model;
+all numbers are `rest.*` in `data/limits.txt`, `rest.enabled = 0` (or `world.enabled = 0`, or an older diary)
+keeps the old behaviour byte for byte.
+
+* **Recovery rate** (`rest.rate.min .. rest.rate.max`, percent): from 32 sampled bits of the wesen's Rule 30 birth
+  row, so some recover fast, some slow (seed 42: 93..126%). It scales the energy of every rest.
+* **Trade-off:** a *quick* rest (fewer than `rest.quick` ticks after work or bench) restores only
+  `rest.quick.energy_pct` of the energy and costs `rest.quick.mood`; a rest after a calm stretch (`rest.calm` ticks
+  without work) restores `rest.calm.energy_pct` and gains `rest.calm.mood`. Consecutive rests are worth
+  `rest.repeat_pct` percent of the one before (diminishing returns).
+* **Refractory period:** when `rest.burst` of the last `rest.window` ticks were work or bench, a *cool-down* starts:
+  for `rest.cool` ticks scaled by the wesen's own rate (a slow recoverer cools down longer) the work and bench
+  weights are cut to `rest.cool.work_pct` percent; a mood of `rest.cool.good_mood` or better runs the cool-down twice
+  as fast. A rest streak shorter than `rest.min_ticks` that work interrupts counts as *cut short*.
+* **Petitions:** `data/topics.txt` has an optional 7th column ("cooling"): `more_rest` and `faster_work_recovery`
+  get more weight the longer the wesen's cool-down is (and while it is cooling down).
+* **Record and report:** an `R<n> tick=T name=rate/cool-downs/cut-short/quick ...` line per session end in
+  `sessions.txt` (replay-verified, tamper = DRIFT, the `rest=1` marker too); the end report shows per wesen the
+  recovery rate, cool-down length, cool-downs taken, rests cut short and quick rests (counted since the model began).
+  Changing a `rest.*` number needs `--fresh` or gives DRIFT, like every other rule number.
 
 ## The debug digest (`DEBUG=1`, `--debug`)
 
@@ -460,7 +505,7 @@ of every run (also on quit, crash and drift): a `# seed ...` header, then the ne
 `propose.file_cap` (40) lines, one per petition:
 
 ```
-P12 tick=560 from=robert topic=faster_work_recovery repeat=1 wish=Please consider ... Thank you.
+P12 tick=560 from=Axiom topic=faster_work_recovery repeat=1 wish=Please consider ... Thank you.
 ```
 
 Older petitions drop out of the file, never out of the diaries (each petition has a
