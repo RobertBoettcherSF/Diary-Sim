@@ -1,4 +1,4 @@
---  Version: 0.022
+--  Version: 0.023
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -28,7 +28,7 @@ pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
-     GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Ledger, Sim_Menu, Sim_Quit, Sim_Screen, Sim_Store, Sim_Things, Sim_Util, Sim_World;
+     GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Ledger, Sim_Chess, Sim_Games, Sim_Menu, Sim_Quit, Sim_Screen, Sim_Store, Sim_Things, Sim_Util, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
 
 procedure Diary_Sim is
@@ -55,7 +55,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.022";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.023";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -114,6 +114,13 @@ procedure Diary_Sim is
    Screen_Store : Sim_Store.Store;
    Screen_N : Natural := 0;                      --  the key number of the next K line
    Scr_Lines : Str_Vectors.Vector;               --  record lines of the last Step (text without key and tick)
+   --  chess=1 sessions (Sim_Games, Sim_Chess): games of the wesen and the players, Elo; records C lines in diaries/chess.txt.
+   Chess_Active : Boolean := False;
+   Chess_Path : constant String := "diaries/chess.txt";
+   Chess_Store : Sim_Store.Store;
+   Chess_N : Natural := 0;
+   Chess_Lines : Str_Vectors.Vector;
+   Elo_View, Perft_Mode : Boolean := False;      --  --elo (replay, then the ranking) / --perft (the move generator checks)
    Screens_View : Boolean := False;              --  --screens: replay, then show the screens (a view like --ledger)
    Rate_Pct, Load, Hist, Cool, Streak, Since_Work, Cool_N, Cut_N, Quick_N : array (Entity_Id) of Natural := [others => 0];
    function RL (Key : String; Default : Integer) return Integer is (Integer (Limit (Key, Int (Default))));
@@ -255,7 +262,7 @@ procedure Diary_Sim is
       Read_Lines (Data_Path ("limits.txt"), Lines, Found);
       if not Found then Warn (Msg ("warn.limits_file")); end if;
       Read_Lines (Data_Path ("menu.txt"), Lines, Found);   --  menu text: keys only, a missing file shows the keys
-      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt", "screens.txt"]) loop   --  the Buddhism layer: numbers, wording, players
+      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt", "screens.txt", "chess.txt"]) loop   --  the Buddhism layer: numbers, wording, players
          Read_Lines (Data_Path (F), Lines, Found);
          if not Found then Warn (Msg ("warn.dharma_file", F)); end if;
       end loop;
@@ -390,6 +397,7 @@ procedure Diary_Sim is
       Was_Cool : constant Boolean := Rest_Active and then Cool (E) > 0;
       Led_Phase, Push_Nom : Integer := 0;
       Push_Feel : Integer := -1;
+      Chess_Fx, Chess_Nom : Integer := 0;   --  mood of finished chess games, taken at this step
       M_Base, M_After_Base : Integer;
 
       procedure Add (Text : String) is
@@ -663,6 +671,45 @@ procedure Diary_Sim is
          when others => null;
       end case;
       if Rest_Active then Rest_After (E, A, S.Mood); end if;
+      if Chess_Active and then World_Mode then   --  chess: a rest beside someone may be a move; a finished game brings mood
+         declare
+            Moods : Sim_Games.Mood_Array;
+            Played : Boolean;
+            Partner : Sim_Games.Comp_Id;
+            Mv, Num : Unbounded_String;
+            Want : constant Integer := Sim_Games.Take_Mood (E);
+            Got : constant Integer := Clamp (S.Mood + Want, M_Min, M_Max) - S.Mood;
+         begin
+            for X in Entity_Id loop Moods (X) := St (X).Mood; end loop;
+            if A = Rest then
+               Sim_Games.Turn (E, Tick, Moods, Chess_Lines, Played, Partner, Mv, Num, Detail);
+               if Played then
+                  S.Energy := Clamp (S.Energy + RL ("chess.energy", 1), E_Min, E_Max);
+                  for Who in Entity_Id loop   --  playing is restful: the cool-down and the work load of both players shrink
+                     if Rest_Active and then (Who = E or else Sim_Games.As_Comp (Who) = Partner) then
+                        Cool (Who) := Cool (Who) - Natural'Min (Cool (Who), Natural (Integer'Max (0, RL ("chess.cool_cut", 3))));
+                        Hist (Who) := Hist (Who) / 2 ** Natural (Integer'Max (0, Integer'Min (20, RL ("chess.hist_shift", 2))));
+                     end if;
+                  end loop;
+                  for T of Str_Vectors.Vector'([To_String (Mv), To_String (Num)]) loop   --  the move and its numeric string are words
+                     declare
+                        W : constant Positive := Sim_Things.Prop_Word (T, Msg ("chess.word"));
+                     begin
+                        Meet (W);
+                        if Sim_Games.Is_Wesen (Partner) and then not Knows (Entity_Id (Partner), W) then
+                           Learn_From_World (Entity_Id (Partner), W);
+                           Ensure (Entity_Id (Partner), Words_File, Words_Line (W, "world", Tick, Meaning_Of (W)));
+                        end if;
+                        if Screen_Active then Sim_Screen.Note (E, W, "chess"); end if;
+                     end;
+                  end loop;
+               end if;
+            end if;
+            S.Mood := S.Mood + Got;
+            Chess_Fx := Got;
+            Chess_Nom := Want;
+         end;
+      end if;
       if Screen_Active and then World_Mode then   --  the screen: pin, drop, show, read, leave, blend (no effect on mood)
          declare
             Learned_Now : Sim_Screen.Learn_Vectors.Vector;
@@ -676,8 +723,8 @@ procedure Diary_Sim is
             if Length (Said) > 0 then Add (To_String (Said)); end if;
          end;
       end if;
-      Sim_Ledger.Add (E, Tick, A, Verb, S.Location, M_Base, M_After_Base - Pre_Mo - M_Base, S.Mood - M_After_Base,
-                      Eff_Mo + Push_Nom, Led_Phase, Was_Cool, Push_Feel);
+      Sim_Ledger.Add (E, Tick, A, Verb, S.Location, M_Base, M_After_Base - Pre_Mo - M_Base, S.Mood - M_After_Base - Chess_Fx,
+                      Eff_Mo + Push_Nom + Chess_Nom, Led_Phase, Was_Cool, Push_Feel, Chess_Fx);
       declare
          Tone : constant List_Id := (if S.Mood <= Tone_Low then Mood_Low elsif S.Mood >= Tone_High then Mood_High
                                      else Mood_Neutral);
@@ -1081,6 +1128,7 @@ procedure Diary_Sim is
       if Rest_Active then
          for E in Entity_Id loop Dg_Add (V, "run", "rest." & Name (E), Rest_Text (E), 7); end loop;
       end if;
+      if Chess_Active then Dg_Add (V, "run", "elo", Sim_Games.Digest_Line, 5); end if;
       for E in Entity_Id loop   --  the mood ledger: one line each (the first to go when the cap is tight); the rest in the full record
          Dg_Add (V, "ledger", "led." & Name (E), Sim_Ledger.Digest_Line (E, Ledger_From), 9);
          Dg_Add (V, "ledger", "sen." & Name (E), Sim_Ledger.Sentence (E), 9, Full_Only => True);
@@ -1651,11 +1699,42 @@ procedure Diary_Sim is
       end if;
    end Verify_Screens;
 
+   --  Every chess record (start, move, end with the new ratings, holiday) is a C line in diaries/chess.txt: replay-verified.
+   procedure Emit_Chess_Lines (Tick : Int) is
+      Result : Sim_Store.Status;
+      Old : Unbounded_String;
+   begin
+      for T of Chess_Lines loop
+         Chess_N := Chess_N + 1;
+         declare
+            Line : constant String := "C" & Img (Chess_N) & " t=" & Img (Tick) & " " & T;
+         begin
+            Sim_Store.Emit (Chess_Store, Line, not Preview and then not Ledger_Mode, Result, Old);
+            if Sim_Store."=" (Result, Sim_Store.Differs) then
+               raise Drift_Error with Msg ("err.chess", "C" & Img (Chess_N), Diff_At (To_String (Old), Line));
+            end if;
+         end;
+      end loop;
+      Chess_Lines.Clear;
+   end Emit_Chess_Lines;
+
+   procedure Verify_Chess (Upto : Int) is
+      Orphan : constant String := Sim_Store.Orphan (Chess_Store, Upto);
+   begin
+      if Orphan /= "" then
+         raise Drift_Error with Msg ("err.chess", Sim_Store.Key_Of (Orphan), Diff_At (Orphan, "(not in the replay)"));
+      end if;
+   end Verify_Chess;
+
    procedure Do_Tick (Tick : Int) is
    begin
       Cur_Tick := Tick;
       Sim_Dharma.Tick_Begin (Tick);
       Apply_Grants (Tick);
+      if Chess_Active then   --  the clocks of the running games (a timeout ends one)
+         Sim_Games.Clock (Tick, Chess_Lines);
+         Emit_Chess_Lines (Tick);
+      end if;
       for E in Entity_Id loop
          Cur_Name := To_Unbounded_String (Name (E));
          if Tick = Crash_At and then Tick > Int (Common) and then E = 1 then Events := Forced (Tick); end if;
@@ -1663,6 +1742,7 @@ procedure Diary_Sim is
             Line : constant String := Step (E, Tick);
          begin
             Emit_Screen_Lines (Tick);
+            Emit_Chess_Lines (Tick);
             if Tick <= Int (Disk (E).Length) then   --  already on disk: compare, do not write
                if No_Ts (Line) /= No_Ts (Disk (E) (Positive (Tick))) then
                   raise Drift_Error with Msg ("err.drift", Name (E), Img (Tick),
@@ -1695,6 +1775,118 @@ procedure Diary_Sim is
       Sim_Dharma.Tick_End (Tick);
       Last_Done := Tick;
    end Do_Tick;
+
+   --  The Elo ranking of the wesen and the players after the replay (--elo / make elo).
+   function Elo_Text return String is
+      R : Unbounded_String;
+   begin
+      if not Chess_Active then return Msg ("elo.none") & ASCII.LF; end if;
+      for L of Sim_Games.Ranking loop Append (R, L & ASCII.LF); end loop;
+      Append (R, Msg ("elo.games", Img (Sim_Games.Game_Count), Img (Sim_Games.Finished_Count), Img (Sim_Games.Moves_Total)) & ASCII.LF);
+      return To_String (R);
+   end Elo_Text;
+
+   --  --perft: the move generator against the reference counts in data/chess.txt; exit 1 if one differs.
+   procedure Do_Perft is
+      Fails, Total : Natural := 0;
+      function Word_At (T : String; N : Positive) return String is
+         From : Natural := T'First;
+         Count_W : Natural := 0;
+      begin
+         for I in T'First .. T'Last + 1 loop
+            if I > T'Last or else T (I) = ' ' then
+               if I > From then
+                  Count_W := Count_W + 1;
+                  if Count_W = N then return T (From .. I - 1); end if;
+               end if;
+               From := I + 1;
+            end if;
+         end loop;
+         return "";
+      end Word_At;
+      function After (T : String; N : Positive) return String is   --  the text after the first N words
+         Count_W : Natural := 0;
+         In_W : Boolean := False;
+      begin
+         for I in T'Range loop
+            if T (I) /= ' ' and then not In_W then In_W := True; Count_W := Count_W + 1;
+            elsif T (I) = ' ' and then In_W then
+               In_W := False;
+               if Count_W = N then return T (I + 1 .. T'Last); end if;
+            end if;
+         end loop;
+         return "";
+      end After;
+      procedure Check (Ok : Boolean; Label, Want, Got : String) is
+      begin
+         Total := Total + 1;
+         if Ok then
+            Con.Put_Line (Msg ("perft.ok", Label));
+         else
+            Fails := Fails + 1;
+            Con.Put_Line (Msg ("perft.fail", Label, Want, Got));
+         end if;
+      end Check;
+      function Pos_Of (Fen : String) return Sim_Chess.Position is
+         Ok : Boolean;
+         P : constant Sim_Chess.Position := Sim_Chess.From_Fen (Fen, Ok);
+      begin
+         if not Ok then raise Usage_Error with Msg ("perft.badfen", Fen); end if;
+         return P;
+      end Pos_Of;
+   begin
+      Con.Put_Line (Msg ("perft.head"));
+      for N in 1 .. 99 loop   --  perft.N = depth count FEN
+         declare
+            T : constant String := Msg ("perft." & Img (N));
+         begin
+            exit when T (T'First) = '[';
+            declare
+               Depth : constant Natural := Natural (Int'Max (0, To_Num_Safe (Word_At (T, 1))));
+               Want : constant Natural := Natural (Int'Max (0, To_Num_Safe (Word_At (T, 2))));
+               Got : constant Natural := Sim_Chess.Perft (Pos_Of (After (T, 2)), Depth);
+            begin
+               Check (Got = Want, "perft " & Img (Depth) & " " & Img (Want) & " " & After (T, 2), Img (Want), Img (Got));
+            end;
+         end;
+      end loop;
+      for N in 1 .. 99 loop   --  perft.state.N = state FEN
+         declare
+            T : constant String := Msg ("perft.state." & Img (N));
+         begin
+            exit when T (T'First) = '[';
+            declare
+               Want : constant String := Word_At (T, 1);
+               S : constant Sim_Chess.Game_State := Sim_Chess.State_Of (Pos_Of (After (T, 1)));
+               Got : constant String :=
+                 (case S is when Sim_Chess.Ongoing => "ongoing", when Sim_Chess.Checkmate => "checkmate",
+                            when Sim_Chess.Stalemate => "stalemate", when Sim_Chess.Fifty_Moves => "fifty");
+            begin
+               Check (Got = Want, "state " & Want & " " & After (T, 1), Want, Got);
+            end;
+         end;
+      end loop;
+      for N in 1 .. 99 loop   --  perft.note.N = coordinate iccf FEN
+         declare
+            T : constant String := Msg ("perft.note." & Img (N));
+         begin
+            exit when T (T'First) = '[';
+            declare
+               Coord : constant String := Word_At (T, 1);
+               Want : constant String := Word_At (T, 2);
+               L : constant Sim_Chess.Move_List := Sim_Chess.Legal (Pos_Of (After (T, 2)));
+               Got : Unbounded_String := To_Unbounded_String ("(not legal)");
+            begin
+               for I in 1 .. L.Count loop
+                  if Sim_Chess.Coord (L.Items (I)) = Coord then Got := To_Unbounded_String (Sim_Chess.Iccf (L.Items (I))); end if;
+               end loop;
+               Check (To_String (Got) = Want, "move " & Coord & " = " & Want, Want, To_String (Got));
+            end;
+         end;
+      end loop;
+      Con.Put_Line (Msg ("perft.sum", Img (Total), Img (Fails)));
+      if Fails > 0 then Ada.Command_Line.Set_Exit_Status (1); end if;
+   end Do_Perft;
 
    --  The screens of every wesen after the replay (--screens / make screens) and the notes lying on things.
    function Screens_Text return String is
@@ -1812,6 +2004,7 @@ procedure Diary_Sim is
       World : Boolean := False;         --  world=1: the treadmill world (Sim_Things) runs in this session
       Rest : Boolean := False;          --  rest=1: recovery rates, rest trade-off and cool-downs
       Grant : Boolean := False;         --  grant=1: grants of petitions (diaries/grants.txt) change recovery rates
+      Chess : Boolean := False;         --  chess=1: chess games as a rest activity, Elo ratings (Sim_Games, diaries/chess.txt)
       Screen : Boolean := False;        --  screen=1: the wesen own small text screens (Sim_Screen, diaries/screens.txt)
    end record;
    package Session_Vectors is new Ada.Containers.Vectors (Positive, Session_Rec);
@@ -1832,7 +2025,7 @@ procedure Diary_Sim is
      ("S" & Img (R.N) & " start=" & Img (R.Start) & " votes=" & Votes_Text (R.Votes) & " len=" & Img (R.Len)
       & " src=" & (if R.By_Vote then "vote" else "explicit") & (if R.Dharma then " dharma=1" else "")
       & (if R.World then " world=1" else "") & (if R.Rest then " rest=1" else "") & (if R.Grant then " grant=1" else "")
-      & (if R.Screen then " screen=1" else ""));
+      & (if R.Screen then " screen=1" else "") & (if R.Chess then " chess=1" else ""));
    function Yuga (N : Positive) return String is (Msg ("yuga." & Img ((N - 1) mod 4)));
    --  The four votes of a session that starts after tick Start (state: St, known words).
    function Votes_At (Start : Int) return Kalpa_Votes is
@@ -1867,6 +2060,7 @@ procedure Diary_Sim is
       R.Rest := Token (L, "rest") = "1";
       R.Grant := Token (L, "grant") = "1";
       R.Screen := Token (L, "screen") = "1";
+      R.Chess := Token (L, "chess") = "1";
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
         and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0;
       while OK and then K < 4 loop
@@ -1967,6 +2161,7 @@ procedure Diary_Sim is
       Rest_Active := False;
       Grant_Active := False;
       Screen_Active := False;
+      Chess_Active := False;
       if not Ada.Directories.Exists (Sessions_Path) then return; end if;
       Read_Lines (Sessions_Path, Lines, Found);
       for I in 1 .. Natural (Lines.Length) loop
@@ -2007,6 +2202,7 @@ procedure Diary_Sim is
       Rest_Active := R.Rest;
       Grant_Active := R.Grant;
       Screen_Active := R.Screen;
+      Chess_Active := R.Chess;
       for E in Entity_Id loop
          if Sim_Dharma.Rebirth_Location (E) >= 0 then St (E).Location := Clamp (Sim_Dharma.Rebirth_Location (E), 0, L_Max); end if;
       end loop;
@@ -2174,6 +2370,7 @@ procedure Diary_Sim is
    function World_Wanted return Boolean is (Limit ("world.enabled", 1) /= 0 and then Sim_Things.Loaded);
    function Rest_Wanted return Boolean is (World_Wanted and then Limit ("rest.enabled", 1) /= 0);   --  rest=1 needs the world
    function Grant_Wanted return Boolean is (Rest_Wanted and then Limit ("grant.enabled", 1) /= 0);   --  grant=1 needs rest=1
+   function Chess_Wanted return Boolean is (World_Wanted and then Limit ("chess.enabled", 1) /= 0);   --  chess=1 needs the world
    function Screen_Wanted return Boolean is (World_Wanted and then Limit ("screen.enabled", 1) /= 0);   --  screen=1 needs the world
 
    --  After the replay of 1 .. Common: resume the unfinished session, or start one
@@ -2194,7 +2391,7 @@ procedure Diary_Sim is
       Session_N := (if Sessions.Is_Empty then 0 else Sessions.Last_Element.N);
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
-               Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted);
+               Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -2210,7 +2407,7 @@ procedure Diary_Sim is
          Kalpa_Line := To_Unbounded_String (Msg ("kalpa.resume", Img (R.N), Yuga (R.N), Votes_Text (R.Votes), Img (R.Len), Img (Ticks)));
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
-               World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted);
+               World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);
@@ -2610,10 +2807,12 @@ procedure Diary_Sim is
       Sim_Dharma.Init (Seed);
       Sim_Things.Init (Seed);
       Sim_Screen.Init (Seed, Coin_Cap);
+      Sim_Games.Init (Seed);
       World_Active := World_Wanted;
       Rest_Active := Rest_Wanted;
       Grant_Active := Grant_Wanted;
       Screen_Active := Screen_Wanted;
+      Chess_Active := Chess_Wanted;
       if Rest_Active then Rest_Begin (Seed); end if;
       Con.Put (To_String (Pending));
       Con.Put_Line (Msg ("preview.head", Img (Seed), Img (Total)));
@@ -2829,6 +3028,51 @@ procedure Diary_Sim is
             Res.Append (Msg ("menu.dharma", To_String (K)));
          end;
       end if;
+      if Ada.Directories.Exists (Chess_Path) then   --  chess: the newest rating of every competitor in diaries/chess.txt, best four
+         declare
+            CL : Str_Vectors.Vector;
+            Cf : Boolean;
+            Rate : array (Sim_Games.Comp_Id) of Natural := [others => 0];
+            Line_E : Unbounded_String;
+            Shown_N : Natural := 0;
+         begin
+            Read_Lines (Chess_Path, CL, Cf);
+            for L of CL loop
+               declare
+                  P : constant Natural := Fx.Index (L, " elo ");
+               begin
+                  if P > 0 and then Fx.Index (L, " end ") > 0 then
+                     for C in Sim_Games.Comp_Id loop
+                        declare
+                           Key : constant String := " " & Sim_Games.Comp_Name (C) & "=";
+                           Q : constant Natural := Fx.Index (L (P .. L'Last), Key);
+                           G : constant Natural := (if Q > 0 then Fx.Index (L (Q .. L'Last), ">") else 0);
+                           Z : Natural := G + 1;
+                        begin
+                           while G > 0 and then Z <= L'Last and then L (Z) in '0' .. '9' loop Z := Z + 1; end loop;
+                           if G > 0 and then Z > G + 1 then Rate (C) := Natural (Int'Max (0, To_Num_Safe (L (G + 1 .. Z - 1)))); end if;
+                        end;
+                     end loop;
+                  end if;
+               end;
+            end loop;
+            for Place in 1 .. 4 loop
+               declare
+                  Best : Natural := 0;
+               begin
+                  for C in Sim_Games.Comp_Id loop
+                     if Rate (C) > 0 and then (Best = 0 or else Rate (C) > Rate (Best)) then Best := C; end if;
+                  end loop;
+                  if Best > 0 then
+                     Append (Line_E, (if Shown_N = 0 then "" else " | ") & Sim_Games.Comp_Name (Best) & " " & Img (Rate (Best)));
+                     Shown_N := Shown_N + 1;
+                     Rate (Best) := 0;
+                  end if;
+               end;
+            end loop;
+            if Shown_N > 0 then Res.Append (Msg ("menu.elo", To_String (Line_E))); end if;
+         end;
+      end if;
       if Length (World_L) > 0 then   --  words learned in the world and where the wesen stood at the last session end
          declare
             Learned, Places : Unbounded_String;
@@ -2939,6 +3183,8 @@ begin
          elsif Opt = "--inbox" then Inbox_Mode := True;
          elsif Opt = "--map" then Map_Mode := True;
          elsif Opt = "--grant" then Grant_Mode := True; Grant_Opt := To_Unbounded_String (Val);
+         elsif Opt = "--perft" then Perft_Mode := True;
+         elsif Opt = "--elo" then Ledger_Mode := True; Elo_View := True;
          elsif Opt = "--screens" then Ledger_Mode := True; Screens_View := True;
          elsif Opt = "--ledger" then
             Ledger_Mode := True;
@@ -2964,6 +3210,10 @@ begin
    Every := (if Every < 0 then 100 else Int'Max (1, Every));
    if Preview and then (Fresh or else Yes or else More >= 0 or else Crash_At >= 0) then
       raise Usage_Error with Msg ("err.preview");
+   end if;
+   if Perft_Mode then
+      Do_Perft;
+      return;
    end if;
    if Preview then
       Run_Preview;
@@ -3073,6 +3323,7 @@ begin
    Sim_Dharma.Init (Seed);
    Sim_Things.Init (Seed);
    Sim_Screen.Init (Seed, Coin_Cap);
+   Sim_Games.Init (Seed);
    for E in Entity_Id loop
       Cur_Name := To_Unbounded_String (Name (E));
       Ada.Directories.Create_Path ("entities/" & Name (E));
@@ -3106,6 +3357,8 @@ begin
    Load_Grants;
    Sim_Store.Open (Screen_Store, Screens_Path, "# seed " & Img (Seed));
    Screen_N := 0;
+   Sim_Store.Open (Chess_Store, Chess_Path, "# seed " & Img (Seed));
+   Chess_N := 0;
    Set_Ledger_From;
    if not Ledger_Mode then Write_Debug ("RUN", ""); end if;   --  stub: a kill -9 still leaves a file
 
@@ -3130,7 +3383,7 @@ begin
       if Ledger_Mode then   --  replayed and verified, nothing decided, nothing written: print the ledger
          for F of Out_File loop TIO.Close (F); end loop;
          for F of Side_Out loop TIO.Close (F); end loop;
-         if Screens_View then Con.Put (Screens_Text); else Con.Put_Line (Sim_Ledger.Report (Seed, Ledger_From, Ledger_Full)); end if;
+         if Elo_View then Con.Put (Elo_Text); elsif Screens_View then Con.Put (Screens_Text); else Con.Put_Line (Sim_Ledger.Report (Seed, Ledger_From, Ledger_Full)); end if;
          return;
       end if;
       for E in Entity_Id loop
@@ -3174,6 +3427,7 @@ begin
       Verify_Edits (Last_Done);
       Verify_Grants (Last_Done);
       Verify_Screens (Last_Done);
+      Verify_Chess (Last_Done);
    end if;
    if Quit_Seen then   --  Ctrl-C / SIGTERM: everything written so far is flushed; a rerun resumes
       Con.Put_Line (Msg ("quit", Sim_Quit.Which, Img (Last_Done)));
@@ -3249,6 +3503,12 @@ begin
       if Screen_Active then   --  the screens: shown / left / read, and the words they taught and coined
          Append (Rep, Msg ("screen.rep") & ASCII.LF);
          for E in Entity_Id loop Append (Rep, Sim_Screen.Summary (E) & ASCII.LF); end loop;
+      end if;
+      if Chess_Active then   --  chess: ratings and results per competitor, then every game with its moves
+         Append (Rep, Msg ("chess.rep") & ASCII.LF);
+         for C in Sim_Games.Comp_Id loop Append (Rep, Sim_Games.Summary (C) & ASCII.LF); end loop;
+         Append (Rep, Msg ("chess.head") & ASCII.LF);
+         for L of Sim_Games.Report (True) loop Append (Rep, L & ASCII.LF); end loop;
       end if;
       if not Grant_Report.Is_Empty then   --  granted petitions and the recovery rates they changed
          Append (Rep, Msg ("grant.head") & ASCII.LF);

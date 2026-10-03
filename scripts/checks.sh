@@ -16,7 +16,7 @@ bad() { echo "  FAIL -- $*"; fails=$((fails + 1)); }
 idn() { sed 's/^\([a-z]*\) *=.*/\1 = \1/' "$root/data/names.txt" > "$1/names.txt"; }
 idata="$w/idata"; mkdir -p "$idata"; cp -r "$root/data/." "$idata/"; idn "$idata"
 # screens (and later chess) change the dice of the words: the older scenarios run with them off; their own scenarios switch them on
-sed -i 's/^screen.enabled = .*/screen.enabled = 0/' "$idata/limits.txt"
+sed -i 's/^screen.enabled = .*/screen.enabled = 0/; s/^chess.enabled = .*/chess.enabled = 0/' "$idata/limits.txt"
 mkdir -p "$w/ib/bin"; cp "$bin" "$w/ib/bin/"; cp -r "$idata" "$w/ib/data"; bin="$w/ib/bin/diary_sim"   # the binary beside its identity-names data
 lines() { cat "$1"/*.jsonl | wc -l; }
 dups()  { for f in "$1"/*.jsonl; do grep '}}$' "$f" | grep -o '"tick":[0-9]*' | sort | uniq -d; done | wc -l; }
@@ -776,6 +776,68 @@ DIARY_HOME="$w/sc/o" "$sfb" --seed 42 --ticks 300 --yes --every 5000 > /dev/null
 [ ! -e "$w/sc/o/diaries/screens.txt" ] && ! grep -q 'screen=1' "$w/sc/o/diaries/sessions.txt" && ! grep -q 'screen' "$w/sc/o"/diaries/*.jsonl && ! grep -q ' screen ' "$w/sc/o"/entities/*/words.txt && grep -q 'no screens in this save' c9.txt \
   && ok "screen.enabled = 0: no marker, no screens.txt, no screen text anywhere; --screens says so" || bad "screens off"
 grep -q -- '--screens' "$root/data/help.txt" && grep -q 'make screens' "$root/README.md" && grep -q 'screen.width' "$root/data/limits.txt" && grep -q 'condensed' "$root/README.md" && ok "--help, README and limits.txt cover screens (and name the condensed-vocabulary hook)" || bad "docs screens"
+unset DIARY_HOME
+
+echo "== 32. chess (chess=1): perft, games, Elo, timeout / resignation, players vs wesen, replay-verified C lines =="
+"$bin" --perft > p1.txt 2>&1; rc=$?
+[ $rc = 0 ] && grep -q '^18 checks, 0 failed' p1.txt && grep -q 'perft 4 197281' p1.txt && grep -q 'state checkmate' p1.txt && grep -q 'move e1g1 = 5171' p1.txt && ok "--perft: six reference positions (castling, en passant, promotion), mate / stalemate / fifty-move states and ICCF notation, 18 checks" || bad "perft ($rc)"
+rm -rf "$w/ch"; mkdir -p "$w/ch/bin" "$w/ch/h" "$w/ch/bad/bin" "$w/ch/off/bin" "$w/ch/o" "$w/ch/t/bin" "$w/ch/t/h" "$w/ch/r/bin" "$w/ch/r/h" "$w/ch/n/bin" "$w/ch/n/h"
+cp "$bin" "$w/ch/bin/"; cp -r "$idata" "$w/ch/data"; sed -i 's/^chess.enabled = .*/chess.enabled = 1/' "$w/ch/data/limits.txt"; cb="$w/ch/bin/diary_sim"
+cp "$bin" "$w/ch/bad/bin/"; cp -r "$w/ch/data" "$w/ch/bad/data"; sed -i 's/^perft.2 = 3 97862/perft.2 = 3 97863/' "$w/ch/bad/data/chess.txt"; ( cd "$w/ch/bad" && ./bin/diary_sim --perft > "$w/ch/p2.txt" 2>&1 ); rc=$?; cp "$w/ch/p2.txt" p2.txt
+[ $rc = 1 ] && grep -q '^FAIL.*expected 97863, got 97862' p2.txt && grep -q '1 failed' p2.txt && ok "--perft with a wrong count: FAIL line and exit 1" || bad "perft failing ($rc)"
+cd "$w/ch/h" || exit 1; export DIARY_HOME="$w/ch/h"
+"$cb" --seed 42 --ticks 300 --yes --every 5000 > h1.txt 2>&1; "$cb" --more 300 --every 5000 > h2.txt 2>&1
+n_c=$(grep -c '^C[0-9]' diaries/chess.txt); n_m=$(grep -c ' move ' diaries/chess.txt)
+grep -q '^S1 .* chess=1$' diaries/sessions.txt && grep -q '^S2 .* chess=1$' diaries/sessions.txt && head -1 diaries/chess.txt | grep -q '^# seed 42$' && [ "$n_m" -gt 100 ] && grep -q ' start white=' diaries/chess.txt \
+  && ok "new sessions carry chess=1; starts, moves and ends are C lines in diaries/chess.txt ($n_c lines, $n_m moves)" || bad "chess.txt ($n_c $n_m)"
+bad_n=$(grep ' move ' diaries/chess.txt | awk '{ c = $7; n = $8; f = index("abcdefgh", substr(c, 1, 1)); t = index("abcdefgh", substr(c, 3, 1)); e = f substr(c, 2, 1) t substr(c, 4, 1); p = (length(c) == 5) ? index("qrbn", substr(c, 5, 1)) : ""; if (n != e p) bad++ } END { print bad + 0 }')
+[ "$bad_n" = 0 ] && ok "every recorded move is both coordinate notation and the matching ICCF number" || bad "ICCF notation ($bad_n differ)"
+grep ' start white=' diaries/chess.txt | grep -Eq 'white=(iris|sol|noor) black=(ada|gemini|replika|robert)|white=(ada|gemini|replika|robert) black=(iris|sol|noor)' && grep ' start white=' diaries/chess.txt | grep -Eq 'white=(iris|sol|noor) black=(iris|sol|noor)' && grep ' start white=' diaries/chess.txt | grep -Eq 'white=(ada|gemini|replika|robert) black=(ada|gemini|replika|robert)' \
+  && ok "wesen play wesen, players play wesen, players play players (all three kinds of games are recorded)" || bad "game kinds"
+"$cb" --elo > e1.txt 2>&1; rc=$?
+tot=$(grep -E '^[0-9]\. ' e1.txt | sed -E 's/^[0-9]\. [A-Za-z]+ ([0-9]+) .*/\1/' | awk '{ s += $1 } END { print s + 0 }')
+[ $rc = 0 ] && [ "$(grep -cE '^[0-9]\. ' e1.txt)" = 7 ] && [ "$tot" = 8400 ] && ok "--elo ranks all seven (4 wesen, 3 players); the ratings sum to 7 x 1200 (exactly conserved)" || bad "elo table ($rc, sum $tot)"
+op=$(grep ' end ' diaries/chess.txt | awk '{ ok = 1; for (i = 1; i <= NF; i++) if ($i ~ /^[a-z]+=[0-9]+>[0-9]+$/) { split($i, a, /[=>]/); d[++n] = a[3] - a[2] } if (n != 2 || d[1] + d[2] != 0) ok = 0; n = 0; if (!ok) bad++ } END { print bad + 0 }')
+[ "$op" = 0 ] && ok "in every finished game the two rating changes are exact opposites" || bad "elo deltas ($op)"
+mkdir -p "$w/ch/dn/bin" "$w/ch/dn/h"; cp "$bin" "$w/ch/dn/bin/"; cp -r "$root/data" "$w/ch/dn/data"; sed -i 's/^chess.enabled = .*/chess.enabled = 1/' "$w/ch/dn/data/limits.txt"
+DIARY_HOME="$w/ch/dn/h" "$w/ch/dn/bin/diary_sim" --seed 42 --ticks 300 --yes --every 5000 > /dev/null 2>&1; DIARY_HOME="$w/ch/dn/h" "$w/ch/dn/bin/diary_sim" --elo > e2.txt 2>&1
+grep -q 'Modulus' e2.txt && grep -q 'Kernel' e2.txt && grep -q 'Vertex' e2.txt && grep -q 'Lemma' e2.txt && ! grep -Eq '^[0-9]\. (ada|iris|sol|noor) ' e2.txt && [ "$(awk 'length > 79' e2.txt | wc -l)" = 0 ] && ok "--elo shows display names (Lemma .. Axiom, Modulus, Kernel, Vertex), no line over 79 columns" || bad "elo display names"
+if [ -f "$w/pty_multi.py" ]; then   # (the menu scenario's pty helper exists in a full run)
+  python3 "$w/pty_multi.py" "$w/ch/h" "$cb" '5\n' > mu.txt 2>&1; grep -aq '^ *chess Elo [A-Za-z]* [0-9]* |' mu.txt && ok "menu: the start screen has a 'chess Elo' line with the best ratings" || bad "menu elo line"
+fi
+# the mood ledger still adds up with chess results in it
+good=1; "$cb" --ledger=full > l1.txt 2>&1
+for e in ada gemini replika robert; do
+  fin=$(grep -o '"mood":-\?[0-9]*' diaries/$e.jsonl | tail -1 | cut -d: -f2); led=$(grep -E "^$e +run" l1.txt | sed -E 's/^[a-z]+ +run ([-+]?[0-9]+) .*/\1/' | sed 's/^+//')
+  [ "$fin" = "$led" ] || { good=0; echo "   $e final mood $fin, ledger $led"; }
+done
+grep -q 'chess results' l1.txt && [ $good = 1 ] && ok "the mood ledger lists 'chess results' and its sums equal the diaries' mood changes" || bad "ledger with chess"
+grep -q '^chess (' run_report.txt && grep -q '^G1 ' run_report.txt && grep -q 'rating' run_report.txt && "$cb" --more 10 --every 5000 --debug > h3.txt 2>&1 && grep -q 'elo ' debug_full.txt && [ "$(wc -c < debug.txt)" -le 1500 ] && [ "$(wc -c < debug_digest.txt)" -le 1500 ] \
+  && ok "the end report lists ratings, results and every game with its moves; the digest has an elo line; caps held" || bad "chess report"
+cp diaries/chess.txt ../chess.keep
+sed -i '0,/ end /s/ elo \([a-z]*\)=\([0-9]*\)>\([0-9]*\)/ elo \1=\2>\3x/' diaries/chess.txt; "$cb" --more 0 --every 5000 > h4.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && grep -q 'chess.txt C' h4.txt && ok "tampered rating in an end line: import FAILED, DRIFT" || bad "tampered elo"
+cp ../chess.keep diaries/chess.txt; sed -i '0,/ move /s/ move \([0-9]*\) \([a-z]*\) \([a-h]\)/ move \1 \2 \3z/' diaries/chess.txt; "$cb" --more 0 --every 5000 > h5.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "tampered move: DRIFT" || bad "tampered move"
+cp ../chess.keep diaries/chess.txt; echo "C99999 t=5 g=1 move 1 ada e2e4 5254 k=0" >> diaries/chess.txt; "$cb" --more 0 --every 5000 > h6.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "an invented C line: DRIFT" || bad "invented C line"
+cp ../chess.keep diaries/chess.txt; cp diaries/sessions.txt ../sess.keep; sed -i '/^S1 /s/ chess=1//' diaries/sessions.txt; "$cb" --more 0 --every 5000 > h7.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "S line with its chess=1 marker removed: DRIFT" || bad "tampered chess marker"
+cp ../sess.keep diaries/sessions.txt; "$cb" --more 0 --every 5000 > h8.txt 2>&1; grep -q '^import OK: 4 entities, 610 ticks verified' h8.txt && ok "restored: replays again" || bad "chess restore"
+# timeouts: a short clock; resignations: a hair trigger
+cp "$bin" "$w/ch/t/bin/"; cp -r "$w/ch/data" "$w/ch/t/data"; sed -i 's/^chess.timeout = .*/chess.timeout = 12/' "$w/ch/t/data/limits.txt"; DIARY_HOME="$w/ch/t/h" "$w/ch/t/bin/diary_sim" --seed 42 --ticks 500 --yes --every 5000 > t1.txt 2>&1
+cp "$bin" "$w/ch/r/bin/"; cp -r "$w/ch/data" "$w/ch/r/data"; sed -i 's/^chess.resign_pct = .*/chess.resign_pct = 90/; s/^chess.resign_gap = .*/chess.resign_gap = 1/' "$w/ch/r/data/limits.txt"; DIARY_HOME="$w/ch/r/h" "$w/ch/r/bin/diary_sim" --seed 42 --ticks 500 --yes --every 5000 > r1.txt 2>&1
+nt=$(grep -c ' end .* timeout ' "$w/ch/t/h/diaries/chess.txt"); nr=$(grep -c ' end .* resign ' "$w/ch/r/h/diaries/chess.txt"); echo "   short clock: $nt timeouts; hair-trigger resignation: $nr resignations"
+tw=$(grep ' end .* timeout ' "$w/ch/t/h/diaries/chess.txt" | head -1); gn=$(echo "$tw" | sed 's/.* g=\([0-9]*\) end.*/\1/')
+[ "$nt" -ge 1 ] && [ "$nr" -ge 1 ] && grep -q 'by timeout [1-9]' "$w/ch/t/h/run_report.txt" && grep -q 'by resignation [1-9]' "$w/ch/r/h/run_report.txt" && ok "a win by timeout and a win by resignation happen, are recorded as end reasons and counted in the report" || bad "timeout / resign paths"
+DIARY_HOME="$w/ch/t/h" "$w/ch/t/bin/diary_sim" --more 0 --every 5000 > t2.txt 2>&1; grep -q '^import OK: 4 entities, 500 ticks verified' t2.txt && ok "the timeout run replays and verifies (import OK)" || bad "timeout replay"
+# holiday: the clock of the holidaying side stops (no timeout is charged to it while it is away)
+hol=$(grep -c ' hol ' "$w/ch/h/diaries/chess.txt"); echo "   holiday notices in the 600-tick run: $hol"
+[ "$hol" -ge 1 ] && ok "holiday notices are recorded (hol <wesen> until=<tick>)" || bad "no holiday notice"
+# off: no marker, no file, no chess text; --elo says so
+cp "$bin" "$w/ch/off/bin/"; cp -r "$idata" "$w/ch/off/data"; DIARY_HOME="$w/ch/o" "$w/ch/off/bin/diary_sim" --seed 42 --ticks 300 --yes --every 5000 > /dev/null 2>&1; DIARY_HOME="$w/ch/o" "$w/ch/off/bin/diary_sim" --elo > e3.txt 2>&1
+[ ! -e "$w/ch/o/diaries/chess.txt" ] && ! grep -q 'chess=1' "$w/ch/o/diaries/sessions.txt" && ! grep -q 'chess' "$w/ch/o"/diaries/*.jsonl && grep -q 'no chess games' e3.txt && ok "chess.enabled = 0: no marker, no chess.txt, no chess text; --elo says so" || bad "chess off"
+grep -q -- '--elo' "$root/data/help.txt" && grep -q -- '--perft' "$root/data/help.txt" && grep -q 'make elo' "$root/README.md" && grep -q 'elo.table' "$root/data/chess.txt" && grep -q 'chess.elo.k' "$root/data/limits.txt" && ok "--help, README, limits.txt and chess.txt cover chess and Elo" || bad "docs chess"
 unset DIARY_HOME
 
 rm -rf "$w"

@@ -253,6 +253,36 @@ separately "taught from a screen" and "coined from a screen". The unit is `sim_s
 **Hook for a later condensed-vocabulary step (not built):** `Sim_Screen.Words_Of` / `Count` give the words on a screen in order, and
 `screen.condense = 0` in `limits.txt` is reserved for it. Changing the `screen.*` numbers of a running save needs `--fresh`.
 
+## Chess and Elo (`chess=1` sessions, `make elo`, `make perft`)
+
+Chess is a rest activity (`sim_chess.ads/.adb` = rules, `sim_games.ads/.adb` = the games; numbers in `data/limits.txt` `chess.*`,
+wording and the checks of the move generator in `data/chess.txt`). New sessions of a save with the world carry `chess=1`
+(`chess.enabled = 0`: nothing changes). When a wesen RESTS next to another wesen (same or neighbouring cell) or in range of a
+player (a player is in range of the wesen it watches and of those next to it), the pair may sit down to a correspondence game
+(`chess.start_pct`), and one move is made whenever they meet again after `chess.gap` ticks. The two players in range of a resting
+wesen may play each other too (`chess.player_pct`), so wesen and players (Modulus, Kernel, Vertex) are all opponents.
+
+* **Rules:** own legal-move generator with castling, en passant, promotion, check, checkmate, stalemate, the 50-move rule; a repetition
+  (`chess.repeat`) and the ply cap (`chess.max_plies`) end a game as a draw. Moves are recorded as coordinates (`e2e4`, `a7a8q`)
+  and as ICCF numbers (`5254`, `17181`). `make perft` (`--perft`) checks the generator against the reference counts (six well-known
+  positions, mate / stalemate / fifty-move states, notation); PROOF-LATER labels mark the rule and Elo arithmetic.
+* **Who moves how:** the side to move chooses by hash dice; strength (the chance of the best 1-ply move, else a random legal move) comes from
+  the wesen's Rule 30 core personality (a player: a hashed birth value), `chess.strength.min .. max`.
+* **Results:** win, loss, draw, win by TIMEOUT (the side to move has used `chess.timeout` ticks; its clock stops while it is on HOLIDAY: a
+  resting wesen may announce one, `chess.holiday_pct`, `chess.holiday_len`, and plays no game meanwhile) and win by RESIGNATION (more likely
+  when clearly behind in material and, for a wesen, in low mood: `chess.resign_*`). A win gives a wesen mood, a draw a little, a loss costs
+  a little (`chess.win/draw/loss`, taken at its next step; the mood ledger lists "chess results").
+* **Restful:** a move cuts the work cool-down (`chess.cool_cut`), shifts the work-load history and gives a little energy; the coordinate
+  and numeric strings of a move become words both players learn (word growth) and land on the screens (`screen=1`).
+* **Elo:** all seven competitors start at `chess.elo.start` (1200) with K = `chess.elo.k` (24). Standard expectation, integer only: the
+  table `elo.table` in `data/chess.txt` (thousandths by rating gap, linear in between); both rating changes are exact opposites, so the
+  sum of all ratings stays 7 x start. `make elo` (`--elo`) replays and prints the ranking with display names; ratings also appear in the
+  end report, the menu line `chess Elo ...` (newest ratings from `diaries/chess.txt`) and the debug digest (`run` section, line `elo`).
+* **Record:** every start, move, holiday and end (with the new ratings of both: `elo ada=1200>1188 iris=1200>1212`) is a `C<n> t=<tick> ...`
+  line in `diaries/chess.txt`, recomputed by every replay: a changed or invented line, or a removed `chess=1` marker, is DRIFT.
+  The end report (`run_report.txt`) lists ratings, results, wins by timeout / resignation, and every game with its moves.
+  Changing the `chess.*` numbers or `elo.table` of a running save needs `--fresh`.
+
 ## The debug digest (`DEBUG=1`, `--debug`)
 
 `debug.txt` (always written, <= 1500 bytes) is unchanged. For a compact file to attach to chat:

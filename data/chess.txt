@@ -1,0 +1,51 @@
+# Chess (chess=1 sessions): wording, and the perft / state / notation checks of the move generator (diary_sim --perft).
+# Numbers (gap between moves, start chance, mood of a result, ...) are in data/limits.txt chess.*
+chess.white = White
+chess.black = Black
+chess.running = running
+chess.game = {1} {2} {3} {4}, {5} plies: {6}
+chess.sum = {1}: rating {2}, won {3}, drew {4}, lost {5}, {6}
+chess.sum2 = by timeout {1}, by resignation {2}, moves made {3}, holidays {4}
+chess.head = chess games (game, white-black, result, how it ended, plies, moves; running games shown with their first moves):
+chess.none = no chess games in this save (they start with a session marked chess=1: make run).
+chess.rep = chess (Elo rating, won / drew / lost, wins by timeout / resignation, moves made, holidays):
+detail.chess_start = sat down to a game of chess with {1} ({2})
+detail.chess_move = played {2} ({3}, ICCF) against {1}, ply {4}
+detail.chess_holiday = told the chess partners it is away on holiday until tick {1}
+detail.chess_end = the game with {3} ended {1} ({2})
+elo.head = Elo (start {1}, K {2}): rating, change, won/drew/lost, wins by time/resign
+elo.row = {1}. {2} {3} ({4}) {5} {6}
+elo.digest = elo {1}
+elo.none = no chess games in this save (they start with a session marked chess=1: make run).
+# the expectation of the weaker side in thousandths at a rating deficit of 0, 25, 50 .. 800 (logistic, base 10, 400); the stronger side gets the rest
+elo.table = 500,464,429,394,360,327,297,267,240,215,192,170,151,133,118,104,91,80,70,61,53,46,40,35,31,27,23,20,17,15,13,11,10
+err.chess = chess.txt {1} differs from the replay: {2}
+perft.head = move generator checks (perft counts, game states, notation):
+perft.ok = ok   {1}
+perft.fail = FAIL {1}: expected {2}, got {3}
+perft.sum = {1} checks, {2} failed
+perft.badfen = bad FEN in data/chess.txt: {1}
+elo.games = chess games {1} (finished {2}), moves {3}
+chess.word = a chess move (coordinate or numeric notation)
+# perft.N = depth count FEN  (leaf positions after depth plies; well-known reference counts)
+perft.1 = 4 197281 rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+perft.2 = 3 97862 r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1
+perft.3 = 4 43238 8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1
+perft.4 = 3 9467 r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1
+perft.5 = 3 62379 rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8
+perft.6 = 3 89890 r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10
+# perft.state.N = state FEN  (state of the side to move: ongoing checkmate stalemate fifty)
+perft.state.1 = ongoing rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+perft.state.2 = checkmate rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3
+perft.state.3 = stalemate 7k/5Q2/6K1/8/8/8/8/8 b - - 0 1
+perft.state.4 = fifty 8/8/8/4k3/8/8/4K3/7R w - - 100 80
+perft.state.5 = ongoing 7k/5Q2/6K1/8/8/8/8/8 w - - 0 1
+# perft.note.N = coordinate iccf FEN  (the legal move with that coordinate notation has that ICCF numeric)
+perft.note.1 = e2e4 5254 rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+perft.note.2 = g1f3 7163 rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+perft.note.3 = a7a8q 17181 8/P6k/8/8/8/8/8/4K3 w - - 0 1
+perft.note.4 = a7a8n 17184 8/P6k/8/8/8/8/8/4K3 w - - 0 1
+perft.note.5 = e1g1 5171 r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1
+perft.note.6 = e1c1 5131 r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1
+perft.note.7 = e5d6 5546 4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1
+menu.elo = chess Elo {1}

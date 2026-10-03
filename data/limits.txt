@@ -168,3 +168,40 @@ screen.note_pct = 15
 screen.blend_pct = 10
 screen.own_blend_pct = 2
 screen.condense = 0
+
+# Chess (chess=1 sessions; needs the world): a rest activity.  A wesen that rests beside another (same or neighbouring cell) may sit down to
+# a game (start_pct per rest; after pause ticks from the last game of that pair), and one move is made when they meet after gap ticks.
+# The side to move chooses by hash dice; its strength (percent chance of the best 1-ply move, else a random legal move) runs from
+# strength.min to strength.max by the wesen's Rule 30 core personality.  A game ends by mate, stalemate, the 50-move rule, `repeat`
+# repetitions of a position, max_plies, a TIMEOUT (the side to move has used `timeout` ticks; its clock stops while it is on holiday: a resting wesen
+# may announce one, holiday_pct per rest, for holiday_len ticks, and plays no game meanwhile) or a RESIGNATION (when the side to move is
+# resign_gap material points behind or more: resign_pct x points / gap percent per move, plus resign_mood_pct for a wesen at mood <= resign_mood).
+# Players (Modulus, Kernel, Vertex) play too: against a wesen next to the wesen they watch, and (player_pct per rest) each other. Elo: every competitor
+# starts at elo.start, K = elo.k, integer table in chess.txt; both rating changes are exact opposites.  win / draw / loss:
+# mood of the result (taken at the wesen's next step).  Playing counts as restful: cool_cut ticks off a work cool-down, the work-load bit
+# history shifted right by hist_shift, energy +energy.  Changing these numbers needs --fresh (chess.txt drifts).
+chess.enabled = 1
+chess.gap = 6
+chess.start_pct = 50
+chess.pause = 30
+chess.timeout = 300
+chess.max_plies = 160
+chess.repeat = 3
+chess.holiday_pct = 2
+chess.holiday_len = 60
+chess.resign_pct = 4
+chess.resign_gap = 3
+chess.resign_mood = -40
+chess.resign_mood_pct = 5
+chess.resign_min_plies = 10
+chess.player_pct = 25
+chess.elo.start = 1200
+chess.elo.k = 24
+chess.strength.min = 0
+chess.strength.max = 100
+chess.win = 6
+chess.draw = 1
+chess.loss = -2
+chess.cool_cut = 3
+chess.hist_shift = 2
+chess.energy = 1
