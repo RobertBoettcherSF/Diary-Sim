@@ -43,6 +43,7 @@ govern.chg.plain = {1} {2}: {3} {4} ({5}); {6}
 govern.chg.calm = {1} {2}: a small step, {3} {4} ({5}); {6}
 govern.chg.alarm = {1} {2}: CHANGED {3} by {4} ({5}); {6}
 govern.head = governance (players decide petitions; decisions D<n>, trust, standing):
+govern.off = governance: off ({1})
 govern.none = no governance in this save (it starts with a session marked govern=1: make run).
 govern.player = {1}: {2}
 govern.wesen = {1}: trust {2} stand {3} | rate {4} cool {5} work {6} quick {7}

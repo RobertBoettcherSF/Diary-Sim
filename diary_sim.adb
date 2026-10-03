@@ -1,4 +1,4 @@
---  Version: 0.025
+--  Version: 0.026
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -55,7 +55,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.025";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.026";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -130,6 +130,7 @@ procedure Diary_Sim is
    --  govern=1 sessions (Sim_Govern): the players decide petitions; D lines in diaries/govern.txt (Sim_Store, replay-verified);
    --  Robert's veto / approval inputs are V lines in diaries/vetoes.txt.
    Govern_Active : Boolean := False;
+   Scoin_Active : Boolean := False;   --  scoin=1 sessions: screen blends have their own per-session cap
    Govern_Path : constant String := "diaries/govern.txt";
    Vetoes_Path : constant String := "diaries/vetoes.txt";
    Govern_Store : Sim_Store.Store;
@@ -593,7 +594,7 @@ procedure Diary_Sim is
          K : constant Natural := Known_Count (E);
       begin
          if Int (Roll (Seed, Eid, Tick, 5, 100)) <= Coin_Pct and then K >= 2
-           and then Int (Coined_Total) < Coin_Cap
+           and then Int (Coined_Total) - (if Scoin_Active then Int (Sim_Screen.Coined_All) else 0) < Coin_Cap   --  scoin=1: blends from screens do not use up the cap
          then
             declare
                Ia : constant Positive := Roll (Seed, Eid, Tick, 6, K);
@@ -2176,6 +2177,7 @@ procedure Diary_Sim is
       Screen : Boolean := False;        --  screen=1: the wesen own small text screens (Sim_Screen, diaries/screens.txt)
       Robot : Boolean := False;         --  robot=1: the robot steered through the screens (Sim_Robot, diaries/robot.txt)
       Govern : Boolean := False;        --  govern=1: the players decide petitions (Sim_Govern, diaries/govern.txt)
+      Scoin : Boolean := False;         --  scoin=1: screen blends have their own per-session cap and rate (not the global coin_cap)
    end record;
    package Session_Vectors is new Ada.Containers.Vectors (Positive, Session_Rec);
    Sessions : Session_Vectors.Vector;
@@ -2196,7 +2198,7 @@ procedure Diary_Sim is
       & " src=" & (if R.By_Vote then "vote" else "explicit") & (if R.Dharma then " dharma=1" else "")
       & (if R.World then " world=1" else "") & (if R.Rest then " rest=1" else "") & (if R.Grant then " grant=1" else "")
       & (if R.Screen then " screen=1" else "") & (if R.Chess then " chess=1" else "")
-      & (if R.Robot then " robot=1" else "") & (if R.Govern then " govern=1" else ""));
+      & (if R.Robot then " robot=1" else "") & (if R.Govern then " govern=1" else "") & (if R.Scoin then " scoin=1" else ""));
    function Yuga (N : Positive) return String is (Msg ("yuga." & Img ((N - 1) mod 4)));
    --  The four votes of a session that starts after tick Start (state: St, known words).
    function Votes_At (Start : Int) return Kalpa_Votes is
@@ -2234,6 +2236,7 @@ procedure Diary_Sim is
       R.Chess := Token (L, "chess") = "1";
       R.Robot := Token (L, "robot") = "1";
       R.Govern := Token (L, "govern") = "1";
+      R.Scoin := Token (L, "scoin") = "1";
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
         and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0;
       while OK and then K < 4 loop
@@ -2337,6 +2340,7 @@ procedure Diary_Sim is
       Chess_Active := False;
       Robot_Active := False;
       Govern_Active := False;
+      Scoin_Active := False;
       if not Ada.Directories.Exists (Sessions_Path) then return; end if;
       Read_Lines (Sessions_Path, Lines, Found);
       for I in 1 .. Natural (Lines.Length) loop
@@ -2380,6 +2384,8 @@ procedure Diary_Sim is
       Chess_Active := R.Chess;
       Robot_Active := R.Robot;
       Govern_Active := R.Govern;
+      Scoin_Active := R.Scoin and then R.Screen;
+      Sim_Screen.Begin_Session (Scoin_Active);   --  a new count of screen blends per wesen
       if R.Govern then Sim_Govern.Begin_Life (R.Start); end if;   --  the players take over the petitions with the first govern=1 session
       if R.Robot then Sim_Robot.Begin_Life (R.Start); end if;   --  the robot comes into the world with its first session
       for E in Entity_Id loop
@@ -2565,6 +2571,7 @@ procedure Diary_Sim is
    function Chess_Wanted return Boolean is (World_Wanted and then Limit ("chess.enabled", 1) /= 0);   --  chess=1 needs the world
    function Screen_Wanted return Boolean is (World_Wanted and then Limit ("screen.enabled", 1) /= 0);   --  screen=1 needs the world
    function Robot_Wanted return Boolean is (Screen_Wanted and then Limit ("robot.enabled", 1) /= 0);     --  robot=1 needs the screens
+   function Scoin_Wanted return Boolean is (Screen_Wanted and then Limit ("screen.coin_enabled", 1) /= 0);   --  scoin=1 needs the screens
    function Govern_Wanted return Boolean is (Rest_Wanted and then Limit ("govern.enabled", 1) /= 0);     --  govern=1 needs the rest model (the levers)
 
    --  After the replay of 1 .. Common: resume the unfinished session, or start one
@@ -2585,7 +2592,7 @@ procedure Diary_Sim is
       Session_N := (if Sessions.Is_Empty then 0 else Sessions.Last_Element.N);
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
-               Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted);
+               Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -2601,7 +2608,7 @@ procedure Diary_Sim is
          Kalpa_Line := To_Unbounded_String (Msg ("kalpa.resume", Img (R.N), Yuga (R.N), Votes_Text (R.Votes), Img (R.Len), Img (Ticks)));
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
-               World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted);
+               World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);
@@ -3094,6 +3101,8 @@ procedure Diary_Sim is
       Chess_Active := Chess_Wanted;
       Robot_Active := Robot_Wanted;
       Govern_Active := Govern_Wanted;
+      Scoin_Active := Scoin_Wanted;
+      Sim_Screen.Begin_Session (Scoin_Active);
       if Rest_Active then Rest_Begin (Seed); end if;
       Con.Put (To_String (Pending));
       Con.Put_Line (Msg ("preview.head", Img (Seed), Img (Total)));
@@ -3819,6 +3828,14 @@ begin
                                     Sgn (Int (Sim_Govern.Off (E, Sim_Govern.Rate))), Sgn (Int (Sim_Govern.Off (E, Sim_Govern.Cool))),
                                     Sgn (Int (Sim_Govern.Off (E, Sim_Govern.Work))), Sgn (Int (Sim_Govern.Off (E, Sim_Govern.Quick)))) & ASCII.LF);
          end loop;
+      end if;
+      if not Robot_Active or else not Govern_Active then   --  one line: why a block is missing (robot / governance)
+         declare
+            R : constant String := (if Robot_Active then "" else Msg ("robot.off", Msg ((if Robot_Wanted then "off.session" else "off.data"), "robot")));
+            G : constant String := (if Govern_Active then "" else Msg ("govern.off", Msg ((if Govern_Wanted then "off.session" else "off.data"), "govern")));
+         begin
+            Append (Rep, R & (if R'Length > 0 and then G'Length > 0 then ", " else "") & G & ASCII.LF);
+         end;
       end if;
       if not Grant_Report.Is_Empty then   --  granted petitions and the recovery rates they changed
          Append (Rep, Msg ("grant.head") & ASCII.LF);

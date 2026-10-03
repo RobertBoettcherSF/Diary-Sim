@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  The screens of diary_sim (screen=1 sessions).  Every wesen owns a small text screen (screen.cols x screen.rows
 --  characters, data/limits.txt) with the words it knows, the names of things it examined, and words it saw on other
 --  screens.  A wesen can pin and drop words, show its screen to a wesen in the same or a neighbouring cell, or leave
@@ -64,6 +64,10 @@ package Sim_Screen is
    function Box (E : Entity_Id) return Str_Vectors.Vector;        --  the framed screen, one string per row
    function Taught_From (E : Entity_Id) return Natural;           --  words E learned from a screen
    function Coined_From (E : Entity_Id) return Natural;           --  words E coined from a screen
+   function Coined_All return Natural;                           --  words all of them coined from screens
+   --  scoin=1 sessions: a screen blend uses screen.coin_pct (not blend_pct) and its own cap screen.coin_cap per wesen and session,
+   --  not the global coin_cap (which a few early sessions use up).  Begin_Session starts the session count at 0.
+   procedure Begin_Session (Scoin : Boolean);
    function Shown (E : Entity_Id) return Natural;                 --  times E showed its screen
    function Left_Notes (E : Entity_Id) return Natural;            --  times E left its screen on a thing
    function Read_Notes (E : Entity_Id) return Natural;            --  notes E read

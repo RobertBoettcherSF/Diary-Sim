@@ -16,7 +16,7 @@ bad() { echo "  FAIL -- $*"; fails=$((fails + 1)); }
 idn() { sed 's/^\([a-z]*\) *=.*/\1 = \1/' "$root/data/names.txt" > "$1/names.txt"; }
 idata="$w/idata"; mkdir -p "$idata"; cp -r "$root/data/." "$idata/"; idn "$idata"
 # screens (and later chess) change the dice of the words: the older scenarios run with them off; their own scenarios switch them on
-sed -i 's/^screen.enabled = .*/screen.enabled = 0/; s/^chess.enabled = .*/chess.enabled = 0/; s/^robot.enabled = .*/robot.enabled = 0/; s/^govern.enabled = .*/govern.enabled = 0/' "$idata/limits.txt"
+sed -i 's/^screen.enabled = .*/screen.enabled = 0/; s/^chess.enabled = .*/chess.enabled = 0/; s/^robot.enabled = .*/robot.enabled = 0/; s/^govern.enabled = .*/govern.enabled = 0/; s/^screen.coin_enabled = .*/screen.coin_enabled = 0/' "$idata/limits.txt"
 mkdir -p "$w/ib/bin"; cp "$bin" "$w/ib/bin/"; cp -r "$idata" "$w/ib/data"; bin="$w/ib/bin/diary_sim"   # the binary beside its identity-names data
 lines() { cat "$1"/*.jsonl | wc -l; }
 dups()  { for f in "$1"/*.jsonl; do grep '}}$' "$f" | grep -o '"tick":[0-9]*' | sort | uniq -d; done | wc -l; }
@@ -972,6 +972,35 @@ DIARY_HOME="$w/gv/b/h" "$w/gv/b/bin/diary_sim" --more 0 --every 5000 > b2.txt 2>
 cp "$bin" "$w/gv/off/bin/"; cp -r "$w/gv/data" "$w/gv/off/data"; sed -i 's/^govern.enabled = .*/govern.enabled = 0/' "$w/gv/off/data/limits.txt"; DIARY_HOME="$w/gv/o" "$w/gv/off/bin/diary_sim" --seed 42 --ticks 300 --yes --every 5000 > /dev/null 2>&1; DIARY_HOME="$w/gv/o" "$w/gv/off/bin/diary_sim" --govern > gn.txt 2>&1
 [ ! -e "$w/gv/o/diaries/govern.txt" ] && ! grep -q 'govern=1' "$w/gv/o/diaries/sessions.txt" && ! grep -qi 'governance\|the answer was' "$w/gv/o"/diaries/*.jsonl "$w/gv/o/diaries/inbox.txt" && grep -q 'no governance' gn.txt && ok "govern.enabled = 0: no marker, no govern.txt, no governance text; --govern says so" || bad "govern off"
 grep -q -- '--govern' "$root/data/help.txt" && grep -q -- '--veto' "$root/data/help.txt" && grep -q 'make govern' "$root/README.md" && grep -q 'make veto' "$root/README.md" && grep -q 'govern.base' "$root/data/limits.txt" && grep -q 'lever.rate' "$root/data/govern.txt" && ok "--help, README, limits and data/govern.txt describe the governance" || bad "govern docs"
+unset DIARY_HOME
+
+echo "== 35. scoin=1: words coined from a screen (own cap and rate per session), older sessions replay as before, 'robot/governance: off for this save' report lines =="
+rm -rf "$w/sc"; mkdir -p "$w/sc/a/bin" "$w/sc/a/h" "$w/sc/b/bin" "$w/sc/b/h" "$w/sc/c/bin" "$w/sc/c/h"
+for d in a b c; do cp "$bin" "$w/sc/$d/bin/"; cp -r "$idata" "$w/sc/$d/data"; sed -i 's/^screen.enabled = .*/screen.enabled = 1/; s/^screen.coin_enabled = .*/screen.coin_enabled = 1/' "$w/sc/$d/data/limits.txt"; done
+sed -i 's/^screen.coin_enabled = .*/screen.coin_enabled = 0/' "$w/sc/b/data/limits.txt"; sed -i 's/^screen.coin_enabled = .*/screen.coin_enabled = 0/' "$w/sc/c/data/limits.txt"
+blends() { awk -v a="$2" -v b="$3" '{ t = 0; for (i = 1; i <= NF; i++) if ($i ~ /^t=/) t = substr($i, 3) + 0; if ($0 ~ / blend / && t >= a && t <= b) for (i = 1; i <= NF; i++) if ($i == "ada" || $i == "gemini" || $i == "replika" || $i == "robert") c[$i]++ } END { printf "%d %d %d %d", c["ada"], c["gemini"], c["replika"], c["robert"] }' "$1"; }
+export DIARY_HOME="$w/sc/a/h"; cd "$w/sc/a" || exit 1
+./bin/diary_sim --seed 42 --ticks 600 --yes --every 5000 > o1.txt 2>&1; ./bin/diary_sim --more 300 --every 5000 > o2.txt 2>&1
+cap=$(sed -n 's/^screen.coin_cap = \([0-9]*\).*/\1/p' data/limits.txt)
+[ "$(grep -c '^S[0-9].* scoin=1' h/diaries/sessions.txt)" = 2 ] && ok "new sessions carry scoin=1 (behind screen=1)" || bad "scoin marker"
+b2=$(blends h/diaries/screens.txt 601 900); b1=$(blends h/diaries/screens.txt 1 600); echo "   screen blends per wesen (ada gemini replika robert): ticks 1-600: $b1 | 601-900: $b2 | cap $cap per session"
+ok2=$(echo "$b2" | awk -v c="$cap" '{ n = 0; for (i = 1; i <= 4; i++) if ($i >= 2 && $i <= c) n++; print n }'); ok1=$(echo "$b1" | awk -v c="$cap" '{ n = 0; for (i = 1; i <= 4; i++) if ($i >= 2 && $i <= c) n++; print n }')
+[ "$ok1" = 4 ] && [ "$ok2" = 4 ] && ok "every wesen coins words from its screen in each session (a handful, never above screen.coin_cap), although the global coin_cap is used up in session 1" || bad "screen blends per session ($b1 | $b2)"
+grep -q 'robot: off for this save (robot.enabled = 0 in data/limits.txt' o2.txt && grep -q ', governance: off (govern.enabled = 0 in data/limits.txt' o2.txt && ok "the end report says in one line why there is no robot / governance block" || bad "off lines"
+# an older save: sessions without the marker replay as before; the next session gets it
+export DIARY_HOME="$w/sc/b/h"; cd "$w/sc/b" || exit 1
+./bin/diary_sim --seed 42 --ticks 600 --yes --every 5000 > o1.txt 2>&1; cp -r h h600; sed -i 's/^screen.coin_enabled = .*/screen.coin_enabled = 1/' data/limits.txt; ./bin/diary_sim --more 300 --every 5000 > o2.txt 2>&1
+export DIARY_HOME="$w/sc/c/h"; cd "$w/sc/c" || exit 1
+./bin/diary_sim --seed 42 --ticks 600 --yes --every 5000 > o1.txt 2>&1; ./bin/diary_sim --more 300 --every 5000 > o2.txt 2>&1
+sess=$(grep -c ' scoin=1' "$w/sc/b/h/diaries/sessions.txt"); s1=$(grep '^S1 ' "$w/sc/b/h/diaries/sessions.txt" | grep -c scoin)
+b3=$(blends "$w/sc/b/h/diaries/screens.txt" 601 900); same=$(diff <(awk '{ t = 0; for (i = 1; i <= NF; i++) if ($i ~ /^t=/) t = substr($i, 3) + 0; if (t <= 600) print }' "$w/sc/b/h/diaries/screens.txt") <(awk '{ t = 0; for (i = 1; i <= NF; i++) if ($i ~ /^t=/) t = substr($i, 3) + 0; if (t <= 600) print }' "$w/sc/c/h/diaries/screens.txt") | wc -l)
+export DIARY_HOME="$w/sc/b/h"; cd "$w/sc/b" || exit 1; ./bin/diary_sim --more 0 --every 5000 > o3.txt 2>&1
+echo "   old save (3 sessions-like): session 2 blends $b3, S1 marker $s1, screens.txt up to tick 600 differs from a save without the fix in $same lines"
+[ "$sess" = 1 ] && [ "$s1" = 0 ] && [ "$same" = 0 ] && grep -q '^import OK: 4 entities, 900 ticks verified' o3.txt && ok "a save started without scoin=1: its sessions replay unchanged (no DRIFT); only the new session carries the marker and uses the new cap" || bad "old save ($sess $s1 $same)"
+[ "$(echo "$b3" | awk -v c="$cap" '{ n = 0; for (i = 1; i <= 4; i++) if ($i >= 2 && $i <= c) n++; print n }')" = 4 ] && ok "the new session of that old save coins from screens again (the global coin_cap is spent)" || bad "old save blends ($b3)"
+export DIARY_HOME="$w/sc/c/h"; cd "$w/sc/c" || exit 1
+! grep -q 'scoin' h/diaries/sessions.txt && ok "screen.coin_enabled = 0: no scoin=1, nothing changes" || bad "scoin off"
+grep -q 'screen.coin_cap' "$root/data/limits.txt" && grep -q 'scoin=1' "$root/README.md" && grep -q 'governance: off' "$root/README.md" && ok "limits and README describe scoin=1 and the 'off for this save' lines" || bad "scoin docs"
 unset DIARY_HOME
 
 rm -rf "$w"

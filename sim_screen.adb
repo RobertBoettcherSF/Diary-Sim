@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  See sim_screen.ads.
 pragma Ada_2022;
 
@@ -37,6 +37,9 @@ package body Sim_Screen is
    Cam_Frame : Frames;
    Frame_Err : array (Entity_Id) of Unbounded_String;
    Seed_V, Cap_V : Int := 0;
+   Scoin_On : Boolean := False;                 --  this session is a scoin=1 session
+   Ses_Coined : Counts := [others => 0];        --  screen blends per wesen in this session (scoin=1)
+   Coin_Pct_S, Coin_Cap_S : Integer := 1;
    Cols, Rows, Max_Pins, Start_N, Pin_Pct, Drop_Pct, Show_Pct, Read_N, Learn_Pct, Leave_Pct, Leave_N, Note_Pct,
      Blend_Pct, Own_Blend_Pct : Integer := 1;
 
@@ -53,6 +56,7 @@ package body Sim_Screen is
       Reads.Clear;
       for E in Entity_Id loop Cam_Frame (E).Clear; Frame_Err (E) := Null_Unbounded_String; end loop;
       Started := [others => False];
+      Scoin_On := False; Ses_Coined := [others => 0];
       C_Taught := [others => 0]; C_Coined := [others => 0]; C_Shown := [others => 0];
       C_Left := [others => 0]; C_Read := [others => 0]; C_Pins := [others => 0];
       Cols := L ("screen.width", 20, 8, 40);
@@ -69,7 +73,15 @@ package body Sim_Screen is
       Note_Pct := L ("screen.note_pct", 15, 0, 100);
       Blend_Pct := L ("screen.blend_pct", 10, 0, 100);
       Own_Blend_Pct := L ("screen.own_blend_pct", 2, 0, 100);
+      Coin_Pct_S := L ("screen.coin_pct", 5, 0, 100);
+      Coin_Cap_S := L ("screen.coin_cap", 8, 0, 100);
    end Init;
+
+   procedure Begin_Session (Scoin : Boolean) is
+   begin
+      Scoin_On := Scoin;
+      Ses_Coined := [others => 0];
+   end Begin_Session;
 
    --  ---- the layout: words in order, wrapped at Cols, Rows rows at most ------------------------------------------
    function Cell (E : Entity_Id; R : Entry_Rec) return String is
@@ -195,7 +207,7 @@ package body Sim_Screen is
                                                                   & Wb (Wb'Last - Tb + 1 .. Wb'Last));
    begin
       Done := False;
-      if Int (Coined_Total) >= Cap_V or else Text'Length < 3 or else Text'Length > 24
+      if (if Scoin_On then Ses_Coined (Who) >= Natural (Coin_Cap_S) else Int (Coined_Total) >= Cap_V) or else Text'Length < 3 or else Text'Length > 24
         or else (for some C of Text => C = ' ') or else Find (Text) /= 0
       then
          return;
@@ -209,6 +221,7 @@ package body Sim_Screen is
          Learn_Word (Who, W);
          Learned.Append (Learn_Rec'(Who => Who, W => W, From => 0, Coined => True));
          C_Coined (Who) := C_Coined (Who) + 1;
+         Ses_Coined (Who) := Ses_Coined (Who) + 1;
          Event (Who, "blend a=" & Img (A) & " b=" & Img (B) & " w=" & Img (W));
          Ignore := Put (Who, W, "coined");
          Append (Detail, (if Length (Detail) > 0 then "; " else "") & Msg ("detail.scr_blend", Text, Wa, Wb));
@@ -252,7 +265,7 @@ package body Sim_Screen is
                B : constant Positive := List ((First + J + 1) mod N + 1);
             begin
                if not Pair_Done and then A /= B and then Knows (V, A) and then Knows (V, B)
-                 and then Int (Roll (Seed_V, Positive (V), Tick, 9160 + J mod 8, 100)) <= Int (Blend_Pct)
+                 and then Int (Roll (Seed_V, Positive (V), Tick, 9160 + J mod 8, 100)) <= Int (if Scoin_On then Coin_Pct_S else Blend_Pct)
                then
                   declare
                      Lc : Learn_Vectors.Vector;
@@ -508,6 +521,13 @@ package body Sim_Screen is
 
    function Taught_From (E : Entity_Id) return Natural is (C_Taught (E));
    function Coined_From (E : Entity_Id) return Natural is (C_Coined (E));
+
+   function Coined_All return Natural is
+      N : Natural := 0;
+   begin
+      for E in Entity_Id loop N := N + C_Coined (E); end loop;
+      return N;
+   end Coined_All;
    function Shown (E : Entity_Id) return Natural is (C_Shown (E));
    function Left_Notes (E : Entity_Id) return Natural is (C_Left (E));
    function Read_Notes (E : Entity_Id) return Natural is (C_Read (E));

@@ -170,6 +170,14 @@ screen.note_pct = 15
 screen.blend_pct = 10
 screen.own_blend_pct = 2
 screen.condense = 0
+# Blends from screens, scoin=1 sessions only (a save's older sessions replay as before, with the global coin_cap above, which a few
+# early sessions use up so that nothing was coined any more).  coin_enabled = 0: new sessions start without the marker.
+# coin_pct: chance (percent) that two known words side by side on a screen being read are blended (blend_pct for older sessions);
+# coin_cap: at most this many screen blends per wesen and session (~4-6 per wesen per 300 ticks; the own-screen blend, own_blend_pct, adds to it); the explore coin_cap above
+# does not count screen blends in these sessions.
+screen.coin_enabled = 1
+screen.coin_pct = 2
+screen.coin_cap = 8
 
 # Chess (chess=1 sessions; needs the world): a rest activity.  A wesen that rests beside another (same or neighbouring cell) may sit down to
 # a game (start_pct per rest; after pause ticks from the last game of that pair), and one move is made when they meet after gap ticks.

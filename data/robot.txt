@@ -14,6 +14,7 @@ robot.meaning = a command word of the robot
 robot.nothing = nothing
 robot.idle = idle
 robot.nobody = nobody
+robot.off = robot: off for this save ({1})
 robot.none = no robot in this save (it comes with a session marked robot=1: make run).
 robot.rep = robot (commands sent / refused with an error, per wesen):
 robot.state = robot {1} at ({2},{3}) facing {4}, battery {5}/{6}

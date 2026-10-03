@@ -253,6 +253,23 @@ separately "taught from a screen" and "coined from a screen". The unit is `sim_s
 **Hook for a later condensed-vocabulary step (not built):** `Sim_Screen.Words_Of` / `Count` give the words on a screen in order, and
 `screen.condense = 0` in `limits.txt` is reserved for it. Changing the `screen.*` numbers of a running save needs `--fresh`.
 
+**Why "coined from a screen" was 0 in later sessions, and `scoin=1`:** a screen blend used the same global `coin_cap` (40 words in the
+whole save) as the ordinary explore coin, and the ordinary coin alone used it up in the first session or two; from then on no blend
+could fire (the dice, the salts and the word table were fine: with a high cap each wesen coins ~30 words per 900 ticks). Sessions
+started by this build carry `scoin=1`: a blend then uses `screen.coin_pct` (chance per pair read) and its own cap `screen.coin_cap`
+per wesen and session (about a handful per wesen per 300 ticks together with the own-screen `screen.own_blend_pct`), and screen blends no
+longer use up the explore `coin_cap`. Older sessions of a save keep their marker-less behaviour and replay unchanged, so no `--fresh` is
+needed: the next session (`make run` / `--more`) of an old save simply gets the marker. `screen.coin_enabled = 0` starts new sessions
+without it.
+
+**Markers of a session:** every session line in `diaries/sessions.txt` lists the features it STARTED with (`world`, `rest`, `grant`,
+`screen`, `chess`, `robot`, `govern`, `scoin`), taken from `data/limits.txt` (`*.enabled`) when the session begins. A running save can gain
+a feature mid-way without `--fresh`: the next NEW session carries the marker and the feature begins there (robot and governance start with
+their first marked session; earlier sessions replay as before). A session that is resumed (unfinished) keeps its old markers. The end
+report shows the blocks of the features the LAST session has; for the others it prints one line, `robot: off for this save (...),
+governance: off (...)`, with the reason (`robot.enabled = 0` in `data/limits.txt`, or the latest session started without the marker:
+older build or resumed).
+
 ## Chess and Elo (`chess=1` sessions, `make elo`, `make perft`)
 
 Chess is a rest activity (`sim_chess.ads/.adb` = rules, `sim_games.ads/.adb` = the games; numbers in `data/limits.txt` `chess.*`,

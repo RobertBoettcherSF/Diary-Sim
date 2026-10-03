@@ -53,6 +53,8 @@ import.entities = import: entities/ {1}; words known at tick {2}: {3}
 import.failed = import FAILED: {1}
 ent.present = present ({1}/4 folders)
 ent.rebuilt = rebuilt ({1} of 4 folders were missing)
+off.session = the latest session started without {1}=1 (older build or resumed; a new session carries it)
+off.data = {1}.enabled = 0 in data/limits.txt
 report.head = report: turns this run {1} (ticks {2}..{3}; total simulated {3}), resumed from tick {4} | events written {5}, verified {6} | warnings {7}
 report.cols = entity     w.start -> w.now   taught coined bench |  mood energy  pet
 report.export = export OK: diaries/ {1} files, {2} lines | entities/ {3} files | summary.txt {4} B, summary.jsonl {5} B | run_report.txt | re-read and counted
