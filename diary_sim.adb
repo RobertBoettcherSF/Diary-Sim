@@ -1,4 +1,4 @@
---  Version: 0.013
+--  Version: 0.014
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -8,6 +8,9 @@
 --  Session length: without --ticks / --more the four entities vote (Kalpas, data/kalpas.txt)
 --  and the median is the number of new ticks; diaries/sessions.txt records every session
 --  and is verified on import (see README).
+--  Menu and words: on a terminal, without explicit run arguments, a main menu (Sim_Menu) comes
+--  first; at the end of every session each wesen names a favourite word (Sim_World.Favourite,
+--  its own hash salt, so old diaries stay valid), recorded as a W line in diaries/sessions.txt.
 --  Where it saves: everything (diaries/, entities/, debug.txt, reports) lives in ONE save folder:
 --  --home DIR, else $DIARY_HOME, else ../diary-data next to the source folder, so the source
 --  folder can be deleted and replaced after every build (see README).
@@ -21,7 +24,7 @@ pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
-     GNAT.Traceback.Symbolic, Sim_Quit, Sim_Util, Sim_World;
+     GNAT.Traceback.Symbolic, Sim_Menu, Sim_Quit, Sim_Util, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
 
 procedure Diary_Sim is
@@ -37,7 +40,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.013";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.014";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -48,7 +51,7 @@ procedure Diary_Sim is
    Snap_Mood, Snap_Energy : array (Entity_Id) of Integer := [others => 0];   --  state at the session start
    Snap_Pet : array (Entity_Id) of Natural := [others => 0];
    Snap_Votes : All_Stats;
-   Since_Head, Saved_Line : Unbounded_String;   --  for debug.txt
+   Since_Head, Saved_Line, Words_Text : Unbounded_String;   --  for debug.txt; Words_Text: the word vote line
    Preview : Boolean := False;         --  --preview: simulate in memory, write nothing, show excerpts
    Sample : array (Entity_Id) of Str_Vectors.Vector;   --  preview: every diary line
    Yes : Boolean := False;             --  --yes: no question when there is no previous diary
@@ -102,16 +105,9 @@ procedure Diary_Sim is
       Say (Line);
    end Warn;
 
-   procedure Load_Data is
-      Lines : Str_Vectors.Vector;
-      Found : Boolean;
-      Sec   : Integer := -1;
+   --  The rule limits of data/limits.txt (read again after the Settings menu).
+   procedure Read_Limits is
    begin
-      Read_Lines (Data_Path ("messages.txt"), Lines, Found);
-      if not Found then Warn ("warning: data/messages.txt not found; messages show their keys"); end if;
-      Read_Lines (Data_Path ("limits.txt"), Lines, Found);
-      if not Found then Warn (Msg ("warn.limits_file")); end if;
-      Load_Keys (Lines);
       E_Min := Integer (Limit ("energy.min", 0));
       E_Max := Integer (Limit ("energy.max", 100));
       M_Min := Integer (Limit ("mood.min", -100));
@@ -124,6 +120,23 @@ procedure Diary_Sim is
       Coin_Pct := Limit ("coin_percent", 20);
       Coin_Cap := Limit ("coin_cap", 40);
       Bench_Steps := Int'Max (1, Limit ("bench_steps", 2000));
+   end Read_Limits;
+
+   procedure Load_Data is
+      Lines : Str_Vectors.Vector;
+      Found : Boolean;
+      Sec   : Integer := -1;
+   begin
+      Read_Lines (Data_Path ("messages.txt"), Lines, Found);
+      if not Found then Warn ("warning: data/messages.txt not found; messages show their keys"); end if;
+      Read_Lines (Data_Path ("limits.txt"), Lines, Found);
+      if not Found then Warn (Msg ("warn.limits_file")); end if;
+      Read_Lines (Data_Path ("menu.txt"), Lines, Found);   --  menu text: keys only, a missing file shows the keys
+      Load_Keys (Lines);
+      Read_Limits;
+      Lines.Clear;
+      Read_Lines (Data_Path ("fonts.txt"), Lines, Found);
+      Sim_Menu.Load_Font (Lines);
       Lines.Clear;
       Read_Lines (Data_Path ("words.txt"), Lines, Found);
       for L of Lines loop
@@ -243,6 +256,7 @@ procedure Diary_Sim is
          if Int (Roll (Seed, Eid, Tick, 2, 100)) <= Teach_Pct and then Pending_Word (P) = 0 and then N > 0 then
             Pending_Word (P) := Nth_Teachable (E, P, Roll (Seed, Eid, Tick, 4, N));
             Pending_From (P) := E;
+            Use_Word (E, Pending_Word (P));   --  the teacher mentions it too
             Detail := To_Unbounded_String (Msg ("detail.taught", Name (P), Word (Pending_Word (P))));
          end if;
       end Teach;
@@ -265,6 +279,8 @@ procedure Diary_Sim is
                   declare
                      W : constant Positive := Add_Coined (Text, Pa, Pb, E);
                   begin
+                     Use_Word (E, Pa);
+                     Use_Word (E, Pb);
                      Learn_Word (E, W);
                      Ensure (E, Words_File, Words_Line (W, "coined", Tick, Parents (W)));
                      Detail := To_Unbounded_String (Msg ("detail.coined", Text, Word (Pa), Word (Pb)));
@@ -476,6 +492,19 @@ procedure Diary_Sim is
 
    function Confirm_New return Boolean is (Ask_Yes (Msg ("ask.prompt", Ada.Directories.Full_Name ("diaries"))));
 
+   function Has_Jsonl_In (Dir : String) return Boolean is
+      use Ada.Directories;
+      S : Search_Type;
+      Res : Boolean := False;
+   begin
+      if Exists (Dir) and then Kind (Dir) = Directory then
+         Start_Search (S, Dir, "*.jsonl");
+         Res := More_Entries (S);
+         End_Search (S);
+      end if;
+      return Res;
+   end Has_Jsonl_In;
+
    --  The save folder: --home DIR, else $DIARY_HOME, else ../diary-data next to the source folder
    --  (so the source folder can be replaced at will).  A save inside the source folder is COPIED
    --  there on a yes (never moved or deleted); without a terminal only a hint is printed.
@@ -490,7 +519,7 @@ procedure Diary_Sim is
          Home_Path := To_Unbounded_String (Ada.Directories.Full_Name (Env));
       else
          Home_Path := To_Unbounded_String (Def);
-         if Ada.Directories.Exists (Src_Root & "/diaries") and then not Ada.Directories.Exists (Def) then
+         if Ada.Directories.Exists (Src_Root & "/diaries") and then not Has_Jsonl_In (Def & "/diaries") then
             if Is_Tty (0) and then Is_Tty (1) then
                if Ask_Yes (Msg ("migrate.ask")) then
                   Copy_Tree (Src_Root & "/diaries", Def & "/diaries");
@@ -537,9 +566,9 @@ procedure Diary_Sim is
    --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (length cap, text assembly)
    procedure Write_Debug (Status, Err : String) is
       Cap : constant := 1500;
-      type Part_Id is (Head, Ticks_P, Kalpa_P, Since_P, Import_P, Export_P, Ents, Mix_P, Topics_P, Votes, Error_P);
+      type Part_Id is (Head, Ticks_P, Kalpa_P, Since_P, Words_P, Import_P, Export_P, Ents, Mix_P, Topics_P, Votes, Error_P);
       Part : array (Part_Id) of Unbounded_String;
-      Order : constant array (1 .. 11) of Part_Id := [Head, Ticks_P, Kalpa_P, Since_P, Error_P, Ents, Mix_P, Topics_P, Votes, Import_P, Export_P];
+      Order : constant array (1 .. 12) of Part_Id := [Head, Ticks_P, Kalpa_P, Since_P, Words_P, Error_P, Ents, Mix_P, Topics_P, Votes, Import_P, Export_P];
       Used : Natural := 0;
       Out_Text : Unbounded_String;
       F : TIO.File_Type;
@@ -559,6 +588,7 @@ procedure Diary_Sim is
          end;
       end if;
       if Length (Saved_Line) > 0 then Append (Part (Since_P), To_String (Saved_Line) & ASCII.LF); end if;
+      if Length (Words_Text) > 0 then Part (Words_P) := Words_Text & ASCII.LF; end if;
       Part (Import_P) := To_Unbounded_String ((if Length (Import_Block) > 0 then To_String (Import_Block) else Msg ("debug.pending", "import"))
                                               & ASCII.LF);
       Part (Export_P) := To_Unbounded_String ((if Length (Export_Line) > 0 then To_String (Export_Line) else Msg ("debug.pending", "export"))
@@ -787,6 +817,76 @@ procedure Diary_Sim is
       end loop;
    end Parse_Session;
 
+   --  ---- the word vote (favourite words at the end of a session) --------------------------
+   type Tok_Array is array (Entity_Id) of Unbounded_String;   --  word/origin, spaces as '-'
+   type Word_Vote is record
+      N    : Positive := 1;
+      Tick : Int := 0;
+      Tok  : Tok_Array;
+   end record;
+   package Word_Vote_Vectors is new Ada.Containers.Vectors (Positive, Word_Vote);
+   Word_Votes : Word_Vote_Vectors.Vector;
+
+   function Dashed (S : String) return String is
+      R : String := S;
+   begin
+      for C of R loop if C = ' ' then C := '-'; end if; end loop;
+      return R;
+   end Dashed;
+
+   --  What each wesen would name now (state of the replay at this tick).
+   function Words_Now (Tick : Int) return Tok_Array is
+      T : Tok_Array;
+   begin
+      for E in Entity_Id loop
+         declare
+            W : constant Natural := Favourite (Seed, E, Tick, St (E).Mood);
+         begin
+            T (E) := To_Unbounded_String (if W = 0 then "-" else Word (W) & "/" & Dashed (Origin (E, W)));
+         end;
+      end loop;
+      return T;
+   end Words_Now;
+
+   function Tok_Text (T : Tok_Array) return String is
+      R : Unbounded_String;
+   begin
+      for E in Entity_Id loop Append (R, (if E = 1 then "" else " ") & Name (E) & "=" & To_String (T (E))); end loop;
+      return To_String (R);
+   end Tok_Text;
+
+   --  "ada water | gemini handphone | ..." for the console (the origin is in sessions.txt).
+   function Words_Short (T : Tok_Array) return String is
+      R : Unbounded_String;
+   begin
+      for E in Entity_Id loop
+         declare
+            V : constant String := To_String (T (E));
+            Sl : constant Natural := Fx.Index (V, "/");
+         begin
+            Append (R, (if E = 1 then "" else " | ") & Name (E) & " " & (if Sl > 0 then V (V'First .. Sl - 1) else V));
+         end;
+      end loop;
+      return To_String (R);
+   end Words_Short;
+
+   --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (parsing of a W record of sessions.txt)
+   procedure Parse_Word_Vote (L : String; R : out Word_Vote; OK : out Boolean) is
+      Sp : constant Natural := Fx.Index (L, " ");
+   begin
+      R := (others => <>);
+      OK := L'Length > 2 and then L (L'First) = 'W' and then Sp > 2;
+      if not OK then return; end if;
+      OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then To_Num (Token (L, "tick")) >= 0;
+      if not OK then return; end if;
+      R.N := Positive (To_Num (L (L'First + 1 .. Sp - 1)));
+      R.Tick := To_Num (Token (L, "tick"));
+      for E in Entity_Id loop
+         R.Tok (E) := To_Unbounded_String (Token (L, Name (E)));
+         OK := OK and then Length (R.Tok (E)) > 0;
+      end loop;
+   end Parse_Word_Vote;
+
    procedure Load_Sessions is
       Lines : Str_Vectors.Vector;
       Found : Boolean;
@@ -796,6 +896,7 @@ procedure Diary_Sim is
       OK    : Boolean;
    begin
       Sessions.Clear;
+      Word_Votes.Clear;
       if not Ada.Directories.Exists (Sessions_Path) then return; end if;
       Read_Lines (Sessions_Path, Lines, Found);
       for I in 1 .. Natural (Lines.Length) loop
@@ -808,6 +909,13 @@ procedure Diary_Sim is
                end if;
             elsif L'Length > Bmark'Length and then L (L'First .. L'First + Bmark'Length - 1) = Bmark then
                Disk_Build := To_Unbounded_String (L (L'First + Bmark'Length .. L'Last));
+            elsif L'Length > 0 and then L (L'First) = 'W' then
+               declare
+                  V : Word_Vote;
+               begin
+                  Parse_Word_Vote (L, V, OK);
+                  if OK then Word_Votes.Append (V); else Warn (Msg ("warn.session_bad", Img (I))); end if;
+               end;
             elsif L'Length > 0 and then L (L'First) = 'S' then
                Parse_Session (L, R, OK);
                if OK then Sessions.Append (R); else Warn (Msg ("warn.session_bad", Img (I))); end if;
@@ -821,6 +929,17 @@ procedure Diary_Sim is
    --  A stored session must reproduce its votes when the replay reaches its start tick.
    procedure Check_Sessions_At (T : Int) is
    begin
+      for R of Word_Votes loop
+         if R.Tick = T then
+            declare
+               Now : constant Tok_Array := Words_Now (T);
+            begin
+               if Now /= R.Tok then
+                  raise Drift_Error with Msg ("err.words", Img (R.N), Img (R.Tick), Tok_Text (R.Tok), Tok_Text (Now));
+               end if;
+            end;
+         end if;
+      end loop;
       for R of Sessions loop
          if R.Start = T then
             declare
@@ -835,7 +954,8 @@ procedure Diary_Sim is
       end loop;
    end Check_Sessions_At;
 
-   procedure Append_Session (R : Session_Rec) is
+
+   procedure Append_Text (Line : String) is
       F : TIO.File_Type;
    begin
       if Ada.Directories.Exists (Sessions_Path) and then Ada.Directories.Size (Sessions_Path) > 0 then
@@ -850,12 +970,30 @@ procedure Diary_Sim is
          TIO.Put_Line (F, "# seed " & Img (Seed));
          TIO.Put_Line (F, "# build v" & Build);
          TIO.Put_Line (F, Msg ("hdr.sessions"));
+         TIO.Put_Line (F, Msg ("words.hdr"));
       end if;
-      TIO.Put_Line (F, Session_Line (R));
+      TIO.Put_Line (F, Line);
       TIO.Flush (F);
       TIO.Close (F);
+   end Append_Text;
+
+   procedure Append_Session (R : Session_Rec) is
+   begin
+      Append_Text (Session_Line (R));
       Sessions.Append (R);
    end Append_Session;
+
+   --  The end of a session: every wesen names a favourite word; the vote goes to sessions.txt.
+   procedure Record_Word_Vote (Tick : Int) is
+      R : Word_Vote;
+   begin
+      R.N := Positive'Max (1, Session_N);
+      R.Tick := Tick;
+      R.Tok := Words_Now (Tick);
+      Append_Text ("W" & Img (R.N) & " tick=" & Img (Tick) & " " & Tok_Text (R.Tok));
+      Word_Votes.Append (R);
+      Words_Text := To_Unbounded_String (Msg ("words.line", Img (R.N), Words_Short (R.Tok)));
+   end Record_Word_Vote;
 
    --  After the replay of 1 .. Common: resume the unfinished session, or start one
    --  (explicit length, else the vote).  Sets Ticks and Kalpa_Line.
@@ -1029,6 +1167,91 @@ procedure Diary_Sim is
       TIO.Put_Line (Msg ("preview.foot"));
    end Run_Preview;
 
+
+   --  ---- the main menu (terminal only) -------------------------------------------------------
+   --  What the menu shows under the tagline: the wesen, the game (session, ticks) and the last
+   --  favourite-word vote with who taught or coined each word; read-only, from diaries/.
+   function Game_Info return Str_Vectors.Vector is
+      Res, Lines, Ada_Lines : Str_Vectors.Vector;
+      Found : Boolean;
+      Names : Unbounded_String;
+      N : Natural := 0;
+      Last : Word_Vote;
+      Have : Boolean := False;
+      R : Session_Rec;
+      V : Word_Vote;
+      OK : Boolean;
+      function Shown (E : Entity_Id) return String is
+         T  : constant String := To_String (Last.Tok (E));
+         Sl : constant Natural := Fx.Index (T, "/");
+         Origin_Text : String := (if Sl > 0 then T (Sl + 1 .. T'Last) else "start");
+      begin
+         for C of Origin_Text loop if C = '-' then C := ' '; end if; end loop;
+         return Fx.Head (Name (E), 8) & (if Sl > 0 then T (T'First .. Sl - 1) else T)
+           & (if Origin_Text = "start" or else Sl = 0 then "" else " (" & Origin_Text & ")");
+      end Shown;
+   begin
+      for E in Entity_Id loop Append (Names, (if E = 1 then "" else ", ") & Name (E)); end loop;
+      Res.Append (Msg ("wesen.label", To_String (Names)));
+      if Has_Diaries then
+         Read_Lines (Sessions_Path, Lines, Found);
+         for L of Lines loop
+            if L'Length > 0 and then L (L'First) = 'S' then
+               Parse_Session (L, R, OK);
+               if OK then N := R.N; end if;
+            elsif L'Length > 0 and then L (L'First) = 'W' then
+               Parse_Word_Vote (L, V, OK);
+               if OK then Last := V; Have := True; end if;
+            end if;
+         end loop;
+         Read_Lines (Path (1), Ada_Lines, Found);
+         Res.Append (Msg ("game.line", Img (N), Img (Integer (Ada_Lines.Length)), To_String (Home_Path)));
+      else
+         Res.Append (Msg ("game.none", To_String (Home_Path)));
+      end if;
+      if Have then
+         Res.Append (Msg ("vote.head", Img (Last.N), Img (Last.Tick)));
+         Res.Append (Fx.Head (Shown (1), 38) & Shown (2));
+         Res.Append (Fx.Head (Shown (3), 38) & Shown (4));
+      else
+         Res.Append (Msg ("vote.none"));
+      end if;
+      return Res;
+   end Game_Info;
+
+   --  Intro, menu loop.  New Game on an existing game asks before it is moved aside (--fresh
+   --  does that, never a delete); Load Game goes on with the normal load / vote flow.
+   procedure Menu_Loop (Quit_Now : out Boolean) is
+      Seed_V : Int := Seed_Opt;
+      Every_V : Int := Every;
+   begin
+      Quit_Now := False;
+      Sim_Menu.Intro (Natural (if Seed_Opt >= 0 then Seed_Opt else 42));
+      loop
+         case Sim_Menu.Ask (Game_Info) is
+            when Sim_Menu.Quit =>
+               Quit_Now := True;
+               exit;
+            when Sim_Menu.Load_Game =>
+               exit;
+            when Sim_Menu.New_Game =>
+               if not Has_Diaries then
+                  Yes := True;
+                  exit;
+               elsif Ask_Yes (Msg ("menu.confirm_move", Ada.Directories.Full_Name ("diaries"))) then
+                  Fresh := True;
+                  TIO.Put_Line (Msg ("menu.moved"));
+                  exit;
+               end if;
+            when Sim_Menu.Settings =>
+               Sim_Menu.Edit_Settings (Seed_V, Every_V);
+         end case;
+      end loop;
+      Seed_Opt := Seed_V;
+      Every := Every_V;
+      Read_Limits;   --  the Settings menu may have changed them
+   end Menu_Loop;
+
 begin
    Load_Data;
    while I <= Ada.Command_Line.Argument_Count loop
@@ -1073,6 +1296,17 @@ begin
    end if;
    Resolve_Home;
    Saved_Line := To_Unbounded_String (Msg ("saved", To_String (Home_Path)));
+   if not Explicit and then not Fresh and then not Yes and then Is_Tty (0) and then Is_Tty (1) then
+      declare
+         Quit_Now : Boolean;
+      begin
+         Menu_Loop (Quit_Now);
+         if Quit_Now then
+            TIO.Put_Line (To_String (Saved_Line));
+            return;   --  exit 0
+         end if;
+      end;
+   end if;
 
    if Fresh and then (Ada.Directories.Exists ("diaries") or else Ada.Directories.Exists ("entities")) then
       declare
@@ -1202,6 +1436,11 @@ begin
          exit when Quit_Seen;
       end loop;
    end if;
+   if not Quit_Seen and then Ticks > Int (Common)
+     and then not (for some R of Word_Votes => R.Tick = Ticks)
+   then
+      Record_Word_Vote (Ticks);
+   end if;
    for F of Out_File loop TIO.Close (F); end loop;
    for F of Side_Out loop TIO.Close (F); end loop;
    if Quit_Seen then   --  Ctrl-C / SIGTERM: everything written so far is flushed; a rerun resumes
@@ -1267,6 +1506,7 @@ begin
       end;
       Since_Head := To_Unbounded_String (Since_Text);
       Append (Rep, Since_Head);
+      if Length (Words_Text) > 0 then Append (Rep, To_String (Words_Text) & ASCII.LF); end if;
       if Length (Fails) = 0 then
          Export_Line := To_Unbounded_String
            (Msg ("report.export", Img (D_Files), Img (D_Lines), Img (E_Files),

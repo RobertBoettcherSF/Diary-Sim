@@ -1,0 +1,33 @@
+# The main menu (Sim_Menu), shown when the program is started on a terminal without
+# --ticks / --more / --fresh / --yes / --preview (make run / make play).  Text only; edit freely.
+# Robert: the tagline is literally "Stories of word and word" - if "world" was meant,
+# change the one line below to "tagline = Stories of word and world".
+title = DIARY
+tagline = Stories of word and word
+# font size of the title: small, medium or large (data/fonts.txt)
+title.size = large
+# the life intro: at most intro.frames frames, intro.ms milliseconds each (0 = no pause)
+intro.frames = 90
+intro.ms = 70
+entry.1 = New Game
+entry.2 = Load Game
+entry.3 = Settings
+entry.4 = Quit
+menu.prompt = >
+menu.bad = Please type 1, 2, 3 or 4 (or n, l, s, q).
+wesen.label = wesen: {1}
+game.none = no game in {1} yet
+game.line = game: session {1}, {2} ticks (save: {3})
+vote.none = no word vote yet (the wesen vote on a favourite word at the end of every session)
+vote.head = favourite words, session {1}, tick {2}:
+menu.cancelled = cancelled, nothing changed
+menu.confirm_move = A game exists in {1}. Move it aside to diaries_old_<time> and start a new one? [y/N]
+menu.moved = the old game stays in diaries_old_<time> (never deleted)
+settings.title = Settings (this session only; data/limits.txt is not changed)
+settings.keys = start_percent teach_percent coin_percent coin_cap kalpa.min kalpa.max
+settings.seed = seed (a new world only; stored diaries keep their seed)
+settings.every = every (progress line every N ticks)
+settings.warn = start_percent, teach_percent, coin_percent and coin_cap change the rules: use them with New Game
+settings.prompt = Number to change, Enter to go back:
+settings.value = New value for {1} (whole number):
+settings.bad = not a whole number

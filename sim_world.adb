@@ -1,4 +1,4 @@
---  Version: 0.005
+--  Version: 0.006
 pragma Ada_2022;
 
 with Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
@@ -26,6 +26,7 @@ package body Sim_World is
    Table : Word_Vectors.Vector;
    Known : array (Entity_Id) of Bool_Vectors.Vector;
    package Nat_Vectors is new Ada.Containers.Vectors (Positive, Natural);
+   Freq   : array (Entity_Id) of Nat_Vectors.Vector;   --  per word: how often it came up for the entity
    Taught : array (Entity_Id) of Nat_Vectors.Vector;   --  per word: the teacher's entity id, else 0
    Base  : Natural := 0;
 
@@ -97,6 +98,7 @@ package body Sim_World is
       for E in Entity_Id loop
          Known (E).Clear;
          Taught (E).Clear;
+         Freq (E).Clear;
          for W in 1 .. Base loop
             Known (E).Append (Int (Roll (Seed, Positive (E), 0, 1000 + W, 100)) <= Start_Percent);
          end loop;
@@ -109,6 +111,14 @@ package body Sim_World is
    function Knows (E : Entity_Id; W : Positive) return Boolean is
      (W <= Natural (Known (E).Length) and then Known (E) (W));
 
+   procedure Use_Word (E : Entity_Id; W : Positive; Amount : Positive := 1) is
+   begin
+      while Natural (Freq (E).Length) < W loop
+         Freq (E).Append (0);
+      end loop;
+      Freq (E).Replace_Element (W, Freq (E).Element (W) + Amount);
+   end Use_Word;
+
    procedure Learn_Word (E : Entity_Id; W : Positive; From : Natural := 0) is
    begin
       while Natural (Known (E).Length) < W loop
@@ -119,6 +129,7 @@ package body Sim_World is
          Taught (E).Append (0);
       end loop;
       if From /= 0 then Taught (E) (W) := From; end if;
+      Use_Word (E, W, 2);
    end Learn_Word;
 
    function Coined_By (W : Positive) return String is
@@ -480,6 +491,38 @@ package body Sim_World is
       end loop;
       return (S (2) + S (3)) / 2;
    end Kalpa_Median;
+
+   --  ---- favourite word ----------------------------------------------------------------
+
+   function Favourite (Seed : Int; E : Entity_Id; Tick : Int; Mood : Integer) return Natural is
+      Tone_Hi : constant Integer := Integer (Limit ("mood.tone_high", 34));
+      Tone_Lo : constant Integer := Integer (Limit ("mood.tone_low", -34));
+      function Weight (W : Positive) return Positive is
+         F : constant Natural := (if W <= Natural (Freq (E).Length) then Freq (E).Element (W) else 0);
+         Is_Start : constant Boolean := Origin (E, W) = "start";
+      begin
+         return (1 + F) * (if Mood >= Tone_Hi and then not Is_Start then 3
+                           elsif Mood <= Tone_Lo and then Is_Start then 3 else 1);
+      end Weight;
+      Total : Natural := 0;
+      Acc   : Natural := 0;
+   begin
+      for W in 1 .. Count loop
+         if Knows (E, W) then Total := Total + Weight (W); end if;
+      end loop;
+      if Total = 0 then return 0; end if;
+      declare
+         R : constant Positive := Roll (Seed, Positive (E), Tick, 960, Total);
+      begin
+         for W in 1 .. Count loop
+            if Knows (E, W) then
+               Acc := Acc + Weight (W);
+               if R <= Acc then return W; end if;
+            end if;
+         end loop;
+      end;
+      return 0;
+   end Favourite;
 
    --  ---- bench --------------------------------------------------------------------
 

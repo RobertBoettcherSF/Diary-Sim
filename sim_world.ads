@@ -1,4 +1,4 @@
---  Version: 0.005
+--  Version: 0.006
 --  The shared world of diary_sim: the four entities, the vocabulary (base
 --  words, who knows what, coined words), the bench kernels and the final votes.
 --  One world per run; Init rebuilds it from scratch, so a replay from tick 1
@@ -88,6 +88,16 @@ package Sim_World is
    function Kalpa_Vote (Seed : Int; E : Entity_Id; Start : Int; Energy, Mood : Integer) return Int;
    --  Sorted v1 <= v2 <= v3 <= v4: (v2 + v3) / 2, rounded down (duplicates are fine).
    function Kalpa_Median (V : Kalpa_Votes) return Int;
+
+   --  ---- favourite word (the end-of-session word vote of the wesen) ----------------------
+   --  Each entity names one favourite among the words it knows: weight 1 + how often the word
+   --  came up for it (learned +2, taught, coined, used as a parent), x3 for words that are not
+   --  start words when mood >= mood.tone_high, x3 for start words when mood <= mood.tone_low.
+   --  Rolled with its own salt (960) from hash (seed, entity, tick): no existing dice are used,
+   --  so old diaries stay valid.  0: the entity knows no word.
+   --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (weight sums, cumulative pick)
+   procedure Use_Word (E : Entity_Id; W : Positive; Amount : Positive := 1);
+   function Favourite (Seed : Int; E : Entity_Id; Tick : Int; Mood : Integer) return Natural;
 
    --  ---- bench ------------------------------------------------------------
    --  A built-in integer kernel with a fixed step budget.  Steps, result and

@@ -22,6 +22,39 @@ found inside the source folder (`./diaries` from older versions) is **copied** t
 it to ../diary-data? [y/N]`); never moved or deleted. Without a terminal only a hint is
 printed (`--home <source folder>` keeps using the old place). `make demo` writes nothing.
 
+## The main menu and the favourite words
+
+Started on a terminal without `--ticks` / `--more` / `--fresh` / `--yes` / `--preview`
+(`make run`, `make play`), the program first shows a menu: a Conway Game-of-Life intro whose
+dying cells reveal the title, the block-letter title, the tagline, the **wesen** (the four
+entities: ada, gemini, replika, robert) with the game's session, ticks and last favourite
+words (who taught or coined each), and exactly four entries:
+
+- **New Game**: a fresh world; if `diaries/` holds a game it asks first and moves it to
+  `diaries_old_<time>` (never deleted).
+- **Load Game**: the normal flow (load, replay-verify, the wesen vote the session length); with
+  no game the usual `No previous diary found ... Generate a new one? [y/N]`.
+- **Settings**: seed, progress interval and the rule limits named in `data/menu.txt`
+  (`settings.keys`), for this session only; `data/limits.txt` is never written. Changing
+  start_percent, teach_percent, coin_percent or coin_cap changes the rules: use it with New Game.
+- **Quit**: exit 0, nothing written.
+
+No menu without a terminal (scripts, CI, pipes) and none for `make demo`, which is a
+preview. Text lives in `data/menu.txt` (title, tagline, entries, messages), the letters in
+`data/fonts.txt` (3 sizes, `title.size`); each screen is written to the terminal in one piece.
+**Tagline:** the default is literally `Stories of word and word`; if "world" was meant,
+change the one line `tagline = ...` in `data/menu.txt` (no rebuild needed).
+
+**Favourite words (word vote):** at the end of every session each wesen names one favourite
+among the words it knows: weight 1 + how often the word came up for it (learned, taught,
+coined, used as a parent), x3 for words learned or coined later (not start words) when its
+mood is high, x3 for start words when its mood is low; rolled with its own hash salt (960),
+so the action table and all existing dice are untouched and old diaries stay valid. Result:
+`W<n> tick=<t> ada=<word>/<origin> ...` in `diaries/sessions.txt` (origin: `start`,
+`taught-by-<id>`, `coined-by-<id>`), verified on import like the session records (a
+difference is DRIFT), shown on the console (`words vote (session 3): ada city | ...`), in
+`run_report.txt`, `debug.txt` and on the menu.
+
 ## Since the last session
 
 Each run ends with a block per wesen comparing the loaded diaries (the session start)
@@ -368,10 +401,10 @@ paste it` and `back up diaries/ before the next run`.
 
 ## Files
 
-`diary_sim.adb` (main: CLI, loop, side files, debug.txt), `sim_quit.ads/.adb` (Ctrl-C and SIGTERM flag), `sim_world.ads/.adb` (entities,
+`diary_sim.adb` (main: CLI, loop, side files, debug.txt), `sim_menu.ads/.adb` (main menu: life intro, title, entries), `sim_quit.ads/.adb` (Ctrl-C and SIGTERM flag), `sim_world.ads/.adb` (entities,
 vocabulary, Rule 30 personality, bench kernels, votes and summary text), `sim_util.ads/.adb` (hash rolls,
 line parsing, data-file helpers), `data/words.txt`, `data/topics.txt` (petition topics), `data/limits.txt`,
-`data/messages.txt` (all console wording), `data/kalpas.txt` (session length votes), `data/vocab.txt`, `data/help.txt`,
+`data/messages.txt` (all console wording), `data/kalpas.txt` (session length votes), `data/menu.txt` (menu text, title, tagline), `data/fonts.txt` (title letters), `data/vocab.txt`, `data/help.txt`,
 `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
 `Version:` header (`make version-check`); a touched file goes up by 0.001. V&V is
 suspended: no new test suites, `scripts/checks.sh` must keep passing.

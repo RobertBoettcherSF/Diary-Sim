@@ -114,3 +114,6 @@ since.state = mood {1}>{2} en {3}>{4} fav {5}
 migrate.ask = Found a save inside the source folder. Copy it to ../diary-data? [y/N]
 migrate.done = copied {1} to {2} (the original is untouched)
 migrate.hint = Found a save inside the source folder ({1}); the saves now live in {2}. Copy it there (cp -r) or keep using it with --home {3}
+words.line = words vote (session {1}): {2}
+words.hdr = # W<n> tick=<t> <wesen>=<word>/<origin> ...  (favourite words at the end of a session)
+err.words = sessions.txt W{1} (tick {2}): stored {3}, the replay gives {4}; the diaries, data/ or this build changed (use --fresh)

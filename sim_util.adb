@@ -1,4 +1,4 @@
---  Version: 0.007
+--  Version: 0.008
 pragma Ada_2022;
 
 with Ada.Calendar.Formatting, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Maps, Ada.Directories,
@@ -157,6 +157,11 @@ package body Sim_Util is
       end if;
       return (if Neg then -Int'Value (D) else Int'Value (D));
    end Limit;
+
+   procedure Set_Limit (Key : String; Value : Int) is
+   begin
+      Texts.Include (Key, Img (Value));
+   end Set_Limit;
 
    function Ends_With_Lf (File : String) return Boolean is
       F : Ada.Streams.Stream_IO.File_Type;
