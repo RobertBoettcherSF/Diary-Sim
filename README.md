@@ -516,6 +516,14 @@ Options: `--ticks=N` (absolute target; without `--ticks`/`--more` the entities v
 Exit: 0 ok, 1 error, 2 usage. Run it from the project directory (or from any
 directory: `data/` is found next to the executable).
 
+**Speed.** Most of "make run" used to be the compile, not the simulation: a clean build took ~60 s on one core (the unit `diary_sim.adb`
+alone ~20 s at -O1). `make` now compiles the units in parallel (`-j0`, all cores) at `-O0`: ~12 s on 8 cores, no change to any output byte
+(same diaries, same hashes). `make OPT="-O1 -fno-inline"` is the strict build (optimizer-level warnings); `make portable` builds both ways with
+GNAT 14 and 12 and fails on any warning. The simulation itself: a save with 1800 ticks is replay-verified in ~1.4 s (every line of every
+diary, world, screens, chess, robot and governance record is recomputed - that is not skipped); 300 more ticks add ~0.1 s. The replay
+used to spend 40 % in counting the known words of a wesen (`Known_Count` scanned the whole vocabulary at every call; now a counter kept
+by `Learn_Word`), the rest is spread (chess move generation ~10 %, screens, record files).
+
 **Old diaries are incompatible** with this version (new actions, longer texts, a
 vocabulary): start with `--fresh`.
 

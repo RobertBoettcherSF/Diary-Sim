@@ -10,8 +10,11 @@ for v in 14 12; do
     cd "$tmp" || exit 1
     if [ "$v" = 12 ]; then . "$GNAT12_ENV"; gn=gnatmake-12
     else PATH=$(echo "$PATH" | tr ':' '\n' | grep -v gnat12 | paste -sd:); gn=gnatmake; fi
-    make GNATMAKE=$gn > build.log 2>&1; rc=$?
-    echo "$($gn --version | head -1): rc=$rc, warnings=$(grep -ci warning build.log), errors=$(grep -ci error build.log)"
+    rc=0; : > build.log
+    for opt in "-O0" "-O1 -fno-inline"; do   # the default (fast) build and the strict one
+      rm -rf obj bin; make GNATMAKE=$gn OPT="$opt" >> build.log 2>&1 || rc=1
+    done
+    echo "$($gn --version | head -1): rc=$rc, warnings=$(grep -ci warning build.log), errors=$(grep -ci error build.log) (-O0 and -O1)"
     [ $rc = 0 ] && ! grep -qi -E "warning|error" build.log
   ) || { echo "$out"; status=1; continue; }
   echo "$out"

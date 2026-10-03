@@ -1020,6 +1020,17 @@ done
 "$bin" --govern > g1.txt 2>&1; [ -n "$(tail -n 1 g1.txt)" ] && ok "a view ends with its last line (no extra blank line the runtime used to add at exit)" || bad "trailing blank line"
 unset DIARY_HOME
 
+echo "== 37. build and run speed: parallel -O0 build by default, strict -O1 build on request, replay of a longer save stays fast =="
+fl=$(make -n -B -C "$root" all 2>/dev/null | grep -m1 gnatmake)
+echo "$fl" | grep -q -- '-j0' && echo "$fl" | grep -q -- '-O0' && make -n -B -C "$root" all OPT="-O1 -fno-inline" 2>/dev/null | grep -m1 gnatmake | grep -q -- '-O1 -fno-inline' \
+  && grep -q 'OPT' "$root/scripts/portable_check.sh" && ok "make builds with -j0 -O0; OPT=\"-O1 -fno-inline\" selects the strict build; make portable builds both" || bad "make flags ($fl)"
+rm -rf "$w/spd"; mkdir -p "$w/spd/h"; export DIARY_HOME="$w/spd/h"; cd "$w/spd" || exit 1
+t0=$(date +%s.%N); "$bin" --seed 42 --ticks 600 --yes --every 5000 > a1.txt 2>&1; "$bin" --more 600 --every 5000 > a2.txt 2>&1; "$bin" --more 300 --every 5000 > a3.txt 2>&1; t1=$(date +%s.%N)
+grep -q '^import OK: 4 entities, 1200 ticks verified' a3.txt && ok "1500 ticks over three runs (the last one replay-verifies 1200 ticks of every record file and adds 300): $(awk -v a="$t0" -v b="$t1" 'BEGIN { printf "%.1f", b - a }') s" || bad "speed run"
+awk -v a="$t0" -v b="$t1" 'BEGIN { exit !(b - a < 60) }' && ok "well under a minute (limit 60 s here; ~3 s on an 8-core box)" || bad "slow: $t0 -> $t1"
+grep -q 'Known_Count' "$root/README.md" && grep -q -- '-j0' "$root/README.md" && ok "README documents the build flags and the replay cost" || bad "speed docs"
+unset DIARY_HOME
+
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="
 [ "$fails" = 0 ]

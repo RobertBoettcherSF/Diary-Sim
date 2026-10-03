@@ -1,4 +1,4 @@
-# Version: 0.019
+# Version: 0.020
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -45,7 +45,12 @@
 #                 make run SECTION=drift|trace|players|inbox|run|status prints one block of it (nothing runs)
 # make check      version headers + the resume/replay/drift/crash checks
 GNATMAKE ?= gnatmake
-FLAGS = -g -O1 -fno-inline -gnatwa -gnat2022 -gnata
+# Build speed: units compile in parallel (-j0 = all cores) and at -O0 (a clean build took ~60 s serial at -O1; ~12 s now; the run
+# itself is ~35 % slower, 300 ticks on 1800 replayed ticks take ~2 s).  make portable builds BOTH ways with both compilers and
+# fails on any warning: OPT="-O1 -fno-inline" is the strict (optimizer-level warnings) one, e.g. make all OPT="-O1 -fno-inline".
+OPT ?= -O0
+JOBS ?= -j0
+FLAGS = -g $(OPT) -gnatwa -gnat2022 -gnata $(JOBS)
 
 .PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve
 export WESEN PLAYER TEXT AS

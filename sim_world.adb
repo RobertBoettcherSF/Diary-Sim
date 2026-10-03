@@ -1,4 +1,4 @@
---  Version: 0.014
+--  Version: 0.015
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
@@ -143,6 +143,7 @@ package body Sim_World is
    package Bool_Vectors is new Ada.Containers.Vectors (Positive, Boolean);
    Table : Word_Vectors.Vector;
    Known : array (Entity_Id) of Bool_Vectors.Vector;
+   Known_N : array (Entity_Id) of Natural := [others => 0];   --  how many words each wesen knows (kept by Init / Learn_Word, not recounted)
    package Nat_Vectors is new Ada.Containers.Vectors (Positive, Natural);
    Freq   : array (Entity_Id) of Nat_Vectors.Vector;   --  per word: how often it came up for the entity
    Taught : array (Entity_Id) of Nat_Vectors.Vector;   --  per word: the teacher's entity id, else 0
@@ -221,11 +222,13 @@ package body Sim_World is
       Base := Natural (Table.Length);
       for E in Entity_Id loop
          Known (E).Clear;
+         Known_N (E) := 0;
          Taught (E).Clear;
          Via_World (E).Clear;
          Freq (E).Clear;
          for W in 1 .. Base loop
             Known (E).Append (Int (Roll (Seed, Positive (E), 0, 1000 + W, 100)) <= Start_Percent);
+            if Known (E) (W) then Known_N (E) := Known_N (E) + 1; end if;
          end loop;
       end loop;
    end Init;
@@ -249,6 +252,7 @@ package body Sim_World is
       while Natural (Known (E).Length) < W loop
          Known (E).Append (False);
       end loop;
+      if not Known (E) (W) then Known_N (E) := Known_N (E) + 1; end if;
       Known (E) (W) := True;
       while Natural (Taught (E).Length) < W loop
          Taught (E).Append (0);
@@ -331,14 +335,7 @@ package body Sim_World is
    function Parents (W : Positive) return String is
      (if Table (W).P1 = 0 then "" else Word (Table (W).P1) & "+" & Word (Table (W).P2));
 
-   function Known_Count (E : Entity_Id) return Natural is
-      N : Natural := 0;
-   begin
-      for W in 1 .. Count loop
-         if Knows (E, W) then N := N + 1; end if;
-      end loop;
-      return N;
-   end Known_Count;
+   function Known_Count (E : Entity_Id) return Natural is (Known_N (E));   --  was a scan of the whole table at every call (40 % of a replay)
 
    function Nth_Known (E : Entity_Id; N : Positive) return Positive is
       K : Natural := 0;
