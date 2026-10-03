@@ -13,12 +13,13 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
   --grant=P<n>   grant a petition (make grant PETITION=P12): more recovery
   --map          print the treadmill view of the last session end (make map)
   --elo          Elo ranking of wesen and players (chess=1 sessions; make elo)
-  --perft        check the chess move generator (perft + draw rules; make perft)
+  --perft        check the chess move generator (perft, draw rules; make perft)
   --govern       the players' decisions, trust, standing (make govern)
   --veto=D<n>    revert a decision (make veto DECISION=D12); --approve=D<n>
   --audit        players' claims vs the truth, misreports (make audit)
   --next         the advice for the next run: wesen, players (make next)
   --next-ticks   the advised ticks, a bare number (nextticks.use=1; make run)
+  --trials       the trials (trial=1 sessions; make trials)
   --visit=WHO    stand next to one wesen, watch and talk (make visit WHO=ada)
   --visit-script=F  commands for --visit from a file (else stdin)
   --challenge=P  a caught lie lowers a player's standing (make challenge)
@@ -135,3 +136,11 @@ Every input is a line of diaries/visit.txt, replay-verified (tamper = DRIFT).
 --visit-script FILE or a pipe: the commands without a keyboard; EOF = leave.
 visit.enabled = 0 in limits.txt: no visits. STEP 2 (possess / steer) is only
 a hook, see README.
+Trial by chess (trial=1 session; needs chess and govern; make trials): a
+dispute (clashing petitions, an appeal against a refusal, rival claims to a
+coined word, rest against work) between two wesen, a wesen and a player or two
+players is settled over the board: best of 3 games, colours alternate; level =
+a further match of 3, then 5, ... (odd) until decided; past trial.max_games a
+Rule 30 coin. A losing wesen adheres with trial.adhere_pct (less unrest, more
+standing), else "refused the trial" and pays standing. Small effects. T lines
+of diaries/trials.txt, replay-verified. trial.enabled = 0: no trials.

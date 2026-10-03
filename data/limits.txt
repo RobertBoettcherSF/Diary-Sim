@@ -345,3 +345,36 @@ chess.fivefold = 5
 chess.moves75 = 150
 chess.claim_pct = 40
 chess.claim_behind = 40
+
+# trial=1 sessions (Trial by chess: disputes between wesen / players are settled with chess games; needs chess=1 and govern=1; new
+# sessions carry the marker, trial.enabled = 0 turns that off).  Series: trial.first games (odd), a level series is extended by matches of
+# trial.ext_first (odd), then +trial.ext_step (even) each time, until decided; past trial.max_games the Rule 30 coin decides.
+trial.enabled = 1
+trial.first = 3
+trial.ext_first = 3
+trial.ext_step = 2
+trial.max_games = 15
+# disputes: window = ticks between two clashing petitions / rival claims; pause = ticks between two trials; rest = ticks before the same
+# one is in another; session_cap = trials per session; the chances (percent) per possible dispute
+trial.window = 30
+trial.claim_window = 6
+trial.pause = 20
+trial.rest = 60
+trial.session_cap = 5
+trial.petition_pct = 50
+trial.escalate_pct = 30
+trial.appeal_pct = 25
+trial.claim_pct = 25
+trial.restwork_pct = 6
+# adherence of a losing wesen: adhere_pct - unrest * unrest_w / 100 + (standing - 50) * stand_w / 100, kept in adhere_min .. adhere_max;
+# a refusing loser pays refuse_stand standing.  Effects (points; a veto is 10 standing / 8 trust): win_*, loss_mood
+trial.adhere_pct = 85
+trial.adhere_min = 5
+trial.adhere_max = 99
+trial.unrest_w = 30
+trial.stand_w = 20
+trial.win_stand = 1
+trial.win_trust = 1
+trial.win_mood = 1
+trial.loss_mood = -1
+trial.refuse_stand = 2

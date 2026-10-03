@@ -1,0 +1,19 @@
+# Trial by chess (trial=1 sessions, see README "Trial by chess"): the clashing petition pairs, the wording.  The numbers (trial.*) are in
+# data/limits.txt.  Changing a pair or a number of a running save needs --fresh (the T records are replay-checked).
+# trial.clash.N = <topic> <topic>   two petitions of these topics, filed within trial.window ticks by two wesen, are a dispute
+trial.clash.1 = more_rest faster_work_recovery
+trial.clash.2 = more_rest bigger_bench_budget
+trial.clash.3 = more_talk_partners different_locations
+trial.clash.4 = new_action more_rest
+# where the dispute came from (the {6} of the box lines)
+trial.src.petition = clashing petitions
+trial.src.appeal = an appeal against a refusal
+trial.src.claim = rival claims to a new word
+trial.src.restwork = rest against work
+# the one line of a player in its box ({1} player, {2} trial number, {3} winner, {4} loser, {5} score, {6} where it came from)
+trial.box.score = {1}: Trial T{2} ({6}): {3} beat {4} on the board, {5}.
+trial.box.refused = {1}: Trial T{2} ({6}): {3} won {5}; {4} refused the trial.
+trial.box.coin = {1}: Trial T{2} ({6}): the games stayed level, so the Rule 30 coin gave it to {3} against {4}.
+trial.none = no trial yet (it starts with a session marked trial=1: make run; a dispute is settled over the board).
+trial.head = trials {1} (refused {2}, by coin {3})
+err.trial = trials.txt {1} differs from the replay: {2}

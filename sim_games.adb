@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 --  See sim_games.ads.
 pragma Ada_2022;
 
@@ -46,6 +46,8 @@ package body Sim_Games is
    Table : Table_Array := [others => 0];
    Gap, Start_Pct, Pause, Timeout, Max_Plies, Repeat, Hol_Pct, Hol_Len, Smin, Smax, Win_Mood, Draw_Mood, Loss_Mood,
      Res_Pct, Res_Gap, Res_Mood, Res_Mood_Pct, Res_Min, PP_Pct, Elo_Start, Elo_K : Integer := 1;
+   Forced : Natural := 0;     --  Play_Out: the game that Pair plays (0: the normal search and start)
+   Quiet : Boolean := False;  --  Play_Out (a game of a trial): no chess mood
    Rules, Fives, Moves75, Claim_Pct, Claim_Behind : Integer := 0;   --  chessrules=2 (Set_Rules): 0 = the old rules
 
    procedure Set_Rules (V : Natural) is
@@ -199,7 +201,7 @@ package body Sim_Games is
       Ob : constant Positive := Rate (G.B);
       procedure Mood (C : Comp_Id; V : Integer) is
       begin
-         if C <= 4 then Pending (C) := Pending (C) + V; end if;
+         if C <= 4 and then not Quiet then Pending (C) := Pending (C) + V; end if;
       end Mood;
       Winner : constant Natural := (case R is when White_Wins => G.W, when Black_Wins => G.B, when others => 0);
    begin
@@ -243,11 +245,15 @@ package body Sim_Games is
       Played := False;
       Move_Text := Null_Unbounded_String;
       Num_Text := Null_Unbounded_String;
-      for I in 1 .. Natural (Games.Length) loop
-         if Games (I).Res = Running and then ((Games (I).W = A and then Games (I).B = B) or else (Games (I).W = B and then Games (I).B = A)) then
-            Gi := I;
-         end if;
-      end loop;
+      if Forced /= 0 then
+         Gi := Forced;
+      else
+         for I in 1 .. Natural (Games.Length) loop
+            if Games (I).Res = Running and then ((Games (I).W = A and then Games (I).B = B) or else (Games (I).W = B and then Games (I).B = A)) then
+               Gi := I;
+            end if;
+         end loop;
+      end if;
       if Gi = 0 then   --  start a game (the pair has played Pair_Games times: the colours alternate)
          if Tick - Last_End (A, B) < Int (Pause) or else Int (Roll (Seed_V, A * 10 + B, Tick, 9401, 100)) > Int (Start_Pct) then return; end if;
          declare
@@ -350,6 +356,45 @@ package body Sim_Games is
          end;
       end;
    end Pair;
+
+   --  A whole game at once (a trial): White plays the white pieces against the other one of A, B.  Every move is made with the same
+   --  rules and dice as a game over time (Pair), at the virtual ticks Tick, Tick + chess.gap, ...  No chess mood (the trial has its own),
+   --  the pair pause is left as it was; Elo, the record lines and the counters are as for any game.  Winner: the competitor, 0 = draw.
+   procedure Play_Out (A, B, White : Comp_Id; Tick : Int; Moods : Mood_Array; Lines : in out Str_Vectors.Vector;
+                       Winner, Game_No : out Natural) is
+      G : Game_Rec;
+      Played : Boolean;
+      Mv, Nm, Dt : Unbounded_String;
+      Vt : Int := Tick;
+      Was_End : constant Int := Last_End (A, B);
+   begin
+      G.W := White;
+      G.B := (if White = A then B else A);
+      G.Pos := Sim_Chess.Start;
+      G.Keys.Append (Sim_Chess.Key (G.Pos));
+      G.Start := Tick;
+      G.Last_Move := Tick - Int (Gap);
+      Games.Append (G);
+      Game_No := Natural (Games.Length);
+      Lines.Append ("g=" & Img (Game_No) & " start white=" & Comp_Name (G.W) & " black=" & Comp_Name (G.B));
+      Forced := Game_No;
+      Quiet := True;
+      for Ply in 1 .. Max_Plies + 4 loop
+         exit when Games (Game_No).Res /= Running;
+         Pair (A, B, Vt, Moods, Lines, Played, Mv, Nm, Dt, False);
+         Vt := Vt + Int (Gap);
+      end loop;
+      if Games (Game_No).Res = Running then Finish (Game_No, Draw, "cap", Vt, Lines); end if;
+      Forced := 0;
+      Quiet := False;
+      Last_End (A, B) := Was_End; Last_End (B, A) := Was_End;
+      Winner := (case Games (Game_No).Res is when White_Wins => G.W, when Black_Wins => G.B, when others => 0);
+   end Play_Out;
+
+   procedure Add_Mood (C : Comp_Id; V : Integer) is
+   begin
+      if C <= 4 then Pending (C) := Pending (C) + V; end if;
+   end Add_Mood;
 
    procedure Turn (E : Entity_Id; Tick : Int; Moods : Mood_Array; Lines : in out Str_Vectors.Vector; Played : out Boolean;
                    Partner : out Comp_Id; Move_Text, Num_Text : out Unbounded_String;

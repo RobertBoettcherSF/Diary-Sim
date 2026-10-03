@@ -1,4 +1,4 @@
---  Version: 0.005
+--  Version: 0.006
 --  Governance of diary_sim (govern=1 sessions; needs rest=1): the players (Player 1, Player 2, Player 3) decide what happens to the
 --  petitions of the wesen they watch.  A SHORT WHITELIST of rule levers (data/govern.txt: recovery rate, cool-down length, the mood
 --  cost of work, the quick-rest energy) can each be moved a small step by a petition of the matching topic, never past its bounds.
@@ -55,6 +55,9 @@ package Sim_Govern is
    function Deferred_Of (E : Entity_Id) return Natural;   --  ... of which already put off at least once
    --  Robert caught a player lying (make challenge): the player's standing with E drops by By points (never below 0).
    procedure Lower_Standing (E : Entity_Id; By : Natural);
+   --  trial=1 (Sim_Trial): the tick of the latest refusal of a petition of E (-1: none), and a small move of E's trust / standing (0 .. 100).
+   function Refusal_Tick (E : Entity_Id) return Int;
+   procedure Adjust (E : Entity_Id; Trust_By, Stand_By : Integer);
    function View return Str_Vectors.Vector;                           --  --govern / make govern (ids; the output layer maps names)
    function Describe (Line : String) return String;                   --  one D line as a sentence
 

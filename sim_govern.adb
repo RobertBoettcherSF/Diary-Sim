@@ -1,4 +1,4 @@
---  Version: 0.005
+--  Version: 0.006
 --  See sim_govern.ads.
 pragma Ada_2022;
 
@@ -52,6 +52,7 @@ package body Sim_Govern is
    Is_Started : Boolean := False;
    Off_V : Offs := [others => [others => 0]];
    Trust, Stand, Mood_P : Ints := [others => 0];
+   Refused_At : array (Entity_Id) of Int := [others => -1];   --  tick of the latest refusal of a petition of E (trial=1 appeals)
    Reps : Cnt_Topic := [others => [others => 0]];
    Pend : Pend_Vectors.Vector;
    Inputs : In_Vectors.Vector;
@@ -125,7 +126,7 @@ package body Sim_Govern is
       Seed_V := Seed;
       Is_Started := False;
       Off_V := [others => [others => 0]];
-      Trust := [others => 0]; Stand := [others => 0]; Mood_P := [others => 0];
+      Trust := [others => 0]; Stand := [others => 0]; Mood_P := [others => 0]; Refused_At := [others => -1];
       Reps := [others => [others => 0]];
       Pend.Clear; Inputs.Clear; Decs.Clear; Dec_Lines.Clear;
       Trust_Start := L ("govern.trust_start", 50);
@@ -301,6 +302,7 @@ package body Sim_Govern is
          Add_Urgency (E, Tn, Natural (Integer'Max (0, Urgency)));
       end if;
       Mood_P (E) := Mood_P (E) + Mood_D;
+      if K = Refuse then Refused_At (E) := Tick; end if;
       Put (Lines, Make_Line (Tick, P.Pet, E, Topic, Lever_Name (V), K, To_String (Why), Old_Off,
                              (if K in Grant | Partial then Off_V (E, V) else Old_Off), Old_Tr, Trust (E), Old_St, Stand (E), ""),
            Dec_Rec'(Kind => K, E => E, Lev => V, Delta_V => (if K in Grant | Partial then Off_V (E, V) - Old_Off else 0), Acted => False));
@@ -449,6 +451,14 @@ package body Sim_Govern is
       end loop;
       return (if Best = 0 then "" else Topic_Name (Best));
    end Top_Concern;
+
+   function Refusal_Tick (E : Entity_Id) return Int is (Refused_At (E));
+
+   procedure Adjust (E : Entity_Id; Trust_By, Stand_By : Integer) is
+   begin
+      Trust (E) := Integer'Max (0, Integer'Min (100, Trust (E) + Trust_By));
+      Stand (E) := Integer'Max (0, Integer'Min (100, Stand (E) + Stand_By));
+   end Adjust;
 
    procedure Lower_Standing (E : Entity_Id; By : Natural) is
    begin

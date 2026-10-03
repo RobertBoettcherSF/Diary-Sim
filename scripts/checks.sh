@@ -16,7 +16,7 @@ bad() { echo "  FAIL -- $*"; fails=$((fails + 1)); }
 idn() { sed 's/^\([a-z]*\) *=.*/\1 = \1/' "$root/data/names.txt" > "$1/names.txt"; }
 idata="$w/idata"; mkdir -p "$idata"; cp -r "$root/data/." "$idata/"; idn "$idata"
 # screens (and later chess) change the dice of the words: the older scenarios run with them off; their own scenarios switch them on
-sed -i 's/^screen.enabled = .*/screen.enabled = 0/; s/^chess.enabled = .*/chess.enabled = 0/; s/^robot.enabled = .*/robot.enabled = 0/; s/^govern.enabled = .*/govern.enabled = 0/; s/^screen.coin_enabled = .*/screen.coin_enabled = 0/; s/^players4.enabled = .*/players4.enabled = 0/; s/^preport.pause = .*/preport.pause = 0/; s/^chessrules.enabled = .*/chessrules.enabled = 0/' "$idata/limits.txt"
+sed -i 's/^screen.enabled = .*/screen.enabled = 0/; s/^chess.enabled = .*/chess.enabled = 0/; s/^robot.enabled = .*/robot.enabled = 0/; s/^govern.enabled = .*/govern.enabled = 0/; s/^screen.coin_enabled = .*/screen.coin_enabled = 0/; s/^players4.enabled = .*/players4.enabled = 0/; s/^preport.pause = .*/preport.pause = 0/; s/^chessrules.enabled = .*/chessrules.enabled = 0/; s/^trial.enabled = .*/trial.enabled = 0/' "$idata/limits.txt"
 mkdir -p "$w/ib/bin"; cp "$bin" "$w/ib/bin/"; cp -r "$idata" "$w/ib/data"; bin="$w/ib/bin/diary_sim"   # the binary beside its identity-names data
 lines() { cat "$1"/*.jsonl | wc -l; }
 dups()  { for f in "$1"/*.jsonl; do grep '}}$' "$f" | grep -o '"tick":[0-9]*' | sort | uniq -d; done | wc -l; }
@@ -1344,6 +1344,84 @@ for d in on fv rp m75 off; do ( cd "$w/cr/$d/h" || exit 1; export DIARY_HOME="$w
 [ ! -s "$w/cr/replay.txt" ] && ok "every variant replays and verifies (C lines recomputed with the rules of its session marker)" || bad "chessrules replay: $(cat "$w/cr/replay.txt")"
 cd "$w/cr/fv/h" || exit 1; export DIARY_HOME="$w/cr/fv/h"; sed -i '/^S2 /s/ chessrules=2//' diaries/sessions.txt; "$w/cr/fv/bin/diary_sim" --more 0 --every 5000 > r2.txt 2>&1; head -1 debug.txt | grep -q '^DRIFT' && ok "a removed chessrules=2 marker (other rules for the same games) is DRIFT" || bad "chessrules marker removed"
 grep -q 'chessrules' "$root/README.md" && grep -q 'chessrules' "$root/data/limits.txt" && grep -q 'draw rules' "$root/data/help.txt" && ok "README, --help and limits.txt describe chessrules=2" || bad "chessrules docs"
+unset DIARY_HOME
+
+echo "== 44. trial by chess (trial=1): disputes settled with chess games, odd extensions, Rule 30 coin, adherence, T lines =="
+rm -rf "$w/tr"; mkdir -p "$w/tr"
+tr_run() {   # tr_run NAME 'sed expr on limits.txt' [ticks]: a fresh session of seed 42 (chess=1 govern=1 trial=1, session cap lifted)
+  mkdir -p "$w/tr/$1/bin" "$w/tr/$1/h"; cp "$bin" "$w/tr/$1/bin/"; cp -r "$idata" "$w/tr/$1/data"
+  sed -i 's/^chess.enabled = .*/chess.enabled = 1/; s/^govern.enabled = .*/govern.enabled = 1/; s/^trial.enabled = .*/trial.enabled = 1/; s/^trial.session_cap = .*/trial.session_cap = 50/; s/^trial.pause = .*/trial.pause = 5/; s/^trial.rest = .*/trial.rest = 10/' "$w/tr/$1/data/limits.txt"
+  [ -n "$2" ] && sed -i "$2" "$w/tr/$1/data/limits.txt"
+  ( cd "$w/tr/$1/h" || exit 1; export DIARY_HOME="$w/tr/$1/h"; "$w/tr/$1/bin/diary_sim" --seed 42 --ticks "${3:-500}" --yes --every 5000 > run.txt 2>&1 )
+}
+tr_run main ''
+( cd "$w/tr/main/h" && export DIARY_HOME="$w/tr/main/h" && "$w/tr/main/bin/diary_sim" --more 300 --every 5000 > run2.txt 2>&1 )
+cd "$w/tr/main/h" || exit 1; export DIARY_HOME="$w/tr/main/h"
+nt=$(grep -c '^T[0-9]' diaries/trials.txt); nm=$(grep -c '^S[0-9].* trial=1' diaries/sessions.txt)
+[ "$nt" -ge 3 ] && [ "$nm" = 2 ] && head -1 diaries/trials.txt | grep -q '^# seed 42$' && ok "new sessions carry trial=1 ($nm); $nt trials are T lines in diaries/trials.txt" || bad "trial lines ($nt, $nm)"
+bad_t=$(grep '^T[0-9]' diaries/trials.txt | awk '{ ok = 1; split("t src a b games res score match win by verdict", k, " "); for (i = 1; i <= 11; i++) if (index($0, " " k[i] "=") == 0) ok = 0; if (!ok) bad++ } END { print bad + 0 }')
+[ "$bad_t" = 0 ] && ok "every T line has t, src, a, b, games, res, score, match, win, by, verdict" || bad "T line fields ($bad_t)"
+bad_s=$(grep '^T[0-9]' diaries/trials.txt | awk '{ for (i = 1; i <= NF; i++) { split($i, kv, "="); v[kv[1]] = kv[2] }
+  n = split(v["games"], g, ","); r = v["res"]; wa = 0; wb = 0
+  for (i = 1; i <= length(r); i++) { c = substr(r, i, 1); if (c == "A") wa++; else if (c == "B") wb++ }
+  if (length(r) != n || v["score"] != wa "-" wb || v["match"] % 2 != 1) bad++
+  if (v["by"] == "score" && wa == wb) bad++
+  if (v["by"] == "score" && ((wa > wb && v["win"] != v["a"]) || (wb > wa && v["win"] != v["b"]))) bad++ } END { print bad + 0 }')
+[ "$bad_s" = 0 ] && ok "the games, results and score of every trial agree; the winner has more wins; every match is odd" || bad "trial arithmetic ($bad_s)"
+bad_g=$(grep '^T[0-9]' diaries/trials.txt | while read -r l; do a=$(echo "$l" | sed -E 's/.* a=([a-z]+) .*/\1/'); b=$(echo "$l" | sed -E 's/.* b=([a-z]+) .*/\1/'); gs=$(echo "$l" | sed -E 's/.* games=([0-9,]+) .*/\1/' | tr ',' ' '); k=0
+  for g in $gs; do k=$((k + 1)); want=$a; [ $((k % 2)) = 0 ] && want=$b; grep -q " g=$g start white=$want black=" diaries/chess.txt || echo "bad"; grep -q " g=$g end " diaries/chess.txt || echo "bad"; done; done | wc -l)
+[ "$bad_g" = 0 ] && ok "every trial game is a recorded game of diaries/chess.txt, finished, with the colours alternating (the first one named plays white first)" || bad "trial games ($bad_g)"
+grep -q 'Trial T[0-9]' run.txt && ok "the players' box at the end of the session has a one-liner about the latest trial" || bad "box line"
+"$w/tr/main/bin/diary_sim" --trials > t1.txt 2>&1; rc=$?
+[ $rc = 0 ] && head -1 t1.txt | grep -q '^trials [0-9]' && [ "$(grep -c '^T[0-9]' t1.txt)" = "$nt" ] && ok "make trials / --trials lists the trials after a verified replay" || bad "--trials ($rc)"
+wsv=$(sed -n 's/^trial.win_stand = \([0-9]*\).*/\1/p' data/limits.txt 2>/dev/null); [ -z "$wsv" ] && wsv=$(sed -n 's/^trial.win_stand = \([0-9]*\).*/\1/p' "$w/tr/main/data/limits.txt")
+vst=$(sed -n 's/^govern.veto_stand = \([0-9]*\).*/\1/p' "$w/tr/main/data/limits.txt"); wtr=$(sed -n 's/^trial.win_trust = \([0-9]*\).*/\1/p' "$w/tr/main/data/limits.txt"); vtr=$(sed -n 's/^govern.veto_trust = \([0-9]*\).*/\1/p' "$w/tr/main/data/limits.txt")
+[ "$wsv" -lt "$vst" ] && [ "$wtr" -lt "$vtr" ] && ok "the effects of a trial (win: $wsv standing, $wtr trust) are smaller than a veto ($vst, $vtr)" || bad "effects ($wsv $vst $wtr $vtr)"
+cd "$w/tr/main/h"; "$w/tr/main/bin/diary_sim" --more 0 --every 5000 > r1.txt 2>&1; head -1 debug.txt | grep -q '^OK' && ok "the save replays and verifies (T lines and their games recomputed)" || bad "trial replay"
+cp diaries/trials.txt ../trials.keep
+sed -i '2s/ score=\([0-9]\)-\([0-9]\) / score=\2-\1 /' diaries/trials.txt; "$w/tr/main/bin/diary_sim" --more 0 --every 5000 > r2.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && grep -q 'trials.txt T' r2.txt && ok "a changed T line: import FAILED, DRIFT" || bad "tampered T"
+cp ../trials.keep diaries/trials.txt; sed -i '2d' diaries/trials.txt; "$w/tr/main/bin/diary_sim" --more 0 --every 5000 > r3.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "a removed T line is DRIFT" || bad "removed T"
+cp ../trials.keep diaries/trials.txt; echo "T99 t=5 src=claim a=ada b=gemini games=1 res=A score=1-0 match=3 win=ada by=score verdict=adhered fx=none" >> diaries/trials.txt; "$w/tr/main/bin/diary_sim" --more 0 --every 5000 > r4.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "an invented T line is DRIFT" || bad "invented T"
+cp ../trials.keep diaries/trials.txt; sed -i '/^S1 /s/ trial=1//' diaries/sessions.txt; "$w/tr/main/bin/diary_sim" --more 0 --every 5000 > r5.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "a removed trial=1 marker is DRIFT" || bad "trial marker removed"
+for s in petition appeal claim restwork; do
+  case $s in
+    petition) x='s/^trial.claim_pct = .*/trial.claim_pct = 0/; s/^trial.restwork_pct = .*/trial.restwork_pct = 0/; s/^trial.appeal_pct = .*/trial.appeal_pct = 0/; s/^trial.petition_pct = .*/trial.petition_pct = 100/; s/^trial.escalate_pct = .*/trial.escalate_pct = 0/';;
+    appeal) x='s/^trial.claim_pct = .*/trial.claim_pct = 0/; s/^trial.restwork_pct = .*/trial.restwork_pct = 0/; s/^trial.petition_pct = .*/trial.petition_pct = 0/; s/^trial.appeal_pct = .*/trial.appeal_pct = 100/';;
+    claim) x='s/^trial.petition_pct = .*/trial.petition_pct = 0/; s/^trial.restwork_pct = .*/trial.restwork_pct = 0/; s/^trial.appeal_pct = .*/trial.appeal_pct = 0/; s/^trial.claim_pct = .*/trial.claim_pct = 100/; s/^trial.claim_window = .*/trial.claim_window = 100/';;
+    restwork) x='s/^trial.petition_pct = .*/trial.petition_pct = 0/; s/^trial.claim_pct = .*/trial.claim_pct = 0/; s/^trial.appeal_pct = .*/trial.appeal_pct = 0/; s/^trial.restwork_pct = .*/trial.restwork_pct = 100/';;
+  esac
+  tr_run "src_$s" "$x" 700
+  n_s=$(grep -c "^T[0-9].* src=$s " "$w/tr/src_$s/h/diaries/trials.txt"); n_o=$(grep -c '^T[0-9]' "$w/tr/src_$s/h/diaries/trials.txt")
+  [ "$n_s" -ge 1 ] && [ "$n_s" = "$n_o" ] && ok "dispute source $s: $n_s trials, no other source" || bad "source $s ($n_s of $n_o)"
+done
+n_pp=$(grep -c '^T[0-9].* src=petition a=\(iris\|sol\|noor\) b=\(iris\|sol\|noor\) ' "$w/tr/src_petition/h/diaries/trials.txt")
+tr_run esc 's/^trial.claim_pct = .*/trial.claim_pct = 0/; s/^trial.restwork_pct = .*/trial.restwork_pct = 0/; s/^trial.appeal_pct = .*/trial.appeal_pct = 0/; s/^trial.petition_pct = .*/trial.petition_pct = 100/; s/^trial.escalate_pct = .*/trial.escalate_pct = 100/' 700
+n_e=$(grep -c '^T[0-9].* src=petition a=\(iris\|sol\|noor\) b=\(iris\|sol\|noor\) .* fx=none$' "$w/tr/esc/h/diaries/trials.txt"); n_ap=$(grep -c '^T[0-9].* src=appeal a=\(ada\|gemini\|replika\|robert\) b=\(iris\|sol\|noor\) ' "$w/tr/src_appeal/h/diaries/trials.txt")
+[ "$n_pp" = 0 ] && [ "$n_e" -ge 1 ] && [ "$n_ap" -ge 1 ] && ok "clashing petitions: the watching players take over only when escalate_pct says so (two players, no effect on a wesen: $n_e); an appeal is a wesen against a player ($n_ap)" || bad "escalation ($n_pp $n_e $n_ap)"
+lv='s/^chess.repeat = .*/chess.repeat = 1/; s/^trial.claim_pct = .*/trial.claim_pct = 100/; s/^trial.petition_pct = .*/trial.petition_pct = 0/; s/^trial.restwork_pct = .*/trial.restwork_pct = 0/; s/^trial.appeal_pct = .*/trial.appeal_pct = 0/; s/^trial.claim_window = .*/trial.claim_window = 100/'
+tr_run lvl "$lv" 500
+g_l=$(grep '^T[0-9]' "$w/tr/lvl/h/diaries/trials.txt" | sed -E 's/.* games=([0-9,]+) .*/\1/' | awk -F, '{ print NF }' | sort -u | tr '\n' ' '); by_l=$(grep '^T[0-9]' "$w/tr/lvl/h/diaries/trials.txt" | grep -c ' by=coin ')
+n_l=$(grep -c '^T[0-9]' "$w/tr/lvl/h/diaries/trials.txt")
+[ "$n_l" -ge 1 ] && [ "$g_l" = "11 " ] && [ "$by_l" = "$n_l" ] && grep '^T[0-9]' "$w/tr/lvl/h/diaries/trials.txt" | grep -q ' score=0-0 ' && ok "all games drawn (level): matches of 3, 3 and 5 games are played (11 in all), the next (7) would pass trial.max_games = 15, so the Rule 30 coin decides ($n_l trials by coin)" || bad "level series ($n_l '$g_l' $by_l)"
+tr_run lvl3 "$lv; s/^trial.max_games = .*/trial.max_games = 3/" 400
+g_3=$(grep '^T[0-9]' "$w/tr/lvl3/h/diaries/trials.txt" | sed -E 's/.* games=([0-9,]+) .*/\1/' | awk -F, '{ print NF }' | sort -u | tr '\n' ' ')
+c3=$(grep '^T[0-9]' "$w/tr/lvl3/h/diaries/trials.txt" | sed -E 's/.* win=([a-z]+) .*/\1/' | sort -u | wc -l)
+[ "$g_3" = "3 " ] && [ "$c3" -ge 2 ] && ok "trial.max_games = 3: three drawn games, then the coin (the coin falls both ways: $c3 different winners)" || bad "coin cap ('$g_3' $c3)"
+tr_run adh0 's/^trial.adhere_pct = .*/trial.adhere_pct = 0/; s/^trial.adhere_min = .*/trial.adhere_min = 0/; s/^trial.adhere_max = .*/trial.adhere_max = 0/' 600
+tr_run adh1 's/^trial.adhere_pct = .*/trial.adhere_pct = 100/; s/^trial.adhere_max = .*/trial.adhere_max = 100/; s/^trial.unrest_w = .*/trial.unrest_w = 0/; s/^trial.stand_w = .*/trial.stand_w = 0/' 600
+a0=$(grep '^T[0-9].* fxl=' "$w/tr/adh0/h/diaries/trials.txt" | grep -vc ' verdict=refused .*fxl=-2/0/-1$'); r0=$(grep -c ' verdict=refused ' "$w/tr/adh0/h/diaries/trials.txt")
+a1=$(grep -c ' verdict=refused ' "$w/tr/adh1/h/diaries/trials.txt"); n1=$(grep -c '^T[0-9]' "$w/tr/adh1/h/diaries/trials.txt")
+[ "$r0" -ge 1 ] && [ "$a0" = 0 ] && [ "$a1" = 0 ] && [ "$n1" -ge 1 ] && ok "adherence is data: chance 0 = every losing wesen 'refused the trial' ($r0, -2 standing); chance 100 = none refuses ($n1 trials)" || bad "adherence ($r0 $a0 $a1 $n1)"
+grep -q 'trial=1' "$w/tr/adh0/h/diaries/sessions.txt" && stand_n=$(grep -c . "$w/tr/adh0/h/diaries/govern.txt") && [ "$stand_n" -ge 1 ] && ok "the refusal costs standing: it is part of the governance record (replay-checked with the D lines)" || bad "standing record"
+tr_run off 's/^trial.enabled = .*/trial.enabled = 0/'
+if [ ! -f "$w/tr/off/h/diaries/trials.txt" ] || [ "$(grep -c '^T[0-9]' "$w/tr/off/h/diaries/trials.txt")" = 0 ]; then
+  grep -q 'trial=1' "$w/tr/off/h/diaries/sessions.txt" && bad "trial off marker" || ok "trial.enabled = 0: no trial=1 marker, no T lines (the old behaviour exactly)"
+else bad "trial off lines"; fi
+grep -q 'trial' "$root/README.md" && grep -q 'trial.enabled' "$root/data/help.txt" && grep -q 'trial.first' "$root/data/limits.txt" && grep -q '^trial.clash.1' "$root/data/trial.txt" && ok "README, --help, limits.txt and data/trial.txt describe the trial" || bad "trial docs"
 unset DIARY_HOME
 
 rm -rf "$w"

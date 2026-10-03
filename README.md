@@ -264,7 +264,7 @@ needed: the next session (`make run` / `--more`) of an old save simply gets the 
 without it.
 
 **Markers of a session:** every session line in `diaries/sessions.txt` lists the features it STARTED with (`world`, `rest`, `grant`,
-`screen`, `chess`, `robot`, `govern`, `scoin`, `preport`, `players4`, `nextticks`), taken from `data/limits.txt` (`*.enabled`) when the session begins. A running save can gain
+`screen`, `chess`, `robot`, `govern`, `scoin`, `preport`, `players4`, `nextticks`, `trial`), taken from `data/limits.txt` (`*.enabled`) when the session begins. A running save can gain
 a feature mid-way without `--fresh`: the next NEW session carries the marker and the feature begins there (robot and governance start with
 their first marked session; earlier sessions replay as before). A session that is resumed (unfinished) keeps its old markers. The end
 report shows the blocks of the features the LAST session has; for the others it prints one line, `robot: off for this save (...),
@@ -589,6 +589,41 @@ grants, as an override of `Choose` for that wesen (`Steer_Override (E, Tick)` re
 dice salts 9950 .. 9959 are reserved), a refusal is an `A` line too; (4) a steered tick costs trust or energy by data numbers and has
 a cap per visit; (5) only verbs the wesen's own action and world lists allow. The extension points are `Sim_Visit.Parse`, `Apply`
 (a new `Steer` kind) and the one call of `Visit_Step` in `Do_Tick` in `diary_sim.adb`.
+
+## Trial by chess (`trial=1` sessions, `make trials`)
+
+A dispute between two wesen, a wesen and a player, or two players can be settled over the board (`sim_trial.ads/.adb`; numbers
+`trial.*` in `data/limits.txt`, wording and the clashing petition pairs in `data/trial.txt`). New sessions of a save with `chess=1`
+and `govern=1` carry `trial=1` (`trial.enabled = 0`: nothing changes, old sessions replay byte for byte as before). At most one
+trial per tick, `trial.session_cap` (5) per session, `trial.pause` ticks between two, `trial.rest` ticks before the same one is in
+another.
+
+* **Where disputes come from (existing things only):** `petition` = two petitions of two wesen with CLASHING topics (pairs in
+  `trial.clash.N`: rest against quicker work recovery, ...) filed within `trial.window` ticks, `trial.petition_pct` at the moment the
+  second is filed; their watching players may take the case over instead (`trial.escalate_pct`): then the two PLAYERS play.
+  `appeal` = a refused petition: the wesen appeals against the refusing player (`trial.appeal_pct`). `claim` = rival claims: two
+  wesen coined a word within `trial.claim_window` ticks (`trial.claim_pct`). `restwork` = one wesen is in its cool-down after hard
+  work and a neighbour in the same place works (`trial.restwork_pct` per tick). Player 4 does not play chess, so it takes no part.
+* **The series:** a match of `trial.first` (3) games, colours alternate; the side with more wins takes it (a match ends early when one
+  side has the majority). Level (draws)? A further match of `trial.ext_first` (3) games, then 5, then 7 ... (`trial.ext_step`), every
+  match odd, until one side is ahead. When the next match would take the series past `trial.max_games` (15), a Rule 30 coin decides
+  (a hashed 32-bit row, 20 steps of Rule 30, the middle bit). The games are real games of `sim_games` (same rules, same dice,
+  `chessrules=2` if the session has it): Elo changes per game as ever, the `g=N` lines are in `diaries/chess.txt`; a trial game gives
+  no chess mood (the trial has its own).
+* **Wesen ADHERE, but value a trial differently from a ruling:** the losing wesen accepts the verdict with the chance
+  `trial.adhere_pct` (85), minus `trial.unrest_w` per 100 of its unrest, plus `trial.stand_w` per 100 of its standing above 50
+  (kept in `adhere_min .. adhere_max`). A loser that does not is recorded as `verdict=refused` ("refused the trial") and pays
+  `trial.refuse_stand` (2) standing. Players always adhere.
+* **Effects** are a few points on the wesen's standing / trust / mood with its watching player: a winner `+trial.win_stand` (1) /
+  `+trial.win_trust` (1) / `+trial.win_mood` (1), a loser `trial.loss_mood` (-1), a refusing loser also -2 standing. A veto is 10
+  standing and 8 trust, a grant 2 trust and 2 mood: a trial counts for far less. A trial between two players changes nothing else.
+* **Record:** every trial is a line `T<n> t=<tick> src=... a=.. b=.. subj=.. games=.. res=.. score=.. match=.. win=.. by=score|coin
+  verdict=adhered|refused fxw=.. fxl=..` in `diaries/trials.txt` (`res`: A = the first one named won the game, B the other, d = draw),
+  computed again by every replay (Sim_Store, own hash salts 9960 .. 9979): a changed, removed or invented line is DRIFT. The players'
+  box at the end of a session has a one-liner about the latest trial of the session. `make trials` (`--trials`) lists them (replay-
+  verified, writes nothing).
+* **Not done / defaults:** the verdict has no effect on the petitions themselves, only on standing, trust and mood; a trial runs in
+  one tick (its games are played at once, not over many ticks); sessions that began before `trial=1` keep their old rules.
 
 ## The debug digest (`DEBUG=1`, `--debug`)
 
@@ -986,6 +1021,6 @@ paste it` and `back up diaries/ before the next run`.
 vocabulary, Rule 30 personality, bench kernels, votes and summary text), `sim_util.ads/.adb` (hash rolls,
 line parsing, data-file helpers), `data/words.txt`, `data/topics.txt` (petition topics), `data/limits.txt`,
 `data/messages.txt` (all console wording), `data/kalpas.txt` (session length votes), `data/menu.txt` (menu text, title, tagline), `data/fonts.txt` (title letters), `data/vocab.txt`, `data/help.txt`, `sim_dharma.ads/.adb` (karma, rebirth, unrest, ladder, awareness, players, inbox), `sim_things.ads/.adb` (the treadmill world), `data/things.txt` (its lists), `docs/WORLD.md`, `data/karma.txt` (numbers), `data/dharma.txt` (wording, flavour labels), `data/players.txt` (the three players),
-`sim_next.ads/.adb` + `data/ticks.txt` (the advice for the next run), `sim_visit.ads/.adb` + `data/visit.txt` (the visit: watch and talk), `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
+`sim_next.ads/.adb` + `data/ticks.txt` (the advice for the next run), `sim_visit.ads/.adb` + `data/visit.txt` (the visit: watch and talk), `sim_trial.ads/.adb` + `data/trial.txt` (trial by chess), `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
 `Version:` header (`make version-check`); a touched file goes up by 0.001. V&V is
 suspended: no new test suites, `scripts/checks.sh` must keep passing.
