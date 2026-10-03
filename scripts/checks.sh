@@ -4,6 +4,7 @@
 # folders (words, bench), summary, crash then resume, start_percent, petitions,
 # make run, kalpa sessions (vote, median, resume, explicit, drift).
 # Usage: scripts/checks.sh [BIN]     (works in a scratch directory)
+exec < /dev/null   # never a terminal: the 'no previous diary' question is not asked (see scenario 20)
 root=$(cd "$(dirname "$0")/.." && pwd)
 bin=$(readlink -f "${1:-$root/bin/diary_sim}")
 w=$(mktemp -d); fails=0
@@ -204,8 +205,8 @@ grep -q 'found Diaries/' out.txt && ok "wrong case Diaries/: clear hint, stop" |
 
 echo "== 19. kalpa sessions: the entities vote the session length =="
 rm -rf "$w/kal"; mkdir -p "$w/kal/bin" "$w/kal/a" "$w/kal/b"; cp "$bin" "$w/kal/bin/"; cp -r "$root/data" "$w/kal/data"
-kb="$w/kal/bin/diary_sim"; cd "$w/kal/a" || exit 1; "$kb" --every 1000 > out.txt 2>&1
-cd "$w/kal/b" || exit 1; "$kb" --every 1000 > out.txt 2>&1
+kb="$w/kal/bin/diary_sim"; cd "$w/kal/a" || exit 1; "$kb" --yes --every 1000 > out.txt 2>&1
+cd "$w/kal/b" || exit 1; "$kb" --yes --every 1000 > out.txt 2>&1
 cmp -s "$w/kal/a/diaries/sessions.txt" "$w/kal/b/diaries/sessions.txt" && cmp -s <(sed 's/"ts":"[^"]*"//' "$w/kal/a/diaries/ada.jsonl") <(sed 's/"ts":"[^"]*"//' diaries/ada.jsonl) \
   && ok "two fresh bare runs vote the same and write identical diaries and sessions.txt" || bad "vote not deterministic"
 rec=$(grep '^S1 ' diaries/sessions.txt); echo "   $rec"
@@ -218,7 +219,7 @@ cp diaries/sessions.txt s_full.txt; "$kb" --every 1000 > out.txt 2>&1
 cmp -s s_full.txt diaries/sessions.txt || true
 grep -q '^S2 ' diaries/sessions.txt && grep -q '^kalpa 2 (Treta)' out.txt && ok "a finished session is followed by a new vote (S2, Treta) at the common tick" || bad "second session"
 rm -rf "$w/kal/c"; mkdir "$w/kal/c"; cd "$w/kal/c" || exit 1
-"$kb" --every 1000 --crash-at 120 > out.txt 2>&1; [ $? = 1 ] && grep -q "^$(echo "$rec" | cut -d' ' -f1-4)" diaries/sessions.txt && [ "$(wc -l < diaries/sessions.txt)" = 4 ] && ok "crash mid-session: the S1 record is already on disk" || bad "crash record"
+"$kb" --yes --every 1000 --crash-at 120 > out.txt 2>&1; [ $? = 1 ] && grep -q "^$(echo "$rec" | cut -d' ' -f1-4)" diaries/sessions.txt && [ "$(wc -l < diaries/sessions.txt)" = 4 ] && ok "crash mid-session: the S1 record is already on disk" || bad "crash record"
 "$kb" --every 1000 > out.txt 2>&1
 grep -q '^kalpa 1 (Satya) resumes: votes' out.txt && grep -q "target tick $len" out.txt && [ "$(wc -l < diaries/sessions.txt)" = 4 ] && cmp -s "$w/kal/a/diaries/sessions.txt" <(cat diaries/sessions.txt) && [ "$(wc -l < diaries/gemini.jsonl)" = "$len" ] \
   && ok "crash then bare rerun: same target, no second vote, sessions.txt identical to the clean run" || bad "resume of a crashed session"
@@ -237,6 +238,55 @@ sed -i '/^# build v/d' diaries/sessions.txt; sed -i '/^S1 /s/votes=[0-9]*/votes=
 grep -q '^likely cause' out.txt && ! grep -q 'diaries written by build' out.txt && ok "an old sessions.txt without a build line: that sentence is skipped" || bad "old file hint"
 rm -rf diaries; cp -r ../d_ok diaries; sed -i '1s/42/7/' diaries/sessions.txt; "$kb" --more 0 > out.txt 2>&1
 grep -q 'sessions.txt is from seed 7' out.txt && ok "sessions.txt of another seed: clear error" || bad "sessions.txt seed"
+
+echo "== 20. no previous diary: the question (terminal) and the non-interactive paths =="
+rm -rf "$w/ask"; mkdir -p "$w/ask/bin" "$w/ask/run"; cp "$bin" "$w/ask/bin/"; cp -r "$root/data" "$w/ask/data"; ab="$w/ask/bin/diary_sim"; cd "$w/ask/run" || exit 1
+"$ab" > out.txt 2>&1; rc=$?
+[ $rc = 2 ] && grep -q '^No previous diary found in ./diaries and no terminal to ask: copy a backed-up diaries/ here, then make run' out.txt && [ -z "$(ls -A . | grep -v "^out.txt$")" ] \
+  && ok "no diaries, no terminal, no length: exit 2 with the hint, nothing written (not even diaries/ or debug.txt)" || bad "no-terminal stop (rc=$rc: $(ls -A . | tr '\n' ' '))"
+mkdir diaries; "$ab" > out.txt 2>&1; rc=$?; [ $rc = 2 ] && [ -z "$(ls -A diaries)" ] && ok "an EMPTY diaries/ counts as no previous diary" || bad "empty diaries/ (rc=$rc)"
+echo "# seed 42" > diaries/sessions.txt; "$ab" > out.txt 2>&1; rc=$?; [ $rc = 2 ] && ok "diaries/ without any *.jsonl counts as no previous diary" || bad "no jsonl (rc=$rc)"
+rm -rf diaries; "$ab" --more 5 > out.txt 2>&1; rc=$?; [ $rc = 0 ] && grep -q 'import OK: none (fresh start, seed 42)' out.txt && ! grep -q 'y/N' out.txt && ok "no terminal + explicit --more: old behaviour, fresh start, no question" || bad "explicit without terminal (rc=$rc)"
+rm -rf diaries entities; "$ab" --ticks 5 --seed 7 > out.txt 2>&1; grep -q 'import OK: none (fresh start, seed 7)' out.txt && ok "no terminal + explicit --ticks: fresh start with --seed" || bad "explicit --ticks"
+rm -rf diaries entities; "$ab" --yes --every 1000 > out.txt 2>&1; rc=$?; [ $rc = 0 ] && grep -q '^kalpa 1 ' out.txt && ! grep -q 'y/N' out.txt && ok "--yes answers for you (bare run: fresh start, the entities vote)" || bad "--yes (rc=$rc)"
+rm -rf diaries entities; "$ab" --fresh --more 5 > out.txt 2>&1; grep -q 'import OK: none' out.txt && ok "--fresh never asks" || bad "--fresh asked"
+rm -rf "$w/askp"; mkdir "$w/askp"; tar -C "$root" --exclude=.git --exclude=obj --exclude=bin --exclude=diaries --exclude=entities --exclude=demo_run -cf - . | tar -C "$w/askp" -xf -; cd "$w/askp" || exit 1
+make run > out.txt 2>&1; rc=$?; [ $rc != 0 ] && grep -q 'No previous diary found' out.txt && [ ! -e diaries ] && ok "make run without diaries, no terminal: stops with the hint, nothing written" || bad "make run no diaries (rc=$rc)"
+make run YES=1 TICKS=20 SEED=9 > out.txt 2>&1; grep -q 'bin/diary_sim --more 20 --every 100 --seed 9 --yes' out.txt && grep -q 'import OK: none (fresh start, seed 9)' out.txt && ok "make run YES=1 SEED=9: passes --yes, fresh start with seed 9" || bad "make YES=1"
+if command -v python3 > /dev/null; then
+cat > "$w/pty_run.py" <<'PTY_EOF'
+import pty,os,sys,select,time
+def run(argv,answer,cwd):
+    pid,fd=pty.fork()
+    if pid==0:
+        os.chdir(cwd); os.execv(argv[0],argv)
+    out=b''; sent=False; t=time.time()
+    while True:
+        r,_,_=select.select([fd],[],[],0.2)
+        if r:
+            try: d=os.read(fd,4096)
+            except OSError: break
+            if not d: break
+            out+=d
+            if not sent and b'[y/N]' in out:
+                os.write(fd,answer); sent=True
+        elif time.time()-t>60: break
+    _,st=os.waitpid(pid,0)
+    return out.decode().replace('\r',''),os.WEXITSTATUS(st)
+cwd=sys.argv[1]; ans=sys.argv[2].encode().decode('unicode_escape').encode()
+o,rc=run([sys.argv[3]]+sys.argv[4:],ans,cwd)
+print(o); print("rc=%d"%rc)
+PTY_EOF
+ask() { python3 "$w/pty_run.py" "$@"; }
+rm -rf "$w/pt"; mkdir -p "$w/pt"; cp -r "$root/data" "$w/pt/data"; cd "$w/pt" || exit 1
+ask . 'n\n' "$ab" --more 20 > out.txt 2>&1
+grep -q 'Generate a new one? \[y/N\]' out.txt && grep -q '^copy a backed-up diaries/ here, then make run' out.txt && grep -q '^cancelled, nothing written' out.txt && grep -q '^rc=0' out.txt && [ "$(ls -A . | grep -v "^out.txt$" | tr '\n' ' ')" = "data " ] \
+  && ok "terminal, answer n: hint, 'cancelled, nothing written', exit 0, no file written" || bad "answer n"
+ask . '\n' "$ab" > out.txt 2>&1; grep -q '^cancelled, nothing written' out.txt && ok "terminal, just Enter = N" || bad "default N"
+ask . 'y\n' "$ab" --more 20 --seed 7 > out.txt 2>&1
+grep -q '^new diary generated (seed 7)' out.txt && grep -q 'import OK: none (fresh start, seed 7)' out.txt && [ "$(wc -l < diaries/ada.jsonl)" = 20 ] && ok "terminal, answer y: 'new diary generated (seed 7)', a fresh world" || bad "answer y"
+ask . 'yes\n' "$ab" --more 5 > out.txt 2>&1; ! grep -q 'y/N' out.txt && grep -q 'import OK: 4 entities, 20 ticks verified' out.txt && ok "terminal with diaries present: no question, normal resume" || bad "resume asked"
+fi
 
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="

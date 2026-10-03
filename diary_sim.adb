@@ -1,4 +1,4 @@
---  Version: 0.010
+--  Version: 0.011
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -34,11 +34,12 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.010";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.011";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
    Fresh, Seed_Shown : Boolean := False;
+   Yes : Boolean := False;             --  --yes: no question when there is no previous diary
    Explicit : Boolean := False;        --  --ticks or --more given: no vote
    --  Limits, built-in values; data/limits.txt overrides them.
    E_Min, E_Max, M_Min, M_Max, L_Max, Tone_Low, Tone_High : Integer := 0;
@@ -425,6 +426,38 @@ procedure Diary_Sim is
       end if;
       if Exists ("entities/entities") then Warn (Msg ("warn.nested", "entities/entities")); end if;
    end Check_Layout;
+
+   --  True when diaries/ holds at least one *.jsonl (a missing or empty folder: no previous diary).
+   function Has_Diaries return Boolean is
+      use Ada.Directories;
+      S : Search_Type;
+      Res : Boolean := False;
+   begin
+      if Exists ("diaries") and then Kind ("diaries") = Directory then
+         Start_Search (S, "diaries", "*.jsonl");
+         Res := More_Entries (S);
+         End_Search (S);
+      end if;
+      return Res;
+   end Has_Diaries;
+
+   --  No previous diary and no --fresh / --yes: ask on a terminal.  True = go on.  Nothing is
+   --  written before the answer (no diaries/, no debug.txt), and nothing for an N.
+   function Confirm_New return Boolean is
+   begin
+      TIO.Put (Msg ("ask.prompt") & " ");
+      TIO.Flush;
+      declare
+         Answer : constant String :=
+           Ada.Characters.Handling.To_Lower (Ada.Strings.Fixed.Trim (TIO.Get_Line, Ada.Strings.Both));
+      begin
+         return Answer in "y" | "yes";
+      end;
+   exception
+      when TIO.End_Error =>
+         TIO.New_Line;
+         return False;
+   end Confirm_New;
 
    function Number (Opt, Text : String) return Int is
    begin
@@ -834,6 +867,7 @@ begin
             if not Found then TIO.Put_Line ("diary_sim: data/help.txt not found (--ticks --seed --every --fresh --crash-at)"); end if;
             return;
          elsif Opt = "--fresh" then Fresh := True;
+         elsif Opt = "--yes" then Yes := True;
          elsif Opt = "--ticks" then Ticks := Number (Opt, Val);
          elsif Opt = "--seed" then Seed_Opt := Number (Opt, Val);
          elsif Opt = "--every" then Every := Number (Opt, Val);
@@ -861,6 +895,21 @@ begin
       end;
    end if;
    Check_Layout;
+   if not Fresh and then not Yes and then not Has_Diaries then
+      if Is_Tty (0) and then Is_Tty (1) then
+         if Confirm_New then
+            TIO.Put_Line (Msg ("ask.yes", Img (if Seed_Opt >= 0 then Seed_Opt else 42)));
+         else
+            TIO.Put_Line (Msg ("ask.hint"));
+            TIO.Put_Line (Msg ("ask.cancelled"));
+            return;   --  exit 0, nothing written
+         end if;
+      elsif not Explicit then   --  no terminal to ask (script, pipe): an explicit length means go on, else stop
+         TIO.Put_Line (Msg ("ask.noterminal"));
+         Ada.Command_Line.Set_Exit_Status (2);
+         return;
+      end if;
+   end if;
    Ada.Directories.Create_Path ("diaries");
    for E in Entity_Id loop
       Cur_Name := To_Unbounded_String (Name (E));

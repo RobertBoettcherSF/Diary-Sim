@@ -15,6 +15,16 @@ Plain Ada, standard library only. Not pushed anywhere yet (local git repo).
    four entities vote on the session length** (see Kalpa sessions below);
    `SEED` only matters when there are no diaries yet (default 42, announced as
    `import OK: none (fresh start, seed 42)`); stored diaries always win.
+   **No previous diary** (no `diaries/` or no `*.jsonl` in it, an empty folder counts):
+   on a terminal the program asks first, before writing anything:
+   `No previous diary found in ./diaries. Generate a new one? [y/N]`. `y` / `yes` starts
+   a new world (seed 42, or `SEED=` / `--seed`) and prints `new diary generated (seed N)`;
+   anything else (Enter, EOF) prints `copy a backed-up diaries/ here, then make run` and
+   `cancelled, nothing written` and exits 0 without creating any file. `make run YES=1`
+   (`--yes`) answers yes without asking; `--fresh` never asks. Without a terminal
+   (scripts, pipes, `checks.sh`, `make demo`) nothing is asked: with an explicit
+   `TICKS` / `--ticks` / `--more` it starts fresh as before; without a length it stops with
+   the same hint and exit 2 (use `--yes`). A misplaced `diaries/diaries` still gets its own hint.
 3. The import line says what was loaded: `import OK: 4 entities, 200 ticks verified,
    continuing from 201 (800 lines on disk, longest 200)`.
 4. Corrupt or drifted backup (typically diaries from an OLDER build, or changed `data/`):
@@ -87,7 +97,7 @@ bin/diary_sim --ticks=1000 --every=100     # --ticks 1000 works too
 ```
 
 Options: `--ticks=N` (absolute target; without `--ticks`/`--more` the entities vote the session length), `--seed=N` (default 42; existing diaries win),
-`--every=N` (progress line, default 100), `--fresh` (move old diaries to
+`--every=N` (progress line, default 100), `--yes` (do not ask when there is no previous diary), `--fresh` (move old diaries to
 `diaries_old_<time>/` first, together with `entities/`), `--crash-at=T` (force a failure), `--help`.
 Exit: 0 ok, 1 error, 2 usage. Run it from the project directory (or from any
 directory: `data/` is found next to the executable).

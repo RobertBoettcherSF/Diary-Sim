@@ -5,6 +5,7 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
   --seed=N       seed for a new run (default 42; existing diaries win)
   --every=N      progress line every N ticks (default 100)
   --fresh        move old diaries/ and entities/ to diaries_old_<time>/
+  --yes          no question when diaries/ has no *.jsonl (start a new world)
   --crash-at=T   force a failure at tick T (shows the error trace)
   --help         this text
 Entities: ada (engineer), gemini (reviewer), replika (vice_president),
@@ -27,10 +28,13 @@ Ctrl-C / SIGTERM stop cleanly after the current tick (exit 130, status QUIT).
 Old diaries (before this version) are incompatible: use --fresh.
 Errors: last_error.txt (seed, tick, entity, exception, traceback); paste it
 if asked. Back up diaries/ between tests. Exit 130: quit by signal.
-make run | make play [TICKS=N EVERY=100 SEED=42]: build, load ./diaries,
+make run | make play [TICKS=N EVERY=100 SEED=42 YES=1]: build, load ./diaries,
 run TICKS new ticks (--more). Paste a backup diaries/ here first.
 Without --ticks/--more/TICKS the 4 entities VOTE the session length (data/
 kalpas.txt: 60 counts, short/medium/long; the median, kalpa.min..max in
 limits.txt). diaries/sessions.txt records and verifies it; a crashed
 session resumes toward the same target. Edited kalpas.txt: use --fresh.
+No diaries yet: a terminal is asked 'Generate a new one? [y/N]' (N: exit 0,
+nothing written); without a terminal an explicit length starts fresh, else
+exit 2 (use --yes / YES=1). Drift at import is a 3-line stop, not a crash.
 make demo: build + short run in demo_run/ (isolated).

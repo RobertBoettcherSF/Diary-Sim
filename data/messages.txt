@@ -95,3 +95,8 @@ hdr.sessions = # S<n> start=<tick> votes=<a>/<b>/<c>/<d> len=<ticks> src=vote|ex
 drift.cause = likely cause: these diaries were probably written by an older build or with different data/ settings{1}
 drift.build = ; diaries written by build v{1}, this is v{2}
 drift.fix = fix: move them aside (mv diaries diaries_old_X) or start over with --fresh; to keep reading old diaries use the matching older build
+ask.prompt = No previous diary found in ./diaries. Generate a new one? [y/N]
+ask.yes = new diary generated (seed {1})
+ask.hint = copy a backed-up diaries/ here, then make run
+ask.cancelled = cancelled, nothing written
+ask.noterminal = No previous diary found in ./diaries and no terminal to ask: copy a backed-up diaries/ here, then make run (or YES=1 / --yes to start a new one, or give TICKS)

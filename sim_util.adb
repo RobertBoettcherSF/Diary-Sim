@@ -1,10 +1,15 @@
---  Version: 0.005
+--  Version: 0.006
 pragma Ada_2022;
 
 with Ada.Calendar.Formatting, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Maps, Ada.Directories,
-     Ada.Streams.Stream_IO, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO, Interfaces;
+     Ada.Streams.Stream_IO, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO, Interfaces, Interfaces.C;
 
 package body Sim_Util is
+
+   function C_Isatty (Fd : Interfaces.C.int) return Interfaces.C.int;
+   pragma Import (C, C_Isatty, "isatty");
+   use type Interfaces.C.int;
+   function Is_Tty (Fd : Integer) return Boolean is (C_Isatty (Interfaces.C.int (Fd)) = 1);
 
    package Fx renames Ada.Strings.Fixed;
    package Str_Maps is new Ada.Containers.Indefinite_Hashed_Maps (String, String, Ada.Strings.Hash, "=");
