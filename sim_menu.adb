@@ -1,7 +1,7 @@
---  Version: 0.002
+--  Version: 0.003
 pragma Ada_2022;
 
-with Ada.Characters.Handling, Ada.Strings.Fixed, Ada.Strings.Unbounded, Ada.Text_IO, Sim_Util;
+with Ada.Characters.Handling, Ada.Strings.Fixed, Ada.Strings.Unbounded, Ada.Text_IO, Interfaces.C, System, Sim_Util;
 use Ada.Strings.Unbounded, Sim_Util;
 
 package body Sim_Menu is
@@ -10,7 +10,9 @@ package body Sim_Menu is
    package Fx renames Ada.Strings.Fixed;
 
    ESC : constant Character := ASCII.ESC;
-   Width : constant := 80;   --  the screen is assumed to be 80 columns wide
+   --  The screen is assumed to be 80x24 (data/menu.txt screen.cols / screen.rows).
+   function Width return Natural is (Natural (Int'Max (40, Limit ("screen.cols", 80))));
+   function Rows_Max return Natural is (Natural (Int'Max (16, Limit ("screen.rows", 24))));
 
    --  ---- the block font -------------------------------------------------------------------
    type Size_Id is (Small, Medium, Large);
@@ -108,11 +110,50 @@ package body Sim_Menu is
       return To_String (R);
    end Frame_Text;
 
+   --  One frame = ONE write(2) on fd 1 (stdio would split a long string at its buffer size and a
+   --  terminal would show the pieces one after the other), inside a synchronized-update bracket
+   --  (terminals that do not know it ignore it).
+   function C_Write (Fd : Interfaces.C.int; Buf : System.Address; N : Interfaces.C.size_t) return Interfaces.C.long
+     with Import, Convention => C, External_Name => "write";
+
    procedure Put_Frame (S : String) is
+      Whole : constant String := ESC & "[?2026h" & S & ESC & "[?2026l";
+      Done : Natural := 0;
    begin
-      TIO.Put (S);
       TIO.Flush;
+      while Done < Whole'Length loop   --  a short write continues with the rest
+         declare
+            R : constant Integer :=
+              Integer (C_Write (1, Whole (Whole'First + Done)'Address, Interfaces.C.size_t (Whole'Length - Done)));
+         begin
+            exit when R <= 0;
+            Done := Done + Natural (R);
+         end;
+      end loop;
    end Put_Frame;
+
+   --  The largest title size (not above the configured one) with which title + info lines + the
+   --  fixed rows (tagline, 3 blanks/notice, 5 entries, prompt = 10) fit into Rows_Max rows.
+   function Fit (Info_N : Natural) return Size_Id is
+      Want : constant Size_Id := Title_Size;
+      Res  : Size_Id := Small;
+   begin
+      for Sz in reverse Size_Id loop
+         if Sz <= Want then
+            declare
+               Art : constant Str_Vectors.Vector := Title_Rows (Msg ("title"), Sz);
+            begin
+               Res := Sz;
+               if Natural (Art.Length) + Info_N + 10 <= Rows_Max and then (Art.Is_Empty or else Art.First_Element'Length <= Width) then
+                  return Sz;
+               end if;
+            end;
+         end if;
+      end loop;
+      return Res;
+   end Fit;
+
+   function Clip (S : String; N : Natural) return String is (if S'Length <= N then S else S (S'First .. S'First + N - 1));
 
    --  ---- Life intro ------------------------------------------------------------------------
    H_Board : constant := 11;
@@ -151,13 +192,14 @@ package body Sim_Menu is
       end loop;
    end Step;
 
-   procedure Intro (Seed : Natural) is
-      Art : constant Str_Vectors.Vector := Title_Rows (Msg ("title"), Title_Size);
+   procedure Intro (Seed : Natural; Info : Str_Vectors.Vector) is
+      Art : constant Str_Vectors.Vector := Title_Rows (Msg ("title"), Fit (Natural (Info.Length)));
       Ink, Cells, Nxt, Seen : Board := [others => [others => False]];
       S : Long_Long_Integer := Long_Long_Integer (Seed) + 1;
       Frames : constant Natural := Natural (Int'Max (1, Limit ("intro.frames", 90)));
       Pause  : constant Duration := Duration (Int'Max (0, Limit ("intro.ms", 70))) / 1000.0;
-      Top : constant Natural := Natural'Max (0, (H_Board - Natural (Art.Length)) / 2);
+      Top : constant Natural := 0;   --  the title rises at the row where the menu draws it
+      Hold   : constant Duration := Duration (Int'Max (0, Limit ("intro.hold", 600))) / 1000.0;
       Ink_Total, Seen_Ink : Natural := 0;
 
       function Frame_Of (Final : Boolean) return String is
@@ -176,6 +218,9 @@ package body Sim_Menu is
                Rows.Append (Pad ((Width - W_Board) / 2) & Row);
             end;
          end loop;
+         if Final and then Natural (Art.Length) < H_Board then   --  the tagline under the resolved title
+            Rows.Replace_Element (Natural (Art.Length) + 1, Centered (Msg ("tagline")));
+         end if;
          return Frame_Text (Rows);
       end Frame_Of;
    begin
@@ -214,39 +259,48 @@ package body Sim_Menu is
          if Pause > 0.0 then delay Pause; end if;
          exit when Seen_Ink >= Ink_Total and then Gen >= 10;
       end loop;
-      Put_Frame (Frame_Of (True) & ESC & "[?25h");
+      Put_Frame (Frame_Of (True));
+      if Hold > 0.0 then delay Hold; end if;   --  a beat with the resolved title, then the menu
    end Intro;
 
    --  ---- the menu ---------------------------------------------------------------------------
-   function Frame (Info : Str_Vectors.Vector; Notice : String) return String is
+   function Frame (Info : Str_Vectors.Vector; Notice : String; Default : Choice) return String is
       Rows : Str_Vectors.Vector;
-      Art  : constant Str_Vectors.Vector := Title_Rows (Msg ("title"), Title_Size);
+      Art  : constant Str_Vectors.Vector := Title_Rows (Msg ("title"), Fit (Natural (Info.Length)));
+      Room : constant Natural := (if Rows_Max > Natural (Art.Length) + 10 then Rows_Max - Natural (Art.Length) - 10 else 0);
+      Shown : Natural := 0;
    begin
       for L of Art loop Rows.Append (Centered (L)); end loop;
-      Rows.Append ("");
       Rows.Append (Centered (Msg ("tagline")));
       Rows.Append ("");
-      for L of Info loop Rows.Append ("  " & L); end loop;
+      for L of Info loop
+         exit when Shown >= Room;
+         Rows.Append ("  " & Clip (L, Width - 4));
+         Shown := Shown + 1;
+      end loop;
       Rows.Append ("");
-      for I in 1 .. 5 loop Rows.Append ("    " & Img (I) & ") " & Msg ("entry." & Img (I))); end loop;
-      Rows.Append (if Notice = "" then "" else "  " & Notice);
+      for I in 1 .. 5 loop
+         Rows.Append ((if Choice'Pos (Default) = I - 1 then "  > " else "    ") & Img (I) & ") " & Msg ("entry." & Img (I)));
+      end loop;
+      Rows.Append ("  " & Clip ((if Notice = "" then Msg ("menu.hint", Msg ("entry." & Img (Integer (Choice'Pos (Default)) + 1))) else Notice), Width - 4));
       return Frame_Text (Rows, Msg ("menu.prompt") & " ");
    end Frame;
 
-   function Ask (Info : Str_Vectors.Vector) return Choice is
+   function Ask (Info : Str_Vectors.Vector; Default : Choice) return Choice is
       Notice : Unbounded_String;
    begin
       loop
-         Put_Frame (ESC & "[2J" & Frame (Info, To_String (Notice)));
+         Put_Frame (Frame (Info, To_String (Notice), Default));
          declare
             A : constant String := Ada.Characters.Handling.To_Lower (Fx.Trim (TIO.Get_Line, Ada.Strings.Both));
             F : constant Character := (if A'Length > 0 then A (A'First) else ' ');
          begin
-            if A = "1" or else (A'Length > 0 and then F = 'n') then return New_Game;
-            elsif A = "2" or else (A'Length > 0 and then F = 'l') then return Load_Game;
-            elsif A = "3" or else (A'Length > 0 and then F = 'i') then return Inbox;
-            elsif A = "4" or else (A'Length > 0 and then F = 's') then return Settings;
-            elsif A = "5" or else (A'Length > 0 and then F = 'q') then return Quit;
+            if A = "" then return Default;
+            elsif A = "1" or else F = 'n' then return New_Game;
+            elsif A = "2" or else F = 'l' then return Load_Game;
+            elsif A = "3" or else F = 'i' then return Inbox;
+            elsif A = "4" or else F = 's' then return Settings;
+            elsif A = "5" or else F = 'q' then return Quit;
             end if;
             Notice := To_Unbounded_String (Msg ("menu.bad"));
          end;

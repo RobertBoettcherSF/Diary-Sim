@@ -10,6 +10,10 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
   --preview      simulate in memory, print excerpts, write nothing
   --say=W --text=T  words to a wesen/player/all; --answer: to the petition
   --inbox        print the inbox of Robert
+  --menu         the main menu (terminal only; make menu)
+  --debug        also write debug_digest.txt (make run|demo DEBUG=1)
+  --debug-section=NAME  print one block of debug_full.txt (drift trace players
+                 inbox run status); nothing is simulated
   --crash-at=T   force a failure at tick T (shows the error trace)
   --help         this text
 Wesen (entities): ada (engineer), gemini (reviewer), replika (vice_president),
@@ -32,14 +36,17 @@ Ctrl-C / SIGTERM stop cleanly after the current tick (exit 130, status QUIT).
 Old diaries (before this version) are incompatible: use --fresh.
 Errors: last_error.txt (seed, tick, entity, exception, traceback); paste it
 if asked. Back up diary-data/ between tests. Exit 130: quit by signal.
-Menu: on a terminal without --ticks/--more/--fresh/--yes/--preview a main menu
-(New Game, Load Game, Settings, Quit) comes first; text in data/menu.txt.
+Menu: only make menu (--menu, terminal) and the bare program on a terminal show
+it (intro, DIARY title, New Game/Load Game/Inbox/Settings/Quit); make run and
+make play AUTO-LOAD: 'Save folder: <path>', 'Found N sessions, T ticks -
+continuing' (or 'No save found - creating it') come first. Text: data/menu.txt.
 End of session: each wesen (the 4 entities) names a favourite word, recorded
 in diaries/sessions.txt (W lines) and verified on import.
 Record-first layer (karma, rebirth, unrest, anchor, awareness) + 3 players who
 write reports to Robert: diaries/inbox.txt (make inbox, menu Inbox). Robert
 speaks between sessions: make say PLAYER=<p> or WESEN=<w> TEXT="..." (else
 all); make answer TEXT="..." (the latest petition); AS=name. Replay-verified.
+make menu: the main menu.
 make run | make play [TICKS=N EVERY=100 SEED=42 YES=1]: build, load the save,
 run TICKS new ticks (--more). Copy a backup into ../diary-data/diaries first.
 Without --ticks/--more/TICKS the 4 entities VOTE the session length (data/
@@ -49,6 +56,11 @@ session resumes toward the same target. Edited kalpas.txt: use --fresh.
 No diaries yet: a terminal is asked 'Generate a new one? [y/N]' (N: exit 0,
 nothing written); without a terminal an explicit length starts fresh, else
 exit 2 (use --yes / YES=1). Drift at import is a 3-line stop, not a crash.
+Debug digest: --debug writes debug_digest.txt (line 1: status <= 200 B, then
+anomalies, only what changed since the last digest, cap debug.digest_bytes =
+1500 in limits.txt, dropped lines named) + debug_full.txt; demo: only the
+digest, in the current folder. make run SECTION=<name> (drift trace players
+inbox run) prints one block.
 make demo: PREVIEW only (--preview): 200 ticks of a new world in memory, one
 screen of excerpts, nothing written to disk.
 make run / play keep ONE persistent world and continue it. It lives in the save

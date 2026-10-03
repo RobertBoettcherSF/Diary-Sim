@@ -24,11 +24,23 @@ printed (`--home <source folder>` keeps using the old place). `make demo` writes
 
 ## The main menu and the favourite words
 
-Started on a terminal without `--ticks` / `--more` / `--fresh` / `--yes` / `--preview`
-(`make run`, `make play`), the program first shows a menu: a Conway Game-of-Life intro whose
-dying cells reveal the title, the block-letter title, the tagline, the **wesen** (the four
-entities: ada, gemini, replika, robert) with the game's session, ticks and last favourite
-words (who taught or coined each), and exactly five entries:
+**`make run` / `make play` never show a menu: they AUTO-LOAD.** The first two lines, before
+anything else, say where and what:
+
+```
+Save folder: /home/you/diary-data
+Found 4 sessions, 1250 ticks - continuing        (or: No save found - creating it)
+```
+
+(no save on a terminal: `No save found - creating it (asks y/N first; --yes skips the question)`).
+Then the save is loaded, replay-verified and continued; `Saved to <path>` ends the run.
+
+**The menu** comes only from **`make menu`** (`--menu`, needs a terminal) and from the bare
+program on a terminal with no arguments: a Conway Game-of-Life intro whose dying cells reveal
+the block-letter title, the tagline under it, then (after a short beat) the whole menu in one
+screen: the save folder, the game's sessions and ticks, the last favourite words (who taught or
+coined each), karma, the last petition and the inbox size, and exactly five entries as a plain
+list under the title, `>` marking the default (Load Game once a game exists; Enter takes it):
 
 - **New Game**: a fresh world; if `diaries/` holds a game it asks first and moves it to
   `diaries_old_<time>` (never deleted).
@@ -40,9 +52,12 @@ words (who taught or coined each), and exactly five entries:
   start_percent, teach_percent, coin_percent or coin_cap changes the rules: use it with New Game.
 - **Quit**: exit 0, nothing written.
 
-No menu without a terminal (scripts, CI, pipes) and none for `make demo`, which is a
-preview. Text lives in `data/menu.txt` (title, tagline, entries, messages), the letters in
-`data/fonts.txt` (3 sizes, `title.size`); each screen is written to the terminal in one piece.
+The menu is laid out for 80x24 (`screen.cols` / `screen.rows` in `data/menu.txt`): if title +
+lines do not fit, the title shrinks (large -> medium) and the info is clipped, so nothing
+scrolls off. No menu without a terminal (scripts, CI, pipes) and none for `make demo` (a
+preview), `make run` or `make play`. Text lives in `data/menu.txt` (title, tagline, entries, messages), the letters in
+`data/fonts.txt` (3 sizes, `title.size`); each screen is ONE write(2) to the terminal (inside a synchronized-update bracket), so it never
+appears piece by piece.
 **Tagline:** the default is literally `Stories of word and word`; if "world" was meant,
 change the one line `tagline = ...` in `data/menu.txt` (no rebuild needed).
 
@@ -122,6 +137,37 @@ for a player goes on to the wesen that player watches (an answer to all players)
 relayed message raises awareness more (`aware.relay`) than a direct address (`aware.say`).
 The inbox reports what each player did with it.
 
+## The debug digest (`DEBUG=1`, `--debug`)
+
+`debug.txt` (always written, <= 1500 bytes) is unchanged. For a compact file to attach to chat:
+
+```
+make run  DEBUG=1        # ./debug_digest.txt in the save folder (the folder is printed)
+make demo DEBUG=1        # ./debug_digest.txt in the current folder: the ONLY file a demo ever writes
+```
+
+Without `--debug` nothing is written. The path is printed as `debug digest: <absolute path>`
+just before `Saved to ...`. Layout of `debug_digest.txt`:
+
+1. **line 1**, at most 200 bytes: `OK|DRIFT|CRASH|QUIT v<build> seed S | session N | ticks ... | the one thing wrong`
+   (`no anomalies` or `anomalies N: <first>`);
+2. **anomalies** first (the error, the first lines of the traceback, warnings, alert-level
+   inbox lines);
+3. then **only what changed since the last digest** by importance (ticks, words vote, karma
+   and awareness, the players line, notes of the players, entities ...). The hashes of the
+   previous digest are in `debug_digest.prev` (save folder; a demo has no history). Repeated
+   lines are folded (`... x3`); unchanged lines are only counted (`... 13 lines unchanged`);
+4. a **hard byte cap**, `debug.digest_bytes` in `data/limits.txt` (default 1500): the least
+   important lines are dropped first and the last line says what was dropped
+   (`... dropped 19 lines for the byte cap (run 13, inbox 6) ...`).
+
+The full record stays on disk: `debug_full.txt` in the save folder (all sections, uncapped,
+raw inbox lines), written with every `--debug` run. **`--debug-section NAME`** (or
+`make run SECTION=NAME`) prints one block of it and writes it alone to `debug_digest.txt`; it
+simulates nothing. NAME is one of `status drift trace players inbox run`. For a demo
+(`make demo SECTION=run`) the block comes from the preview in memory (a preview has no session
+end, so `players` and `inbox` are empty there). Plain Ada, CPU only.
+
 ## Since the last session
 
 Each run ends with a block per wesen comparing the loaded diaries (the session start)
@@ -184,11 +230,12 @@ would hold, and the vote table. It creates no `diaries/`, `entities/`, `debug.tx
 `run_report.txt`, `petitions.txt` or other file, and does not read `./diaries` (the old
 `demo_run/` is gone). `--preview` takes `--ticks` and `--seed`; with `--fresh`, `--yes`,
 `--more` or `--crash-at` it stops with a usage error (exit 2), since those write.
+The one exception is on request: `make demo DEBUG=1` (`--debug`) writes `debug_digest.txt` in
+the current folder (see "The debug digest").
 
 ## Kalpa sessions: the entities vote on how long a session runs
 
-Started without `TICKS` / `--ticks` / `--more` (`make run`, `make play`, or the program
-alone) a session does not have a fixed length: each of the four entities casts a vote
+Started without `TICKS` / `--ticks` / `--more` (`make run`, `make play`) a session does not have a fixed length: each of the four entities casts a vote
 for the number of NEW ticks (think kalpas in Hinduism: ages of different length).
 
 - **The list:** `data/kalpas.txt`, 60 tick counts in three blocks of 20 by age: lines
@@ -230,8 +277,11 @@ for the number of NEW ticks (think kalpas in Hinduism: ages of different length)
 ```
 make                         # bin/diary_sim  (GNAT 14; make GNATMAKE=gnatmake-12 for GNAT 12)
 make portable                # 0-warning build with GNAT 14 and 12 in a copy without .git
-make run                     # = make play: continue ./diaries; the entities vote how many ticks (TICKS=N: explicit)
+make run                     # = make play: AUTO-LOAD the save and continue (no menu); the entities vote how many ticks (TICKS=N: explicit)
+make menu                    # the main menu: intro, DIARY title, New Game / Load Game / Inbox / Settings / Quit (terminal only)
 make demo                    # PREVIEW: 200 ticks in memory, a screen of excerpts, nothing written to disk
+make run DEBUG=1             # also write debug_digest.txt (+ debug_full.txt) to attach; make demo DEBUG=1: only the digest
+make run SECTION=drift       # print one block of debug_full.txt (drift trace players inbox run status)
 make check                   # version headers + scripts/checks.sh (the scenarios: run, resume, behind, half line, drift, crash, fresh, data limits)
 bin/diary_sim --help
 bin/diary_sim --ticks=1000 --every=100     # --ticks 1000 works too

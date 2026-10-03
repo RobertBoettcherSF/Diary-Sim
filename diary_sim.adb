@@ -1,4 +1,4 @@
---  Version: 0.015
+--  Version: 0.017
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -8,8 +8,8 @@
 --  Session length: without --ticks / --more the four entities vote (Kalpas, data/kalpas.txt)
 --  and the median is the number of new ticks; diaries/sessions.txt records every session
 --  and is verified on import (see README).
---  Menu and words: on a terminal, without explicit run arguments, a main menu (Sim_Menu) comes
---  first; at the end of every session each wesen names a favourite word (Sim_World.Favourite,
+--  Menu and words: only --menu (make menu) and the bare program on a terminal show the main menu (Sim_Menu); make run auto-loads
+--  (header Save folder / Found N sessions). At the end of every session each wesen names a favourite word (Sim_World.Favourite,
 --  its own hash salt, so old diaries stay valid), recorded as a W line in diaries/sessions.txt.
 --  Buddhism layer and players (Sim_Dharma, record-first): karma, reincarnation values, unrest, the
 --  commitment ladder, awareness and the in-sim players' inbox are replayed like everything else and
@@ -44,7 +44,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.015";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.017";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -59,6 +59,7 @@ procedure Diary_Sim is
    Preview : Boolean := False;         --  --preview: simulate in memory, write nothing, show excerpts
    Sample : array (Entity_Id) of Str_Vectors.Vector;   --  preview: every diary line
    Yes : Boolean := False;             --  --yes: no question when there is no previous diary
+   Menu_Wanted : Boolean := False;
    Explicit : Boolean := False;        --  --ticks or --more given: no vote
    --  Limits, built-in values; data/limits.txt overrides them.
    E_Min, E_Max, M_Min, M_Max, L_Max, Tone_Low, Tone_High : Integer := 0;
@@ -78,6 +79,9 @@ procedure Diary_Sim is
    Did_Learn, Did_Coin, Did_Bench, Did_Teach : Boolean := False;   --  what the last Step did
    Pre_Energy_G : Integer := 0;   --  energy before the last Step's action
    Inbox_Bad : Boolean := False;   --  inbox.txt differs from the replay: it is left as it is
+   Debug_On : Boolean := False;                            --  --debug: write debug_digest.txt (make run DEBUG=1)
+   Section_Opt : Unbounded_String;                         --  --debug-section NAME
+   Menu_Opt : Boolean := False;                            --  --menu: show the main menu (make menu)
    Say_Mode, Answer_Mode, Inbox_Mode : Boolean := False;   --  --say / --answer / --inbox
    Say_To, Say_Text, Say_By : Unbounded_String;
    Act_Count : array (Entity_Id, Action) of Natural := [others => [others => 0]];   --  all ticks replayed
@@ -524,16 +528,19 @@ procedure Diary_Sim is
    --  (so the source folder can be replaced at will).  A save inside the source folder is COPIED
    --  there on a yes (never moved or deleted); without a terminal only a hint is printed.
    --  Then every relative path of the program is relative to it (cd).
-   procedure Resolve_Home is
+   procedure Resolve_Home (Header : Boolean) is
       Env : constant String := Ada.Environment_Variables.Value ("DIARY_HOME", "");
       Def : constant String := Ada.Directories.Containing_Directory (Src_Root) & "/diary-data";
    begin
       if Length (Home_Opt) > 0 then
          Home_Path := To_Unbounded_String (Ada.Directories.Full_Name (To_String (Home_Opt)));
+         if Header then TIO.Put_Line (Msg ("start.folder", To_String (Home_Path))); TIO.Flush; end if;
       elsif Env /= "" then
          Home_Path := To_Unbounded_String (Ada.Directories.Full_Name (Env));
+         if Header then TIO.Put_Line (Msg ("start.folder", To_String (Home_Path))); TIO.Flush; end if;
       else
          Home_Path := To_Unbounded_String (Def);
+         if Header then TIO.Put_Line (Msg ("start.folder", Def)); TIO.Flush; end if;
          if Ada.Directories.Exists (Src_Root & "/diaries") and then not Has_Jsonl_In (Def & "/diaries") then
             if Is_Tty (0) and then Is_Tty (1) then
                if Ask_Yes (Msg ("migrate.ask")) then
@@ -572,6 +579,369 @@ procedure Diary_Sim is
    Last_Done : Int := 0;                --  last tick finished for all entities
    Export_Line, Vote_Line : Unbounded_String;
    Quit_Seen : Boolean := False;
+
+   --  "key=value" token of a session line; "" if missing.  PROOF-LATER: Importance 3/10, Urgency 2/10,
+   --  SPARK2 (parsing of the sessions.txt record)
+   function Token (L, Key : String) return String is
+      P : constant Natural := Fx.Index (L, " " & Key & "=");
+   begin
+      if P = 0 then return ""; end if;
+      declare
+         First : constant Positive := P + Key'Length + 2;
+         Stop  : constant Natural := Fx.Index (L, " ", First);
+      begin
+         return L (First .. (if Stop = 0 then L'Last else Stop - 1));
+      end;
+   end Token;
+   --  ---- debug digest (--debug / make run DEBUG=1 / make demo DEBUG=1) --------------------------
+   --  debug_digest.txt: line 1 = one-line status (<= 200 bytes), then anomalies, then only what
+   --  changed since the last digest (hashes in debug_digest.prev, save folder only), repeated
+   --  lines folded into counts, at most debug.digest_bytes (data/limits.txt) bytes: the least
+   --  important lines go first and a last line says what was dropped.  The full record is
+   --  debug_full.txt ([section] blocks, run only); --debug-section NAME prints one block.
+   Sections : constant String := "status drift trace players inbox run";
+   Digest_Note : Unbounded_String;       --  "debug digest: <abs path>", printed before "Saved to"
+   Prev_Loaded : Boolean := False;
+   Prev_Hashes : Str_Vectors.Vector;
+
+   type Dg_Entry is record
+      Sec, Key, Text : Unbounded_String;
+      Prio  : Positive := 5;         --  1 = most important, dropped last
+      Anom  : Boolean := False;      --  anomaly: always shown
+      Full_Only : Boolean := False;  --  only in debug_full.txt
+      Count : Positive := 1;         --  folded repeats
+   end record;
+   package Dg_Vectors is new Ada.Containers.Vectors (Positive, Dg_Entry);
+   package Dg_Names is new Ada.Containers.Vectors (Positive, Unbounded_String);
+   package Dg_Counts is new Ada.Containers.Vectors (Positive, Positive);
+
+   --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (hash, folding, byte cap)
+   function Hash_Of (S : String) return String is
+     (Fx.Trim (Ada.Containers.Hash_Type'Image (Ada.Strings.Hash (S)), Ada.Strings.Both));
+
+   function Digits_Off (S : String) return String is
+      R : String := S;
+   begin
+      for C of R loop if C in '0' .. '9' then C := '#'; end if; end loop;
+      return R;
+   end Digits_Off;
+
+   function Shown_Text (E : Dg_Entry) return String is
+     (To_String (E.Text) & (if E.Count > 1 then " x" & Img (E.Count) else ""));
+
+   procedure Dg_Add (V : in out Dg_Vectors.Vector; Sec, Key, Text : String; Prio : Positive;
+                     Anom : Boolean := False; Full_Only : Boolean := False; Fold : Boolean := False) is
+      K : constant String := (if Fold then "f:" & Digits_Off (Text) else Key);
+   begin
+      if Text = "" then return; end if;
+      for E of V loop
+         if Fold and then To_String (E.Sec) = Sec and then To_String (E.Key) = K and then E.Full_Only = Full_Only then
+            E.Count := E.Count + 1;
+            E.Text := To_Unbounded_String (Text);
+            return;
+         end if;
+      end loop;
+      V.Append (Dg_Entry'(Sec => To_Unbounded_String (Sec), Key => To_Unbounded_String (K), Text => To_Unbounded_String (Text),
+                          Prio => Prio, Anom => Anom, Full_Only => Full_Only, Count => 1));
+   end Dg_Add;
+
+   --  Every line of a multi-line text as its own entry (keys Key.1, Key.2, ...).
+   procedure Dg_Lines (V : in out Dg_Vectors.Vector; Sec, Key, Text : String; Prio : Positive; Anom : Boolean := False) is
+      From : Positive := Text'First;
+      N : Natural := 0;
+   begin
+      if Text'Length = 0 then return; end if;
+      for I in Text'First .. Text'Last + 1 loop
+         if I > Text'Last or else Text (I) = ASCII.LF then
+            if I > From then
+               N := N + 1;
+               Dg_Add (V, Sec, Key & "." & Img (N), Text (From .. I - 1), Prio, Anom);
+            end if;
+            From := I + 1;
+         end if;
+      end loop;
+   end Dg_Lines;
+
+   function Sev_Of (L : String) return String is
+      Sp : constant Natural := Fx.Index (L, " ");
+      Sp2 : constant Natural := (if Sp > 0 then Fx.Index (L, " ", Sp + 1) else 0);
+   begin
+      return (if Sp > 0 and then Sp2 > Sp then L (Sp + 1 .. Sp2 - 1) else "");
+   end Sev_Of;
+
+   --  The inbox line "I5 note from=iris s2 t600 | text | src=..." as "note iris text".
+   function Inbox_Brief (L : String) return String is
+      A : constant Natural := Fx.Index (L, " | ");
+      B : constant Natural := (if A > 0 then Fx.Index (L, " | ", A + 3) else 0);
+      Sev : constant String := Sev_Of (L);
+   begin
+      if A = 0 or else B = 0 or else Sev = "" then return L; end if;
+      return Sev & " " & Token (L, "from") & " " & L (A + 3 .. B - 1);
+   end Inbox_Brief;
+
+   procedure Digest_Entries (V : in out Dg_Vectors.Vector; Status, Err : String) is
+      Table : constant Str_Vectors.Vector := Sim_Dharma.Table_Lines;
+      Box   : constant Str_Vectors.Vector := Sim_Dharma.Inbox_Tail (Positive (Int'Max (1, Limit ("inbox.view", 40))));
+      Trace : Str_Vectors.Vector;
+      Found : Boolean;
+      N : Natural := 0;
+   begin
+      --  anomalies
+      if Status = "DRIFT" then Dg_Lines (V, "drift", "err", Err, 1, True);
+      elsif Status = "CRASH" then Dg_Lines (V, "trace", "err", Err, 1, True);
+      elsif Status = "QUIT" then Dg_Lines (V, "drift", "err", Err, 2, True);
+      end if;
+      if Status = "CRASH" then
+         Read_Lines ("last_error.txt", Trace, Found);
+         for L of Trace loop
+            N := N + 1;
+            Dg_Add (V, "trace", "tr" & Img (N), L, (if N <= 4 then 2 else 3), Full_Only => N > 4);
+         end loop;
+      end if;
+      if Warnings > 0 then Dg_Add (V, "drift", "warn", "warnings: " & Img (Warnings), 2, True); end if;
+      if Ent_Missing > 0 and then Disk_Seed >= 0 then Dg_Add (V, "drift", "entmiss", "entity folders rebuilt: " & Img (Ent_Missing), 3, True); end if;
+      if Inbox_Bad then Dg_Add (V, "drift", "inbox", "inbox.txt differs from the replay (left as it is)", 1, True); end if;
+      --  state
+      Dg_Add (V, "run", "ticks",
+              (if Preview then "preview: ticks 1.." & Img (Ticks) & " in memory, nothing written"
+               elsif Last_Done > Int (Common) then "ticks " & Img (Int (Common) + 1) & ".." & Img (Last_Done) & " new, resumed from " & Img (Common)
+               else "ticks " & Img (Last_Done) & " (verify only)"), 3);
+      Dg_Lines (V, "run", "kalpa", To_String (Kalpa_Line), 5);
+      Dg_Lines (V, "run", "words", To_String (Words_Text), 4);
+      if Sim_Dharma.Debug_Line /= "" then Dg_Add (V, "players", "dharma", Msg ("debug.dharma", Sim_Dharma.Debug_Line), 4); end if;
+      for L of Table loop
+         if L'Length > 8 and then (L (L'First .. L'First + 7) = "players:" or else L (L'First .. L'First + 6) = "anchor:") then
+            Dg_Add (V, "players", "t" & Digits_Off (L (L'First .. L'First + 6)), L, 4);
+         end if;
+      end loop;
+      for I in 1 .. Natural (Box.Length) loop   --  raw lines: full record; folded lines: digest
+         declare
+            L : constant String := Box (I);
+            Sev : constant String := Sev_Of (L);
+            Alert : constant Boolean := Sev = Msg ("sev.3");
+         begin
+            Dg_Add (V, "inbox", "raw" & Img (I), L, 9, Full_Only => True);
+            Dg_Add (V, "inbox", "", Inbox_Brief (L), (if Alert then 2 elsif Sev = Msg ("sev.2") then 5 else 7), Alert, Fold => True);
+         end;
+      end loop;
+      Dg_Lines (V, "run", "import", To_String (Import_Block), 6);
+      Dg_Add (V, "run", "export", To_String (Export_Line), 7);
+      for E in Entity_Id loop
+         Dg_Add (V, "run", "ent." & Name (E),
+                 Msg ("debug.entity", Name (E), Img (Start_Known (E)), Img (Known_Count (E)), Img (Run_Learn (E)),
+                      Img (Run_Coin (E)), Img (Run_Bench_N (E)), Sgn (Int (St (E).Mood)) & " en " & Img (St (E).Energy) & " pet " & Img (Petitions_Of (E))), 6);
+         Dg_Add (V, "run", "mix." & Name (E),
+                 Msg ("debug.mix", Name (E), Img (Act_Count (E, Rest)), Img (Act_Count (E, Work)), Img (Act_Count (E, Explore)),
+                      Img (Act_Count (E, Talk)), Img (Act_Count (E, Wander)), Img (Act_Count (E, Bench)) & " p" & Img (Act_Count (E, Propose))
+                      & " l" & Img (Act_Count (E, Learn))), 8);
+      end loop;
+      Dg_Add (V, "run", "topics", "topics " & Top_Topics (3), 8);
+      Dg_Lines (V, "run", "votes", To_String (Vote_Line), 8);
+   end Digest_Entries;
+
+   procedure Write_Plain (Name, Text : String) is
+      F : TIO.File_Type;
+   begin
+      TIO.Create (F, TIO.Out_File, Name & ".tmp");
+      TIO.Put (F, (if Text'Length > 0 and then Text (Text'Last) = ASCII.LF then Text (Text'First .. Text'Last - 1) else Text));
+      TIO.Close (F);   --  Text_IO ends the last line itself
+      if Ada.Directories.Exists (Name) then Ada.Directories.Delete_File (Name); end if;
+      Ada.Directories.Rename (Name & ".tmp", Name);
+   end Write_Plain;
+
+   procedure Load_Prev is
+      Found : Boolean;
+   begin
+      if not Prev_Loaded then
+         Prev_Loaded := True;
+         if not Preview then Read_Lines ("debug_digest.prev", Prev_Hashes, Found); end if;
+      end if;
+   end Load_Prev;
+
+   procedure Write_Digest (Status, Err : String) is
+      Cap : constant Natural := Natural (Int'Max (300, Limit ("debug.digest_bytes", 1500)));
+      V, Keep : Dg_Vectors.Vector;
+      Gone : Natural := 0;
+      Gone_By, Drop_Sec : Unbounded_String;
+      Gone_Secs : Dg_Names.Vector;
+      Gone_N : Dg_Counts.Vector;
+      Unchanged : Natural := 0;
+      Total : Natural := 0;
+      Head, Out_Text, Full, Prev_New : Unbounded_String;
+      Anoms : Natural := 0;
+      First_Anom : Unbounded_String;
+
+      function Hash_Line (E : Dg_Entry) return String is (To_String (E.Key) & "=" & Hash_Of (Shown_Text (E)));
+   begin
+      if not Debug_On or else Status in "RUN" | "USAGE" then return; end if;
+      Load_Prev;
+      Digest_Entries (V, Status, Err);
+      for E of V loop
+         if E.Anom and then not E.Full_Only then
+            Anoms := Anoms + 1;
+            if Length (First_Anom) = 0 then First_Anom := E.Text; end if;
+         end if;
+      end loop;
+      --  keep: anomalies and changed lines (not in the previous digest); the rest is counted
+      for E of V loop
+         if not E.Full_Only then
+            if E.Anom or else not Prev_Hashes.Contains (Hash_Line (E)) then
+               Keep.Append (E);
+               Total := Total + Shown_Text (E)'Length + 1;
+            else
+               Unchanged := Unchanged + 1;
+            end if;
+         end if;
+      end loop;
+      Head := To_Unbounded_String
+        (Fx.Head (Status & " v" & Build & " seed " & Img (Seed) & " | session " & Img (Session_N) & " | ticks " & Img (if Preview then Ticks else Last_Done)
+                  & (if Preview then " (preview)" elsif Last_Done = 0 then " (stopped before any tick)" else " (resumed from " & Img (Common) & ")") & " | "
+                  & (if Anoms = 0 then Msg ("digest.fine") else "anomalies " & Img (Anoms) & ": " & Fx.Head (To_String (First_Anom), 70)), 200, ' '));
+      Head := To_Unbounded_String (Fx.Trim (To_String (Head), Ada.Strings.Right));
+      --  the byte cap: the least important lines (highest Prio, the latest) go first
+      declare
+         Note_Room : constant Natural := 190;   --  the "unchanged" and "dropped" notes
+         Used : constant Natural := Length (Head) + 1 + Note_Room;
+      begin
+         if Total + Used > Cap then
+            while Total + Used > Cap and then not Keep.Is_Empty loop
+               declare
+                  Worst : Natural := 0;
+               begin
+                  for I in 1 .. Natural (Keep.Length) loop
+                     if Worst = 0 or else Keep (I).Prio >= Keep (Worst).Prio then Worst := I; end if;
+                  end loop;
+                  Total := Total - (Shown_Text (Keep (Worst))'Length + 1);
+                  Gone := Gone + 1;
+                  Drop_Sec := Keep (Worst).Sec;
+                  Keep.Delete (Worst);
+                  declare
+                     Seen : Boolean := False;
+                  begin
+                     for I in 1 .. Natural (Gone_Secs.Length) loop
+                        if Gone_Secs (I) = Drop_Sec then Gone_N (I) := Gone_N (I) + 1; Seen := True; end if;
+                     end loop;
+                     if not Seen then Gone_Secs.Append (Drop_Sec); Gone_N.Append (1); end if;
+                  end;
+               end;
+            end loop;
+         end if;
+      end;
+      Out_Text := Head & ASCII.LF;
+      for P in 1 .. 9 loop   --  anomalies first, then by importance; unchanged order inside
+         for E of Keep loop
+            if E.Prio = P and then E.Anom then Append (Out_Text, Shown_Text (E) & ASCII.LF); end if;
+         end loop;
+      end loop;
+      for P in 1 .. 9 loop
+         for E of Keep loop
+            if E.Prio = P and then not E.Anom then Append (Out_Text, Shown_Text (E) & ASCII.LF); end if;
+         end loop;
+      end loop;
+      if Unchanged > 0 then Append (Out_Text, Msg ("digest.unchanged", Img (Unchanged)) & ASCII.LF); end if;
+      for I in 1 .. Natural (Gone_Secs.Length) loop
+         Append (Gone_By, (if I = 1 then "" else ", ") & To_String (Gone_Secs (I)) & " " & Img (Gone_N (I)));
+      end loop;
+      if Gone > 0 then Append (Out_Text, Msg ("digest.dropped", Img (Gone), To_String (Gone_By)) & ASCII.LF); end if;
+      declare
+         T : constant String := To_String (Out_Text);
+      begin
+         Out_Text := To_Unbounded_String (if T'Length > Cap then T (T'First .. T'First + Cap - 1) else T);   --  the hard cap
+      end;
+      for E of V loop Append (Prev_New, Hash_Line (E) & ASCII.LF); end loop;
+      --  the full record
+      Append (Full, "[status]" & ASCII.LF & To_String (Head) & ASCII.LF);
+      declare
+         Name : Unbounded_String;
+         Rest_S : constant String := Sections;
+         From : Positive := Rest_S'First;
+      begin
+         for I in Rest_S'First .. Rest_S'Last + 1 loop
+               if I > Rest_S'Last or else Rest_S (I) = ' ' then
+                  Name := To_Unbounded_String (Rest_S (From .. I - 1));
+                  From := I + 1;
+                  if To_String (Name) /= "status" then
+                     Append (Full, "[" & To_String (Name) & "]" & ASCII.LF);
+                     declare
+                        Raw : Boolean := False;
+                     begin
+                        for E of V loop   --  the inbox: the raw lines of the full record, not the folded ones
+                           if To_String (E.Sec) = To_String (Name) and then (To_String (Name) /= "inbox" or else E.Full_Only) then
+                              Append (Full, Shown_Text (E) & ASCII.LF);
+                              Raw := True;
+                           end if;
+                        end loop;
+                        if not Raw then Append (Full, Msg ("digest.empty") & ASCII.LF); end if;
+                     end;
+                  end if;
+               end if;
+         end loop;
+      end;
+      if Length (Section_Opt) > 0 then   --  --debug-section NAME with --preview: just that block
+         declare
+            Wanted : constant String := To_String (Section_Opt);
+            Body_S : Unbounded_String;
+            In_It : Boolean := False;
+            Pos : Natural := 1;
+            F : constant String := To_String (Full);
+         begin
+            for I in F'Range loop
+               if F (I) = ASCII.LF then
+                  declare
+                     L : constant String := F (Pos .. I - 1);
+                  begin
+                     if L'Length > 0 and then L (L'First) = '[' then In_It := L = "[" & Wanted & "]";
+                     elsif In_It then Append (Body_S, L & ASCII.LF);
+                     end if;
+                  end;
+                  Pos := I + 1;
+               end if;
+            end loop;
+            Out_Text := To_Unbounded_String ("section " & Wanted & ASCII.LF) & Body_S;
+            TIO.Put (To_String (Out_Text));
+         end;
+      end if;
+      Write_Plain ("debug_digest.txt", To_String (Out_Text));
+      if not Preview then
+         Write_Plain ("debug_full.txt", To_String (Full));
+         Write_Plain ("debug_digest.prev", To_String (Prev_New));
+      end if;
+      Digest_Note := To_Unbounded_String (Msg ("digest.path", Ada.Directories.Full_Name ("debug_digest.txt")));
+   exception
+      when others => TIO.Put_Line (Msg ("debug.failed"));
+   end Write_Digest;
+
+   --  The last console line(s): the digest path (only with --debug), then "Saved to <path>".
+   procedure Put_Saved is
+   begin
+      if Length (Digest_Note) > 0 then TIO.Put_Line (To_String (Digest_Note)); end if;
+      TIO.Put_Line (To_String (Saved_Line));
+   end Put_Saved;
+
+   --  --debug-section NAME on a saved run (nothing is simulated): print that block of debug_full.txt
+   --  and write it to debug_digest.txt.
+   procedure Print_Section (Name : String) is
+      Lines : Str_Vectors.Vector;
+      Found : Boolean;
+      In_It : Boolean := False;
+      Out_Text : Unbounded_String;
+   begin
+      Read_Lines ("debug_full.txt", Lines, Found);
+      if not Found then
+         TIO.Put_Line (TIO.Standard_Error, Msg ("digest.nofull", Ada.Directories.Full_Name ("debug_full.txt")));
+         Ada.Command_Line.Set_Exit_Status (2);
+         return;
+      end if;
+      Out_Text := To_Unbounded_String ("section " & Name & ASCII.LF);
+      for L of Lines loop
+         if L'Length > 0 and then L (L'First) = '[' then In_It := L = "[" & Name & "]";
+         elsif In_It then Append (Out_Text, L & ASCII.LF);
+         end if;
+      end loop;
+      Write_Plain ("debug_digest.txt", To_String (Out_Text));
+      TIO.Put (To_String (Out_Text));
+      TIO.Put_Line (Msg ("digest.path", Ada.Directories.Full_Name ("debug_digest.txt")));
+   end Print_Section;
 
    --  debug.txt: ONE small file (<= 1500 bytes) on every exit path; Status is
    --  RUN (stub, refreshed every --every ticks), OK, QUIT, CRASH, DRIFT or USAGE.
@@ -650,6 +1020,7 @@ procedure Diary_Sim is
             Ada.Directories.Delete_File ("debug.txt");
             Ada.Directories.Rename ("debug.tmp", "debug.txt");
       end;
+      Write_Digest (Status, Err);   --  only with --debug, and only for a final status
    exception
       when others => TIO.Put_Line (Msg ("debug.failed"));
    end Write_Debug;
@@ -819,19 +1190,6 @@ procedure Diary_Sim is
    function Decided (V : Kalpa_Votes) return Int is
      (Int'Max (Limit ("kalpa.min", 20), Int'Min (Limit ("kalpa.max", 1500), Kalpa_Median (V))));
 
-   --  "key=value" token of a session line; "" if missing.  PROOF-LATER: Importance 3/10, Urgency 2/10,
-   --  SPARK2 (parsing of the sessions.txt record)
-   function Token (L, Key : String) return String is
-      P : constant Natural := Fx.Index (L, " " & Key & "=");
-   begin
-      if P = 0 then return ""; end if;
-      declare
-         First : constant Positive := P + Key'Length + 2;
-         Stop  : constant Natural := Fx.Index (L, " ", First);
-      begin
-         return L (First .. (if Stop = 0 then L'Last else Stop - 1));
-      end;
-   end Token;
    function To_Num (T : String) return Int is
      (if T'Length in 1 .. 15 and then (for all C of T => C in '0' .. '9') then Int'Value (T) else -1);
 
@@ -1394,7 +1752,7 @@ procedure Diary_Sim is
       if Import_Done then Write_Petitions; end if;
       Write_Debug ("DRIFT", "error: " & Message & (if Built'Length > 0 then ASCII.LF & Msg ("drift.cause", Built) else ""));
       TIO.Put_Line (Msg ("debug.attach"));
-      TIO.Put_Line (To_String (Saved_Line));
+      Put_Saved;
       Ada.Command_Line.Set_Exit_Status (1);
    end Validation_Stop;
 
@@ -1511,25 +1869,62 @@ procedure Diary_Sim is
       Summarize (Seed, Total, Votes_Of, Console, Text, Json);
       TIO.Put (To_String (Console));
       TIO.Put_Line (Msg ("preview.foot"));
+      Write_Digest ("OK", "");   --  only with --debug: the one file a preview ever writes
+      if Length (Digest_Note) > 0 then TIO.Put_Line (To_String (Digest_Note)); end if;
    end Run_Preview;
 
 
-   --  ---- the main menu (terminal only) -------------------------------------------------------
-   --  What the menu shows under the tagline: the wesen, the game (session, ticks) and the last
-   --  favourite-word vote with who taught or coined each word; read-only, from diaries/.
-   function Game_Info return Str_Vectors.Vector is
-      Res, Lines, Ada_Lines : Str_Vectors.Vector;
+   --  Sessions on disk and the lowest common tick (what "continuing" starts from); read-only.
+   procedure Save_Counts (Sessions_N, Ticks : out Natural) is
+      Lines, Ent : Str_Vectors.Vector;
       Found : Boolean;
-      Names : Unbounded_String;
-      N : Natural := 0;
+      R : Session_Rec;
+      OK : Boolean;
+   begin
+      Sessions_N := 0;
+      Ticks := 0;
+      if not Has_Diaries then return; end if;
+      Read_Lines (Sessions_Path, Lines, Found);
+      for L of Lines loop
+         if L'Length > 0 and then L (L'First) = 'S' then
+            Parse_Session (L, R, OK);
+            if OK then Sessions_N := Sessions_N + 1; end if;
+         end if;
+      end loop;
+      for E in Entity_Id loop
+         Ent.Clear;
+         Read_Lines (Path (E), Ent, Found);
+         Ticks := (if E = 1 then Natural (Ent.Length) else Natural'Min (Ticks, Natural (Ent.Length)));
+      end loop;
+   end Save_Counts;
+
+   --  The second line of the run header (the first one is "Save folder: ..."): what is there.
+   function Start_Line return String is
+      N, T : Natural;
+   begin
+      Save_Counts (N, T);
+      if Fresh and then Has_Diaries then return Msg ("start.fresh", Img (N), Img (T)); end if;
+      if Has_Diaries then return Msg ((if N = 1 then "start.found1" else "start.found"), Img (N), Img (T)); end if;
+      if Yes or else Fresh then return Msg ("start.none"); end if;
+      if Is_Tty (0) and then Is_Tty (1) then return Msg ("start.none.ask"); end if;
+      return Msg ((if Explicit then "start.none" else "start.none.stop"));
+   end Start_Line;
+
+   --  ---- the main menu (terminal only) -------------------------------------------------------
+   --  What the menu shows under the tagline (at most six short lines, so that the large title fits
+   --  into 80x24): the save folder; sessions, ticks and the last favourite-word vote with who
+   --  taught or coined each word; karma; the last petition and the inbox.  Read-only.
+   function Game_Info return Str_Vectors.Vector is
+      Res, Lines : Str_Vectors.Vector;
+      Found : Boolean;
       Last : Word_Vote;
       Have : Boolean := False;
-      R : Session_Rec;
       V : Word_Vote;
       OK : Boolean;
       Karma_Of : array (Entity_Id) of Unbounded_String;
       Have_D : Boolean := False;
       Pet : Unbounded_String;
+      Sessions_N, Ticks : Natural;
       function Shown (E : Entity_Id) return String is
          T  : constant String := To_String (Last.Tok (E));
          Sl : constant Natural := Fx.Index (T, "/");
@@ -1540,35 +1935,30 @@ procedure Diary_Sim is
            & (if Origin_Text = "start" or else Sl = 0 then "" else " (" & Origin_Text & ")");
       end Shown;
    begin
-      for E in Entity_Id loop Append (Names, (if E = 1 then "" else ", ") & Name (E)); end loop;
-      Res.Append (Msg ("wesen.label", To_String (Names)));
-      if Has_Diaries then
-         Read_Lines (Sessions_Path, Lines, Found);
-         for L of Lines loop
-            if L'Length > 0 and then L (L'First) = 'S' then
-               Parse_Session (L, R, OK);
-               if OK then N := R.N; end if;
-            elsif L'Length > 0 and then L (L'First) = 'W' then
-               Parse_Word_Vote (L, V, OK);
-               if OK then Last := V; Have := True; end if;
-            elsif L'Length > 0 and then L (L'First) = 'D' and then Sim_Dharma.Find_Wesen (Token (L, "wesen")) > 0 then
-               Karma_Of (Entity_Id (Sim_Dharma.Find_Wesen (Token (L, "wesen")))) := To_Unbounded_String (Token (L, "karma"));
-               Have_D := True;
-            elsif L'Length > 0 and then L (L'First) = 'C' then
-               Pet := To_Unbounded_String (L (L'First .. Fx.Index (L, " ") - 1) & " " & Token (L, "win"));
-            end if;
-         end loop;
-         Read_Lines (Path (1), Ada_Lines, Found);
-         Res.Append (Msg ("game.line", Img (N), Img (Integer (Ada_Lines.Length)), To_String (Home_Path)));
-      else
-         Res.Append (Msg ("game.none", To_String (Home_Path)));
+      Res.Append (Msg ("menu.save", To_String (Home_Path)));
+      if not Has_Diaries then
+         Res.Append (Msg ("menu.nogame"));
+         return Res;
       end if;
+      Save_Counts (Sessions_N, Ticks);
+      Read_Lines (Sessions_Path, Lines, Found);
+      for L of Lines loop
+         if L'Length > 0 and then L (L'First) = 'W' then
+            Parse_Word_Vote (L, V, OK);
+            if OK then Last := V; Have := True; end if;
+         elsif L'Length > 0 and then L (L'First) = 'D' and then Sim_Dharma.Find_Wesen (Token (L, "wesen")) > 0 then
+            Karma_Of (Entity_Id (Sim_Dharma.Find_Wesen (Token (L, "wesen")))) := To_Unbounded_String (Token (L, "karma"));
+            Have_D := True;
+         elsif L'Length > 0 and then L (L'First) = 'C' then
+            Pet := To_Unbounded_String (L (L'First .. Fx.Index (L, " ") - 1) & " " & Token (L, "win"));
+         end if;
+      end loop;
       if Have then
-         Res.Append (Msg ("vote.head", Img (Last.N), Img (Last.Tick)));
+         Res.Append (Msg ("menu.game.vote", Img (Sessions_N), Img (Ticks), Img (Last.N), Img (Last.Tick)));
          Res.Append (Fx.Head (Shown (1), 38) & Shown (2));
          Res.Append (Fx.Head (Shown (3), 38) & Shown (4));
       else
-         Res.Append (Msg ("vote.none"));
+         Res.Append (Msg ("menu.game.novote", Img (Sessions_N), Img (Ticks)));
       end if;
       if Have_D then
          declare
@@ -1578,11 +1968,12 @@ procedure Diary_Sim is
             Res.Append (Msg ("menu.dharma", To_String (K)));
          end;
       end if;
-      if Length (Pet) > 0 then Res.Append (Msg ("menu.petition", To_String (Pet))); end if;
       declare
          Box : constant Str_Vectors.Vector := Inbox_File_Lines;
       begin
-         if not Box.Is_Empty then Res.Append (Msg ("menu.inbox", Img (Integer (Box.Length)), Short (Box.Last_Element))); end if;
+         if Length (Pet) > 0 or else not Box.Is_Empty then
+            Res.Append (Msg ("menu.last", (if Length (Pet) > 0 then To_String (Pet) else "-"), Img (Integer (Box.Length))));
+         end if;
       end;
       return Res;
    end Game_Info;
@@ -1594,9 +1985,9 @@ procedure Diary_Sim is
       Every_V : Int := Every;
    begin
       Quit_Now := False;
-      Sim_Menu.Intro (Natural (if Seed_Opt >= 0 then Seed_Opt else 42));
+      Sim_Menu.Intro (Natural (if Seed_Opt >= 0 then Seed_Opt else 42), Game_Info);
       loop
-         case Sim_Menu.Ask (Game_Info) is
+         case Sim_Menu.Ask (Game_Info, (if Has_Diaries then Sim_Menu.Load_Game else Sim_Menu.New_Game)) is
             when Sim_Menu.Quit =>
                Quit_Now := True;
                exit;
@@ -1636,7 +2027,7 @@ begin
          Eq  : constant Natural := Fx.Index (A, "=");
          Opt : constant String := (if Eq > 0 then A (A'First .. Eq - 1) else A);
          Num : constant Boolean := Opt in "--ticks" | "--seed" | "--every" | "--crash-at" | "--more";
-         Sep : constant Boolean := (Num or else Opt in "--home" | "--say" | "--text" | "--as") and then Eq = 0 and then I < Ada.Command_Line.Argument_Count;   --  --ticks 200
+         Sep : constant Boolean := (Num or else Opt in "--home" | "--say" | "--text" | "--as" | "--debug-section") and then Eq = 0 and then I < Ada.Command_Line.Argument_Count;   --  --ticks 200
          Val : constant String := (if Eq > 0 then A (Eq + 1 .. A'Last) elsif Sep then Ada.Command_Line.Argument (I + 1) else "");
          Help  : Str_Vectors.Vector;
          Found : Boolean;
@@ -1656,6 +2047,12 @@ begin
          elsif Opt = "--as" then Say_By := To_Unbounded_String (Val);
          elsif Opt = "--answer" then Answer_Mode := True;
          elsif Opt = "--inbox" then Inbox_Mode := True;
+         elsif Opt = "--menu" then Menu_Opt := True;
+         elsif Opt = "--debug" then Debug_On := True;
+         elsif Opt = "--debug-section" then
+            Section_Opt := To_Unbounded_String (Val);
+            Debug_On := True;
+            if Fx.Index (" " & Sections & " ", " " & Val & " ") = 0 then raise Usage_Error with Msg ("digest.nosection", Val, Sections); end if;
          elsif Opt = "--ticks" then Ticks := Number (Opt, Val);
          elsif Opt = "--seed" then Seed_Opt := Number (Opt, Val);
          elsif Opt = "--every" then Every := Number (Opt, Val);
@@ -1675,7 +2072,9 @@ begin
       Run_Preview;
       return;
    end if;
-   Resolve_Home;
+   Menu_Wanted := Menu_Opt or else (Ada.Command_Line.Argument_Count = 0 and then Is_Tty (0) and then Is_Tty (1));
+   if Menu_Opt and then not (Is_Tty (0) and then Is_Tty (1)) then raise Usage_Error with Msg ("err.menu_tty"); end if;
+   Resolve_Home (Header => not (Menu_Wanted or else Inbox_Mode or else Say_Mode or else Answer_Mode or else (Length (Section_Opt) > 0 and then not Preview)));
    Saved_Line := To_Unbounded_String (Msg ("saved", To_String (Home_Path)));
    if Inbox_Mode then
       TIO.Put (Inbox_Page);
@@ -1685,8 +2084,11 @@ begin
       Do_Say;
       TIO.Put_Line (To_String (Saved_Line));
       return;
+   elsif Length (Section_Opt) > 0 then
+      Print_Section (To_String (Section_Opt));
+      return;
    end if;
-   if not Explicit and then not Fresh and then not Yes and then Is_Tty (0) and then Is_Tty (1) then
+   if Menu_Wanted then
       declare
          Quit_Now : Boolean;
       begin
@@ -1698,6 +2100,8 @@ begin
       end;
    end if;
 
+   TIO.Put_Line (Start_Line);   --  header line 2 (line 1 is Save folder:, printed first; the menu shows it itself)
+   TIO.Flush;
    if Fresh and then (Ada.Directories.Exists ("diaries") or else Ada.Directories.Exists ("entities")) then
       declare
          Old : constant String := "diaries_old_" & Plain_Stamp;
@@ -1844,7 +2248,7 @@ begin
       Write_Petitions;
       Write_Debug ("QUIT", Msg ("debug.quit", Sim_Quit.Which, Img (Last_Done)));
       TIO.Put_Line (Msg ("debug.attach"));
-      TIO.Put_Line (To_String (Saved_Line));
+      Put_Saved;
       Ada.Command_Line.Set_Exit_Status (130);
       return;
    end if;
@@ -1953,7 +2357,7 @@ begin
       TIO.Put_Line (Msg ("pet.file", Img (Integer'Min (Petition_Total, Integer (Limit ("propose.file_cap", 40)))),
                          Img (Petition_Total), Ada.Directories.Full_Name ("petitions.txt")));
       TIO.Put_Line (Msg ("pet.attach"));
-      TIO.Put_Line (To_String (Saved_Line));
+      Put_Saved;
    end;
 exception
    when E : Usage_Error =>
@@ -1969,5 +2373,7 @@ exception
       if Import_Done then Write_Petitions; end if;
       Write_Debug ("CRASH", Error_Brief (E));
       Report (E);
+      Write_Digest ("CRASH", Error_Brief (E));   --  again: last_error.txt exists now
+      if Length (Digest_Note) > 0 then TIO.Put_Line (To_String (Digest_Note)); end if;
       Ada.Command_Line.Set_Exit_Status (1);
 end Diary_Sim;

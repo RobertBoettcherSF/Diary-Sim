@@ -90,8 +90,6 @@ inbox.players = player {1}
 inbox.answer = answer: make say PLAYER=<name> TEXT="..."   (or WESEN=<name> for a wesen; make answer TEXT="..." for the petition)
 inbox.saved = inbox: {1}
 menu.dharma = karma {1}
-menu.petition = last petition to the players: {1}; answer with make answer TEXT="..."
-menu.inbox = inbox: {1} lines (newest: {2})
 menu.inbox.title = Inbox of Robert (newest {1} of {2} lines)
 menu.inbox.back = press Enter to go back:
 # ---- make say / make answer

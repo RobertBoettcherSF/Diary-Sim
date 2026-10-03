@@ -106,6 +106,14 @@ preview.kalpa = a first bare "make run" of this world would be: {1}
 preview.words = words known: {1}\ncoined: {2}\ntaught: {3}
 preview.foot = nothing was written to disk. make run / make play write ./diaries and continue that world each time.
 saved = Saved to {1}
+start.folder = Save folder: {1}
+start.found = Found {1} sessions, {2} ticks - continuing
+start.found1 = Found 1 session, {2} ticks - continuing
+start.fresh = Found {1} sessions, {2} ticks - moving them aside (--fresh) and starting a new game
+start.none = No save found - creating it
+start.none.ask = No save found - creating it (asks y/N first; --yes skips the question)
+start.none.stop = No save found
+err.menu_tty = --menu needs a terminal (use make run to load and continue without it)
 since.head = session {1} ({2}): ticks {3} -> {4} (+{5}), since the last session
 since.none = session {1}: no new ticks this run (total {2} ticks)
 since.words = words {1} (+{2}) | learned {3}/{4} coined {5}/{6}
@@ -117,3 +125,12 @@ migrate.hint = Found a save inside the source folder ({1}); the saves now live i
 words.line = words vote (session {1}): {2}
 words.hdr = # W<n> tick=<t> <wesen>=<word>/<origin> ...  (favourite words at the end of a session)
 err.words = sessions.txt W{1} (tick {2}): stored {3}, the replay gives {4}; the diaries, data/ or this build changed (use --fresh)
+
+# debug digest (--debug, --debug-section; see README)
+digest.fine = no anomalies
+digest.empty = (nothing recorded in this section)
+digest.unchanged = ... {1} lines unchanged since the last digest
+digest.dropped = ... dropped {1} lines for the byte cap ({2}); all in debug_full.txt (SECTION=<name>)
+digest.path = debug digest: {1}
+digest.nosection = unknown --debug-section {1} (one of: {2})
+digest.nofull = no full record yet: {1} (run once with make run DEBUG=1)

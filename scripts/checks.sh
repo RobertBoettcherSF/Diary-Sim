@@ -342,10 +342,10 @@ fi
 echo "== 23. main menu (terminal only): intro, title, five entries, new/load/inbox/settings/quit =="
 if command -v python3 > /dev/null; then
 rm -rf "$w/mn"; mkdir -p "$w/mn/bin" "$w/mn/home"; cp "$bin" "$w/mn/bin/"; cp -r "$root/data" "$w/mn/data"; mb="$w/mn/bin/diary_sim"
-sed -i 's/^intro.ms = .*/intro.ms = 0/; s/^intro.frames = .*/intro.frames = 6/' "$w/mn/data/menu.txt"
+sed -i 's/^intro.ms = .*/intro.ms = 0/; s/^intro.frames = .*/intro.frames = 6/; s/^intro.hold = .*/intro.hold = 0/' "$w/mn/data/menu.txt"
 cat > "$w/pty_multi.py" <<'PTY2_EOF'
 import pty, os, sys, select, time, re
-PROMPT = rb'(J> |\[y/N\] |go back: |whole number\): )'
+PROMPT = rb'(J> |\[y/N\] |go back: |whole number\): )(\x1b\[\?2026l)?'
 def run(argv, answers, env):
     pid, fd = pty.fork()
     if pid == 0:
@@ -375,17 +375,69 @@ PTY2_EOF
 menu() { python3 "$w/pty_multi.py" "$w/mn/home" "$mb" "$@"; }
 cd "$w/mn" || exit 1
 menu '5\n' > m1.txt 2>&1
-[ "$(grep -c '^    [0-9]) ' m1.txt)" = 5 ] && grep -q '^    1) New Game' m1.txt && grep -q '^    2) Load Game' m1.txt && grep -q '^    3) Inbox' m1.txt && grep -q '^    4) Settings' m1.txt && grep -q '^    5) Quit' m1.txt && grep -q 'Stories of word and word' m1.txt \
-  && grep -q '^ *#####   #######   ###   ######  #     #' m1.txt && grep -q 'wesen: ada, gemini, replika, robert' m1.txt && grep -q '^rc=0' m1.txt && [ -z "$(ls -A home)" ] \
-  && ok "terminal, no arguments: life intro, DIARY title, tagline, wesen, exactly five entries; Quit = exit 0, nothing written" || bad "menu screen"
+[ "$(grep -Ec '^( {4}|  > )[0-9]\) ' m1.txt)" = 5 ] && grep -q '^  > 1) New Game' m1.txt && grep -q '^    2) Load Game' m1.txt && grep -q '^    3) Inbox' m1.txt && grep -q '^    4) Settings' m1.txt && grep -q '^    5) Quit' m1.txt && grep -q 'Stories of word and word' m1.txt \
+  && grep -q '^ *#####   #######   ###   ######  #     #' m1.txt && grep -q '^  save: ' m1.txt && grep -q 'Enter = New Game' m1.txt && grep -q '^rc=0' m1.txt && [ -z "$(ls -A home)" ] \
+  && ok "terminal, bare program: life intro, DIARY title, tagline, save folder, exactly five entries with the cursor mark; Quit = exit 0, nothing written" || bad "menu screen"
+# the screen as a terminal shows it (80x24, a small emulator): title + tagline + entries together, no scrolling, every frame bracketed
+cat > "$w/pty_screen.py" <<'PTY3_EOF'
+import pty, os, sys, select, time, re, fcntl, termios, struct
+R, C = 24, 80
+g = [[' '] * C for _ in range(R)]; pos = [0, 0]; scrolls = [0]
+def lf():
+    if pos[0] == R - 1: g.pop(0); g.append([' '] * C); scrolls[0] += 1
+    else: pos[0] += 1
+def feed(t):
+    i = 0
+    while i < len(t):
+        if t[i] == '\x1b' and t[i + 1:i + 2] == '[':
+            m = re.match(r'\x1b\[([0-9;?]*)([A-Za-z])', t[i:]); i += m.end(); a, k = m.group(1), m.group(2)
+            if k == 'H': pos[0] = 0; pos[1] = 0
+            elif k == 'K':
+                for x in range(pos[1], C): g[pos[0]][x] = ' '
+            elif k == 'J':
+                if a == '2':
+                    for y in range(R): g[y] = [' '] * C
+                else:
+                    for x in range(pos[1], C): g[pos[0]][x] = ' '
+                    for y in range(pos[0] + 1, R): g[y] = [' '] * C
+            continue
+        ch = t[i]; i += 1
+        if ch == '\r': pos[1] = 0
+        elif ch == '\n': lf(); pos[1] = 0
+        elif ch >= ' ':
+            if pos[1] >= C: lf(); pos[1] = 0
+            g[pos[0]][pos[1]] = ch; pos[1] += 1
+pid, fd = pty.fork()
+if pid == 0: os.execve(sys.argv[2], [sys.argv[2]] + sys.argv[3:], dict(os.environ, DIARY_HOME=sys.argv[1]))
+fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', R, C, 0, 0))
+raw = b''; shot = None; t0 = time.time()
+while time.time() - t0 < 60:
+    r, _, _ = select.select([fd], [], [], 0.3)
+    if r:
+        try: d = os.read(fd, 65536)
+        except OSError: break
+        if not d: break
+        raw += d; feed(d.decode(errors='replace'))
+        if shot is None and re.search(rb'J> (\x1b\[\?2026l)?$', raw):
+            time.sleep(0.2); shot = ('\n'.join(''.join(r).rstrip() for r in g), scrolls[0]); os.write(fd, b'5\n')
+try: os.waitpid(pid, 0)
+except OSError: pass
+print(shot[0]); print('scrolls=%d h=%d l=%d' % (shot[1], raw.count(b'\x1b[?2026h'), raw.count(b'\x1b[?2026l')))
+PTY3_EOF
+scr() { python3 "$w/pty_screen.py" "$w/mn/home" "$mb" "$@"; }
+scr > m1s.txt 2>&1
+[ "$(grep -c '#' m1s.txt)" -ge 7 ] && grep -q '^ *Stories of word and word$' m1s.txt && [ "$(grep -Ec '^( {4}|  > )[0-9]\) ' m1s.txt)" = 5 ] && grep -q '^> *$' m1s.txt && grep -q '^scrolls=0 ' m1s.txt && [ "$(wc -l < m1s.txt)" -le 25 ] \
+  && ok "80x24 terminal: title, tagline, five entries, hint and prompt on screen together at the moment of the first question; the screen never scrolled" || bad "menu does not fit 80x24 (m1s.txt)"
+h=$(sed -n 's/.*scrolls=[0-9]* h=\([0-9]*\) l=.*/\1/p' m1s.txt); l=$(sed -n 's/.*l=\([0-9]*\)$/\1/p' m1s.txt)
+[ -n "$h" ] && [ "$h" = "$l" ] && [ "$h" -ge 2 ] && ok "every frame is a bracketed single write (synchronized update begin/end: $h of $l)" || bad "frame brackets"
 menu '1\n' > m2.txt 2>&1
 grep -q 'import OK: none (fresh start, seed 42)' m2.txt && grep -q '^kalpa 1 ' m2.txt && grep -q '^words vote (session 1)' m2.txt && grep -q '^Saved to ' m2.txt && [ -f home/diaries/sessions.txt ] \
   && ok "New Game with no game: a fresh world, the entities vote the session length and their favourite words" || bad "new game"
 menu '2\n' > m3.txt 2>&1
-grep -q '^  game: session 1, [0-9]* ticks (save: ' m3.txt && grep -q '^  favourite words, session 1, tick [0-9]*:' m3.txt && grep -Eq '^  ada +[a-z]+.*gemini +[a-z]+' m3.txt && grep -q 'import OK: 4 entities, [0-9]* ticks verified' m3.txt && grep -q '^words vote (session 2)' m3.txt \
+grep -q '^  game: sessions 1, ticks [0-9]* | words voted, session 1, tick [0-9]*:' m3.txt && grep -Eq '^  ada +[a-z]+.*gemini +[a-z]+' m3.txt && grep -q 'import OK: 4 entities, [0-9]* ticks verified' m3.txt && grep -q '^words vote (session 2)' m3.txt \
   && ok "Load Game: the menu shows session, ticks and the last word vote (who taught or coined); the world continues (session 2, replay-verified)" || bad "load game"
 menu '3\n,\n,5\n' > m3b.txt 2>&1
-grep -q '^  karma ada ' m3b.txt && grep -q '^  inbox: [0-9]* lines' m3b.txt && grep -q '^inbox for Robert (newest [0-9]* lines):' m3b.txt && grep -q '^press Enter to go back:' m3b.txt && grep -q '^rc=0' m3b.txt \
+grep -q '^  karma ada ' m3b.txt && grep -q '^  last petition: .* | inbox: [0-9]* lines' m3b.txt && grep -q '^inbox for Robert (newest [0-9]* lines):' m3b.txt && grep -q '^press Enter to go back:' m3b.txt && grep -q '^rc=0' m3b.txt \
   && ok "menu: karma and inbox lines on the start screen; entry 3 (Inbox) shows the reports, Enter goes back to the menu" || bad "menu inbox"
 cp home/diaries/sessions.txt s_before.txt; n=$(wc -l < home/diaries/ada.jsonl)
 menu '1\n,n\n,5\n' > m4.txt 2>&1
@@ -399,6 +451,18 @@ grep -q 'seed (a new world only' m6.txt && grep -q '^New value for seed' m6.txt 
 cmp -s "$root/data/limits.txt" "$w/mn/data/limits.txt" && ok "limits.txt not changed by Settings" || bad "limits.txt changed"
 rm -rf home; mkdir home; menu 'x\n,5\n' > m7.txt 2>&1; grep -q 'Please type 1, 2, 3, 4 or 5' m7.txt && ok "a bad answer asks again" || bad "bad menu answer"
 python3 "$w/pty_multi.py" "$w/mn/home" "$mb" 'n\n' --more 5 > m8.txt 2>&1; ! grep -q 'New Game' m8.txt && ok "explicit --more on a terminal: no menu" || bad "menu with explicit args"
+# make run / make play: AUTO-LOAD, no menu; the first two lines say where and what
+rm -rf home; mkdir home; abs=$(cd home && pwd)
+python3 "$w/pty_multi.py" "$w/mn/home" "$mb" 'y\n' --ticks 30 --every 1000 > r1.txt 2>&1
+[ "$(sed -n 1p r1.txt)" = "Save folder: $abs" ] && grep -A1 '^Save folder: ' r1.txt | grep -q '^No save found - creating it (asks y/N first; --yes skips the question)$' && grep -q '^Saved to ' r1.txt && ! grep -q 'New Game' r1.txt \
+  && ok "terminal, no save: header 'Save folder: <abs path>' + 'No save found - creating it (asks y/N ...)', then the question; no menu" || bad "run header without a save"
+DIARY_HOME="$w/mn/home" "$mb" --more 5 --every 1000 > r2.txt 2>&1 < /dev/null
+[ "$(sed -n 1p r2.txt)" = "Save folder: $abs" ] && [ "$(sed -n 2p r2.txt)" = "Found 1 session, 30 ticks - continuing" ] && grep -q '^import OK: 4 entities, 30 ticks verified' r2.txt && tail -1 r2.txt | grep -q "^Saved to $abs\$" \
+  && ok "make run on a save: line 1 'Save folder: <abs>', line 2 'Found N session(s), T ticks - continuing', replay-verify, 'Saved to <abs>' last" || bad "run header with a save"
+DIARY_HOME="$w/mn/home" "$mb" --every 1000 --more 5 > r3.txt 2>&1 < /dev/null; sed -n 2p r3.txt | grep -q '^Found 2 sessions, 35 ticks - continuing$' && ok "the second run counts both sessions (Found 2 sessions, 35 ticks)" || bad "run header count"
+python3 "$w/pty_multi.py" "$w/mn/home" "$mb" ',5\n' --every 1000 --more 5 > r4.txt 2>&1; ! grep -q 'New Game' r4.txt && sed -n 1,2p r4.txt | grep -q '^Save folder: ' && ok "terminal, make run arguments (--every ...): auto-load, no menu" || bad "make run on a terminal showed the menu"
+python3 "$w/pty_multi.py" "$w/mn/home" "$mb" '5\n' --menu > r5.txt 2>&1; grep -q '^  > 2) Load Game' r5.txt && grep -q 'game: sessions 4, ticks 45' r5.txt && grep -q '^rc=0' r5.txt && ok "make menu (--menu): the menu, Load Game is the marked default once a game exists" || bad "--menu"
+DIARY_HOME="$w/mn/home" "$mb" --menu > r6.txt 2>&1 < /dev/null; rc=$?; [ $rc = 2 ] && grep -q 'needs a terminal' r6.txt && ok "--menu without a terminal: usage error, exit 2" || bad "--menu without terminal"
 fi
 
 echo "== 24. Buddhism layer + players: three sessions in a row, replay-verified, record-first =="
@@ -471,6 +535,43 @@ cd "$w/dh/a" || exit 1; rm -rf diaries; cp -r ../d_dh diaries
 DIARY_HOME="$w/dh/a" make -s -C "$root" say PLAYER=sol TEXT="via make" AS=rob > mk1.txt 2>&1; tail -n 1 diaries/says.txt | grep -q ' to=sol kind=relay by=rob .*text=via make$' \
   && DIARY_HOME="$w/dh/a" make -s -C "$root" inbox > mk2.txt 2>&1 && grep -q '^inbox for Robert (newest' mk2.txt && grep -q '^  player sol (tracker of progress)' mk2.txt && ok "make say PLAYER=... TEXT=... records the words; make inbox prints the inbox" || bad "make say / inbox"
 "$db" --say bob --text x > mk3.txt 2>&1; rc=$?; [ $rc = 2 ] && grep -q 'neither a player' mk3.txt && "$db" --say ada --text "" > mk4.txt 2>&1; [ $? = 2 ] && ok "say to an unknown name or with no text: usage error (exit 2), nothing written" || bad "say usage"
+
+echo "== 25. debug digest: --debug / DEBUG=1 (run and demo), byte cap, sections =="
+rm -rf "$w/dg"; mkdir -p "$w/dg/bin" "$w/dg/home" "$w/dg/demo"; cp "$bin" "$w/dg/bin/"; cp -r "$root/data" "$w/dg/data"; gb="$w/dg/bin/diary_sim"
+cd "$w/dg/demo" || exit 1
+"$gb" --preview --ticks 60 > /dev/null 2>&1; [ -z "$(ls -A)" ] && ok "make demo without --debug writes nothing (as before)" || bad "demo wrote files"
+"$gb" --preview --ticks 60 --debug > dm.txt 2>&1; rm -f dm.txt.tmp
+[ "$(ls | grep -v '^dm.txt$')" = "debug_digest.txt" ] && head -1 debug_digest.txt | grep -q '^OK v.* (preview) | ' && [ "$(head -1 debug_digest.txt | wc -c)" -le 201 ] && [ "$(wc -c < debug_digest.txt)" -le 1500 ] \
+  && grep -q "^debug digest: $PWD/debug_digest.txt\$" dm.txt && [ "$(tail -1 dm.txt | cut -c1-14)" = "debug digest: " ] \
+  && ok "demo --debug: debug_digest.txt is the ONE file written (current folder), line 1 = status <= 200 B, whole file <= 1500 B, absolute path printed last" || bad "demo --debug"
+rm -f debug_digest.txt; "$gb" --preview --ticks 60 --debug-section run > dm2.txt 2>&1
+[ "$(ls | grep -v '^dm2\?.txt$')" = "debug_digest.txt" ] && [ "$(head -1 debug_digest.txt)" = "section run" ] && grep -q '^ada words' debug_digest.txt && ok "demo --debug-section run: just that block, in the one file" || bad "demo section"
+cd "$w/dg/home" || exit 1; export DIARY_HOME="$w/dg/home"
+"$gb" --ticks 150 --yes --every 1000 > g0.txt 2>&1
+[ ! -e debug_digest.txt ] && [ ! -e debug_full.txt ] && [ ! -e debug_digest.prev ] && [ "$(wc -c < debug.txt)" -le 1500 ] && ok "without --debug nothing changes: no digest files, debug.txt <= 1500 B" || bad "files without --debug"
+"$gb" --more 100 --every 1000 --debug > g1.txt 2>&1
+l1=$(head -1 debug_digest.txt); [ "${#l1}" -le 200 ] && echo "$l1" | grep -q '^OK v[0-9.]* seed 42 | session 2 | ticks 250 (resumed from 150) | ' && [ "$(wc -c < debug_digest.txt)" -le 1500 ] && [ -s debug_full.txt ] && [ -s debug_digest.prev ] \
+  && [ "$(tail -2 g1.txt | head -1)" = "debug digest: $PWD/debug_digest.txt" ] && [ "$(tail -1 g1.txt)" = "Saved to $PWD" ] \
+  && ok "run --debug: status line first, <= 1500 B, full record + hashes in the save folder, 'debug digest: <abs>' just before 'Saved to'" || bad "run --debug (g1.txt)"
+"$gb" --more 0 --debug > g2.txt 2>&1
+grep -q '^\.\.\. [0-9]* lines unchanged since the last digest' debug_digest.txt && [ "$(wc -l < debug_digest.txt)" -lt "$(grep -c . debug_full.txt)" ] && ok "a second digest shows only what changed (the rest is counted: 'N lines unchanged')" || bad "unchanged since last digest"
+cp -r data data_ok 2> /dev/null; mkdir -p "$w/dg/small"; cp -r "$w/dg/data" "$w/dg/small/data"; mkdir -p "$w/dg/small/bin"; cp "$gb" "$w/dg/small/bin/"
+sed -i 's/^debug.digest_bytes = .*/debug.digest_bytes = 420/' "$w/dg/small/data/limits.txt"; rm -f debug_digest.prev
+"$w/dg/small/bin/diary_sim" --more 0 --debug > g3.txt 2>&1
+[ "$(wc -c < debug_digest.txt)" -le 420 ] && head -1 debug_digest.txt | grep -q '^OK ' && tail -1 debug_digest.txt | grep -q '^\.\.\. dropped [0-9]* lines for the byte cap' \
+  && ok "debug.digest_bytes = 420 (data/limits.txt): file <= 420 B, least important lines dropped first, last line says what was dropped" || bad "byte cap"
+rm -f debug_digest.prev; "$gb" --more 0 --debug > /dev/null 2>&1
+cp diaries/sessions.txt ss.bak; sum_before=$(cksum < diaries/sessions.txt)
+"$gb" --debug-section players > g4.txt 2>&1; rc4=$?
+[ $rc4 = 0 ] && [ "$(head -1 g4.txt)" = "section players" ] && grep -q '^players: iris attn' g4.txt && [ "$(head -1 debug_digest.txt)" = "section players" ] && [ "$sum_before" = "$(cksum < diaries/sessions.txt)" ] && ! grep -q '^import' g4.txt \
+  && ok "--debug-section players: only that block of debug_full.txt, printed and written; nothing is simulated" || bad "debug-section"
+"$gb" --debug-section nosuch > g5.txt 2>&1; rc5=$?; [ $rc5 = 2 ] && grep -q 'unknown --debug-section nosuch (one of: status drift trace players inbox run)' g5.txt && ok "unknown section: usage error, exit 2, the list of sections" || bad "unknown section"
+sed -i '/^S1 /s/votes=[0-9]*/votes=7/' diaries/sessions.txt; "$gb" --more 0 --debug > g6.txt 2>&1
+head -1 debug_digest.txt | grep -q '^DRIFT v' && sed -n 2p debug_digest.txt | grep -q '^error: sessions.txt S1' && "$gb" --debug-section drift 2> /dev/null | grep -q '^error: sessions.txt S1' && ok "DRIFT: line 1 DRIFT, the one thing wrong on line 2; section drift has it" || bad "drift digest"
+cp ss.bak diaries/sessions.txt; "$gb" --more 10 --crash-at 255 --debug > g7.txt 2>&1
+head -1 debug_digest.txt | grep -q '^CRASH v' && grep -q '^traceback' debug_digest.txt && "$gb" --debug-section trace | grep -q '^traceback (innermost first):' && ok "CRASH: line 1 CRASH, error and traceback head in the digest, whole trace in section trace" || bad "crash digest"
+unset DIARY_HOME
+make -n -C "$root" run DEBUG=1 2> /dev/null | grep -q -- '--debug' && make -n -C "$root" demo DEBUG=1 2> /dev/null | grep -q -- '--preview .*--debug' && make -n -C "$root" run SECTION=inbox 2> /dev/null | grep -q -- '--debug-section inbox' && ok "make run DEBUG=1 / make demo DEBUG=1 / SECTION=inbox pass --debug / --debug-section" || bad "make DEBUG"
 
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="

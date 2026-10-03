@@ -1,5 +1,6 @@
-# The main menu (Sim_Menu), shown when the program is started on a terminal without
-# --ticks / --more / --fresh / --yes / --preview (make run / make play).  Text only; edit freely.
+# The main menu (Sim_Menu), shown by make menu (--menu) and by the bare program on a terminal
+# (no arguments).  make run / make play never show it: they load the save and continue.
+# Text only; edit freely.
 # Robert: the tagline is literally "Stories of word and word" - if "world" was meant,
 # change the one line below to "tagline = Stories of word and world".
 title = DIARY
@@ -9,18 +10,24 @@ title.size = large
 # the life intro: at most intro.frames frames, intro.ms milliseconds each (0 = no pause)
 intro.frames = 90
 intro.ms = 70
+# pause on the resolved title (with the tagline) before the entries appear, milliseconds
+intro.hold = 600
+# the screen the menu is laid out for: it must fit, the title shrinks (large -> medium) if not
+screen.cols = 80
+screen.rows = 24
 entry.1 = New Game
 entry.2 = Load Game
 entry.3 = Inbox
 entry.4 = Settings
 entry.5 = Quit
 menu.prompt = >
+menu.hint = type a number or a letter; Enter = {1}
 menu.bad = Please type 1, 2, 3, 4 or 5 (or n, l, i, s, q).
-wesen.label = wesen: {1}
-game.none = no game in {1} yet
-game.line = game: session {1}, {2} ticks (save: {3})
-vote.none = no word vote yet (the wesen vote on a favourite word at the end of every session)
-vote.head = favourite words, session {1}, tick {2}:
+menu.save = save: {1}
+menu.nogame = no game yet - New Game creates it here
+menu.game.vote = game: sessions {1}, ticks {2} | words voted, session {3}, tick {4}:
+menu.game.novote = game: sessions {1}, ticks {2} | no word vote yet
+menu.last = last petition: {1} | inbox: {2} lines
 menu.cancelled = cancelled, nothing changed
 menu.confirm_move = A game exists in {1}. Move it aside to diaries_old_<time> and start a new one? [y/N]
 menu.moved = the old game stays in diaries_old_<time> (never deleted)
