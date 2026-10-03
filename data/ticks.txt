@@ -1,0 +1,70 @@
+# The advice for the next run (nextticks=1 sessions, see README "Next run").  At the end of a session every wesen PROPOSES a tick count from
+# its own state, every player decides (the mean of its wesen's proposals pulled toward its own preference, rounding that may lean its way),
+# the players' choices are combined by the median.  Numbers and wording here; nextticks.enabled / nextticks.use are in data/limits.txt.
+# Changing a number of this file changes the advice (the N records are replay-checked): for an old save use --fresh or keep the numbers.
+# The allowed set: ticks.min, ticks.min + ticks.step, ... up to ticks.max.
+ticks.min = 100
+ticks.max = 1000
+ticks.step = 100
+ticks.base = 300
+# a wesen: each petition that waits (open) asks for open_w more ticks, each one already put off (deferred) for defer_w more (both capped);
+# unrest above unrest_at asks for unrest_w per 10 points; energy below tired_at takes tired_w per 10 points away; the Rule 30 hash adds
+# 0 .. curious_n - 1 steps of curious_step ("would like to see what happens")
+ticks.open_w = 40
+ticks.defer_w = 60
+ticks.open_cap = 200
+ticks.unrest_at = 30
+ticks.unrest_w = 30
+ticks.unrest_cap = 200
+ticks.tired_at = 30
+ticks.tired_w = 40
+ticks.tired_cap = 200
+ticks.curious_n = 3
+ticks.curious_step = 50
+# a player: its preference is base + warmth * pref_warm / 100 - (brevity - 50) * pref_brev / 100 (generous players give more time, curt ones
+# less); the decision is mean * (100 - self_w) + preference * self_w (percent); an honesty trait (like the one of the reports) makes
+# the rounding to the allowed set lean toward the preference with a chance of (100 - honesty) * bias_scale percent (at most bias_cap)
+ticks.self_w = 30
+ticks.pref_warm = 200
+ticks.pref_brev = 100
+ticks.hon_base = 55
+ticks.hon_brev = 40
+ticks.hon_warm = 70
+ticks.bias_scale = 60
+ticks.bias_cap = 90
+# the reason names the strongest factor of the wesen proposals; below calm_below (per wesen, on average) it is "calm"
+ticks.calm_below = 20
+# ---- wording ({1} next run ticks, {2} wesen proposals a/b/c/d, {3} the players' choices w/x/y/z); keep it short, the box has one frame
+next.box.1 = Next run: {1} ticks (wesen asked {2}, players settled on {3}).
+next.box.2 = For next time we suggest {1} ticks. Wesen asked {2}; the players settled on {3}.
+next.box.3 = Next run: {1} ticks - wesen {2}, players {3}.
+# the reason in a player's voice ({1} the player, {2} the ticks)
+next.why.open.plain = {1}: petitions are waiting, so {2} ticks give them room.
+next.why.open.calm = {1}: there are open petitions; let us take {2} ticks and answer them properly.
+next.why.open.alarm = {1}: petitions pile up, Robert. We need the {2} ticks to deal with them.
+next.why.defer.plain = {1}: some petitions were put off already, so {2} ticks should settle them.
+next.why.defer.calm = {1}: we put some petitions off; {2} ticks give us time to come back to them.
+next.why.defer.alarm = {1}: deferred petitions are waiting, Robert. Do not cut this short: {2} ticks.
+next.why.unrest.plain = {1}: some wesen are restless, so {2} ticks to look after them.
+next.why.unrest.calm = {1}: there is unrest among them; a calm stretch of {2} ticks may help.
+next.why.unrest.alarm = {1}: the unrest is growing, Robert. {2} ticks, and watch closely.
+next.why.tired.plain = {1}: the wesen are tired, so a shorter run of {2} ticks is enough.
+next.why.tired.calm = {1}: they need rest more than time; {2} ticks, no more.
+next.why.tired.alarm = {1}: they are worn out, Robert. Keep it to {2} ticks.
+next.why.curious.plain = {1}: nothing pressing, but they would like to see what happens: {2} ticks.
+next.why.curious.calm = {1}: they are curious how things go on, so {2} ticks it is.
+next.why.curious.alarm = {1}: they want to see what happens next, Robert. {2} ticks.
+next.why.calm.plain = {1}: all quiet, so the usual {2} ticks.
+next.why.calm.calm = {1}: everything is in order; {2} ticks as always.
+next.why.calm.alarm = {1}: nothing is wrong, but stay alert: {2} ticks.
+# make next
+next.head = next run (advice made at tick {1}): {2} ticks, allowed {3} .. {4} in steps of {5}
+next.wesen = {1} asked {2} ticks (petitions open {3}, deferred {4}, unrest {5}, energy {6}; {7})
+next.player = {1} decided {4}{5}: mean of its wesen {2}, own preference {3}, honesty {6}
+next.biased = , rounded its way
+next.median = the players' choices {2}: the median is {1} ticks
+next.use.on = nextticks.use = 1: make run without TICKS runs {1} ticks (make run TICKS=n overrides it)
+next.use.off = nextticks.use = 0: advice only (make run without TICKS keeps the vote of the wesen); set nextticks.use = 1 in data/limits.txt to follow it
+next.none = no advice yet (it starts with a session marked nextticks=1: make run).
+next.digest = next {1} rounds, last {2} (wesen {3})
+err.nextticks = nextticks.txt {1} differs from the replay: {2}

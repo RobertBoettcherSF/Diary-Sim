@@ -264,7 +264,7 @@ needed: the next session (`make run` / `--more`) of an old save simply gets the 
 without it.
 
 **Markers of a session:** every session line in `diaries/sessions.txt` lists the features it STARTED with (`world`, `rest`, `grant`,
-`screen`, `chess`, `robot`, `govern`, `scoin`, `preport`, `players4`), taken from `data/limits.txt` (`*.enabled`) when the session begins. A running save can gain
+`screen`, `chess`, `robot`, `govern`, `scoin`, `preport`, `players4`, `nextticks`), taken from `data/limits.txt` (`*.enabled`) when the session begins. A running save can gain
 a feature mid-way without `--fresh`: the next NEW session carries the marker and the feature begins there (robot and governance start with
 their first marked session; earlier sessions replay as before). A session that is resumed (unfinished) keeps its old markers. The end
 report shows the blocks of the features the LAST session has; for the others it prints one line, `robot: off for this save (...),
@@ -371,7 +371,7 @@ the **true counts of the D records**, never omitted, never changed), the overall
 from -100 to +100"), and its top concern (the topic it was asked about most; refused / deferred ones count double). The wording varies:
 `data/preport.txt` has five templates per slot (`rbox.pet.1..5`, `rbox.mood.1..5`, `rbox.concern.1..5`, `rbox.head.1..5`); a hash of
 (seed, tick, slot) says where the rotation starts and the player number moves it on, so the four players use different templates in one box
-and the next run starts elsewhere. The box is display only (not part of the replay): changing the wording is always safe. The same box goes
+and the next run starts elsewhere. After the players come two lines about the next run (see "Next run"). The box is display only (not part of the replay): changing the wording is always safe. The same box goes
 to `player_reports.txt` in the save folder (latest run), followed by a hint line. If it ever grew beyond `preport.page_lines` lines (data), it
 would be split into frames, one write per frame (`-- more: press Enter --` on a terminal, `preport.pause = 0`: no waiting). Sample (seed 42,
 2100 ticks, four players):
@@ -391,6 +391,9 @@ would be split into frames, one write per frame (`-- more: press Enter --` on a 
 | Player 4 (Eve): I saw 11 petitions: granted 4, partly 3, deferred 5,         |
 |    refused 4. Mood of Eve: +78, I would say very good. Mostly it is about    |
 |    quicker recovery after hard work.                                         |
+| Next run: 400 ticks (wesen asked 400/500/600/300, players settled on         |
+| 400/500/300/400).                                                            |
+| Player 1: the unrest is growing, Robert. 400 ticks, and watch closely.       |
 +------------------------------------------------------------------------------+
 ```
 
@@ -436,6 +439,57 @@ P records of the report boxes) and a report box of its own.
 * **Box:** the one box lists all four players (`player_reports.txt`); `make audit` and `make govern` list all four players.
 * **Addressing:** `make say PLAYER="Player 4" TEXT="..."` (also `player4`, `4`, `vega`; `make challenge PLAYER=4`). On a save whose latest
   session has no `players4=1` an address to Player 4 is recorded but nobody passes it on (no effect).
+
+## Next run: the wesen ask, the players decide (`nextticks=1` sessions, `make next`)
+
+At the end of every session the simulation also says how long the NEXT run should be, in the same box (the two lines after the players, see
+the sample above):
+
+* **Wesen propose.** Each wesen asks for a tick count from its own state: `ticks.base` (300), plus `ticks.open_w` per petition that waits for
+  a decision, plus `ticks.defer_w` per petition already put off (both capped), plus `ticks.unrest_w` per 10 points of unrest above
+  `ticks.unrest_at` (unrest wants attention), minus `ticks.tired_w` per 10 points of energy below `ticks.tired_at` (tired wesen want a shorter
+  run), plus 0 .. `ticks.curious_n` - 1 steps of `ticks.curious_step` from a Rule 30 hash ("would like to see what happens"). The result
+  is rounded to the allowed set: `ticks.min` .. `ticks.max` in steps of `ticks.step` (100 .. 1000 by 100).
+* **Players decide.** Each player takes the mean of the proposals of the wesen it watches and pulls it toward its own preference (generous
+  players give more time, curt ones less: `ticks.pref_warm`, `ticks.pref_brev`) by `ticks.self_w` percent. The rounding to the allowed set
+  normally goes to the nearest step; a player with a low honesty trait (the Rule 30 personality, as in the reports) rounds toward what suits
+  it with a chance of (100 - honesty) * `ticks.bias_scale` percent (at most `ticks.bias_cap`). The players' choices are combined by their
+  **median** (an even number: the middle of the two, rounded up to the allowed set).
+* **The box** shows `Next run: 400 ticks (wesen asked 400/500/600/300, players settled on 400/500/300/400).` (the wesen in the order Adam,
+  Eve, Abel, Ruth; the players in order) and one line of reason in the voice of a player whose choice is closest to the result (plain / calm /
+  alarm by its personality): the strongest factor was open petitions, deferred ones, unrest, tiredness, curiosity or nothing (calm). The same
+  lines are in `player_reports.txt`. Wording and templates: `data/ticks.txt` (`next.box.1..3`, `next.why.<factor>.<voice>`).
+* **Record-first.** A new session carries the marker `nextticks=1` (needs `govern=1`; `nextticks.enabled = 0` in `data/limits.txt` turns it
+  off: byte-identical to before). At its last tick the advice is recorded as one line in **`diaries/nextticks.txt`**:
+  `N7 t=2100 wesen=400/500/600/300 players=400/500/300/400 next=400 why=unrest voice=iris`. Every replay recomputes the line (own hash
+  salts 9820 .. 9824, nothing else reads the dice) and compares it: a changed, removed or invented line, or a removed marker, is DRIFT. The advice
+  is only advice: it changes nothing in the simulation (diaries and D records are identical with and without it). An existing save gets it
+  from its next new session, no `--fresh`. Changing `data/ticks.txt` numbers of a save that already has N lines needs `--fresh`
+  (the wording keys are safe).
+* **`make next`** (`--next`) replays and verifies the save and prints the advice with its reasons: for each wesen what it asked and why
+  (open / deferred petitions, unrest, energy, the parts of the sum), for each player what it decided (mean, preference, honesty, "rounded
+  its way"), the median and whether the advice is followed. Writes nothing. Sample (seed 42, 2100 ticks):
+
+```
+next run (advice made at tick 2100): 400 ticks, allowed 100 .. 1000 in steps of 100
+Adam asked 400 ticks (petitions open 0, deferred 0, unrest 33, energy 58; open 0 deferred 0 unrest +9 tired 0 curious +100)
+Eve asked 500 ticks (petitions open 0, deferred 0, unrest 87, energy 73; open 0 deferred 0 unrest +171 tired 0 curious 0)
+Abel asked 600 ticks (petitions open 0, deferred 0, unrest 100, energy 87; open 0 deferred 0 unrest +200 tired 0 curious +50)
+Ruth asked 300 ticks (petitions open 0, deferred 0, unrest 41, energy 23; open 0 deferred 0 unrest +33 tired -28 curious 0)
+Player 1 decided 400: mean of its wesen 400, own preference 330, honesty 45
+Player 2 decided 500: mean of its wesen 600, own preference 260, honesty 70
+Player 3 decided 300: mean of its wesen 300, own preference 290, honesty 58
+Player 4 decided 400, rounded its way: mean of its wesen 500, own preference 340, honesty 42
+the players' choices 400/500/300/400: the median is 400 ticks
+Player 1: the unrest is growing, Robert. 400 ticks, and watch closely.
+nextticks.use = 0: advice only (make run without TICKS keeps the vote of the wesen); set nextticks.use = 1 in data/limits.txt to follow it
+```
+
+* **`make run` and the advice.** By default (`nextticks.use = 0`) nothing changes: `make run` without `TICKS` lets the four wesen VOTE on the
+  session length (`data/kalpas.txt`, the median, see "Kalpa sessions"), `make run TICKS=n` runs n ticks. With **`nextticks.use = 1`** in
+  `data/limits.txt` a `make run` WITHOUT `TICKS` runs the advised number of ticks of the latest session (the Makefile asks
+  `bin/diary_sim --next-ticks`, which prints the number of the last N line and nothing else; no N line yet: the vote as before).
+  `TICKS=n` always wins. The bare program and the menu are not changed (they keep the vote).
 
 ## The debug digest (`DEBUG=1`, `--debug`)
 
@@ -581,6 +635,7 @@ make run                     # = make play: AUTO-LOAD the save and continue (no 
 make menu                    # the main menu: intro, DIARY title, New Game / Load Game / Inbox / Settings / Quit (terminal only)
 make demo                    # PREVIEW: 200 ticks in memory, a screen of excerpts, nothing written to disk
 make run DEBUG=1             # also write debug_digest.txt (+ debug_full.txt) to attach; make demo DEBUG=1: only the digest
+make next                     # the advice for the next run (nextticks=1 sessions): wesen proposals, player decisions, the median
 make run SECTION=drift       # print one block of debug_full.txt (drift trace players inbox run ledger preport status)
 make check                   # version headers + scripts/checks.sh (the scenarios: run, resume, behind, half line, drift, crash, fresh, data limits)
 bin/diary_sim --help
@@ -832,6 +887,6 @@ paste it` and `back up diaries/ before the next run`.
 vocabulary, Rule 30 personality, bench kernels, votes and summary text), `sim_util.ads/.adb` (hash rolls,
 line parsing, data-file helpers), `data/words.txt`, `data/topics.txt` (petition topics), `data/limits.txt`,
 `data/messages.txt` (all console wording), `data/kalpas.txt` (session length votes), `data/menu.txt` (menu text, title, tagline), `data/fonts.txt` (title letters), `data/vocab.txt`, `data/help.txt`, `sim_dharma.ads/.adb` (karma, rebirth, unrest, ladder, awareness, players, inbox), `sim_things.ads/.adb` (the treadmill world), `data/things.txt` (its lists), `docs/WORLD.md`, `data/karma.txt` (numbers), `data/dharma.txt` (wording, flavour labels), `data/players.txt` (the three players),
-`scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
+`sim_next.ads/.adb` + `data/ticks.txt` (the advice for the next run), `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
 `Version:` header (`make version-check`); a touched file goes up by 0.001. V&V is
 suspended: no new test suites, `scripts/checks.sh` must keep passing.

@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 --  See sim_preport.ads.
 pragma Ada_2022;
 
@@ -289,7 +289,7 @@ package body Sim_Preport is
    end Say_Of;
 
    --  ONE framed box for all players: a header line, then each player in one hanging paragraph.
-   function One_Box (Tick : Int; Made : Entry_Vectors.Vector) return String is
+   function One_Box (Tick : Int; Made : Entry_Vectors.Vector; Extra : Str_Vectors.Vector) return String is
       Out_T : Unbounded_String;
       Title : constant String := Shown (Msg ("preport.title", Img (Tick)));
       Inner : constant Positive := Width - 4;
@@ -312,15 +312,23 @@ package body Sim_Preport is
             end loop;
          end;
       end loop;
+      for X of Extra loop
+         declare
+            Lines : Str_Vectors.Vector;
+         begin
+            Wrap (Lines, Shown (X), Inner);
+            for Ln of Lines loop Line (Ln); end loop;
+         end;
+      end loop;
       Append (Out_T, "+" & Fill (Width - 2, '-') & "+" & ASCII.LF);
       return To_String (Out_T);
    end One_Box;
 
-   function Boxes (Tick : Int; Mood, Pets : Ints) return String is
+   function Boxes (Tick : Int; Mood, Pets : Ints; Extra : Str_Vectors.Vector := Str_Vectors.Empty_Vector) return String is
       Made : constant Entry_Vectors.Vector :=
         (if Last_T = Tick and then not Latest.Is_Empty then Latest else Make_Entries (Tick, Mood, Pets, 0));
    begin
-      return One_Box (Tick, Made) & ASCII.LF & Shown (Msg ("preport.hint")) & ASCII.LF;
+      return One_Box (Tick, Made, Extra) & ASCII.LF & Shown (Msg ("preport.hint")) & ASCII.LF;
    end Boxes;
 
    --  ---- the audit -------------------------------------------------------------------------------------------------------

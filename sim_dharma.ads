@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 --  The Buddhism layer of diary_sim, RECORD-FIRST: karma, reincarnation values, attachment
 --  (unrest), the commitment ladder with an anchor, awareness ("feels watched"), and the three
 --  in-sim PLAYERS that sit between the wesen and Robert (the real player) and write him summary
@@ -75,6 +75,7 @@ package Sim_Dharma is
    function Brev_Of (P : Player_Id) return Integer;    --  0 .. 100: how curt (strict) the player is
    function Attn_Of (P : Player_Id) return Integer;    --  0 .. 100: workload / awareness of its wesen
    function Variant_Of (P : Player_Id) return String;  --  "calm" | "plain" | "alarm": the wording of its reports
+   function Unrest_Of (E : Entity_Id) return Integer;  --  0 .. 100: the unrest of E (the attachment layer; the next-run advice reads it)
    --  The governance lines a player must put into its report at the next End_Life (never omitted, wording may differ):
    --  the first line of a player is its counter line (shown in the end report), all lines go to the inbox.
    procedure Set_Govern_Report (P : Player_Id; Lines : Str_Vectors.Vector);

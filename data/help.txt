@@ -17,6 +17,8 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
   --govern       the players' decisions, trust, standing (make govern)
   --veto=D<n>    revert a decision (make veto DECISION=D12); --approve=D<n>
   --audit        players' claims vs the truth, misreports (make audit)
+  --next         the advice for the next run: wesen, players (make next)
+  --next-ticks   the advised ticks, a bare number (nextticks.use=1; make run)
   --challenge=P  a caught lie lowers a player's standing (make challenge)
   --robot        the robot: place, battery, camera, who steers it (make robot)
   --screens      the wesen's text screens after the replay (make screens)
@@ -104,6 +106,15 @@ changed or removed). make audit: claimed vs true, misreports, the biggest.
 make challenge PLAYER=<name>: a caught liar loses a little standing (Q line in
 diaries/challenges.txt, applied from the next tick). preport.enabled = 0 in
 limits.txt: nothing changes. See README.
+Next run (nextticks=1, new sessions get the marker): at the end of a session
+each wesen proposes a tick count from its state (data/ticks.txt: open and
+deferred petitions, unrest, tiredness, Rule 30 curiosity; 100..1000 by 100),
+each player decides (mean of its wesen, own preference, honesty), the median
+is shown in the box ("Next run: 400 ticks (wesen asked a/b/c/d, players
+settled on w/x/y/z)") and recorded in diaries/nextticks.txt (replay-checked).
+make next shows how. Advice only; with nextticks.use = 1 in limits.txt a
+make run without TICKS runs it; TICKS=n always wins. nextticks.enabled = 0:
+nothing changes.
 Player 4 (players4=1: new sessions get the marker; an old save gets it from
 its next new session, no --fresh): a 4th player with its own personality,
 trust, watcher, decisions, honesty and box; players4.enabled = 0 in

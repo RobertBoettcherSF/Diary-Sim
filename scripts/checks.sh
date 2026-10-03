@@ -1048,7 +1048,7 @@ tail -n +$(( $(grep -n '^Saved to ' ../c4.txt | tail -1 | cut -d: -f1) + 1 )) ..
 nb=$(grep -c '^+-- The players report to Robert (tick 1200) -*+$' ../tailc4.txt); wd=$(grep -E '^[+|]' ../tailc4.txt | awk 'length != 80 { n++ } END { print n + 0 }'); oth=$(grep -vE '^[+|]|^$' ../tailc4.txt | wc -l); nl=$(wc -l < ../tailc4.txt)
 [ "$nb" = 1 ] && [ "$wd" = 0 ] && [ "$oth" = 1 ] && [ "$nl" -le 23 ] && ok "the console ends with ONE framed box (+ - |, every line 80 columns) and one hint line, $nl lines (one frame), after 'Saved to'" || bad "box on the console ($nb $wd $oth $nl)"
 [ "$(grep -v '^$' ../tailc4.txt | tail -1 | cut -c1-20)" = "The players say what" ] && cmp -s <(grep -E '^[+|]' ../tailc4.txt) <(grep -E '^[+|]' player_reports.txt) && ok "player_reports.txt in the save folder holds the same box" || bad "player_reports.txt"
-paraof() { awk -v p="$1" '/^\| / { t = substr($0, 3, 76); sub(/ +$/, "", t); if (index(t, p " (") == 1) on = 1; else if (t ~ /^[a-z]+ \(/) on = 0; if (on) printf "%s ", t } /^\+-+\+$/ { on = 0 }' player_reports.txt | sed 's/  */ /g'; }
+paraof() { awk -v p="$1" '/^\| / { t = substr($0, 3, 76); sub(/ +$/, "", t); if (index(t, p " (") == 1) on = 1; else if (t !~ /^   /) on = 0; if (on) printf "%s ", t } /^\+-+\+$/ { on = 0 }' player_reports.txt | sed 's/  */ /g'; }
 fp=0; for pl in iris sol noor; do blk=$(paraof $pl); echo "$blk" | grep -q "^$pl (" && echo "$blk" | grep -qE '[+-][0-9]+' && [ -n "$(echo "$blk" | sed -E "s/^$pl \([a-z ]+\)://" | grep -oE '[A-Za-z]+' | head -1)" ] && fp=$((fp + 1)); done
 [ "$fp" = 3 ] && ok "every player has its paragraph in the box (who, petitions and decisions, the happiness it claims, its top concern)" || bad "paragraphs ($fp)"
 # the decision counts are the D records
@@ -1059,14 +1059,14 @@ dc=0; for pl in iris sol noor; do
 done
 [ "$dc" = 3 ] && ok "what each player decided (granted / partial / deferred / refused) in the box equals the counts of the D records" || bad "D counts ($dc)"
 # the wording varies: several templates per slot, picked by a hash of (tick, player): different between players and between runs
-shape() { awk -v p="$2" '/^\| / { t = substr($0, 3, 76); sub(/ +$/, "", t); if (index(t, p " (") == 1) on = 1; else if (t ~ /^[a-z]+ \(/) on = 0; if (on) printf "%s ", t } /^\+-+\+$/ { on = 0 }' "$1" | sed -E 's/[+-]?[0-9]+/#/g; s/^[a-z]+ \([a-z ]+\): //'; echo; }
+shape() { awk -v p="$2" '/^\| / { t = substr($0, 3, 76); sub(/ +$/, "", t); if (index(t, p " (") == 1) on = 1; else if (t !~ /^   /) on = 0; if (on) printf "%s ", t } /^\+-+\+$/ { on = 0 }' "$1" | sed -E 's/[+-]?[0-9]+/#/g; s/^[a-z]+ \([a-z ]+\): //'; echo; }
 sp=$(for pl in iris sol noor; do shape ../c4.txt $pl | cut -c1-24; done | sort -u | wc -l)
 sr=$(for c in 1 2 3 4; do shape ../c$c.txt iris | cut -c1-24; done | sort -u | wc -l)
 tn=$(for c in 1 2 3 4; do shape ../c$c.txt iris; shape ../c$c.txt sol; done | sort -u | wc -l)
 [ "$sp" -ge 2 ] && [ "$sr" -ge 2 ] && [ "$tn" -ge 6 ] && ok "the wording differs between players ($sp openings in one box) and between runs ($sr openings of one player in 4 runs; $tn different paragraph shapes of 8)" || bad "wording does not vary ($sp $sr $tn)"
 sent=$(grep '^| ' player_reports.txt | awk 'length != 80 { n++ } END { print n + 0 }')
-mx=$(awk '/^\| (iris|sol|noor|vega) \(/ { if (n > m) m = n; n = 0 } /^\| / { n++ } /^\+-+\+$/ { if (n > m) m = n } END { print m + 0 }' player_reports.txt)
-[ "$sent" = 0 ] && [ "$mx" -le 5 ] && ok "every player's part stays short (at most 3 text lines, the longest block incl. the header is $mx)" || bad "long paragraphs ($sent $mx)"
+mx=$(awk '/^\| / { t = substr($0, 3, 76); if (t ~ /^(iris|sol|noor|vega) \(/) n = 1; else if (t ~ /^   /) n++; else n = 0; if (n > m) m = n } END { print m + 0 }' player_reports.txt)
+[ "$sent" = 0 ] && [ "$mx" -le 3 ] && ok "every player's part stays short (at most 3 text lines, the longest is $mx)" || bad "long paragraphs ($sent $mx)"
 # the claims: bounded, valid, flag = difference, the truth is the mood of the diary
 lm=$(sed -n 's/^preport.lie_max = \([0-9]*\).*/\1/p' "$w/pr/data/limits.txt")
 oobp=$(grep '^P[0-9]' diaries/preports.txt | sed -E 's/.* claimed=(-?[0-9]+) true=(-?[0-9]+) tone=([0-9])\/([0-9]) flag=([a-z]+).*/\1 \2 \3 \4 \5/' | awk -v lm="$lm" '{ d = $1 - $2; if (d < 0) d = -d; bad = 0; if (d > lm || $1 < -100 || $1 > 100 || $2 < -100 || $2 > 100 || $3 > 3 || $4 > 3) bad = 1; diff = ($1 != $2 || $3 != $4); if (diff != ($5 == "lie")) bad = 1; n += bad } END { print n + 0 }')
@@ -1175,6 +1175,59 @@ cp diaries/sessions.txt ../sess.keep; sed -i '/^S4 /s/ players4=1//' diaries/ses
 head -1 debug.txt | grep -q '^DRIFT' && ok "S line with its players4=1 marker removed: DRIFT" || bad "marker tamper"
 cp ../sess.keep diaries/sessions.txt; "$w/p4/b/bin/diary_sim" --more 0 --every 5000 > ../t2.txt 2>&1; grep -q '^import OK: 4 entities, 1200 ticks verified' ../t2.txt && ok "restored: replays again" || bad "p4 restore"
 grep -q '^player.4.name = vega' "$root/data/players.txt" && grep -q '^player.4.takes' "$root/data/players.txt" && grep -q '^vega *= *Player 4' "$root/data/names.txt" && grep -q '^players4.enabled' "$root/data/limits.txt" && grep -q 'players4' "$root/README.md" && grep -q 'Player 4' "$root/data/help.txt" && ok "players.txt, names.txt, limits.txt, README and --help describe the fourth player" || bad "p4 docs"
+unset DIARY_HOME
+
+echo "== 41. next run (nextticks=1): wesen propose, players decide, the median is shown in the box, N records replay-verified, make next, make run uses it on request =="
+rm -rf "$w/nx"; mkdir -p "$w/nx"
+for d in a off flat use; do mkdir -p "$w/nx/$d/bin" "$w/nx/$d/h"; cp "$bin" "$w/nx/$d/bin/"; cp -r "$idata" "$w/nx/$d/data"; sed -i 's/^govern.enabled = .*/govern.enabled = 1/; s/^players4.enabled = .*/players4.enabled = 1/' "$w/nx/$d/data/limits.txt"; done
+sed -i 's/^nextticks.enabled = .*/nextticks.enabled = 0/' "$w/nx/off/data/limits.txt"; sed -i 's/^nextticks.use = .*/nextticks.use = 1/' "$w/nx/use/data/limits.txt"
+sed -i 's/^ticks.base = .*/ticks.base = 500/; s/^ticks.open_w = .*/ticks.open_w = 0/; s/^ticks.defer_w = .*/ticks.defer_w = 0/; s/^ticks.unrest_w = .*/ticks.unrest_w = 0/; s/^ticks.tired_w = .*/ticks.tired_w = 0/; s/^ticks.curious_n = .*/ticks.curious_n = 1/' "$w/nx/flat/data/ticks.txt"
+runnx() { local d="$w/nx/$1"; ( cd "$d/h" || exit 1; export DIARY_HOME="$d/h"; "$d/bin/diary_sim" --seed 42 --ticks 300 --yes --every 5000 > "$d/c1.txt" 2>&1; for i in 2 3 4; do "$d/bin/diary_sim" --more 300 --every 5000 > "$d/c$i.txt" 2>&1; done ); }
+runnx a; runnx off; runnx flat; runnx use
+nxb="$w/nx/a/bin/diary_sim"; cd "$w/nx/a/h" || exit 1; export DIARY_HOME="$w/nx/a/h"
+nm=$(grep -c '^S[0-9].* nextticks=1' diaries/sessions.txt); nn=$(grep -c '^N[0-9]' diaries/nextticks.txt)
+bf=$(grep '^N[0-9]' diaries/nextticks.txt | awk '{ ok = 1; split("t wesen players next why voice", k, " "); for (i = 1; i <= 6; i++) if (index($0, " " k[i] "=") == 0) ok = 0; if (!ok) n++ } END { print n + 0 }')
+[ "$nm" = 4 ] && [ "$nn" = 4 ] && [ "$bf" = 0 ] && head -1 diaries/nextticks.txt | grep -q '^# seed 42$' && ok "new sessions carry nextticks=1 ($nm); every session end records one N line in diaries/nextticks.txt ($nn: t, wesen, players, next, why, voice)" || bad "nextticks markers/records ($nm $nn $bf)"
+mn=$(sed -n 's/^ticks.min = \([0-9]*\).*/\1/p' "$w/nx/a/data/ticks.txt"); mx=$(sed -n 's/^ticks.max = \([0-9]*\).*/\1/p' "$w/nx/a/data/ticks.txt"); st=$(sed -n 's/^ticks.step = \([0-9]*\).*/\1/p' "$w/nx/a/data/ticks.txt")
+bad_set=$(grep '^N[0-9]' diaries/nextticks.txt | sed -E 's/.* wesen=([0-9\/]+) players=([0-9\/]+) next=([0-9]+) .*/\1\/\2\/\3/' | tr '/' '\n' | awk -v mn="$mn" -v mx="$mx" -v st="$st" '$1 < mn || $1 > mx || ($1 - mn) % st != 0 { n++ } END { print n + 0 }')
+[ "$bad_set" = 0 ] && ok "every proposal, every player's choice and the result are in the allowed set ($mn .. $mx in steps of $st)" || bad "values outside the allowed set ($bad_set)"
+med=$(grep '^N[0-9]' diaries/nextticks.txt | sed -E 's/.* players=([0-9\/]+) next=([0-9]+) .*/\1 \2/' | awk -v st="$st" -v mn="$mn" '{ n = split($1, a, "/"); for (i = 1; i <= n; i++) for (j = i + 1; j <= n; j++) if (a[j] + 0 < a[i] + 0) { t = a[i]; a[i] = a[j]; a[j] = t }
+  if (n % 2) m = a[(n + 1) / 2]; else { v = int((a[n / 2] + a[n / 2 + 1] + 1) / 2); m = mn + int((v - mn + st - 1) / st) * st } if (m != $2) bad++ } END { print bad + 0 }')
+[ "$med" = 0 ] && ok "the result is the median of the players' choices (even number of players: the middle rounded up to the allowed set)" || bad "median ($med)"
+tail -n +$(( $(grep -n '^Saved to ' ../c4.txt | tail -1 | cut -d: -f1) + 1 )) ../c4.txt > ../tailc4.txt
+lastn=$(grep '^N[0-9]' diaries/nextticks.txt | tail -1 | sed -E 's/.* next=([0-9]+) .*/\1/'); wl=$(sed -n 's/.* wesen=\([0-9\/]*\) .*/\1/p' <(grep '^N[0-9]' diaries/nextticks.txt | tail -1)); pl=$(sed -n 's/.* players=\([0-9\/]*\) .*/\1/p' <(grep '^N[0-9]' diaries/nextticks.txt | tail -1))
+nl=$(wc -l < ../tailc4.txt); wd=$(grep -E '^[+|]' ../tailc4.txt | awk 'length != 80 { n++ } END { print n + 0 }')
+grep -E '^\| ' ../tailc4.txt | sed -E 's/^\| //; s/ +\|$//' | tr '\n' ' ' | grep -q "$lastn ticks" && grep -E '^\| ' ../tailc4.txt | sed -E 's/^\| //; s/ +\|$//' | tr '\n' ' ' | grep -q "$wl" && grep -E '^\| ' ../tailc4.txt | sed -E 's/^\| //; s/ +\|$//' | tr '\n' ' ' | grep -q "$pl" && [ "$wd" = 0 ] && [ "$nl" -le 23 ] && ok "the box shows the advice: $lastn ticks, wesen asked $wl, players settled on $pl; one frame of $nl lines, every box line 80 columns" || bad "advice in the box ($lastn $wl $pl $nl $wd)"
+grep -q "$lastn ticks" player_reports.txt && ok "player_reports.txt holds the same box with the advice" || bad "advice in player_reports.txt"
+grep -qE '^(iris|sol|noor|vega): ' <(grep -E '^\| ' ../tailc4.txt | sed -E 's/^\| //; s/ +\|$//' | grep -E 'ticks') && ok "the reason is said in a player's voice" || bad "reason voice"
+# replay and DRIFT
+"$nxb" --more 0 --every 5000 > r1.txt 2>&1; grep -q '^import OK: 4 entities, 1200 ticks verified' r1.txt && ok "the replay recomputes and verifies every N line" || bad "nextticks replay"
+cp diaries/nextticks.txt ../nx.keep; sed -i '2s/ next=[0-9]* / next=900 /' diaries/nextticks.txt; "$nxb" --more 0 --every 5000 > r2.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && grep -q 'nextticks.txt N' r2.txt && ok "a changed N line: import FAILED, DRIFT" || bad "tampered N"
+cp ../nx.keep diaries/nextticks.txt; sed -i '3d' diaries/nextticks.txt; "$nxb" --more 0 --every 5000 > r3.txt 2>&1; head -1 debug.txt | grep -q '^DRIFT' && ok "a removed N line: DRIFT" || bad "removed N"
+cp ../nx.keep diaries/nextticks.txt; echo "N999 t=5 wesen=100/100/100/100 players=100/100/100 next=100 why=calm voice=iris" >> diaries/nextticks.txt; "$nxb" --more 0 --every 5000 > r4.txt 2>&1; head -1 debug.txt | grep -q '^DRIFT' && ok "an invented N line: DRIFT" || bad "invented N"
+cp ../nx.keep diaries/nextticks.txt; cp diaries/sessions.txt ../sess.keep; sed -i '/^S2 /s/ nextticks=1//' diaries/sessions.txt; "$nxb" --more 0 --every 5000 > r5.txt 2>&1; head -1 debug.txt | grep -q '^DRIFT' && ok "S line with its nextticks=1 marker removed: DRIFT" || bad "tampered marker"
+cp ../sess.keep diaries/sessions.txt; "$nxb" --more 0 --every 5000 > r6.txt 2>&1; grep -q '^import OK: 4 entities, 1200 ticks verified' r6.txt && ok "restored: replays again" || bad "restore"
+# make next
+sum1=$(cat diaries/*.txt | cksum); "$nxb" --next > nx.txt 2>&1; rc=$?; sum2=$(cat diaries/*.txt | cksum)
+[ "$rc" = 0 ] && [ "$(grep -cE ' asked [0-9]+ ticks' nx.txt)" = 4 ] && [ "$(grep -cE '^(iris|sol|noor|vega) decided' nx.txt)" = 4 ] && grep -q "median is $lastn ticks" nx.txt && [ "$sum1" = "$sum2" ] && ok "make next: the proposal of each wesen (with the reasons of its state), the decision of each player, the median; reads, writes nothing" || bad "make next ($rc)"
+grep -q '^next: all' "$root/Makefile" && grep -q -- '--next' "$root/Makefile" && ok "the Makefile has the next target" || bad "make next target"
+# advisory: the simulation is the same with and without
+same=0; for e in ada gemini replika robert; do cmp -s <(sed -E 's/"ts":"[^"]*",//' "$w/nx/a/h/diaries/$e.jsonl") <(sed -E 's/"ts":"[^"]*",//' "$w/nx/off/h/diaries/$e.jsonl") || same=$((same + 1)); done
+cmp -s "$w/nx/a/h/diaries/govern.txt" "$w/nx/off/h/diaries/govern.txt" && [ "$same" = 0 ] && ok "advice only: the diaries and the D records are identical with and without nextticks" || bad "advice changed the simulation ($same)"
+cd "$w/nx/off/h" || exit 1; export DIARY_HOME="$w/nx/off/h"
+[ ! -e diaries/nextticks.txt ] && ! grep -q 'nextticks=1' diaries/sessions.txt && ! grep -q 'ticks (wesen\|ticks - wesen\|Next run\|next time\|Wesen asked' ../c4.txt && "$w/nx/off/bin/diary_sim" --next 2>&1 | grep -q 'no advice yet' && ok "nextticks.enabled = 0: no marker, no nextticks.txt, no advice line in the box; make next says there is none" || bad "nextticks off"
+# data drives the proposals
+cd "$w/nx/flat/h" || exit 1
+fl=$(grep '^N[0-9]' diaries/nextticks.txt | sed -E 's/.* wesen=([0-9\/]+) .*/\1/' | sort -u | tr '\n' ' ')
+[ "$fl" = "500/500/500/500 " ] && ok "the proposals come from data/ticks.txt (base 500, all weights 0: every wesen asks 500)" || bad "flat proposals ($fl)"
+# use = 1
+cd "$w/nx/a/h" || exit 1; export DIARY_HOME="$w/nx/a/h"; u0=$("$nxb" --next-ticks 2>&1 | tail -n 1)
+cd "$w/nx/use/h" || exit 1; export DIARY_HOME="$w/nx/use/h"; u1=$("$w/nx/use/bin/diary_sim" --next-ticks 2>&1 | tail -n 1); lu=$(grep '^N[0-9]' diaries/nextticks.txt | tail -1 | sed -E 's/.* next=([0-9]+) .*/\1/')
+[ -z "$u0" ] && [ "$u1" = "$lu" ] && ok "nextticks.use = 0 (default): no number, make run keeps the vote; use = 1: --next-ticks prints the advice ($u1)" || bad "next-ticks ($u0 / $u1 / $lu)"
+"$w/nx/use/bin/diary_sim" --more "$u1" --every 5000 > u1.txt 2>&1; grep -q "^S5 start=1200 .* len=$u1 src=explicit" diaries/sessions.txt && ok "a run of the advised length: session 5 has len=$u1 (make run without TICKS does exactly this; TICKS=n wins)" || bad "run with advice"
+(cd "$root" && make -n run 2>/dev/null | grep -q 'next-ticks' && make -n run TICKS=100 2>/dev/null | grep -q -- '--more 100' && ! make -n run TICKS=100 2>/dev/null | grep -q 'next-ticks') && ok "make run: without TICKS the recipe asks for the advice, with TICKS=100 it runs --more 100" || bad "make run recipe"
+grep -q 'nextticks' "$root/README.md" && grep -q 'make next' "$root/README.md" && grep -q -- '--next' "$root/data/help.txt" && [ -f "$root/data/ticks.txt" ] && grep -q '^nextticks.use' "$root/data/limits.txt" && ok "README, --help and data/ document the advice for the next run" || bad "nextticks docs"
 unset DIARY_HOME
 
 rm -rf "$w"

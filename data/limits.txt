@@ -301,3 +301,6 @@ players4.enabled = 1
 preport.page_lines = 23
 # 1: on a terminal the next frame waits for Enter (-- more --); 0: the frames follow each other
 preport.pause = 1
+# The advice for the next run (data/ticks.txt): new sessions carry nextticks=1 unless 0; 1: make run without TICKS runs the advised number of ticks
+nextticks.enabled = 1
+nextticks.use = 0

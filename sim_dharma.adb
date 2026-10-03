@@ -1,4 +1,4 @@
---  Version: 0.005
+--  Version: 0.006
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Containers.Vectors, Ada.Strings.Fixed, Ada.Strings.Unbounded, Interfaces;
@@ -768,6 +768,7 @@ package body Sim_Dharma is
    function Latest_Report return Str_Vectors.Vector is (Last_Report);
    function Warm_Of (P : Player_Id) return Integer is (Warm (P));
    function Brev_Of (P : Player_Id) return Integer is (Brev (P));
+   function Unrest_Of (E : Entity_Id) return Integer is (Unrest_V (E));
    function Attn_Of (P : Player_Id) return Integer is (Attn (P));
    function Variant_Of (P : Player_Id) return String is (if Tone (P) <= -34 then "calm" elsif Tone (P) >= 34 then "alarm" else "plain");
    procedure Set_Govern_Report (P : Player_Id; Lines : Str_Vectors.Vector) is

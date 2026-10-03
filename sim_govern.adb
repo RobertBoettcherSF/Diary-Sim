@@ -1,4 +1,4 @@
---  Version: 0.004
+--  Version: 0.005
 --  See sim_govern.ads.
 pragma Ada_2022;
 
@@ -415,6 +415,20 @@ package body Sim_Govern is
       & (if C (6) > 0 then Msg ("govern.counter.veto", Img (C (6))) else ""));
 
    function Counts_Of (P : Player_Id) return Counts_T is (Count_For (Player_Name (P)));
+
+   function Open_Of (E : Entity_Id) return Natural is
+      N : Natural := 0;
+   begin
+      for P of Pend loop if P.E = E then N := N + 1; end if; end loop;
+      return N;
+   end Open_Of;
+
+   function Deferred_Of (E : Entity_Id) return Natural is
+      N : Natural := 0;
+   begin
+      for P of Pend loop if P.E = E and then P.Defers > 0 then N := N + 1; end if; end loop;
+      return N;
+   end Deferred_Of;
 
    function Top_Concern (P : Player_Id) return String is
       Score : array (1 .. 40) of Natural := [others => 0];
