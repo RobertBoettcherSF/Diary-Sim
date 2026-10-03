@@ -638,15 +638,15 @@ snap() { ( cd "$1" && { for e in ada gemini replika robert; do sed 's/"ts":"[^"]
 rm -rf "$w/nm"; mkdir -p "$w/nm/a/bin" "$w/nm/b/bin" "$w/nm/h"; cp "$bin" "$w/nm/a/bin/"; cp -r "$root/data" "$w/nm/a/data"; cp "$bin" "$w/nm/b/bin/"; cp -r "$root/data" "$w/nm/b/data"
 printf '# test names\nada = Aleph\ngemini = Bet\nreplika = Gimel\nrobert = Dalet\niris = He\nsol = Vav\nnoor = Zayin\n' > "$w/nm/b/data/names.txt"
 na="$w/nm/a/bin/diary_sim"; nb="$w/nm/b/bin/diary_sim"; cd "$w/nm/h" || exit 1; export DIARY_HOME="$w/nm/h"
-"$na" --ticks 300 --yes --every 5000 > n1.txt 2>&1; "$na" --say Jack --text "hello there" > n1s.txt 2>&1; "$na" --more 200 --every 5000 > n2.txt 2>&1
+"$na" --ticks 300 --yes --every 5000 > n1.txt 2>&1; "$na" --say Adam --text "hello there" > n1s.txt 2>&1; "$na" --more 200 --every 5000 > n2.txt 2>&1
 before=$(snap .); cp diaries/sessions.txt s0.txt; cp diaries/inbox.txt i0.txt
-grep -q '^entities: Jack(engineer) John(reviewer) Jill(vice_president) Jane(human)' n1.txt && grep -q 'Jack' run_report.txt && grep -q 'Jack' summary.txt && grep -q '^Jack ' debug.txt \
+grep -q '^entities: Adam(engineer) Eve(reviewer) Abel(vice_president) Ruth(human)' n1.txt && grep -q 'Adam' run_report.txt && grep -q 'Adam' summary.txt && grep -q '^Adam ' debug.txt \
   && [ -n "$(grep -m1 'to=ada' diaries/says.txt)" ] && grep -q 'src=[a-z0-9]*:t[0-9]*:\(ada\|gemini\|replika\|robert\)' diaries/inbox.txt \
-  && ok "default data/names.txt: Jack / John / Jill / Jane in the console, reports and debug.txt; say to a display name is recorded under the id (to=ada); inbox src tags keep the ids" || bad "default display names"
+  && ok "default data/names.txt: Adam / Eve / Abel / Ruth in the console, reports and debug.txt; say to a display name is recorded under the id (to=ada); inbox src tags keep the ids" || bad "default display names"
 "$na" --inbox > ib1.txt 2>&1; grep -q 'player Player 1 (' ib1.txt && ! grep -q 'player iris' ib1.txt && ok "the players show as Player 1 / Player 2 / Player 3 in the inbox view" || bad "player display names"
 "$nb" --more 0 --every 5000 > n3.txt 2>&1; after=$(snap .)
-grep -q '^import OK: 4 entities, 500 ticks verified' n3.txt && grep -q '^entities: Aleph(engineer) Bet(reviewer) Gimel(vice_president) Dalet(human)' n3.txt && grep -q 'Aleph' run_report.txt && ! grep -q 'Jack' run_report.txt debug.txt summary.txt \
-  && [ "$before" = "$after" ] && grep -v '^# build' diaries/sessions.txt | cmp -s - <(grep -v '^# build' s0.txt) && cmp -s i0.txt diaries/inbox.txt && ls diaries/ada.jsonl entities/ada/words.txt > /dev/null 2>&1 && [ ! -e diaries/Jack.jsonl ] \
+grep -q '^import OK: 4 entities, 500 ticks verified' n3.txt && grep -q '^entities: Aleph(engineer) Bet(reviewer) Gimel(vice_president) Dalet(human)' n3.txt && grep -q 'Aleph' run_report.txt && ! grep -q 'Adam' run_report.txt debug.txt summary.txt \
+  && [ "$before" = "$after" ] && grep -v '^# build' diaries/sessions.txt | cmp -s - <(grep -v '^# build' s0.txt) && cmp -s i0.txt diaries/inbox.txt && ls diaries/ada.jsonl entities/ada/words.txt > /dev/null 2>&1 && [ ! -e diaries/Adam.jsonl ] \
   && ok "names.txt changed: the diaries, sessions.txt (minus the build line), inbox, world.txt, says and words files are byte-identical, replay-verify still passes, only the display text changed" || bad "names.txt change touched files ($before / $after)"
 "$nb" --map > mp.txt 2>&1; grep -q '^treadmill  Aleph ' mp.txt && ok "--map uses the display names" || bad "map names"
 "$nb" --say Gimel --text "x" > n4.txt 2>&1; tail -n 1 diaries/says.txt | grep -q ' to=replika ' && ok "--say accepts the display name and records the id" || bad "say with display name"
@@ -709,7 +709,7 @@ done
 [ $good = 1 ] && ok "by verb: every diary verb (rest, work, ..., examine, push, eat, greet) has exactly the ledger's sum and tick count" || bad "ledger verbs"
 grep -q '^  rest model .*quick-rest penalty -[0-9]*/[0-9]*t' led.txt && grep -q '^  - run ' led.txt && grep -q '^  + last ' led.txt && [ "$(grep -c ' loses most mood from ' led.txt)" = 4 ] && ok "top drains and gains for both scopes, the rest-model line and one sentence per wesen" || bad "ledger lines"
 "$bin" --ledger=full > led2.txt 2>&1; cmp -s led.txt led2.txt && ok "the same replay prints the same ledger" || bad "ledger not deterministic"
-"$w/nm/a/bin/diary_sim" --ledger > led_n.txt 2>&1; grep -q '^Jack ' led_n.txt && grep -q 'Jack loses most mood from' led_n.txt && ! grep -q '^ada' led_n.txt && [ "$(awk 'length > 79' led_n.txt | wc -l)" = 0 ] && ok "display names from data/names.txt (Jack ...), still within 79 columns" || bad "ledger names"
+"$w/nm/a/bin/diary_sim" --ledger > led_n.txt 2>&1; grep -q '^Adam ' led_n.txt && grep -q 'Adam loses most mood from' led_n.txt && ! grep -q '^ada' led_n.txt && [ "$(awk 'length > 79' led_n.txt | wc -l)" = 0 ] && ok "display names from data/names.txt (Adam ...), still within 79 columns" || bad "ledger names"
 "$bin" --more 20 --every 5000 --debug > l3.txt 2>&1
 sz_d=$(wc -c < debug.txt); sz_g=$(wc -c < debug_digest.txt); "$w/nm/a/bin/diary_sim" --more 0 --every 5000 --debug > l3n.txt 2>&1; sz_dn=$(wc -c < debug.txt); sz_gn=$(wc -c < debug_digest.txt)
 grep -q '^mood ledger: seed 42' run_report.txt && grep -q '^\[ledger\]' debug_full.txt && "$bin" --debug-section ledger | grep -q '^section ledger' && [ "$sz_d" -le 1500 ] && [ "$sz_g" -le 1500 ] && [ "$sz_dn" -le 1500 ] && [ "$sz_gn" -le 1500 ] && ok "run_report.txt carries the ledger, the digest section 'ledger' is in debug_full.txt (--debug-section ledger), debug.txt and the digest stay <= 1500 B (with the identity ids and with the longer display names)" || bad "ledger in reports"
@@ -803,7 +803,7 @@ op=$(grep ' end ' diaries/chess.txt | awk '{ ok = 1; for (i = 1; i <= NF; i++) i
 [ "$op" = 0 ] && ok "in every finished game the two rating changes are exact opposites" || bad "elo deltas ($op)"
 mkdir -p "$w/ch/dn/bin" "$w/ch/dn/h"; cp "$bin" "$w/ch/dn/bin/"; cp -r "$root/data" "$w/ch/dn/data"; sed -i 's/^chess.enabled = .*/chess.enabled = 1/' "$w/ch/dn/data/limits.txt"
 DIARY_HOME="$w/ch/dn/h" "$w/ch/dn/bin/diary_sim" --seed 42 --ticks 300 --yes --every 5000 > /dev/null 2>&1; DIARY_HOME="$w/ch/dn/h" "$w/ch/dn/bin/diary_sim" --elo > e2.txt 2>&1
-grep -q 'Player 1' e2.txt && grep -q 'Player 2' e2.txt && grep -q 'Player 3' e2.txt && grep -q 'Jack' e2.txt && ! grep -Eq '^[0-9]\. (ada|iris|sol|noor) ' e2.txt && [ "$(awk 'length > 79' e2.txt | wc -l)" = 0 ] && ok "--elo shows display names (Jack .. Jane, Player 1, Player 2, Player 3), no line over 79 columns" || bad "elo display names"
+grep -q 'Player 1' e2.txt && grep -q 'Player 2' e2.txt && grep -q 'Player 3' e2.txt && grep -q 'Adam' e2.txt && ! grep -Eq '^[0-9]\. (ada|iris|sol|noor) ' e2.txt && [ "$(awk 'length > 79' e2.txt | wc -l)" = 0 ] && ok "--elo shows display names (Adam .. Ruth, Player 1, Player 2, Player 3), no line over 79 columns" || bad "elo display names"
 if [ -f "$w/pty_multi.py" ]; then   # (the menu scenario's pty helper exists in a full run)
   python3 "$w/pty_multi.py" "$w/ch/h" "$cb" '5\n' > mu.txt 2>&1; grep -aq '^ *chess Elo [A-Za-z]* [0-9]* |' mu.txt && ok "menu: the start screen has a 'chess Elo' line with the best ratings" || bad "menu elo line"
 fi
@@ -866,7 +866,7 @@ grep -q 'by=robot' diaries/world.txt && ok "the robot's pick / push are world ed
 "$rbn" --robot > rv.txt 2>&1; rc=$?
 mkdir -p "$w/rb/disp"; cp -r "$w/rb/data" "$w/rb/disp/data"; cp "$root/data/names.txt" "$w/rb/disp/data/names.txt"; ( cd "$w/rb/disp" && "$rbn" --robot > "$w/rb/h/rd.txt" 2>&1 )
 [ $rc = 0 ] && grep -q '^robot ' rv.txt && grep -q 'battery' rv.txt && grep -q 'steered by' rv.txt && [ "$(grep -cE '^  [^ ]{5}$' rv.txt)" = 5 ] && [ "$(awk 'length > 79' rv.txt | wc -l)" = 0 ] && ok "--robot: state, battery, 5x5 camera, controllers, last commands (display names, <= 79 columns)" || bad "--robot view ($rc)"
-grep -qE 'Jack|John|Jill|Jane' rd.txt && ! grep -qwE 'ada|gemini|replika|robert' rd.txt && ok "the robot view uses the display names (Jack, John, Jill, Jane)" || bad "robot names"
+grep -qE 'Adam|Eve|Abel|Ruth' rd.txt && ! grep -qwE 'ada|gemini|replika|robert' rd.txt && ok "the robot view uses the display names (Adam, Eve, Abel, Ruth)" || bad "robot names"
 grep -q '^robot (' run_report.txt && grep -q '^ada: commands' run_report.txt && ok "the end report has the robot block" || bad "robot report"
 cp diaries/robot.txt ../robot.keep
 sed -i '0,/ exec /s/ pos=\([-0-9]*\),/ pos=\1\1,/' diaries/robot.txt; "$rbn" --more 0 --every 5000 > h4.txt 2>&1
@@ -1043,20 +1043,30 @@ np=$(grep -c '^P[0-9]' diaries/preports.txt); nm=$(grep -c '^S[0-9].* preport=1'
 [ "$nm" = 4 ] && [ "$np" = 16 ] && head -1 diaries/preports.txt | grep -q '^# seed 42$' && ok "new sessions carry preport=1 ($nm); every session end records one P line per wesen in diaries/preports.txt ($np lines)" || bad "preport markers/records ($nm $np)"
 bf=$(grep '^P[0-9]' diaries/preports.txt | awk '{ ok = 1; split("t player wesen claimed true tone flag", k, " "); for (i = 1; i <= 7; i++) if (index($0, " " k[i] "=") == 0) ok = 0; if (!ok) n++ } END { print n + 0 }')
 [ "$bf" = 0 ] && ok "P lines carry t, player, wesen, claimed, true, tone (claimed/true) and flag" || bad "P line fields ($bf)"
-# the boxes: after 'Saved to', framed, 80 columns, one per player, the same text in player_reports.txt
+# the box: after 'Saved to', ONE frame, 80 columns, a header and every player, the same text in player_reports.txt
 tail -n +$(( $(grep -n '^Saved to ' ../c4.txt | tail -1 | cut -d: -f1) + 1 )) ../c4.txt > ../tailc4.txt
-nb=$(grep -c '^+-- .* reports to Robert (tick 1200) -*+$' ../tailc4.txt); wd=$(grep -E '^[+|]' ../tailc4.txt | awk 'length != 80 { n++ } END { print n + 0 }'); oth=$(grep -vE '^[+|]|^$' ../tailc4.txt | wc -l)
-[ "$nb" = 3 ] && [ "$wd" = 0 ] && [ "$oth" = 1 ] && ok "the console ends with three framed boxes (+ - |, every line 80 columns) and one hint line, after 'Saved to'" || bad "boxes on the console ($nb $wd $oth)"
-[ "$(head -n -0 ../tailc4.txt | grep -v '^$' | tail -1 | cut -c1-20)" = "The players say what" ] && cmp -s <(grep -E '^[+|]' ../tailc4.txt) <(grep -E '^[+|]' player_reports.txt) && ok "player_reports.txt in the save folder holds the same boxes" || bad "player_reports.txt"
-fp=0; for pl in iris sol noor; do blk=$(awk -v p="$pl" '$0 ~ "^\\+-- " p " reports" { on = 1 } on { print } on && /^\+-+\+$/ { exit }' player_reports.txt | sed -E 's/^\| //; s/ \|$//' | tr '\n' ' '); echo "$blk" | grep -q ' I ' && echo "$blk" | grep -qE 'My top concern|concern for me' && echo "$blk" | grep -q 'Overall happiness' && fp=$((fp + 1)); done
-[ "$fp" = 3 ] && ok "each box is first-person prose (I / My), with the overall happiness it reports and its top concern" || bad "first person ($fp)"
+nb=$(grep -c '^+-- The players report to Robert (tick 1200) -*+$' ../tailc4.txt); wd=$(grep -E '^[+|]' ../tailc4.txt | awk 'length != 80 { n++ } END { print n + 0 }'); oth=$(grep -vE '^[+|]|^$' ../tailc4.txt | wc -l); nl=$(wc -l < ../tailc4.txt)
+[ "$nb" = 1 ] && [ "$wd" = 0 ] && [ "$oth" = 1 ] && [ "$nl" -le 23 ] && ok "the console ends with ONE framed box (+ - |, every line 80 columns) and one hint line, $nl lines (one frame), after 'Saved to'" || bad "box on the console ($nb $wd $oth $nl)"
+[ "$(grep -v '^$' ../tailc4.txt | tail -1 | cut -c1-20)" = "The players say what" ] && cmp -s <(grep -E '^[+|]' ../tailc4.txt) <(grep -E '^[+|]' player_reports.txt) && ok "player_reports.txt in the save folder holds the same box" || bad "player_reports.txt"
+paraof() { awk -v p="$1" '/^\| / { t = substr($0, 3, 76); sub(/ +$/, "", t); if (index(t, p " (") == 1) on = 1; else if (t ~ /^[a-z]+ \(/) on = 0; if (on) printf "%s ", t } /^\+-+\+$/ { on = 0 }' player_reports.txt | sed 's/  */ /g'; }
+fp=0; for pl in iris sol noor; do blk=$(paraof $pl); echo "$blk" | grep -q "^$pl (" && echo "$blk" | grep -qE '[+-][0-9]+' && [ -n "$(echo "$blk" | sed -E "s/^$pl \([a-z ]+\)://" | grep -oE '[A-Za-z]+' | head -1)" ] && fp=$((fp + 1)); done
+[ "$fp" = 3 ] && ok "every player has its paragraph in the box (who, petitions and decisions, the happiness it claims, its top concern)" || bad "paragraphs ($fp)"
 # the decision counts are the D records
 dc=0; for pl in iris sol noor; do
-  want=$(awk -v p="$pl" '$0 ~ "^D[0-9]" && index($0, " player=" p " ") { for (i = 1; i <= NF; i++) if ($i ~ /^kind=/) c[substr($i, 6)]++ } END { printf "I granted %d, granted %d in part, put %d off for later and refused %d.", c["grant"], c["partial"], c["defer"], c["refuse"] }' diaries/govern.txt)
-  blk=$(awk -v p="$pl" '$0 ~ "^\\+-- " p " reports" { on = 1 } on { print } on && /^\+-+\+$/ { exit }' player_reports.txt | sed -E 's/^\| //; s/ \|$//' | tr '\n' ' ' | sed 's/  */ /g')
-  case "$blk" in *"$want"*) dc=$((dc + 1));; *) echo "   $pl: want '$want' in '$blk'";; esac
+  want=$(awk -v p="$pl" '$0 ~ "^D[0-9]" && index($0, " player=" p " ") { for (i = 1; i <= NF; i++) if ($i ~ /^kind=/) c[substr($i, 6)]++ } END { printf "%d %d %d %d", c["grant"], c["partial"], c["defer"], c["refuse"] }' diaries/govern.txt)
+  got=$(paraof $pl | sed -E 's/^[a-z]+ \([a-z ]+\)://' | grep -oE '[0-9]+' | sed -n 2,5p | tr '\n' ' ' | sed 's/ $//')
+  if [ "$(paraof $pl | grep -c 'petitions yet\|Nothing on my desk\|not one petition')" = 0 ]; then [ "$got" = "$want" ] && dc=$((dc + 1)) || echo "   $pl: want '$want' got '$got'"; else dc=$((dc + 1)); fi
 done
 [ "$dc" = 3 ] && ok "what each player decided (granted / partial / deferred / refused) in the box equals the counts of the D records" || bad "D counts ($dc)"
+# the wording varies: several templates per slot, picked by a hash of (tick, player): different between players and between runs
+shape() { awk -v p="$2" '/^\| / { t = substr($0, 3, 76); sub(/ +$/, "", t); if (index(t, p " (") == 1) on = 1; else if (t ~ /^[a-z]+ \(/) on = 0; if (on) printf "%s ", t } /^\+-+\+$/ { on = 0 }' "$1" | sed -E 's/[+-]?[0-9]+/#/g; s/^[a-z]+ \([a-z ]+\): //'; echo; }
+sp=$(for pl in iris sol noor; do shape ../c4.txt $pl | cut -c1-24; done | sort -u | wc -l)
+sr=$(for c in 1 2 3 4; do shape ../c$c.txt iris | cut -c1-24; done | sort -u | wc -l)
+tn=$(for c in 1 2 3 4; do shape ../c$c.txt iris; shape ../c$c.txt sol; done | sort -u | wc -l)
+[ "$sp" -ge 2 ] && [ "$sr" -ge 2 ] && [ "$tn" -ge 6 ] && ok "the wording differs between players ($sp openings in one box) and between runs ($sr openings of one player in 4 runs; $tn different paragraph shapes of 8)" || bad "wording does not vary ($sp $sr $tn)"
+sent=$(grep '^| ' player_reports.txt | awk 'length != 80 { n++ } END { print n + 0 }')
+mx=$(awk '/^\| (iris|sol|noor|vega) \(/ { if (n > m) m = n; n = 0 } /^\| / { n++ } /^\+-+\+$/ { if (n > m) m = n } END { print m + 0 }' player_reports.txt)
+[ "$sent" = 0 ] && [ "$mx" -le 5 ] && ok "every player's part stays short (at most 3 text lines, the longest block incl. the header is $mx)" || bad "long paragraphs ($sent $mx)"
 # the claims: bounded, valid, flag = difference, the truth is the mood of the diary
 lm=$(sed -n 's/^preport.lie_max = \([0-9]*\).*/\1/p' "$w/pr/data/limits.txt")
 oobp=$(grep '^P[0-9]' diaries/preports.txt | sed -E 's/.* claimed=(-?[0-9]+) true=(-?[0-9]+) tone=([0-9])\/([0-9]) flag=([a-z]+).*/\1 \2 \3 \4 \5/' | awk -v lm="$lm" '{ d = $1 - $2; if (d < 0) d = -d; bad = 0; if (d > lm || $1 < -100 || $1 > 100 || $2 < -100 || $2 > 100 || $3 > 3 || $4 > 3) bad = 1; diff = ($1 != $2 || $3 != $4); if (diff != ($5 == "lie")) bad = 1; n += bad } END { print n + 0 }')
@@ -1110,21 +1120,21 @@ grep -q 'misreports' ds.txt && [ "$db" -le 1500 ] && ok "the digest has the prep
 # off: nothing at all
 cd "$w/pr/off/h" || exit 1; export DIARY_HOME="$w/pr/off/h"
 "$w/pr/off/bin/diary_sim" --audit > ../oa.txt 2>&1
-[ ! -e diaries/preports.txt ] && [ ! -e player_reports.txt ] && ! grep -q 'preport=1' diaries/sessions.txt && ! grep -q 'reports to Robert' ../c4.txt && grep -q 'no player report' ../oa.txt && ok "preport.enabled = 0: no marker, no preports.txt, no player_reports.txt, no boxes; --audit says there is nothing" || bad "preport off"
+[ ! -e diaries/preports.txt ] && [ ! -e player_reports.txt ] && ! grep -q 'preport=1' diaries/sessions.txt && ! grep -q 'report to Robert' ../c4.txt && grep -q 'no player report' ../oa.txt && ok "preport.enabled = 0: no marker, no preports.txt, no player_reports.txt, no boxes; --audit says there is nothing" || bad "preport off"
 same=0   # (the normal save has 3 more ticks from the challenge test: compare the first 1200 ticks)
 for e in ada gemini replika robert; do cmp -s <(head -n 1200 diaries/$e.jsonl | sed -E 's/"ts":"[^"]*",//') <(head -n 1200 "$w/pr/h/diaries/$e.jsonl" | sed -E 's/"ts":"[^"]*",//') || same=$((same + 1)); done
 [ "$same" = 0 ] && ok "with and without the player reports the simulation is the same: the diary lines of the 4 wesen are identical" || bad "reports change the simulation ($same)"
 grep -q -- '--audit' "$root/data/help.txt" && grep -q -- '--challenge' "$root/data/help.txt" && grep -q 'make audit' "$root/README.md" && grep -q 'make challenge' "$root/README.md" && grep -q 'player_reports.txt' "$root/README.md" && grep -q '^preport.lie_max' "$root/data/limits.txt" && [ -f "$root/data/preport.txt" ] && grep -q '^audit:' "$root/Makefile" && grep -q '^challenge:' "$root/Makefile" && ok "--help, README, Makefile and data/ document and offer the reports, audit and challenge" || bad "preport docs"
 unset DIARY_HOME
 
-echo "== 39. player names: Player 1 / 2 / 3 and Jack / John / Jill / Jane are display names only; every spelling finds the right id =="
+echo "== 39. player names: Player 1 / 2 / 3 and Adam / Eve / Abel / Ruth are display names only; every spelling finds the right id =="
 rm -rf "$w/pn"; mkdir -p "$w/pn/h" "$w/pn/bin"; cp "$bin" "$w/pn/bin/"; cp -r "$root/data" "$w/pn/data"; pnb="$w/pn/bin/diary_sim"; cd "$w/pn/h" || exit 1; export DIARY_HOME="$w/pn/h"
 "$pnb" --seed 42 --ticks 300 --yes --every 5000 > p1.txt 2>&1
-okn=0; for pair in "Player 1:iris" "player1:iris" "PLAYER 2:sol" "Player3:noor" "1:iris" "3:noor" "noor:noor" "Jack:ada" "jane:robert" "JILL:replika" "john:gemini"; do nm=${pair%%:*}; id=${pair##*:}
+okn=0; for pair in "Player 1:iris" "player1:iris" "PLAYER 2:sol" "Player3:noor" "1:iris" "3:noor" "noor:noor" "Adam:ada" "ruth:robert" "ABEL:replika" "eve:gemini" "Jack:ada" "jane:robert" "JILL:replika" "john:gemini"; do nm=${pair%%:*}; id=${pair##*:}
   "$pnb" --say "$nm" --text "hi" > pn.txt 2>&1; tail -n 1 diaries/says.txt | grep -q " to=$id " && okn=$((okn + 1)) || echo "   spelling '$nm' did not reach $id"; done
-[ "$okn" = 11 ] && ok "--say accepts 'Player 1', player1, PLAYER 2, Player3, 1, 3, the id and Jack / jane / JILL / john (11 of 11), recorded under the id" || bad "name spellings ($okn of 11)"
+[ "$okn" = 15 ] && ok "--say accepts 'Player 1', player1, PLAYER 2, Player3, 1, 3, the id, Adam / ruth / ABEL / eve and the older names Jack / jane / JILL / john (15 of 15), recorded under the id" || bad "name spellings ($okn of 15)"
 "$pnb" --say "Player 9" --text "x" > pn9.txt 2>&1; rc=$?; [ "$rc" != 0 ] && ok "an unknown player name is refused (exit $rc)" || bad "unknown player accepted"
-grep -q '^iris *= *Player 1' "$root/data/names.txt" && grep -q '^ada *= *Jack' "$root/data/names.txt" && ! grep -qi 'greek\|alpha\|beta' "$root/data/names.txt" && grep -q 'PLAYER="Player 1"' "$root/README.md" && ok "data/names.txt and the README use the new names (internal ids stay iris / sol / noor, ada / gemini / replika / robert)" || bad "names docs"
+grep -q '^iris *= *Player 1' "$root/data/names.txt" && grep -q '^ada *= *Adam' "$root/data/names.txt" && ! grep -qi 'greek\|alpha\|beta' "$root/data/names.txt" && grep -q 'PLAYER="Player 1"' "$root/README.md" && ok "data/names.txt and the README use the new names (internal ids stay iris / sol / noor, ada / gemini / replika / robert)" || bad "names docs"
 grep -q 'Player 1' "$root/data/help.txt" && awk 'length > 79 { n++ } END { exit n > 0 }' "$root/data/help.txt" && ok "help text names the players and stays within 79 columns" || bad "help names"
 unset DIARY_HOME
 
@@ -1148,20 +1158,18 @@ wmap=$(grep '^P[0-9]' diaries/preports.txt | sed -E 's/.* player=([a-z]+) wesen=
 "$w/p4/b/bin/diary_sim" --govern > gv.txt 2>&1; "$w/p4/b/bin/diary_sim" --inbox > ib.txt 2>&1; "$w/p4/b/bin/diary_sim" --audit > au.txt 2>&1
 [ "$(grep -cE '^(iris|sol|noor|vega): ' gv.txt)" = 4 ] && [ "$(grep -cE '^(iris|sol|noor|vega): claims' au.txt)" = 4 ] && grep -q 'vega' ib.txt && ok "--govern, --audit and the inbox view list four players" || bad "views ($(grep -cE '^(iris|sol|noor|vega): ' gv.txt) / $(grep -cE '^(iris|sol|noor|vega): claims' au.txt))"
 tail -n +$(( $(grep -n '^Saved to ' ../c4.txt | tail -1 | cut -d: -f1) + 1 )) ../c4.txt > ../tailc4.txt
-nb=$(grep -c '^+-- .* reports to Robert (tick 1200) -*+$' ../tailc4.txt); wd=$(grep -E '^[+|]' ../tailc4.txt | awk 'length != 80 { n++ } END { print n + 0 }')
-nb3=$(grep -c '^+-- .* reports to Robert' "$w/p4/c/c4.txt")
-[ "$nb" = 4 ] && [ "$wd" = 0 ] && [ "$nb3" = 3 ] && grep -q '^+-- vega reports to Robert' ../tailc4.txt && grep -q '^+-- vega reports to Robert' player_reports.txt && ok "four 80-column boxes at the end of the run (Player 1 .. Player 4), three with players4 off" || bad "boxes ($nb $wd $nb3)"
+nb=$(grep -c '^+-- The players report to Robert (tick 1200) -*+$' ../tailc4.txt); wd=$(grep -E '^[+|]' ../tailc4.txt | awk 'length != 80 { n++ } END { print n + 0 }'); nl=$(wc -l < ../tailc4.txt)
+np4=$(grep -cE '^\| (iris|sol|noor|vega) \(' player_reports.txt); np3=$(grep -cE '^\| (iris|sol|noor|vega) \(' "$w/p4/c/h/player_reports.txt")
+[ "$nb" = 1 ] && [ "$wd" = 0 ] && [ "$nl" -le 23 ] && [ "$np4" = 4 ] && [ "$np3" = 3 ] && grep -q '^| vega (gemini):' player_reports.txt && ! grep -q '^| vega' "$w/p4/c/h/player_reports.txt" && ok "ONE 80-column box ($nl lines with the hint) with a header and four players (Player 1 .. Player 4); three with players4 off" || bad "box ($nb $wd $nl $np4 $np3)"
 np=$(grep -c '^P[0-9]' diaries/preports.txt); pv=$(grep -c 'player=vega wesen=gemini' diaries/preports.txt)
 [ "$np" = 16 ] && [ "$pv" = 4 ] && ok "honesty: the P records name the watcher (vega: 4 rounds), 16 claims in all, each player with its own trait" || bad "P lines ($np $pv)"
-# pagination: frames of at most preport.page_lines lines, one write each; the text is the same whatever the page size
+# one frame: no pause on a terminal; a tiny page_lines (data) would still split it
+cp -r "$w/p4/b" "$w/p4/b8"; sed -i 's/^preport.page_lines = .*/preport.page_lines = 8/' "$w/p4/b8/data/limits.txt"
 if command -v script > /dev/null 2>&1; then
   printf '\n\n\n\n' | script -qec "$w/p4/b/bin/diary_sim --more 0 --every 5000" /dev/null 2>&1 | tr -d '\r' > pg.txt
-  pl=$(sed -n 's/^preport.page_lines = \([0-9]*\).*/\1/p' "$w/p4/b/data/limits.txt")
-  fm=$(awk -v lim="$pl" '/^\+-- .* reports to Robert/ && !on { on = 1 } on { if ($0 ~ /^-- more/) { if (n > m) m = n; n = 0; k++ } else n++ } END { if (n > m) m = n; print m + 0, k + 0 }' pg.txt)
-  [ "${fm% *}" -le "$pl" ] && [ "${fm#* }" -ge 1 ] && [ "$(grep -c '^+-- .* reports to Robert' pg.txt)" = 4 ] && ok "on a terminal the boxes come in frames of at most $pl lines (largest ${fm% *}, ${fm#* } pauses), all four boxes shown" || bad "pagination ($fm)"
+  (cd "$w/p4/b8/h" && printf '\n\n\n\n' | DIARY_HOME="$w/p4/b8/h" script -qec "$w/p4/b8/bin/diary_sim --more 0 --every 5000" /dev/null 2>&1 | tr -d '\r' > "$w/p4/pg8.txt")
+  [ "$(grep -c '^-- more' pg.txt)" = 0 ] && [ "$(grep -c "^-- more" "$w/p4/pg8.txt")" -ge 1 ] && ok "on a terminal the box needs no Enter pause (one frame of $nl lines); only page_lines = 8 would split it" || bad "pause ($(grep -c '^-- more' pg.txt) $(grep -c "^-- more" "$w/p4/pg8.txt"))"
 fi
-grep -E '^[+|]' ../tailc4.txt > ../box23.txt; cp -r "$w/p4/b" "$w/p4/b8"; sed -i 's/^preport.page_lines = .*/preport.page_lines = 8/' "$w/p4/b8/data/limits.txt"; cd "$w/p4/b8/h" || exit 1; DIARY_HOME="$w/p4/b8/h" "$w/p4/b8/bin/diary_sim" --more 0 --every 5000 > ../p8.txt 2>&1
-cmp -s <(grep -E '^[+|]' ../p8.txt) ../box23.txt && ok "the page size changes only where the pauses fall, not the boxes" || bad "page size changes the text"
 cd "$w/p4/b/h"; "$w/p4/b/bin/diary_sim" --say "Player 4" --text "hello" > sy.txt 2>&1; tail -n 1 diaries/says.txt | grep -q ' to=vega ' && "$w/p4/b/bin/diary_sim" --say player4 --text "x" > /dev/null 2>&1 && "$w/p4/b/bin/diary_sim" --say 4 --text "x" > /dev/null 2>&1 && ok "--say reaches Player 4 as 'Player 4', player4 and 4 (recorded to=vega)" || bad "say vega"
 cp diaries/sessions.txt ../sess.keep; sed -i '/^S4 /s/ players4=1//' diaries/sessions.txt; "$w/p4/b/bin/diary_sim" --more 0 --every 5000 > ../t1.txt 2>&1
 head -1 debug.txt | grep -q '^DRIFT' && ok "S line with its players4=1 marker removed: DRIFT" || bad "marker tamper"

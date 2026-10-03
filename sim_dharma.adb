@@ -1,4 +1,4 @@
---  Version: 0.004
+--  Version: 0.005
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Containers.Vectors, Ada.Strings.Fixed, Ada.Strings.Unbounded, Interfaces;
@@ -169,6 +169,7 @@ package body Sim_Dharma is
       for P in Player_Id loop
          if Squeeze (Player_Name (P)) = T or else Squeeze (Sim_World.Show (Player_Name (P))) = T
            or else T = Img (Integer (P)) or else T = "player" & Img (Integer (P))
+           or else Squeeze (Sim_World.Internal_Id (Text)) = Squeeze (Player_Name (P))
          then
             return Natural (P);
          end if;

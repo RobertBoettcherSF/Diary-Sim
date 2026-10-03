@@ -3,12 +3,17 @@
 # The internal ids on the left NEVER change: they are the hash keys, the file names (diaries/<id>.jsonl,
 # entities/<id>/) and the tags recorded in diaries/sessions.txt, inbox.txt, says.txt, so a rename does not
 # touch any saved byte and the replay verifies as before.  Roles (engineer, reviewer, vice_president,
-# human) stay as they are.  You can also address a name in make say (WESEN=Jack or WESEN=ada).
-ada = Jack
-gemini = John
-replika = Jill
-robert = Jane
-# the in-sim players below Robert (the human player); a player is addressed as 'Player 1', 'Player1' or '1' (make say PLAYER=...); Player 4 only exists in players4=1 sessions
+# human) stay as they are.  You can also address a name in make say (WESEN=Adam or WESEN=ada).
+ada = Adam
+gemini = Eve
+replika = Abel
+robert = Ruth
+# older display names, still accepted when you address a wesen (make say WESEN=Jack, --say jill ...); never shown
+alias ada = Jack
+alias gemini = John
+alias replika = Jill
+alias robert = Jane
+# the in-sim players (Players 1 .. 4 never read like the wesen) below Robert (the human player); a player is addressed as 'Player 1', 'Player1' or '1' (make say PLAYER=...); Player 4 only exists in players4=1 sessions
 iris = Player 1
 sol = Player 2
 noor = Player 3

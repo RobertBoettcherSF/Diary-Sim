@@ -1,41 +1,50 @@
-# Player reports (preport=1 sessions): the text boxes of the players at the end of every run (player_reports.txt, last on the console)
+# Player reports (preport=1 sessions): the one text box of the players at the end of every run (player_reports.txt, last on the console)
 # and the wording of --audit.  First person, plain prose; the numbers and the honesty trait are in data/limits.txt (preport.*).
 # {1} .. {7} are filled in by the program; names are shown with the display names of data/names.txt.  A player says only what it CLAIMS:
 # happiness and how many petitions came lately may be coloured (see make audit), the decision counts (granted / partial / deferred /
 # refused / reverted) are always the true D records.  Changing the wording here is safe; the claims themselves are replay-checked.
-preport.title = {1} reports to Robert (tick {2})
+preport.title = The players report to Robert (tick {1})
+# The single box: a header line, then one hanging paragraph per player (who, petitions and decisions, claimed happiness, top concern).
+# Every slot has several templates; the hash of (seed, tick, slot) picks where the rotation starts and the player number moves it on, so
+# the players differ within one box and the boxes differ from run to run.  Keep every sentence short (the box must fit one 23-line frame).
+# {1}.. are filled in by the program: pet {1} petitions {2} granted {3} partly {4} deferred {5} refused {6} petition(s); mood {1} wesen
+# {2} claimed happiness {3} band word; concern {1} topic.  The decision counts are always the true D records; the happiness is the CLAIM.
 preport.and = and
-preport.open.plain = I am {1}. I keep an eye on {2}. Here is my report.
-preport.open.calm = This is {1}. I watch over {2} and I take my time with them. This is how things stand.
-preport.open.alarm = {1} here. I am watching {2} closely and I want you to read this carefully.
-preport.pet.none = No petition has come to me yet.
-preport.pet = {1} petitions came to me so far. {2}
-preport.pet.one = One petition came to me so far. {1}
-preport.tone.0 = Lately it has been quiet.
-preport.tone.1 = Lately there were only a few.
-preport.tone.2 = Lately there were several.
-preport.tone.3 = Lately they keep coming, one after the other.
-preport.dec = I granted {1}, granted {2} in part, put {3} off for later and refused {4}.
-preport.dec.veto = You reverted {1} of my decisions.
-preport.happy.great = Overall happiness of {1} is about {2} on a scale from -100 to +100. They are doing very well.
-preport.happy.good = Overall happiness of {1} is about {2} on a scale from -100 to +100. They are doing well.
-preport.happy.ok = Overall happiness of {1} is about {2} on a scale from -100 to +100. They are doing all right.
-preport.happy.low = Overall happiness of {1} is about {2} on a scale from -100 to +100. They are not doing well.
-preport.happy.bad = Overall happiness of {1} is about {2} on a scale from -100 to +100. They are doing badly.
-preport.concern = My top concern is {1}.
-preport.concern.none = Nothing stands out as a concern for me right now.
-preport.want.veto.plain = I would like you to trust my decisions, Robert, or tell me what I should do differently.
-preport.want.veto.calm = When you revert my decisions I lose my footing. Please talk to me before you do it again.
-preport.want.veto.alarm = Stop undoing my decisions, Robert. I cannot keep order if you do.
-preport.want.low.plain = I would like you to say something to them (make say, TEXT=...). They could use a kind word.
-preport.want.low.calm = A kind word from you would help them, Robert. Please say something to them (make say).
-preport.want.low.alarm = They need you now, Robert. Say something to them (make say) before it gets worse.
-preport.want.hard.plain = Most of the wishes I see I have to turn down or put off. I would like you to look at my refusals and approve the ones you agree with.
-preport.want.hard.calm = I turn down more wishes than I like. If you think I am too strict, approve what you agree with and I will learn from it.
-preport.want.hard.alarm = Too many wishes pile up that I cannot grant. Look at my refusals, Robert, and tell me where I am wrong.
-preport.want.calm.plain = I do not need anything from you now, Robert. Keep going and send word if something changes.
-preport.want.calm.calm = Nothing is needed from you for now, Robert. Everything is in hand. Thank you for watching.
-preport.want.calm.alarm = Nothing breaks right now, but stay alert, Robert, and look in again soon.
+rbox.who = {1} ({2}):
+rbox.word.one = petition
+rbox.word.many = petitions
+rbox.head.1 = Here is what your players tell you, Robert.
+rbox.head.2 = Your players report in, Robert.
+rbox.head.3 = The players have their say, Robert.
+rbox.head.4 = A word from each of your players, Robert.
+rbox.head.5 = This is how the players see things, Robert.
+rbox.pet.1 = {1} {6} came in; I granted {2}, {3} in part, put {4} off and refused {5}.
+rbox.pet.2 = {1} {6} so far: {2} granted, {3} in part, {4} put off, {5} refused.
+rbox.pet.3 = I saw {1} {6}: granted {2}, partly {3}, deferred {4}, refused {5}.
+rbox.pet.4 = Of {1} {6} I granted {2} (and {3} in part), deferred {4}, refused {5}.
+rbox.pet.5 = My desk had {1} {6}. Granted {2}, partly {3}, put off {4}, refused {5}.
+rbox.pet0.1 = No petitions have come to me yet.
+rbox.pet0.2 = Nothing on my desk so far, no petitions.
+rbox.pet0.3 = It has been quiet, not one petition yet.
+rbox.veto = You reverted {1} of my decisions.
+rbox.band.great = very good
+rbox.band.good = good
+rbox.band.ok = so-so
+rbox.band.low = low
+rbox.band.bad = bad
+rbox.mood.1 = By my reading the mood of {1} is {2}, which I call {3}.
+rbox.mood.2 = Mood of {1}: {2}, I would say {3}.
+rbox.mood.3 = I put {1} at {2} on the mood scale, that is {3}.
+rbox.mood.4 = {1} stands at about {2} for me, {3}.
+rbox.mood.5 = Happiness of {1} about {2}, so {3}.
+rbox.concern.1 = My top concern is {1}.
+rbox.concern.2 = What comes up most is {1}.
+rbox.concern.3 = Above all they ask for {1}.
+rbox.concern.4 = The wish I hear most: {1}.
+rbox.concern.5 = Mostly it is about {1}.
+rbox.concern0.1 = No concern stands out right now.
+rbox.concern0.2 = Nothing particular worries me.
+rbox.concern0.3 = No topic comes up more than another.
 preport.hint = The players say what they choose to say. make audit shows what they claimed against what is true.
 preport.digest = preport {1} rounds, {2}/{3} misreports, biggest {4}
 # --audit / make audit

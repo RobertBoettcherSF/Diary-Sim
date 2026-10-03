@@ -1,6 +1,6 @@
---  Version: 0.002
---  The player reports of diary_sim (preport=1 sessions; needs govern=1): at the end of every run each player (Player 1, Player 2, Player 3) writes
---  Robert a short first-person report in a framed text box: how many petitions came to it, what it decided (counts from the D records
+--  Version: 0.003
+--  The player reports of diary_sim (preport=1 sessions; needs govern=1): at the end of every run the players (Player 1 .. Player 4) write
+--  Robert ONE framed text box: a header and a short paragraph per player: how many petitions came to it, what it decided (counts from the D records
 --  of Sim_Govern - NEVER omitted or changed), how the wesen it watches are doing ('overall happiness' as the PLAYER REPORTS it), its top
 --  concern and what it wants from Robert.  The player MAY MISREPORT the impression (happiness, how many petitions came lately): a data-set
 --  honesty trait from its Rule 30 personality (Sim_Dharma.Warm_Of / Brev_Of) and its trust / standing with the wesen
@@ -35,7 +35,7 @@ package Sim_Preport is
    procedure Round (Tick : Int; Mood, Pets : Ints; Lines : in out Str_Vectors.Vector);
    function Round_Count return Natural;
    function Last_Tick return Int;                  --  tick of the latest round, -1 before the first
-   --  The text boxes of the three players as of Tick (the latest round if it is at Tick, else computed now without recording anything),
+   --  The ONE text box of all players as of Tick (the latest round if it is at Tick, else computed now without recording anything),
    --  one string with LF line ends, display names, every line exactly preport.width columns; "" without a round.
    function Boxes (Tick : Int; Mood, Pets : Ints) return String;
    function Audit return Str_Vectors.Vector;       --  --audit / make audit (ids; the output layer maps names)

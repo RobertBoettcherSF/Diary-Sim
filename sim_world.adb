@@ -1,4 +1,4 @@
---  Version: 0.016
+--  Version: 0.017
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
@@ -17,11 +17,13 @@ package body Sim_World is
    end record;
    package Pair_Vectors is new Ada.Containers.Vectors (Positive, Pair);
    Pairs : Pair_Vectors.Vector;
+   Aliases : Pair_Vectors.Vector;   --  'alias <id> = <older name>' lines: accepted when addressing a name, never shown
 
    --  PROOF-LATER: Importance 2/10, Urgency 1/10, SPARK2 (parsing of data/names.txt)
    procedure Load_Names (Lines : Sim_Util.Str_Vectors.Vector) is
    begin
       Pairs.Clear;
+      Aliases.Clear;
       for L of Lines loop
          declare
             T : constant String := Fx.Trim (L, Ada.Strings.Both);
@@ -33,8 +35,13 @@ package body Sim_World is
                   Sh : constant String := Fx.Trim (T (Eq + 1 .. T'Last), Ada.Strings.Both);
                begin
                   if Id /= "" and then Sh /= "" and then (for all C of Sh => C >= ' ' and then C /= '{' and then C /= '}') then
-                     Pairs.Append (Pair'(Id => Ada.Strings.Unbounded.To_Unbounded_String (Id),
-                                         Shown => Ada.Strings.Unbounded.To_Unbounded_String (Sh)));
+                     if Id'Length > 6 and then Id (Id'First .. Id'First + 5) = "alias " then
+                        Aliases.Append (Pair'(Id => Ada.Strings.Unbounded.To_Unbounded_String (Fx.Trim (Id (Id'First + 6 .. Id'Last), Ada.Strings.Both)),
+                                              Shown => Ada.Strings.Unbounded.To_Unbounded_String (Sh)));
+                     else
+                        Pairs.Append (Pair'(Id => Ada.Strings.Unbounded.To_Unbounded_String (Id),
+                                            Shown => Ada.Strings.Unbounded.To_Unbounded_String (Sh)));
+                     end if;
                   end if;
                end;
             end if;
@@ -67,6 +74,11 @@ package body Sim_World is
       T : constant String := Squeeze (Fx.Trim (Text, Ada.Strings.Both));
    begin
       for P of Pairs loop
+         if Squeeze (Ada.Strings.Unbounded.To_String (P.Shown)) = T then
+            return Ada.Strings.Unbounded.To_String (P.Id);
+         end if;
+      end loop;
+      for P of Aliases loop
          if Squeeze (Ada.Strings.Unbounded.To_String (P.Shown)) = T then
             return Ada.Strings.Unbounded.To_String (P.Id);
          end if;

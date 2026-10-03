@@ -1,4 +1,4 @@
---  Version: 0.012
+--  Version: 0.013
 --  The shared world of diary_sim: the four entities, the vocabulary (base
 --  words, who knows what, coined words), the bench kernels and the final votes.
 --  One world per run; Init rebuilds it from scratch, so a replay from tick 1
@@ -21,7 +21,7 @@ package Sim_World is
    --  Text with every whole-word internal id replaced by its display name (file names, tags after ':' and
    --  words glued to '/', '-', '.ext' are left alone; a table column keeps its width where it can).
    function Show (Text : String) return String;
-   function Internal_Id (Text : String) return String;   --  display name (any case) or id -> internal id, else Text
+   function Internal_Id (Text : String) return String;   --  display name (any case, also an "alias" of data/names.txt) or id -> internal id, else Text
    function Kind (E : Entity_Id) return String;   --  engineer reviewer vice_president human
 
    --  Diary word lists (data/words.txt): action texts, mood tones, vote reasons.

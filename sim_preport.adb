@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  See sim_preport.ads.
 pragma Ada_2022;
 
@@ -250,63 +250,77 @@ package body Sim_Preport is
    function Band (Mean : Integer) return String is
      (if Mean >= 50 then "great" elsif Mean >= 15 then "good" elsif Mean >= -15 then "ok" elsif Mean >= -50 then "low" else "bad");
 
-   function Box_Of (P : Player_Id; Tick : Int; Made : Entry_Vectors.Vector) return String is
-      V : constant String := Variant_Of (P);
+   --  The template of a slot for a player: a hash of (seed, tick, slot) says where the rotation starts, the player number moves it on, so
+   --  the players of one box get different templates (N >= 4) and a later run (other tick) starts elsewhere.
+   function Pick (Slot : Natural; P : Player_Id; Tick : Int; N : Positive) return Positive is
+     ((Roll (Seed_V, 100, Tick, 9810 + Slot, N) - 1 + Integer (P) - 1) mod N + 1);
+
+   function Key (Base : String; Slot : Natural; P : Player_Id; Tick : Int; N : Positive) return String is
+     (Base & "." & Img (Pick (Slot, P, Tick, N)));
+
+   --  What one player says in the box: who, petitions and decisions (the true D counts), the happiness it CLAIMS for its wesen, its
+   --  top concern - up to three short sentences, wording from data/preport.txt (rbox.*).
+   function Say_Of (P : Player_Id; Tick : Int; Made : Entry_Vectors.Vector) return String is
       C : constant Sim_Govern.Counts_T := Sim_Govern.Counts_Of (P);
       Top : constant String := Sim_Govern.Top_Concern (P);
-      Sum, Tsum, N : Integer := 0;
-      Paras : Str_Vectors.Vector;
-      Lines : Str_Vectors.Vector;
+      Sum, N : Integer := 0;
+      Mean : Integer;
+      R : Unbounded_String;
+   begin
+      for X of Made loop
+         if X.P = P then Sum := Sum + X.Claimed; N := N + 1; end if;
+      end loop;
+      Mean := (if N = 0 then 0 else Sum / N);
+      Append (R, Msg ("rbox.who", Player_Name (P), Join_Names (P)));
+      if C (1) = 0 then
+         Append (R, " " & Msg (Key ("rbox.pet0", 1, P, Tick, 3)));
+      else
+         Append (R, " " & Msg (Key ("rbox.pet", 1, P, Tick, 5), Img (C (1)), Img (C (2)), Img (C (3)), Img (C (4)), Img (C (5)),
+                               Msg ("rbox.word." & (if C (1) = 1 then "one" else "many"))));
+         if C (6) > 0 then Append (R, " " & Msg ("rbox.veto", Img (C (6)))); end if;
+      end if;
+      Append (R, " " & Msg (Key ("rbox.mood", 2, P, Tick, 5), Join_Names (P), Sgn (Int (Mean)), Msg ("rbox.band." & Band (Mean))));
+      if Top = "" then
+         Append (R, " " & Msg (Key ("rbox.concern0", 3, P, Tick, 3)));
+      else
+         Append (R, " " & Msg (Key ("rbox.concern", 3, P, Tick, 5), Sim_World.Topic_Phrase (Topic_Id (Top))));
+      end if;
+      return To_String (R);
+   end Say_Of;
+
+   --  ONE framed box for all players: a header line, then each player in one hanging paragraph.
+   function One_Box (Tick : Int; Made : Entry_Vectors.Vector) return String is
       Out_T : Unbounded_String;
-      Title : constant String := Shown (Msg ("preport.title", Player_Name (P), Img (Tick)));
+      Title : constant String := Shown (Msg ("preport.title", Img (Tick)));
       Inner : constant Positive := Width - 4;
-      Mean, Tone : Integer;
-      Case_Key : Unbounded_String;
       procedure Line (S : String) is
       begin
          Append (Out_T, "| " & S & Spaces (Inner - Cols (S)) & " |" & ASCII.LF);
       end Line;
    begin
-      for X of Made loop
-         if X.P = P then Sum := Sum + X.Claimed; Tsum := Tsum + X.TC; N := N + 1; end if;
-      end loop;
-      Mean := (if N = 0 then 0 else Sum / N);
-      Tone := (if N = 0 then 0 else (Tsum + N / 2) / N);
-      Paras.Append (Msg ("preport.open." & V, Shown (Player_Name (P)), Join_Names (P)));
-      if C (1) = 0 then
-         Paras.Append (Msg ("preport.pet.none"));
-      else
-         Paras.Append ((if C (1) = 1 then Msg ("preport.pet.one", Msg ("preport.tone." & Img (Tone)))
-                        else Msg ("preport.pet", Img (C (1)), Msg ("preport.tone." & Img (Tone)))));
-         Paras.Append (Msg ("preport.dec", Img (C (2)), Img (C (3)), Img (C (4)), Img (C (5)))
-                       & (if C (6) > 0 then " " & Msg ("preport.dec.veto", Img (C (6))) else ""));
-      end if;
-      Paras.Append (Msg ("preport.happy." & Band (Mean), Join_Names (P), Sgn (Int (Mean))));
-      if Top = "" then
-         Paras.Append (Msg ("preport.concern.none"));
-      else
-         Paras.Append (Msg ("preport.concern", Sim_World.Topic_Phrase (Topic_Id (Top))));
-      end if;
-      Case_Key := To_Unbounded_String
-        (if C (6) > 0 then "veto" elsif Mean < -15 then "low" elsif C (1) >= 3 and then C (4) + C (5) > C (2) + C (3) then "hard" else "calm");
-      Paras.Append (Msg ("preport.want." & To_String (Case_Key) & "." & V));
-      for Pa of Paras loop Wrap (Lines, Shown (Pa), Inner); end loop;
       Append (Out_T, "+-- " & Title & " " & Fill (Integer'Max (1, Width - 6 - Cols (Title)), '-') & "+" & ASCII.LF);
-      for Ln of Lines loop Line (Ln); end loop;
+      Line (Shown (Msg (Key ("rbox.head", 0, 1, Tick, 5))));
+      for P in Player_Id range 1 .. Last_Player loop
+         declare
+            Lines : Str_Vectors.Vector;
+            First : Boolean := True;
+         begin
+            Wrap (Lines, Shown (Say_Of (P, Tick, Made)), Inner - 3);
+            for Ln of Lines loop
+               Line ((if First then "" else "   ") & Ln);
+               First := False;
+            end loop;
+         end;
+      end loop;
       Append (Out_T, "+" & Fill (Width - 2, '-') & "+" & ASCII.LF);
       return To_String (Out_T);
-   end Box_Of;
+   end One_Box;
 
    function Boxes (Tick : Int; Mood, Pets : Ints) return String is
       Made : constant Entry_Vectors.Vector :=
         (if Last_T = Tick and then not Latest.Is_Empty then Latest else Make_Entries (Tick, Mood, Pets, 0));
-      R : Unbounded_String;
    begin
-      for P in Player_Id range 1 .. Last_Player loop
-         Append (R, Box_Of (P, Tick, Made) & ASCII.LF);
-      end loop;
-      Append (R, Shown (Msg ("preport.hint")) & ASCII.LF);
-      return To_String (R);
+      return One_Box (Tick, Made) & ASCII.LF & Shown (Msg ("preport.hint")) & ASCII.LF;
    end Boxes;
 
    --  ---- the audit -------------------------------------------------------------------------------------------------------
