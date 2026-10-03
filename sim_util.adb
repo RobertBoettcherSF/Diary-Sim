@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 pragma Ada_2022;
 
 with Ada.Calendar.Formatting, Ada.Strings.Fixed, Ada.Strings.Unbounded, Interfaces;
@@ -13,7 +13,6 @@ package body Sim_Util is
    function Img (N : Integer) return String is (Img (Int (N)));
 
    function Clamp (V, Hi : Integer) return Integer is (Integer'Max (0, Integer'Min (Hi, V)));
-   function Clip (S : String) return String is (if S'Length > 100 then S (S'First .. S'First + 99) & "..." else S);
 
    function Mix (X : U64) return U64 is
       Z : U64 := (X xor Interfaces.Shift_Right (X, 30)) * 16#BF58476D1CE4E5B9#;
@@ -85,5 +84,52 @@ package body Sim_Util is
       end loop;
       return Ada.Strings.Unbounded.To_String (R);
    end Esc;
+
+   function Plain_Stamp return String is
+      R : String (1 .. 15);
+      N : Natural := 0;
+   begin
+      for C of Stamp loop
+         if C in '0' .. '9' or else C = 'T' then
+            N := N + 1;
+            R (N) := (if C = 'T' then '_' else C);
+         end if;
+      end loop;
+      return R;
+   end Plain_Stamp;
+
+   function Diff_At (A, B : String) return String is
+      I : Positive := 1;
+   begin
+      while I <= A'Length and then I <= B'Length and then A (A'First + I - 1) = B (B'First + I - 1) loop
+         I := I + 1;
+      end loop;
+      declare
+         From : constant Positive := Integer'Max (1, I - 10);
+         function Cut (S : String) return String is
+           (if From > S'Length then "" else S (S'First + From - 1 .. S'First + Integer'Min (S'Length, From + 35) - 1));
+      begin
+         return "column" & I'Image & "|" & Cut (A) & "|" & Cut (B);
+      end;
+   end Diff_At;
+
+   function Frames (Trace : String) return String is
+      R    : Ada.Strings.Unbounded.Unbounded_String;
+      From : Positive := Trace'First;
+   begin
+      for I in Trace'Range loop
+         if Trace (I) = ASCII.LF then
+            declare
+               L : constant String := Trace (From .. I - 1);
+            begin
+               if Fx.Index (L, " at ") > 0 and then Fx.Index (L, "???") = 0 and then Fx.Index (L, "b~") = 0 then
+                  Ada.Strings.Unbounded.Append (R, L (Fx.Index (L, " ") + 1 .. L'Last) & ASCII.LF);   --  without the address
+               end if;
+            end;
+            From := I + 1;
+         end if;
+      end loop;
+      return Ada.Strings.Unbounded.To_String (R);
+   end Frames;
 
 end Sim_Util;

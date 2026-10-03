@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL; a rerun
@@ -7,7 +7,7 @@
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Command_Line, Ada.Directories,
-     Ada.Exceptions, Ada.Streams.Stream_IO, Ada.Strings.Fixed, Ada.Strings.Maps, Ada.Text_IO,
+     Ada.Exceptions, Ada.Streams.Stream_IO, Ada.Strings.Fixed, Ada.Text_IO,
      Ada.Containers.Indefinite_Vectors, Ada.Containers.Indefinite_Hashed_Maps, Ada.Strings.Hash,
      Ada.Strings.Unbounded, GNAT.Traceback.Symbolic, Sim_Util;
 use Ada.Strings.Unbounded, Sim_Util;
@@ -79,12 +79,15 @@ procedure Diary_Sim is
 
    --  A message of data/messages.txt with {1}..{7} filled in and \n as line break.
    function Msg (Key : String; A1, A2, A3, A4, A5, A6, A7 : String := "") return String is
-      R : Unbounded_String := To_Unbounded_String (if Messages.Contains (Key) then Messages (Key) else "[" & Key & "]");
       A : constant array (1 .. 7) of Unbounded_String :=
         [To_Unbounded_String (A1), To_Unbounded_String (A2), To_Unbounded_String (A3), To_Unbounded_String (A4),
          To_Unbounded_String (A5), To_Unbounded_String (A6), To_Unbounded_String (A7)];
+      R : Unbounded_String := To_Unbounded_String (if Messages.Contains (Key) then Messages (Key) else "[" & Key & "]");
       P : Natural;
    begin
+      if not Messages.Contains (Key) then   --  data/messages.txt missing: key and values
+         for X of A loop Append (R, " " & X); end loop;
+      end if;
       for N in A'Range loop
          loop
             P := Index (R, "{" & Img (N) & "}");
@@ -97,7 +100,7 @@ procedure Diary_Sim is
          exit when P = 0;
          Replace_Slice (R, P, P + 1, "" & ASCII.LF);
       end loop;
-      return To_String (R);
+      return (if Messages.Contains (Key) then To_String (R) else Fx.Trim (To_String (R), Ada.Strings.Both));
    end Msg;
 
    procedure Say (Line : String) is   --  console output, held back until the seed line is out
@@ -209,17 +212,18 @@ procedure Diary_Sim is
       return C = ASCII.LF;
    end Ends_With_Lf;
 
-   --  last_error.txt gets everything; the console gets the first 14 lines (+ a note).
+   --  last_error.txt gets everything; the console the first 14 lines (+ a note).
    procedure Report (E : Ada.Exceptions.Exception_Occurrence) is
+      Raw  : constant String := GNAT.Traceback.Symbolic.Symbolic_Traceback (E);
       Text : constant String := Msg ("err.head", Ada.Exceptions.Exception_Message (E)) & ASCII.LF
         & Msg ("err.where", Img (Seed), Img (Cur_Tick), To_String (Cur_Name), Ada.Exceptions.Exception_Name (E))
-        & ASCII.LF & Msg ("err.trace") & ASCII.LF & GNAT.Traceback.Symbolic.Symbolic_Traceback (E);
+        & ASCII.LF & Msg ("err.trace") & ASCII.LF & Frames (Raw);
       F : TIO.File_Type;
       Count : Natural := 0;
       From  : Positive := Text'First;
    begin
       TIO.Create (F, TIO.Out_File, "last_error.txt");
-      TIO.Put (F, Text);
+      TIO.Put (F, Text & Msg ("err.raw") & ASCII.LF & Raw);
       TIO.Close (F);
       for I in Text'Range loop
          if Text (I) = ASCII.LF then
@@ -274,13 +278,8 @@ begin
    Every := (if Every < 0 then 100 else Int'Max (1, Every));
 
    if Fresh and then Ada.Directories.Exists ("diaries") then
-      declare
-         Old : constant String := "diaries_old_" & Fx.Translate (Fx.Trim (Stamp, Ada.Strings.Both),
-                                                                  Ada.Strings.Maps.To_Mapping (":-T", "  _"));
-      begin
-         Ada.Directories.Rename ("diaries", Old);
-         Say (Msg ("fresh.moved", Old));
-      end;
+      Ada.Directories.Rename ("diaries", "diaries_old_" & Plain_Stamp);
+      Say (Msg ("fresh.moved", "diaries_old_" & Plain_Stamp));
    end if;
    Ada.Directories.Create_Path ("diaries");
    for E in Entity_Id loop
@@ -344,7 +343,7 @@ begin
             if Tick <= Int (Disk (E).Length) then   --  already on disk: compare, do not write
                if No_Ts (Line) /= No_Ts (Disk (E) (Positive (Tick))) then
                   raise Diary_Error with Msg ("err.drift", Name (E), Img (Tick),
-                                              Clip (No_Ts (Disk (E) (Positive (Tick)))), Clip (No_Ts (Line)));
+                                              Diff_At (No_Ts (Disk (E) (Positive (Tick))), No_Ts (Line)));
                end if;
                Verified := Verified + 1;
             else

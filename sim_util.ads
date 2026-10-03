@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  Pure helpers of diary_sim: deterministic hash rolls and the diary line
 --  format (read side).  Standard library only.
 pragma Ada_2022;
@@ -10,8 +10,12 @@ package Sim_Util is
    function Img (N : Int) return String;         --  no leading blank
    function Img (N : Integer) return String;
    function Clamp (V, Hi : Integer) return Integer;   --  0 .. Hi
-   function Clip (S : String) return String;          --  at most ~100 characters
    function Stamp return String;                      --  2026-10-03T02:19:00
+   function Plain_Stamp return String;                --  20261003_021900
+   --  Where two lines first differ, as "column N" plus ~36 characters of each.
+   function Diff_At (A, B : String) return String;
+   --  The frames with source lines of a GNAT symbolic traceback, one per line.
+   function Frames (Trace : String) return String;
 
    --  1 .. Sides, a pure function of (seed, entity, tick, salt): no RNG stream.
    function Roll (Seed : Int; Entity : Positive; Tick : Int; Salt : Natural; Sides : Positive) return Positive;
