@@ -1,4 +1,4 @@
-# Version: 0.009
+# Version: 0.010
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then continue the simulation in this folder: loads (imports and
@@ -11,11 +11,17 @@
 # make play       the same as make run
 # make demo       PREVIEW ONLY: build, then 200 ticks of a new world in memory, a screen of
 #                 excerpts, nothing written to disk (make run is what writes ./diaries)
+# make say       Robert speaks, between sessions (recorded in ../diary-data/diaries/says.txt, applied
+#                 from the next run): make say PLAYER=iris TEXT="..." (a player may pass it on),
+#                 make say WESEN=ada TEXT="..." (direct), make say TEXT="..." (all four);
+#                 optional AS=name.  make answer TEXT="..." answers the latest collective petition.
+# make inbox      print the inbox: the reports of the players to Robert (newest 40 lines)
 # make check      version headers + the resume/replay/drift/crash checks
 GNATMAKE ?= gnatmake
 FLAGS = -g -O1 -fno-inline -gnatwa -gnat2022 -gnata
 
-.PHONY: all version-check portable run play demo check clean
+.PHONY: all version-check portable run play demo check clean say answer inbox
+export WESEN PLAYER TEXT AS
 
 EVERY ?= 100
 
@@ -25,7 +31,7 @@ all:
 	@rm -f b~*
 
 version-check:
-	@bad=0; for f in Makefile diary_sim.adb sim_util.ads sim_util.adb sim_world.ads sim_world.adb sim_quit.ads sim_quit.adb; do \
+	@bad=0; for f in Makefile diary_sim.adb sim_util.ads sim_util.adb sim_world.ads sim_world.adb sim_quit.ads sim_quit.adb sim_menu.ads sim_menu.adb sim_dharma.ads sim_dharma.adb; do \
 	  head -1 $$f | grep -Eq 'Version: [0-9]+\.[0-9]{3}' || { echo "no version header: $$f"; bad=1; }; done; \
 	  v=$$(head -1 diary_sim.adb | grep -Eo '[0-9]+\.[0-9]{3}'); \
 	  grep -q "Build : constant String := \"$$v\"" diary_sim.adb || { echo "Build constant differs from diary_sim.adb header $$v"; bad=1; }; \
@@ -41,6 +47,15 @@ play: run
 
 demo: all
 	bin/diary_sim --preview --ticks 200
+
+say: all
+	bin/diary_sim --say "$${PLAYER:-$${WESEN:-all}}" --text "$$TEXT" $(if $(AS),--as "$$AS",)
+
+answer: all
+	bin/diary_sim --answer --text "$$TEXT" $(if $(AS),--as "$$AS",)
+
+inbox: all
+	bin/diary_sim --inbox
 
 check: version-check all
 	scripts/checks.sh

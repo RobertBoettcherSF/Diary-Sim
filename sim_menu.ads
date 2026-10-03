@@ -1,6 +1,6 @@
---  Version: 0.001
+--  Version: 0.002
 --  The main menu of diary_sim (terminal only): a Game-of-Life intro that reveals the title,
---  the title in block letters (data/fonts.txt), the tagline (data/menu.txt) and four entries.
+--  the title in block letters (data/fonts.txt), the tagline (data/menu.txt) and five entries.
 --  Every screen is built as one string and written with a single Put (one frame).
 --  Plain Ada, standard library only; all text comes from data/ (menu.txt, fonts.txt).
 pragma Ada_2022;
@@ -9,7 +9,7 @@ with Sim_Util;
 
 package Sim_Menu is
 
-   type Choice is (New_Game, Load_Game, Settings, Quit);
+   type Choice is (New_Game, Load_Game, Inbox, Settings, Quit);
 
    --  data/fonts.txt lines; call before Intro / Show (a missing font gives plain letters).
    procedure Load_Font (Lines : Sim_Util.Str_Vectors.Vector);
@@ -18,10 +18,10 @@ package Sim_Menu is
    --  Ends with the full title on screen.  Needs a terminal (ANSI cursor codes).
    procedure Intro (Seed : Natural);
 
-   --  The menu screen: title, tagline, Info lines, the four entries, Notice, prompt.
+   --  The menu screen: title, tagline, Info lines, the five entries, Notice, prompt.
    function Frame (Info : Sim_Util.Str_Vectors.Vector; Notice : String) return String;
 
-   --  Shows the menu once and reads one answer (1-4, n/l/s/q, a name); End_Of_File = Quit.
+   --  Shows the menu once and reads one answer (1-5, n/l/i/s/q, a name); End_Of_File = Quit.
    --  A bad answer shows the notice menu.bad and asks again.
    function Ask (Info : Sim_Util.Str_Vectors.Vector) return Choice;
 

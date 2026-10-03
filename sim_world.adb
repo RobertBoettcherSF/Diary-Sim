@@ -1,4 +1,4 @@
---  Version: 0.006
+--  Version: 0.007
 pragma Ada_2022;
 
 with Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
@@ -429,6 +429,43 @@ package body Sim_World is
       end loop;
       return (if Length (Res) = 0 then "none" else To_String (Res));
    end Top_Topics;
+
+   function Topic_Name (T : Positive) return String is (To_String (Topics (T).Name));
+   function Topic_Phrase (T : Positive) return String is (To_String (Topics (T).Phrase));
+
+   function Core_Percent (Seed : Int; E : Entity_Id) return Natural is
+      R : constant U64 := Start_Row (Seed, E);
+      N : Natural := 0;
+   begin
+      for I in 0 .. R30_Width - 1 loop
+         if (Interfaces.Shift_Right (R, I) and 1) = 1 then N := N + 1; end if;
+      end loop;
+      return N * 100 / R30_Width;
+   end Core_Percent;
+
+   function Ballot_For (Seed : Int; E : Entity_Id; Tick, Since : Int) return Natural is
+      W : array (1 .. Max_Topics) of Natural := [others => 0];
+      Total : Natural := 0;
+      Pick : Positive;
+   begin
+      for Pass in 1 .. 2 loop
+         for P of Petitions loop
+            if Pass = 2 or else P.Tick > Since then
+               W (P.Topic) := W (P.Topic) + 1 + (if P.From = E then 2 else 0);
+            end if;
+         end loop;
+         Total := 0;
+         for T in 1 .. N_Topics loop Total := Total + W (T); end loop;
+         exit when Total > 0;
+      end loop;
+      if Total = 0 then return 0; end if;
+      Pick := Roll (Seed, Positive (E), Tick, 5010, Total);
+      for T in 1 .. N_Topics loop
+         if Pick <= W (T) then return T; end if;
+         Pick := Pick - W (T);
+      end loop;
+      return 0;
+   end Ballot_For;
 
    --  ---- kalpas ------------------------------------------------------------------------
 

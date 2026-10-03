@@ -1,0 +1,107 @@
+# Wording of the Buddhism layer and of the players' reports (Sim_Dharma, diary_sim).  key = text;
+# {1}..{7} are fill-ins.  FLAVOUR ONLY: the realm, ladder and anchor labels borrow familiar Buddhist
+# vocabulary (the six realms of rebirth, taking refuge, the bodhisattva vow) as loose names for
+# numbers; they change nothing and claim nothing about the tradition.  Edit freely (not the {n}).
+cat.company = company
+cat.rest = rest
+cat.words = words
+# the six realms, by net karma (limits: realm.limit.* in karma.txt), low to high
+realm.name.1 = hells
+realm.name.2 = hungry ghosts
+realm.name.3 = animals
+realm.name.4 = asuras
+realm.name.5 = humans
+realm.name.6 = devas
+# the commitment ladder, by commitment score (limits: ladder.limit.*)
+ladder.name.1 = wanderer
+ladder.name.2 = refuge
+ladder.name.3 = precepts
+ladder.name.4 = vow
+ladder.name.5 = bodhisattva vow
+# the anchor = the last wesen to leave a session
+anchor.label = bodhisattva: the one who stays until the others have left
+sev.1 = info
+sev.2 = note
+sev.3 = alert
+inbox.goal = [goal]
+inbox.value = [value]
+# values (tags) of the fact kinds; a player's values (players.txt) pick the facts it stresses
+tags.karma = growth,fairness
+tags.liberated = growth
+tags.unrest = rest,calm
+tags.conflict = order,calm
+tags.aware = calm,voice
+tags.anchor = order,loyalty
+tags.petition = voice,order
+tags.relayed = voice,loyalty
+tags.softened = voice
+tags.withheld = fairness,voice
+# ---- the reports: every kind in three wordings (calm / plain / alarm), the same facts and numbers
+inbox.karma.calm = {1}: karma {2} this session, {3} in all ({4}).
+inbox.karma.plain = {1} karma {2} this session, total {3}, realm {4}.
+inbox.karma.alarm = {1} karma moved {2}; total {3}; realm {4}!
+inbox.liberated.calm = {1} has passed {3} karma ({2}): liberated, free to start anywhere.
+inbox.liberated.plain = {1} is LIBERATED (karma {2}, limit {3}); may start anywhere next time.
+inbox.liberated.alarm = {1} is LIBERATED (karma {2} over {3}) and may now start ANYWHERE!
+inbox.unrest.calm = {1}: a little unrest ({2}), mostly {3} ({4}% of the last window).
+inbox.unrest.plain = {1} unrest {2}; {3} dominated the last window ({4}%).
+inbox.unrest.alarm = {1} unrest {2}! {3} took {4}% of the last window.
+inbox.conflict.calm = {1}: {2} value(s) pull against the commitment ({3}, {4}).
+inbox.conflict.plain = {1} conflict {2}; commitment {3}, rung {4}.
+inbox.conflict.alarm = {1} CONFLICT {2} against commitment {3} ({4})!
+inbox.aware.calm = {1} feels a little watched ({2}); {3} is watching.
+inbox.aware.plain = {1} awareness {2}; watched by {3}.
+inbox.aware.alarm = {1} feels WATCHED: awareness {2} ({3} on watch)!
+inbox.anchor.calm = {1} stayed last ({3}), commitment {4}; {2} left first.
+inbox.anchor.plain = anchor {1} (commitment {4}), first to leave {2}.
+inbox.anchor.alarm = {2} left FIRST; {1} had to stay last (commitment {4}).
+inbox.petition.calm = the wesen ask, gently, for: {2} ({3} of {4} votes; {1}).
+inbox.petition.plain = collective petition {1}: {2} ({3} of {4} votes).
+inbox.petition.alarm = the wesen VOTED for {1}: {2} ({3} of {4})!
+inbox.relayed.calm = {1} passed your words to {2}: "{3}"
+inbox.relayed.plain = {1} relayed to {2}: "{3}"
+inbox.relayed.alarm = {1} delivered your message to {2}: "{3}"!
+inbox.softened.calm = {1} softened your words for {2}: "{3}"
+inbox.softened.plain = {1} softened the message to {2}: "{3}"
+inbox.softened.alarm = {1} toned your message to {2} down: "{3}"!
+inbox.withheld.calm = {1} did not pass your words to {2}: "{3}"
+inbox.withheld.plain = {1} withheld the message to {2}: "{3}"
+inbox.withheld.alarm = {1} WITHHELD your message to {2}: "{3}"!
+# ---- sessions.txt and the other files
+hdr.dharma = # D<n>: karma good bad life realm vals(curiosity/rest/company/craft) unrest dom rank commit rung conflict aware lib rebirth per wesen | C<n>: the wesen vote on the collective petition | Y<n>: player state (attention tone brevity warmth trust ada/gemini/replika/robert)
+hdr.says = # A<n> tick=<tick> session=<n> to=<wesen|player|all> kind=<say|all|relay|answer> by=<name> re=<C<n>|-> text=<text>: what Robert said, between sessions; it takes effect from tick+1
+hdr.inbox = # The inbox of Robert: summary reports of the players, newest {1} lines. Each line: id severity from session tick | text | src=<session>:<tick>:<wesen>
+err.dharma = session {1} (tick {2}): the D / C / Y lines of sessions.txt differ from the replay; first difference at {3}
+err.inbox = diaries/inbox.txt {1} differs from the replay; first difference at {2}
+# ---- the end-of-session table, the since block, the menu
+table.head = dharma (session {1}, life {1}, tick {2}):
+table.cols = wesen    realm   karma  good/bad | cur rst com crf | unrest dom       |rank cmt rg cf | aw  watcher
+table.anchor = ANCHOR
+table.lib = LIBERATED
+table.petition = petition to the players {1}: {2} (tally {3})
+table.players = players: {1}
+table.anchorline = anchor: {1} ({2}); first to leave: {3}
+since.dharma =  karma {1} (now {2}) | life {3} | unrest {4} | aware {5} | commit {6} (now {7})
+since.players = players: {1}
+inbox.page = inbox for Robert (newest {1} lines):
+inbox.none = the inbox is empty (the players write after a session)
+inbox.head = inbox for Robert (latest reports, {1} of {2} lines; all: make inbox):
+inbox.players = player {1}
+inbox.answer = answer: make say PLAYER=<name> TEXT="..."   (or WESEN=<name> for a wesen; make answer TEXT="..." for the petition)
+inbox.saved = inbox: {1}
+menu.dharma = karma {1}
+menu.petition = last petition to the players: {1}; answer with make answer TEXT="..."
+menu.inbox = inbox: {1} lines (newest: {2})
+menu.inbox.title = Inbox of Robert (newest {1} of {2} lines)
+menu.inbox.back = press Enter to go back:
+# ---- make say / make answer
+say.ok = recorded {1}: to {2} ({3}); it takes effect from tick {4}
+say.nogame = no game in {1} yet: run a session first
+say.nowho = say to whom? PLAYER=<name> (a player), WESEN=<name> (a wesen) or all; players: {1}; wesen: {2}
+say.unknown = "{1}" is neither a player ({2}) nor a wesen ({3})
+say.empty = nothing to say: give TEXT="..."
+say.nopetition = no collective petition yet to answer (the wesen vote at the end of a session)
+say.text.cut = (text cut to {1} characters)
+warn.dharma_file = warning: data/{1} not found; the Buddhism layer shows its keys (restore the file)
+warn.says_bad = warning: says.txt line {1} is not a usable address; skipped
+debug.dharma = dharma {1}

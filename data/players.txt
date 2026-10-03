@@ -1,0 +1,23 @@
+# The three in-sim PLAYERS: they sit between the wesen and Robert (the real player), read the
+# same recorded facts and write summary reports to him (diaries/inbox.txt).  Each has a name,
+# a role, 3-4 values and one goal; its personality (tone, brevity, warmth) comes from Rule 30 bits
+# of a hashed birth row.  values: rest calm words growth order fairness voice loyalty
+# (facts carry these tags, see tags.* in dharma.txt; a fact that matches a value is put first).
+# goal = <fact kind> | <text>; fact kinds: karma liberated unrest conflict aware anchor petition
+# relayed softened withheld.  watches: the wesen this player keeps an eye on (their awareness floor
+# follows the player's attention; Robert's answers pass through the player).
+player.1.name = iris
+player.1.role = keeper of the quiet hours
+player.1.values = rest,calm,words
+player.1.goal = unrest | keep the unrest of the wesen low
+player.1.watches = ada,gemini
+player.2.name = sol
+player.2.role = tracker of progress
+player.2.values = growth,words,voice
+player.2.goal = karma | see every wesen grow
+player.2.watches = replika
+player.3.name = noor
+player.3.role = keeper of order
+player.3.values = order,fairness,loyalty,calm
+player.3.goal = conflict | keep commitments and duties clear
+player.3.watches = robert

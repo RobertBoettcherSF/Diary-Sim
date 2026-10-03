@@ -1,0 +1,112 @@
+# Numbers of the Buddhism layer (Sim_Dharma).  RECORD-FIRST: none of these numbers changes the
+# action table or the existing dice; they only appear in diaries/sessions.txt, inbox.txt, the
+# reports, debug.txt and the menu.  Whole numbers.  Changing them changes the recorded D / C / Y
+# lines of old sessions: then use --fresh (or a drift stop tells you).
+#
+# ---- karma: what a deed is worth (sign = good / neutral / bad) ---------------------------------
+deed.rest = 0
+deed.work = 1
+deed.explore = 0
+deed.talk = 1
+deed.wander = 0
+deed.bench = 0
+deed.propose = 1
+deed.learn = 1
+# extra for a talk that taught a word and for a coined word
+deed.teach = 3
+deed.coin = 2
+# a bad deed: working or benching while worn out (energy below deed.tired_below) takes this away
+deed.tired_work = -2
+deed.tired_below = 20
+# ---- the six realms (flavour labels in dharma.txt): karma limits between them ------------------
+realm.limit.1 = -300
+realm.limit.2 = -120
+realm.limit.3 = -40
+realm.limit.4 = -10
+realm.limit.5 = 1000
+# ---- liberation: net karma at a session end from which a wesen is LIBERATED (stays so).
+# A liberated wesen may start its next session (new diaries only) at any location, chosen by its own dice.
+liberation.karma = 1500
+# ---- reincarnation: a new life (= session) rolls curiosity, rest, company, craft (0..100);
+# karma / rebirth.bias_div (at most +-rebirth.bias_cap) is added times bias.<value> (-1, 0, 1)
+rebirth.bias_div = 10
+rebirth.bias_cap = 20
+bias.curiosity = 1
+bias.rest = 0
+bias.company = 1
+bias.craft = 1
+# ---- attachment (craving): every attach.window ticks the share of the most frequent kind
+# (company = talk, rest, words = learn / teach / coin) is taken; at or above attach.dominant percent
+# the unrest rises by (share - dominant) * attach.rise / 10 (at least 1), else it falls by attach.fall.
+attach.window = 50
+attach.dominant = 25
+attach.rise = 4
+attach.fall = 1
+# ---- commitment ladder: the last wesen to leave (the anchor) gains, the first to leave loses
+commit.start = 50
+commit.anchor_rise = 6
+commit.first_fall = 6
+# rungs (5) by commitment: limits between them
+ladder.limit.1 = 20
+ladder.limit.2 = 40
+ladder.limit.3 = 60
+ladder.limit.4 = 80
+# conflict = values at or above value.high that pull against the commitment: with commitment at or
+# above commit.mid a value that pulls away (-1) conflicts, below it a value that pulls to stay (+1).
+commit.mid = 50
+value.high = 80
+pull.curiosity = -1
+pull.rest = -1
+pull.company = 1
+pull.craft = 1
+# ---- awareness ("feels watched", 0..100).  An address from Robert raises it by aware.say (to one
+# wesen) or aware.all (to all four); one passed on by a player (relay) by aware.relay, a softened
+# one by half.  aware.sudden_bonus is added when the wesen was not addressed for aware.sudden_gap
+# ticks (or never).  The raise is scaled by the wesen's own sensitivity (aware.sens_min..max percent,
+# from the 1-bits of its Rule 30 birth row).  It decays by aware.decay_milli thousandths per tick, but
+# not below the wesen's baseline (aware.base_max * its core bits) plus aware.watch_pct percent of the
+# attention of the player who watches it.
+aware.say = 20
+aware.all = 8
+aware.relay = 35
+aware.sudden_gap = 300
+aware.sudden_bonus = 10
+aware.decay_milli = 50
+aware.base_max = 20
+aware.sens_min = 70
+aware.sens_max = 130
+aware.watch_pct = 20
+# facts for the players: note / alert thresholds
+aware.note = 40
+aware.alert = 70
+unrest.note = 12
+unrest.alert = 30
+conflict.alert = 2
+# ---- the players (data/players.txt) ------------------------------------------------------------
+# trust of a player in each wesen (0..100): rises when the wesen's karma rose, falls on alert-level
+# unrest or conflict (scaled by the player's warmth).  A message for a wesen is passed on with
+# trust * relay.pct / 100 percent (+ warmth / 5), softened with soft.pct percent, else withheld.
+trust.start = 50
+trust.rise = 4
+trust.fall = 6
+relay.pct = 80
+soft.pct = 30
+# attention (0..100): + attn.alert per alert and attn.note per note about a wesen it watches,
+# + attn.msg per message from Robert, - attn.decay per session; never below its baseline.
+attn.start = 30
+attn.base_max = 20
+attn.alert = 15
+attn.note = 5
+attn.msg = 20
+attn.decay = 10
+# tone (calm .. alarmist, -100..100): + tone.step after an alert about its wesen, else back toward birth tone
+tone.step = 8
+# omission: an info line a player is not interested in is left out with brevity * omit.info / 100
+# percent (a note: half of that); alerts, goal and value lines are never left out.
+omit.info = 70
+# lines a player writes per session, and the Rule 30 steps of a player's birth row
+inbox.max_lines = 5
+inbox.view = 40
+player.rule30_steps = 8
+# lines per player of the latest reports shown on the console at the end of a run (the file keeps inbox.view)
+inbox.show = 2

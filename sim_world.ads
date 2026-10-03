@@ -1,4 +1,4 @@
---  Version: 0.006
+--  Version: 0.007
 --  The shared world of diary_sim: the four entities, the vocabulary (base
 --  words, who knows what, coined words), the bench kernels and the final votes.
 --  One world per run; Init rebuilds it from scratch, so a replay from tick 1
@@ -75,6 +75,17 @@ package Sim_World is
    function Petition_Topic (N : Positive) return String;
    function Petition_Line (N : Positive) return String;   --  P<n> tick=<t> from=<id> topic=<topic> [repeat=<k>] wish=<text>
    function Top_Topics (N : Positive) return String;      --  "more_rest 5, quieter_mood 4"
+
+   --  ---- ballot for the collective petition (record only; own salt 5010) ---------------------
+   --  Each wesen votes for one petition topic: the weight of a topic is the number of petitions on
+   --  it since tick Since (any wesen) + 2 per petition of its own; with none since Since, the whole
+   --  list counts.  0: no petition at all.  A pure function of (seed, entity, tick, petition list).
+   --  PROOF-LATER: Importance 2/10, Urgency 2/10, SPARK2 (weight sums, cumulative pick)
+   function Ballot_For (Seed : Int; E : Entity_Id; Tick, Since : Int) return Natural;
+   function Topic_Name (T : Positive) return String;
+   function Topic_Phrase (T : Positive) return String;
+   --  Percent (0 .. 100) of the 1-bits in the entity's birth row (its core Rule 30 personality).
+   function Core_Percent (Seed : Int; E : Entity_Id) return Natural;
 
    --  ---- kalpas: the session length vote --------------------------------------------
    --  Every entity votes for the number of NEW ticks of a session: a base-60 pick

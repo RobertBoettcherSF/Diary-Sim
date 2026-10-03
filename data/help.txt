@@ -8,6 +8,8 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
   --home=DIR     save folder (else $DIARY_HOME, else ../diary-data)
   --yes          no question when diaries/ has no *.jsonl (start a new world)
   --preview      simulate in memory, print excerpts, write nothing
+  --say=W --text=T  words to a wesen/player/all; --answer: to the petition
+  --inbox        print the inbox of Robert
   --crash-at=T   force a failure at tick T (shows the error trace)
   --help         this text
 Wesen (entities): ada (engineer), gemini (reviewer), replika (vice_president),
@@ -34,6 +36,10 @@ Menu: on a terminal without --ticks/--more/--fresh/--yes/--preview a main menu
 (New Game, Load Game, Settings, Quit) comes first; text in data/menu.txt.
 End of session: each wesen (the 4 entities) names a favourite word, recorded
 in diaries/sessions.txt (W lines) and verified on import.
+Record-first layer (karma, rebirth, unrest, anchor, awareness) + 3 players who
+write reports to Robert: diaries/inbox.txt (make inbox, menu Inbox). Robert
+speaks between sessions: make say PLAYER=<p> or WESEN=<w> TEXT="..." (else
+all); make answer TEXT="..." (the latest petition); AS=name. Replay-verified.
 make run | make play [TICKS=N EVERY=100 SEED=42 YES=1]: build, load the save,
 run TICKS new ticks (--more). Copy a backup into ../diary-data/diaries first.
 Without --ticks/--more/TICKS the 4 entities VOTE the session length (data/

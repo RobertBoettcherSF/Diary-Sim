@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Strings.Fixed, Ada.Strings.Unbounded, Ada.Text_IO, Sim_Util;
@@ -228,7 +228,7 @@ package body Sim_Menu is
       Rows.Append ("");
       for L of Info loop Rows.Append ("  " & L); end loop;
       Rows.Append ("");
-      for I in 1 .. 4 loop Rows.Append ("    " & Img (I) & ") " & Msg ("entry." & Img (I))); end loop;
+      for I in 1 .. 5 loop Rows.Append ("    " & Img (I) & ") " & Msg ("entry." & Img (I))); end loop;
       Rows.Append (if Notice = "" then "" else "  " & Notice);
       return Frame_Text (Rows, Msg ("menu.prompt") & " ");
    end Frame;
@@ -244,8 +244,9 @@ package body Sim_Menu is
          begin
             if A = "1" or else (A'Length > 0 and then F = 'n') then return New_Game;
             elsif A = "2" or else (A'Length > 0 and then F = 'l') then return Load_Game;
-            elsif A = "3" or else (A'Length > 0 and then F = 's') then return Settings;
-            elsif A = "4" or else (A'Length > 0 and then F = 'q') then return Quit;
+            elsif A = "3" or else (A'Length > 0 and then F = 'i') then return Inbox;
+            elsif A = "4" or else (A'Length > 0 and then F = 's') then return Settings;
+            elsif A = "5" or else (A'Length > 0 and then F = 'q') then return Quit;
             end if;
             Notice := To_Unbounded_String (Msg ("menu.bad"));
          end;

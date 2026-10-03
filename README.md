@@ -28,12 +28,13 @@ Started on a terminal without `--ticks` / `--more` / `--fresh` / `--yes` / `--pr
 (`make run`, `make play`), the program first shows a menu: a Conway Game-of-Life intro whose
 dying cells reveal the title, the block-letter title, the tagline, the **wesen** (the four
 entities: ada, gemini, replika, robert) with the game's session, ticks and last favourite
-words (who taught or coined each), and exactly four entries:
+words (who taught or coined each), and exactly five entries:
 
 - **New Game**: a fresh world; if `diaries/` holds a game it asks first and moves it to
   `diaries_old_<time>` (never deleted).
 - **Load Game**: the normal flow (load, replay-verify, the wesen vote the session length); with
   no game the usual `No previous diary found ... Generate a new one? [y/N]`.
+- **Inbox**: the reports the players wrote to you (see below), then Enter to go back.
 - **Settings**: seed, progress interval and the rule limits named in `data/menu.txt`
   (`settings.keys`), for this session only; `data/limits.txt` is never written. Changing
   start_percent, teach_percent, coin_percent or coin_cap changes the rules: use it with New Game.
@@ -54,6 +55,72 @@ so the action table and all existing dice are untouched and old diaries stay val
 `taught-by-<id>`, `coined-by-<id>`), verified on import like the session records (a
 difference is DRIFT), shown on the console (`words vote (session 3): ada city | ...`), in
 `run_report.txt`, `debug.txt` and on the menu.
+
+## The Buddhism layer and the players (record-first)
+
+Everything below is **recorded, not acted on**: none of it changes the action table or any
+existing dice, so diaries written before it stay valid (a session of an older diary just has no
+D/C/Y lines). It is rebuilt by the replay from tick 1 and verified; a difference is a DRIFT stop.
+Numbers: `data/karma.txt`; wording and labels: `data/dharma.txt`; players: `data/players.txt`.
+Tradition labels (the six realms, the ladder rungs, the *bodhisattva* anchor) are **flavour text
+only**, loose names for numbers; they claim nothing about the tradition. Edited numbers change the
+recorded values: use `--fresh`. Each mechanism has its own hash salt (5000 and up; the favourite
+word keeps 960).
+
+- **Karma** (per wesen, accumulates across sessions): every action is a deed with a weight from
+  `karma.txt` (`deed.*`: good > 0, neutral 0, bad < 0; teaching and coining add extra; working or
+  benching while worn out, energy below `deed.tired_below`, takes away). Shown as net (good/bad).
+  The realm label comes from net karma bands (`realm.limit.*`, flavour).
+- **Reincarnation**: every session is a new *life*. At its start each wesen rolls curiosity,
+  rest, company and craft (0..100), shifted by karma (`rebirth.bias_*`, `bias.*`). Record only.
+- **Attachment (unrest)**: every `attach.window` ticks the most frequent kind of action
+  (company = talk, rest, words = learn/teach/coin) is taken; if its share reaches
+  `attach.dominant` percent the unrest rises, else it falls (0..100). `dom=rest:26` is the last
+  window's top share.
+- **Commitment ladder and the anchor**: each wesen's own kalpa vote is its leave point; the ranking
+  is by leave point, ties by lower energy, then id. The last to leave is the *anchor* (commitment +
+  `commit.anchor_rise`), the first loses `commit.first_fall`; the score (0..100) persists. The rung is
+  its band; **conflict** counts values at or above `value.high` that pull against the commitment
+  (`pull.*`: curiosity and rest pull away, company and craft pull to stay).
+- **Awareness** ("feels watched", 0..100): raised only by what Robert says (below), scaled by the
+  wesen's own sensitivity (from the 1-bits of its Rule 30 birth row); personal and sudden addresses
+  (none for `aware.sudden_gap` ticks) raise more; it decays slowly per tick toward a floor made of its
+  baseline plus a share of the **attention** of the player who watches it.
+- **Collective petition**: at the end of a session each wesen votes for one topic of the petitions
+  filed this session (topics as in `petitions.txt`; own petitions count more); the winner and the
+  tally are recorded (`C<n>` line) and reported.
+- **Liberation**: a wesen whose net karma passes `liberation.karma` at a session end is flagged
+  LIBERATED (permanent). In a session started by this build (its `S` line carries `dharma=1`) a
+  liberated wesen starts at a location chosen by its own dice (salt 5020) instead of the carried-over one
+  (`rebirth=<location>` in its `D` line). **Replay compatibility:** the move only applies to sessions
+  with `dharma=1`, i.e. new diaries; a session of an older diary replays exactly as written.
+
+**Players.** Three in-sim players (`data/players.txt`: name, role, 3-4 values, one goal) sit
+between the wesen and Robert, the real player. Each has a personality (tone, brevity, warmth) from Rule 30
+bits, an **attention**, a **trust** per wesen and a tone bias, all persisted as `Y<n>` lines in
+`sessions.txt`. All three read the same recorded facts (karma, liberation, unrest, conflict, awareness,
+anchor, petition, what happened to Robert's messages) and each writes up to `inbox.max_lines`
+summary lines per session to **`diaries/inbox.txt`** (newest `inbox.view` = 40 lines; the file is a
+view, the replay regenerates everything and compares). Bias changes **emphasis** (goal and value
+matches first, tagged `[goal]` / `[value]`), **omission** (an uninteresting info/note line may be left
+out by a brief player; alerts and its goal never) and **wording** (calm / plain / alarm templates in
+`dharma.txt`), never the facts or numbers. Every line carries `severity from session tick` and a
+source tag `src=<session>:<tick>:<wesen>`. Read it at the end of a run, with `make inbox` or the
+**Inbox** menu entry.
+
+**Answering.** Robert's words are recorded in `diaries/says.txt` (between sessions, at the lowest
+common tick; applied from the next tick, replay-verified through the awareness numbers):
+
+    make say PLAYER=iris TEXT="please look after ada"   # to a player, who may pass it on
+    make say WESEN=ada TEXT="hello"                     # direct to a wesen
+    make say TEXT="thanks, all"                         # to all four wesen
+    make answer TEXT="yes, more places"                 # answers the latest collective petition
+
+(`AS=name` names the speaker; `bin/diary_sim --say <name|all> --text "..."` is the same.) A message
+for a player goes on to the wesen that player watches (an answer to all players): each player
+**relays, softens or withholds** it per wesen by its trust and warmth (own dice, salt 5030+), and a
+relayed message raises awareness more (`aware.relay`) than a direct address (`aware.say`).
+The inbox reports what each player did with it.
 
 ## Since the last session
 
@@ -404,7 +471,7 @@ paste it` and `back up diaries/ before the next run`.
 `diary_sim.adb` (main: CLI, loop, side files, debug.txt), `sim_menu.ads/.adb` (main menu: life intro, title, entries), `sim_quit.ads/.adb` (Ctrl-C and SIGTERM flag), `sim_world.ads/.adb` (entities,
 vocabulary, Rule 30 personality, bench kernels, votes and summary text), `sim_util.ads/.adb` (hash rolls,
 line parsing, data-file helpers), `data/words.txt`, `data/topics.txt` (petition topics), `data/limits.txt`,
-`data/messages.txt` (all console wording), `data/kalpas.txt` (session length votes), `data/menu.txt` (menu text, title, tagline), `data/fonts.txt` (title letters), `data/vocab.txt`, `data/help.txt`,
+`data/messages.txt` (all console wording), `data/kalpas.txt` (session length votes), `data/menu.txt` (menu text, title, tagline), `data/fonts.txt` (title letters), `data/vocab.txt`, `data/help.txt`, `sim_dharma.ads/.adb` (karma, rebirth, unrest, ladder, awareness, players, inbox), `data/karma.txt` (numbers), `data/dharma.txt` (wording, flavour labels), `data/players.txt` (the three players),
 `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
 `Version:` header (`make version-check`); a touched file goes up by 0.001. V&V is
 suspended: no new test suites, `scripts/checks.sh` must keep passing.
