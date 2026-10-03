@@ -16,7 +16,7 @@ bad() { echo "  FAIL -- $*"; fails=$((fails + 1)); }
 idn() { sed 's/^\([a-z]*\) *=.*/\1 = \1/' "$root/data/names.txt" > "$1/names.txt"; }
 idata="$w/idata"; mkdir -p "$idata"; cp -r "$root/data/." "$idata/"; idn "$idata"
 # screens (and later chess) change the dice of the words: the older scenarios run with them off; their own scenarios switch them on
-sed -i 's/^screen.enabled = .*/screen.enabled = 0/; s/^chess.enabled = .*/chess.enabled = 0/' "$idata/limits.txt"
+sed -i 's/^screen.enabled = .*/screen.enabled = 0/; s/^chess.enabled = .*/chess.enabled = 0/; s/^robot.enabled = .*/robot.enabled = 0/' "$idata/limits.txt"
 mkdir -p "$w/ib/bin"; cp "$bin" "$w/ib/bin/"; cp -r "$idata" "$w/ib/data"; bin="$w/ib/bin/diary_sim"   # the binary beside its identity-names data
 lines() { cat "$1"/*.jsonl | wc -l; }
 dups()  { for f in "$1"/*.jsonl; do grep '}}$' "$f" | grep -o '"tick":[0-9]*' | sort | uniq -d; done | wc -l; }
@@ -779,12 +779,12 @@ grep -q -- '--screens' "$root/data/help.txt" && grep -q 'make screens' "$root/RE
 unset DIARY_HOME
 
 echo "== 32. chess (chess=1): perft, games, Elo, timeout / resignation, players vs wesen, replay-verified C lines =="
-"$bin" --perft > p1.txt 2>&1; rc=$?
-[ $rc = 0 ] && grep -q '^18 checks, 0 failed' p1.txt && grep -q 'perft 4 197281' p1.txt && grep -q 'state checkmate' p1.txt && grep -q 'move e1g1 = 5171' p1.txt && ok "--perft: six reference positions (castling, en passant, promotion), mate / stalemate / fifty-move states and ICCF notation, 18 checks" || bad "perft ($rc)"
+"$bin" --perft > "$w/p1.txt" 2>&1; rc=$?
+[ $rc = 0 ] && grep -q '^18 checks, 0 failed' "$w/p1.txt" && grep -q 'perft 4 197281' "$w/p1.txt" && grep -q 'state checkmate' "$w/p1.txt" && grep -q 'move e1g1 = 5171' "$w/p1.txt" && ok "--perft: six reference positions (castling, en passant, promotion), mate / stalemate / fifty-move states and ICCF notation, 18 checks" || bad "perft ($rc)"
 rm -rf "$w/ch"; mkdir -p "$w/ch/bin" "$w/ch/h" "$w/ch/bad/bin" "$w/ch/off/bin" "$w/ch/o" "$w/ch/t/bin" "$w/ch/t/h" "$w/ch/r/bin" "$w/ch/r/h" "$w/ch/n/bin" "$w/ch/n/h"
 cp "$bin" "$w/ch/bin/"; cp -r "$idata" "$w/ch/data"; sed -i 's/^chess.enabled = .*/chess.enabled = 1/' "$w/ch/data/limits.txt"; cb="$w/ch/bin/diary_sim"
-cp "$bin" "$w/ch/bad/bin/"; cp -r "$w/ch/data" "$w/ch/bad/data"; sed -i 's/^perft.2 = 3 97862/perft.2 = 3 97863/' "$w/ch/bad/data/chess.txt"; ( cd "$w/ch/bad" && ./bin/diary_sim --perft > "$w/ch/p2.txt" 2>&1 ); rc=$?; cp "$w/ch/p2.txt" p2.txt
-[ $rc = 1 ] && grep -q '^FAIL.*expected 97863, got 97862' p2.txt && grep -q '1 failed' p2.txt && ok "--perft with a wrong count: FAIL line and exit 1" || bad "perft failing ($rc)"
+cp "$bin" "$w/ch/bad/bin/"; cp -r "$w/ch/data" "$w/ch/bad/data"; sed -i 's/^perft.2 = 3 97862/perft.2 = 3 97863/' "$w/ch/bad/data/chess.txt"; ( cd "$w/ch/bad" && ./bin/diary_sim --perft > "$w/ch/p2.txt" 2>&1 ); rc=$?; cp "$w/ch/p2.txt" "$w/p2.txt"
+[ $rc = 1 ] && grep -q '^FAIL.*expected 97863, got 97862' "$w/p2.txt" && grep -q '1 failed' "$w/p2.txt" && ok "--perft with a wrong count: FAIL line and exit 1" || bad "perft failing ($rc)"
 cd "$w/ch/h" || exit 1; export DIARY_HOME="$w/ch/h"
 "$cb" --seed 42 --ticks 300 --yes --every 5000 > h1.txt 2>&1; "$cb" --more 300 --every 5000 > h2.txt 2>&1
 n_c=$(grep -c '^C[0-9]' diaries/chess.txt); n_m=$(grep -c ' move ' diaries/chess.txt)
@@ -838,6 +838,59 @@ hol=$(grep -c ' hol ' "$w/ch/h/diaries/chess.txt"); echo "   holiday notices in 
 cp "$bin" "$w/ch/off/bin/"; cp -r "$idata" "$w/ch/off/data"; DIARY_HOME="$w/ch/o" "$w/ch/off/bin/diary_sim" --seed 42 --ticks 300 --yes --every 5000 > /dev/null 2>&1; DIARY_HOME="$w/ch/o" "$w/ch/off/bin/diary_sim" --elo > e3.txt 2>&1
 [ ! -e "$w/ch/o/diaries/chess.txt" ] && ! grep -q 'chess=1' "$w/ch/o/diaries/sessions.txt" && ! grep -q 'chess' "$w/ch/o"/diaries/*.jsonl && grep -q 'no chess games' e3.txt && ok "chess.enabled = 0: no marker, no chess.txt, no chess text; --elo says so" || bad "chess off"
 grep -q -- '--elo' "$root/data/help.txt" && grep -q -- '--perft' "$root/data/help.txt" && grep -q 'make elo' "$root/README.md" && grep -q 'elo.table' "$root/data/chess.txt" && grep -q 'chess.elo.k' "$root/data/limits.txt" && ok "--help, README, limits.txt and chess.txt cover chess and Elo" || bad "docs chess"
+unset DIARY_HOME
+
+echo "== 33. robot (robot=1): commands pinned on a screen, battery, camera written back, shared screens, replay-verified Q lines =="
+rm -rf "$w/rb"; mkdir -p "$w/rb/bin" "$w/rb/h" "$w/rb/o" "$w/rb/off/bin" "$w/rb/k/bin" "$w/rb/k/h" "$w/rb/b/bin" "$w/rb/b/h" "$w/rb/s/bin" "$w/rb/s/h"
+cp "$bin" "$w/rb/bin/"; cp -r "$idata" "$w/rb/data"; sed -i 's/^screen.enabled = .*/screen.enabled = 1/; s/^robot.enabled = .*/robot.enabled = 1/' "$w/rb/data/limits.txt"; rbn="$w/rb/bin/diary_sim"
+cd "$w/rb/h" || exit 1; export DIARY_HOME="$w/rb/h"
+"$rbn" --seed 42 --ticks 300 --yes --every 5000 > r1.txt 2>&1; "$rbn" --more 300 --every 5000 > r2.txt 2>&1
+n_q=$(grep -c '^Q[0-9]' diaries/robot.txt); n_x=$(grep -c ' exec ' diaries/robot.txt); n_c=$(grep -c ' cmd ' diaries/robot.txt)
+grep -q '^S1 .* robot=1$' diaries/sessions.txt && grep -q '^S2 .* robot=1$' diaries/sessions.txt && head -1 diaries/robot.txt | grep -q '^# seed 42$' && [ "$n_c" -ge 10 ] && [ "$n_x" -ge 5 ] \
+  && ok "new sessions carry robot=1; commands, executions and shared screens are Q lines in diaries/robot.txt ($n_q lines, $n_c commands, $n_x executions)" || bad "robot.txt ($n_q $n_c $n_x)"
+np=$(grep ' exec ' diaries/robot.txt | sed -E 's/.* pos=([-0-9,]+) .*/\1/' | sort -u | wc -l); nb=$(grep ' exec ' diaries/robot.txt | sed -E 's/.* bat=([0-9]+) .*/\1/' | sort -u | wc -l)
+up=$(grep ' exec ' diaries/robot.txt | sed -E 's/.* bat=([0-9]+) .*/\1/' | awk 'NR>1 && $1>p {n++} {p=$1} END{print n+0}'); dn=$(grep ' exec ' diaries/robot.txt | sed -E 's/.* bat=([0-9]+) .*/\1/' | awk 'NR>1 && $1<p {n++} {p=$1} END{print n+0}')
+[ "$np" -ge 3 ] && [ "$nb" -ge 3 ] && [ "$up" -ge 1 ] && [ "$dn" -ge 1 ] && grep -q ' exec [a-z]* go [a-z]* ok ' diaries/robot.txt && ok "the robot moves ($np positions) and its battery drains ($dn times) and recharges ($up times)" || bad "robot moves ($np $nb $up $dn)"
+grep -q ' exec .* err=unknown command: ' diaries/robot.txt && grep -q ' exec .* err=[a-z]* where? ' diaries/robot.txt && ok "an unknown command and a command without its direction give an error line (err=...)" || bad "robot errors"
+bad_cam=$(grep ' exec ' diaries/robot.txt | sed -E 's/.* cam=//' | awk -F'|' 'NF != 5 || length($1) != 5 || length($3) != 5 || length($5) != 5 {n++} END{print n+0}')
+[ "$bad_cam" = 0 ] && ok "every execution records a 5x5 camera view (five rows of five glyphs)" || bad "camera rows ($bad_cam)"
+"$rbn" --screens > sc.txt 2>&1; ncam=$(grep -cE '^  [^ ]{5}$' sc.txt); npin=$(grep -c ' cmd w=.*\*' diaries/screens.txt)
+[ "$ncam" -ge 5 ] && [ "$npin" -ge 5 ] && ok "a pinned command word sits on the screen (* in the K lines, $npin) and the camera view is written back under the frame ($ncam rows)" || bad "screen camera ($ncam $npin)"
+ns=$(grep -c '^Q[0-9]* t=[0-9]* share ' diaries/robot.txt); nl=$(grep -c '^Q[0-9]* t=[0-9]* learn ' diaries/robot.txt)
+[ "$ns" -ge 1 ] && [ "$nl" -ge 3 ] && ok "a wesen that reads a steering wesen's screen gets the view and may steer too ($ns shares); command words are learned beside the robot ($nl)" || bad "shares ($ns $nl)"
+second=$(awk '/ share /{ split($4, a, ">"); v[a[2]] = 1 } / cmd /{ c[$4]++ } END { for (k in v) if (c[k] > 0) n++; print n + 0 }' diaries/robot.txt)
+[ "$second" -ge 1 ] && ok "$second wesen steered the robot after getting the view by reading another screen" || bad "second controller ($second)"
+grep -q 'by=robot' diaries/world.txt && ok "the robot's pick / push are world edits (by=robot in diaries/world.txt)" || bad "robot edits"
+"$rbn" --robot > rv.txt 2>&1; rc=$?
+mkdir -p "$w/rb/disp"; cp -r "$w/rb/data" "$w/rb/disp/data"; cp "$root/data/names.txt" "$w/rb/disp/data/names.txt"; ( cd "$w/rb/disp" && "$rbn" --robot > "$w/rb/h/rd.txt" 2>&1 )
+[ $rc = 0 ] && grep -q '^robot ' rv.txt && grep -q 'battery' rv.txt && grep -q 'steered by' rv.txt && [ "$(grep -cE '^  [^ ]{5}$' rv.txt)" = 5 ] && [ "$(awk 'length > 79' rv.txt | wc -l)" = 0 ] && ok "--robot: state, battery, 5x5 camera, controllers, last commands (display names, <= 79 columns)" || bad "--robot view ($rc)"
+grep -qE 'Lemma|Corollary|Theorem|Axiom' rd.txt && ! grep -qwE 'ada|gemini|replika|robert' rd.txt && ok "the robot view uses the display names (Lemma, Corollary, Theorem, Axiom)" || bad "robot names"
+grep -q '^robot (' run_report.txt && grep -q '^ada: commands' run_report.txt && ok "the end report has the robot block" || bad "robot report"
+cp diaries/robot.txt ../robot.keep
+sed -i '0,/ exec /s/ pos=\([-0-9]*\),/ pos=\1\1,/' diaries/robot.txt; "$rbn" --more 0 --every 5000 > h4.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && grep -q 'robot.txt Q' h4.txt && ok "tampered position in an exec line: import FAILED, DRIFT" || bad "tampered robot line"
+cp ../robot.keep diaries/robot.txt; echo "Q99999 t=5 cmd ada go north ready=9" >> diaries/robot.txt; "$rbn" --more 0 --every 5000 > h5.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "an invented Q line: DRIFT" || bad "invented Q line"
+cp ../robot.keep diaries/robot.txt; cp diaries/sessions.txt ../sess.keep; sed -i '/^S1 /s/ robot=1//' diaries/sessions.txt; "$rbn" --more 0 --every 5000 > h6.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "S line with its robot=1 marker removed: DRIFT" || bad "tampered robot marker"
+cp ../sess.keep diaries/sessions.txt; "$rbn" --more 0 --every 5000 > h7.txt 2>&1; grep -q '^import OK: 4 entities, 600 ticks verified' h7.txt && ok "restored: replays again" || bad "robot restore"
+# command words must already be known: no contact learning, no sloppy picks -> never a word nobody knows
+cp "$bin" "$w/rb/k/bin/"; cp -r "$w/rb/data" "$w/rb/k/data"; sed -i 's/^robot.contact_pct = .*/robot.contact_pct = 0/; s/^robot.sloppy_pct = .*/robot.sloppy_pct = 0/' "$w/rb/k/data/limits.txt"
+DIARY_HOME="$w/rb/k/h" "$w/rb/k/bin/diary_sim" --seed 42 --ticks 400 --yes --every 5000 > k1.txt 2>&1
+kc=$(grep -c ' cmd ' "$w/rb/k/h/diaries/robot.txt"); kb=$(grep ' cmd ' "$w/rb/k/h/diaries/robot.txt" | grep -Ec ' (north|east|south|west)')
+[ "$kc" -ge 1 ] && [ "$kb" = 0 ] && grep -q ' err=go where? ' "$w/rb/k/h/diaries/robot.txt" && ok "a command word nobody knows is never sent ($kc commands, none with a direction word nobody knows)" || bad "known command words ($kc $kb)"
+# a low battery: too little for the commands -> "battery low" errors
+cp "$bin" "$w/rb/b/bin/"; cp -r "$w/rb/data" "$w/rb/b/data"; sed -i 's/^robot.battery.start = .*/robot.battery.start = 3/; s/^robot.charge = .*/robot.charge = 0/; s/^robot.trickle = .*/robot.trickle = 100000/' "$w/rb/b/data/limits.txt"
+DIARY_HOME="$w/rb/b/h" "$w/rb/b/bin/diary_sim" --seed 42 --ticks 400 --yes --every 5000 > b1.txt 2>&1; DIARY_HOME="$w/rb/b/h" "$w/rb/b/bin/diary_sim" --more 0 --every 5000 > b2.txt 2>&1
+grep -q ' err=battery low' "$w/rb/b/h/diaries/robot.txt" && grep -q '^import OK' b2.txt && ok "a drained battery: commands answer 'battery low' (and replay)" || bad "battery low"
+# sloppy controllers: the error line shows on the screen too
+cp "$bin" "$w/rb/s/bin/"; cp -r "$w/rb/data" "$w/rb/s/data"; sed -i 's/^robot.sloppy_pct = .*/robot.sloppy_pct = 100/; s/^robot.cmd_pct = .*/robot.cmd_pct = 60/' "$w/rb/s/data/limits.txt"
+DIARY_HOME="$w/rb/s/h" "$w/rb/s/bin/diary_sim" --seed 42 --ticks 200 --yes --every 5000 > s1.txt 2>&1; DIARY_HOME="$w/rb/s/h" "$w/rb/s/bin/diary_sim" --screens > s2.txt 2>&1
+grep -q '^  ERR unknown command' s2.txt && ok "an unknown command puts an ERR line on the controller's screen" || bad "ERR on screen"
+# off: no marker, no file, no robot text
+cp "$bin" "$w/rb/off/bin/"; cp -r "$w/rb/data" "$w/rb/off/data"; sed -i 's/^robot.enabled = .*/robot.enabled = 0/' "$w/rb/off/data/limits.txt"; DIARY_HOME="$w/rb/o" "$w/rb/off/bin/diary_sim" --seed 42 --ticks 300 --yes --every 5000 > /dev/null 2>&1; DIARY_HOME="$w/rb/o" "$w/rb/off/bin/diary_sim" --robot > rn.txt 2>&1
+[ ! -e "$w/rb/o/diaries/robot.txt" ] && ! grep -q 'robot=1' "$w/rb/o/diaries/sessions.txt" && ! grep -qi 'robot' "$w/rb/o"/diaries/*.jsonl && grep -q 'no robot' rn.txt && ok "robot.enabled = 0: no marker, no robot.txt, no robot text; --robot says so" || bad "robot off"
+grep -q -- '--robot' "$root/data/help.txt" && grep -q 'make robot' "$root/README.md" && grep -q 'robot.battery.max' "$root/data/limits.txt" && grep -q 'robot.verbs' "$root/data/robot.txt" && ok "--help, README, limits and data/robot.txt describe the robot" || bad "robot docs"
 unset DIARY_HOME
 
 rm -rf "$w"

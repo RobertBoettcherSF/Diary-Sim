@@ -1,0 +1,41 @@
+# The robot (robot=1 sessions): wording and the command list (diary_sim --robot, make robot).  Numbers: data/limits.txt robot.*
+# The command list: verbs, and the words a verb takes (a verb without a line takes none).  "go" is a base word, the rest are made
+# when the robot comes into the world.  Changing the list needs --fresh (robot.txt drifts).
+robot.verbs = go,turn,look,pick,push
+robot.args.go = north,east,south,west
+robot.args.turn = left,right
+robot.name = Tinker
+robot.glyph = ^>v<
+robot.dir.0 = north
+robot.dir.1 = east
+robot.dir.2 = south
+robot.dir.3 = west
+robot.meaning = a command word of the robot
+robot.nothing = nothing
+robot.idle = idle
+robot.nobody = nobody
+robot.none = no robot in this save (it comes with a session marked robot=1: make run).
+robot.rep = robot (commands sent / refused with an error, per wesen):
+robot.state = robot {1} at ({2},{3}) facing {4}, battery {5}/{6}
+robot.carry = carries {1}; command: {2}
+robot.steer = steered by: {1}
+robot.counts = commands {1}, errors {2}, screens shared {3}
+robot.per = {1}: commands {2}, errors {3}
+robot.queue = {1}
+robot.ok.go = went {1} to ({2},{3})
+robot.ok.turn = now facing {1}
+robot.ok.look = looked around, saw {1} things
+robot.ok.pick = picked up {1}
+robot.ok.push = pushed {1} ahead
+robot.err.unknown = unknown command: {1}
+robot.err.noarg = {1} where?
+robot.err.battery = battery low ({1})
+robot.err.full = hands full
+robot.err.nothing = nothing here
+robot.err.ahead = nothing ahead
+robot.reply.err = the robot answered: {1}
+robot.battery = battery {1}
+robot.screen_err = ERR {1}
+detail.robot_cmd = pinned the robot command "{1}" on the screen
+detail.robot_learn = learned the robot command word {1} beside the robot
+err.robot = robot.txt {1} differs from the replay: {2}

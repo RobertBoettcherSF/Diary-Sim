@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  The treadmill world of diary_sim (world=1 sessions only): an endless grid that is generated
 --  around the wesen as they walk and is identical whenever they come back.
 --
@@ -89,5 +89,13 @@ package Sim_Things is
    --  Position, nearest landmark, biome and a 5x5 window per wesen (glyphs: data/things.txt).
    function Treadmill (PX, PY : Pos_Array; Present : Placed_Array) return Str_Vectors.Vector;
    function Treadmill_Now return Str_Vectors.Vector;   --  of the live state
+
+   --  ---- for the robot (Sim_Robot) -----------------------------------------------------------------------------------
+   function Landmark_X (L : Natural) return Integer;   --  the fixed cell of landmark 0 .. 3
+   function Landmark_Y (L : Natural) return Integer;
+   function Near_Landmark (X, Y, Radius : Integer) return Boolean;   --  within Radius cells (Manhattan) of a landmark
+   --  The 5x5 window around (X, Y), five strings of five glyphs: the biome, the thing glyph where a thing lies, the digit of a
+   --  wesen standing there; the centre shows Centre (the robot).  Like one column of the treadmill view.
+   function Camera (X, Y : Integer; Centre : Character) return Str_Vectors.Vector;
 
 end Sim_Things;

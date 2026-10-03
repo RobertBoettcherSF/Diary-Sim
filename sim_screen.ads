@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  The screens of diary_sim (screen=1 sessions).  Every wesen owns a small text screen (screen.cols x screen.rows
 --  characters, data/limits.txt) with the words it knows, the names of things it examined, and words it saw on other
 --  screens.  A wesen can pin and drop words, show its screen to a wesen in the same or a neighbouring cell, or leave
@@ -31,6 +31,11 @@ package Sim_Screen is
    end record;
    package Learn_Vectors is new Ada.Containers.Vectors (Positive, Learn_Rec);
 
+   type Read_Rec is record
+      Viewer, Owner : Entity_Id := 1;
+   end record;
+   package Read_Vectors is new Ada.Containers.Vectors (Positive, Read_Rec);
+
    procedure Init (Seed, Coin_Cap : Int);   --  empty screens, no notes; reads data/limits.txt
 
    --  A word E learned or a thing name E examined (called from the step; the line comes out with the next Step).
@@ -41,6 +46,18 @@ package Sim_Screen is
    --  Detail: the sentence for E's diary line (appended; empty if nothing happened).
    procedure Step (E : Entity_Id; Tick : Int; Lines : in out Str_Vectors.Vector;
                    Learned : in out Learn_Vectors.Vector; Detail : in out Ada.Strings.Unbounded.Unbounded_String);
+
+   --  ---- the robot's hooks (robot=1; Sim_Robot) ----------------------------------------------------------------------------
+   --  Pin up to two command words (a command like "go north"): the earlier command pins are released, a word not yet on the
+   --  screen is put there first.  A command word of 0 is left out.  Not counted against screen.pins.
+   procedure Pin_Command (E : Entity_Id; W1, W2 : Natural);
+   --  The 5x5 camera view (and the error line, "" if none) the robot wrote to the screen of E; Box shows it below the frame.
+   procedure Set_Frame (E : Entity_Id; Rows : Str_Vectors.Vector; Err : String);
+   function Has_Frame (E : Entity_Id) return Boolean;
+   function Frame_Of (E : Entity_Id) return Str_Vectors.Vector;
+   function Word_At (E : Entity_Id; I : Positive) return Positive;   --  the I-th word on the screen
+   --  Who read whose screen (show or note) since the last call; the log is emptied.
+   function Take_Reads return Read_Vectors.Vector;
 
    function Count (E : Entity_Id) return Natural;                 --  words on the screen
    function Words_Of (E : Entity_Id) return String;               --  ids in order, "*" before a pinned one

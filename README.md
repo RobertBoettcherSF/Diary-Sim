@@ -283,6 +283,30 @@ wesen may play each other too (`chess.player_pct`), so wesen and players (Modulu
   The end report (`run_report.txt`) lists ratings, results, wins by timeout / resignation, and every game with its moves.
   Changing the `chess.*` numbers or `elo.table` of a running save needs `--fresh`.
 
+## The robot (`robot=1` sessions, `make robot`)
+
+One robot ("Tinker") lives in the world (`sim_robot.ads/.adb`; numbers `robot.*` in `data/limits.txt`, wording and the command list in
+`data/robot.txt`). It has a position, a heading, a battery and a short command list: `go <north|east|south|west>`, `turn <left|right>`,
+`look`, `pick` (up), `push`. It needs `screen=1`; new sessions carry `robot=1` (`robot.enabled = 0`: nothing changes).
+
+* **Steering through the screen:** a wesen pins the command words on its own screen (`*go *north`) - only words it already KNOWS can be
+  pinned, so steering ties to word growth. A wesen within `robot.reach` cells learns an unknown command word (`robot.contact_pct`) and
+  steers for `robot.window` ticks. The robot acts when its delay is over (`robot.delay` + dice `robot.delay_extra`), one command per
+  `robot.gap` ticks; a command sent while it is busy is not accepted.
+* **Camera:** after every command the robot's 5x5 view (like `make map`: biome glyphs, `*` things, digits = wesen, the arrow `^>v<` =
+  the robot and its heading) is written under the controller's screen frame. A wesen that READS a steering wesen's screen (show / note)
+  gets the same view and may steer too, so several can steer one robot.
+* **Errors:** an unknown command (`robot.sloppy_pct`: a wesen pins any word of its screen), a verb without its direction (`go where?`),
+  a low battery, `hands full`, `nothing here`, `nothing ahead` put an `ERR ...` line on the screen and cost no battery.
+* **Battery:** `robot.cost.*` per command; +`robot.charge` per tick within `robot.charge.radius` cells of a landmark, else +1 every
+  `robot.trickle` ticks; `battery low` below the cost of a command.
+* **World:** `pick` takes a thing from the robot's cell (a world edit `by=robot` in `diaries/world.txt`), `push` moves the thing ahead
+  one cell; `look` offers the names of things it saw to the screen.
+* **Record:** commands, executions (with position, heading, battery and the camera rows), shared screens and learned command words are
+  `Q<n> t=<tick> ...` lines in `diaries/robot.txt`, recomputed by every replay: a changed or invented line, or a removed `robot=1`
+  marker, is DRIFT. `make robot` (`--robot`) replays and prints the state, the 5x5 camera, who steers and the last commands with
+  display names; the end report has a robot block. Changing the `robot.*` numbers or the command list of a running save needs `--fresh`.
+
 ## The debug digest (`DEBUG=1`, `--debug`)
 
 `debug.txt` (always written, <= 1500 bytes) is unchanged. For a compact file to attach to chat:

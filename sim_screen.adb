@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  See sim_screen.ads.
 pragma Ada_2022;
 
@@ -13,6 +13,7 @@ package body Sim_Screen is
    type Entry_Rec is record
       W : Positive := 1;
       Pinned : Boolean := False;
+      Cmd : Boolean := False;       --  pinned by a robot command
    end record;
    package Entry_Vectors is new Ada.Containers.Vectors (Positive, Entry_Rec);
    package Word_Lists is new Ada.Containers.Vectors (Positive, Positive);
@@ -31,6 +32,10 @@ package body Sim_Screen is
    Started : Bools := [others => False];
    C_Taught, C_Coined, C_Shown, C_Left, C_Read, C_Pins : Counts := [others => 0];
    Pend : Str_Vectors.Vector;
+   Reads : Read_Vectors.Vector;
+   type Frames is array (Entity_Id) of Str_Vectors.Vector;
+   Cam_Frame : Frames;
+   Frame_Err : array (Entity_Id) of Unbounded_String;
    Seed_V, Cap_V : Int := 0;
    Cols, Rows, Max_Pins, Start_N, Pin_Pct, Drop_Pct, Show_Pct, Read_N, Learn_Pct, Leave_Pct, Leave_N, Note_Pct,
      Blend_Pct, Own_Blend_Pct : Integer := 1;
@@ -45,6 +50,8 @@ package body Sim_Screen is
       for E in Entity_Id loop Scr (E).Clear; end loop;
       Notes.Clear;
       Pend.Clear;
+      Reads.Clear;
+      for E in Entity_Id loop Cam_Frame (E).Clear; Frame_Err (E) := Null_Unbounded_String; end loop;
       Started := [others => False];
       C_Taught := [others => 0]; C_Coined := [others => 0]; C_Shown := [others => 0];
       C_Left := [others => 0]; C_Read := [others => 0]; C_Pins := [others => 0];
@@ -133,7 +140,7 @@ package body Sim_Screen is
       Probe : constant String := (if Knows (E, W) then "" else "?") & Word (W);
    begin
       if Index_Of (E, W) > 0 or else Probe'Length >= Cols then return False; end if;   --  one column stays free for "*"
-      Scr (E).Append (Entry_Rec'(W => W, Pinned => False));
+      Scr (E).Append (Entry_Rec'(W => W, Pinned => False, Cmd => False));
       if not Fit (E, W) then
          Scr (E).Delete_Last;   --  nothing to drop: the new word does not fit
          return False;
@@ -237,6 +244,7 @@ package body Sim_Screen is
                Read_One (V, Owner, W, Tick, J, Learned, Got, N_Got);
             end;
          end loop;
+         Reads.Append (Read_Rec'(Viewer => V, Owner => Owner));
          Event (Owner, Kind & " " & Name (V) & Where & " w=" & To_String (Seen_W) & " l=" & (if N_Got = 0 then "-" else To_String (Got)));
          for J in 0 .. Take - 2 loop   --  two words side by side may blend
             declare
@@ -412,6 +420,58 @@ package body Sim_Screen is
       Pend.Clear;
    end Step;
 
+   --  ---- the robot's hooks ----------------------------------------------------------------------------------------------
+   procedure Pin_Command (E : Entity_Id; W1, W2 : Natural) is
+      Ignore : Boolean;
+      Todo : constant array (1 .. 2) of Natural := [W1, W2];
+   begin
+      for I in 1 .. Natural (Scr (E).Length) loop   --  release the earlier command
+         if Scr (E) (I).Cmd then Scr (E) (I).Cmd := False; Scr (E) (I).Pinned := False; end if;
+      end loop;
+      for W of Todo loop
+         if W > 0 then
+            Ignore := Put (E, W, "robot");
+            declare
+               I : constant Natural := Index_Of (E, W);
+            begin
+               if I > 0 and then not Scr (E) (I).Pinned then
+                  declare
+                     R : Entry_Rec := Scr (E) (I);
+                  begin
+                     R.Pinned := True;
+                     R.Cmd := True;
+                     Scr (E).Delete (I);
+                     Scr (E).Insert (1, R);
+                     if not Fit (E, W) then   --  the "*" does not fit
+                        R.Pinned := False; R.Cmd := False;
+                        Scr (E).Delete (1);
+                        Scr (E).Insert (Natural'Min (I, Natural (Scr (E).Length) + 1), R);
+                     end if;
+                  end;
+               end if;
+            end;
+         end if;
+      end loop;
+      Event (E, "cmd w=" & Words_Of (E));
+   end Pin_Command;
+
+   procedure Set_Frame (E : Entity_Id; Rows : Str_Vectors.Vector; Err : String) is
+   begin
+      Cam_Frame (E) := Rows;
+      Frame_Err (E) := To_Unbounded_String (Err);
+   end Set_Frame;
+
+   function Has_Frame (E : Entity_Id) return Boolean is (not Cam_Frame (E).Is_Empty);
+   function Frame_Of (E : Entity_Id) return Str_Vectors.Vector is (Cam_Frame (E));
+   function Word_At (E : Entity_Id; I : Positive) return Positive is (Scr (E) (I).W);
+
+   function Take_Reads return Read_Vectors.Vector is
+      R : constant Read_Vectors.Vector := Reads;
+   begin
+      Reads.Clear;
+      return R;
+   end Take_Reads;
+
    function Box (E : Entity_Id) return Str_Vectors.Vector is
       Res : Str_Vectors.Vector;
       Frame : constant String := Msg ("screen.frame");   --  corner, horizontal, vertical
@@ -440,6 +500,9 @@ package body Sim_Screen is
          Res.Append (Side & String'[1 .. Cols => ' '] & Side);
       end loop;
       Res.Append (Bar);
+      --  below the frame (never a frame line): the camera view the robot wrote back, and its error
+      for Line of Cam_Frame (E) loop Res.Append ("  " & Line); end loop;
+      if Length (Frame_Err (E)) > 0 then Res.Append ("  " & Msg ("robot.screen_err", To_String (Frame_Err (E)))); end if;
       return Res;
    end Box;
 

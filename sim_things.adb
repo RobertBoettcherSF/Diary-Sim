@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 pragma Ada_2022;
 
 with Ada.Containers.Ordered_Maps, Ada.Strings.Fixed, Ada.Strings.Unbounded;
@@ -518,4 +518,40 @@ package body Sim_Things is
 
    function Treadmill_Now return Str_Vectors.Vector is (Treadmill (PX, PY, Is_Placed));
 
+
+   function Landmark_X (L : Natural) return Integer is (LM_X (Natural'Min (L, 3)));
+   function Landmark_Y (L : Natural) return Integer is (LM_Y (Natural'Min (L, 3)));
+   function Near_Landmark (X, Y, Radius : Integer) return Boolean is
+     (for some L in 0 .. 3 => abs (X - LM_X (L)) + abs (Y - LM_Y (L)) <= Radius);
+
+   function Camera (X, Y : Integer; Centre : Character) return Str_Vectors.Vector is
+      Res : Str_Vectors.Vector;
+      Thing_G : constant Character := Glyph_Key ("glyph.thing", '*');
+      Digits_G : constant String := Msg ("glyph.wesen");
+   begin
+      for Row in -2 .. 2 loop
+         declare
+            Line : String (1 .. 5);
+         begin
+            for Cx in -2 .. 2 loop
+               declare
+                  Gx : constant Integer := X + Cx;
+                  Gy : constant Integer := Y + Row;
+                  G : Character := Biome_Glyph (Gx, Gy);
+               begin
+                  if not Things_At (Gx, Gy).Is_Empty then G := Thing_G; end if;
+                  for O in Entity_Id loop
+                     if Is_Placed (O) and then PX (O) = Gx and then PY (O) = Gy then
+                        G := (if Natural (O) <= Digits_G'Length then Digits_G (Digits_G'First + Natural (O) - 1) else '@');
+                     end if;
+                  end loop;
+                  if Cx = 0 and then Row = 0 then G := Centre; end if;
+                  Line (Cx + 3) := G;
+               end;
+            end loop;
+            Res.Append (Line);
+         end;
+      end loop;
+      return Res;
+   end Camera;
 end Sim_Things;

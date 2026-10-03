@@ -1,4 +1,4 @@
---  Version: 0.023
+--  Version: 0.024
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -28,7 +28,7 @@ pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
-     GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Ledger, Sim_Chess, Sim_Games, Sim_Menu, Sim_Quit, Sim_Screen, Sim_Store, Sim_Things, Sim_Util, Sim_World;
+     GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Ledger, Sim_Chess, Sim_Games, Sim_Menu, Sim_Quit, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Util, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
 
 procedure Diary_Sim is
@@ -55,7 +55,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.023";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.024";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -120,6 +120,13 @@ procedure Diary_Sim is
    Chess_Store : Sim_Store.Store;
    Chess_N : Natural := 0;
    Chess_Lines : Str_Vectors.Vector;
+   --  robot=1 sessions (Sim_Robot): Q lines in diaries/robot.txt (commands, executions, shared screens), replay-verified.
+   Robot_Active : Boolean := False;
+   Robot_Path : constant String := "diaries/robot.txt";
+   Robot_Store : Sim_Store.Store;
+   Robot_N : Natural := 0;
+   Robot_Lines : Str_Vectors.Vector;
+   Robot_View : Boolean := False;                --  --robot: replay, then show the robot
    Elo_View, Perft_Mode : Boolean := False;      --  --elo (replay, then the ranking) / --perft (the move generator checks)
    Screens_View : Boolean := False;              --  --screens: replay, then show the screens (a view like --ledger)
    Rate_Pct, Load, Hist, Cool, Streak, Since_Work, Cool_N, Cut_N, Quick_N : array (Entity_Id) of Natural := [others => 0];
@@ -262,7 +269,7 @@ procedure Diary_Sim is
       Read_Lines (Data_Path ("limits.txt"), Lines, Found);
       if not Found then Warn (Msg ("warn.limits_file")); end if;
       Read_Lines (Data_Path ("menu.txt"), Lines, Found);   --  menu text: keys only, a missing file shows the keys
-      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt", "screens.txt", "chess.txt"]) loop   --  the Buddhism layer: numbers, wording, players
+      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt", "screens.txt", "chess.txt", "robot.txt"]) loop   --  the Buddhism layer: numbers, wording, players
          Read_Lines (Data_Path (F), Lines, Found);
          if not Found then Warn (Msg ("warn.dharma_file", F)); end if;
       end loop;
@@ -721,7 +728,31 @@ procedure Diary_Sim is
                                            else Words_Line (X.W, "screen", Tick, Name (Entity_Id (X.From)))));
             end loop;
             if Length (Said) > 0 then Add (To_String (Said)); end if;
+            for Rd of Sim_Screen.Take_Reads loop   --  whoever read the screen of a steering wesen may steer too
+               if Robot_Active then Sim_Robot.Share (Rd.Viewer, Rd.Owner, Tick, Robot_Lines); end if;
+            end loop;
          end;
+         if Robot_Active then   --  the robot: learn a command word beside it, pin and send a command, read its answer
+            declare
+               Learned_R : Str_Vectors.Vector;
+               Said_R : Unbounded_String;
+            begin
+               Sim_Robot.Control (E, Tick, Robot_Lines, Learned_R, Said_R);
+               for Id of Learned_R loop
+                  declare
+                     W : constant Positive := Positive'Value (Id);
+                  begin
+                     Ensure (E, Words_File, Words_Line (W, "world", Tick, Meaning_Of (W)));
+                  end;
+               end loop;
+               declare
+                  Reply : constant String := Sim_Robot.Take_Reply (E);
+               begin
+                  if Length (Said_R) > 0 then Add (To_String (Said_R)); end if;
+                  if Reply /= "" then Add (Reply); end if;
+               end;
+            end;
+         end if;
       end if;
       Sim_Ledger.Add (E, Tick, A, Verb, S.Location, M_Base, M_After_Base - Pre_Mo - M_Base, S.Mood - M_After_Base - Chess_Fx,
                       Eff_Mo + Push_Nom + Chess_Nom, Led_Phase, Was_Cool, Push_Feel, Chess_Fx);
@@ -1726,6 +1757,33 @@ procedure Diary_Sim is
       end if;
    end Verify_Chess;
 
+   --  Every robot record (command, execution with the camera view, shared screen, learned word) is a Q line in diaries/robot.txt.
+   procedure Emit_Robot_Lines (Tick : Int) is
+      Result : Sim_Store.Status;
+      Old : Unbounded_String;
+   begin
+      for T of Robot_Lines loop
+         Robot_N := Robot_N + 1;
+         declare
+            Line : constant String := "Q" & Img (Robot_N) & " t=" & Img (Tick) & " " & T;
+         begin
+            Sim_Store.Emit (Robot_Store, Line, not Preview and then not Ledger_Mode, Result, Old);
+            if Sim_Store."=" (Result, Sim_Store.Differs) then
+               raise Drift_Error with Msg ("err.robot", "Q" & Img (Robot_N), Diff_At (To_String (Old), Line));
+            end if;
+         end;
+      end loop;
+      Robot_Lines.Clear;
+   end Emit_Robot_Lines;
+
+   procedure Verify_Robot (Upto : Int) is
+      Orphan : constant String := Sim_Store.Orphan (Robot_Store, Upto);
+   begin
+      if Orphan /= "" then
+         raise Drift_Error with Msg ("err.robot", Sim_Store.Key_Of (Orphan), Diff_At (Orphan, "(not in the replay)"));
+      end if;
+   end Verify_Robot;
+
    procedure Do_Tick (Tick : Int) is
    begin
       Cur_Tick := Tick;
@@ -1735,6 +1793,10 @@ procedure Diary_Sim is
          Sim_Games.Clock (Tick, Chess_Lines);
          Emit_Chess_Lines (Tick);
       end if;
+      if Robot_Active then   --  the robot acts when its delay is over
+         Sim_Robot.Tick_Begin (Tick, Robot_Lines);
+         Emit_Robot_Lines (Tick);
+      end if;
       for E in Entity_Id loop
          Cur_Name := To_Unbounded_String (Name (E));
          if Tick = Crash_At and then Tick > Int (Common) and then E = 1 then Events := Forced (Tick); end if;
@@ -1743,6 +1805,7 @@ procedure Diary_Sim is
          begin
             Emit_Screen_Lines (Tick);
             Emit_Chess_Lines (Tick);
+            Emit_Robot_Lines (Tick);
             if Tick <= Int (Disk (E).Length) then   --  already on disk: compare, do not write
                if No_Ts (Line) /= No_Ts (Disk (E) (Positive (Tick))) then
                   raise Drift_Error with Msg ("err.drift", Name (E), Img (Tick),
@@ -1888,6 +1951,15 @@ procedure Diary_Sim is
       if Fails > 0 then Ada.Command_Line.Set_Exit_Status (1); end if;
    end Do_Perft;
 
+   --  The robot after the replay (--robot / make robot).
+   function Robot_Text return String is
+      R : Unbounded_String;
+   begin
+      if not Robot_Active then return Msg ("robot.none") & ASCII.LF; end if;
+      for L of Sim_Robot.View (Last_Done) loop Append (R, L & ASCII.LF); end loop;
+      return To_String (R);
+   end Robot_Text;
+
    --  The screens of every wesen after the replay (--screens / make screens) and the notes lying on things.
    function Screens_Text return String is
       R : Unbounded_String;
@@ -2006,6 +2078,7 @@ procedure Diary_Sim is
       Grant : Boolean := False;         --  grant=1: grants of petitions (diaries/grants.txt) change recovery rates
       Chess : Boolean := False;         --  chess=1: chess games as a rest activity, Elo ratings (Sim_Games, diaries/chess.txt)
       Screen : Boolean := False;        --  screen=1: the wesen own small text screens (Sim_Screen, diaries/screens.txt)
+      Robot : Boolean := False;         --  robot=1: the robot steered through the screens (Sim_Robot, diaries/robot.txt)
    end record;
    package Session_Vectors is new Ada.Containers.Vectors (Positive, Session_Rec);
    Sessions : Session_Vectors.Vector;
@@ -2025,7 +2098,8 @@ procedure Diary_Sim is
      ("S" & Img (R.N) & " start=" & Img (R.Start) & " votes=" & Votes_Text (R.Votes) & " len=" & Img (R.Len)
       & " src=" & (if R.By_Vote then "vote" else "explicit") & (if R.Dharma then " dharma=1" else "")
       & (if R.World then " world=1" else "") & (if R.Rest then " rest=1" else "") & (if R.Grant then " grant=1" else "")
-      & (if R.Screen then " screen=1" else "") & (if R.Chess then " chess=1" else ""));
+      & (if R.Screen then " screen=1" else "") & (if R.Chess then " chess=1" else "")
+      & (if R.Robot then " robot=1" else ""));
    function Yuga (N : Positive) return String is (Msg ("yuga." & Img ((N - 1) mod 4)));
    --  The four votes of a session that starts after tick Start (state: St, known words).
    function Votes_At (Start : Int) return Kalpa_Votes is
@@ -2061,6 +2135,7 @@ procedure Diary_Sim is
       R.Grant := Token (L, "grant") = "1";
       R.Screen := Token (L, "screen") = "1";
       R.Chess := Token (L, "chess") = "1";
+      R.Robot := Token (L, "robot") = "1";
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
         and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0;
       while OK and then K < 4 loop
@@ -2162,6 +2237,7 @@ procedure Diary_Sim is
       Grant_Active := False;
       Screen_Active := False;
       Chess_Active := False;
+      Robot_Active := False;
       if not Ada.Directories.Exists (Sessions_Path) then return; end if;
       Read_Lines (Sessions_Path, Lines, Found);
       for I in 1 .. Natural (Lines.Length) loop
@@ -2203,6 +2279,8 @@ procedure Diary_Sim is
       Grant_Active := R.Grant;
       Screen_Active := R.Screen;
       Chess_Active := R.Chess;
+      Robot_Active := R.Robot;
+      if R.Robot then Sim_Robot.Begin_Life (R.Start); end if;   --  the robot comes into the world with its first session
       for E in Entity_Id loop
          if Sim_Dharma.Rebirth_Location (E) >= 0 then St (E).Location := Clamp (Sim_Dharma.Rebirth_Location (E), 0, L_Max); end if;
       end loop;
@@ -2372,6 +2450,7 @@ procedure Diary_Sim is
    function Grant_Wanted return Boolean is (Rest_Wanted and then Limit ("grant.enabled", 1) /= 0);   --  grant=1 needs rest=1
    function Chess_Wanted return Boolean is (World_Wanted and then Limit ("chess.enabled", 1) /= 0);   --  chess=1 needs the world
    function Screen_Wanted return Boolean is (World_Wanted and then Limit ("screen.enabled", 1) /= 0);   --  screen=1 needs the world
+   function Robot_Wanted return Boolean is (Screen_Wanted and then Limit ("robot.enabled", 1) /= 0);     --  robot=1 needs the screens
 
    --  After the replay of 1 .. Common: resume the unfinished session, or start one
    --  (explicit length, else the vote).  Sets Ticks and Kalpa_Line.
@@ -2391,7 +2470,7 @@ procedure Diary_Sim is
       Session_N := (if Sessions.Is_Empty then 0 else Sessions.Last_Element.N);
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
-               Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted);
+               Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -2407,7 +2486,7 @@ procedure Diary_Sim is
          Kalpa_Line := To_Unbounded_String (Msg ("kalpa.resume", Img (R.N), Yuga (R.N), Votes_Text (R.Votes), Img (R.Len), Img (Ticks)));
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
-               World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted);
+               World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);
@@ -2808,11 +2887,13 @@ procedure Diary_Sim is
       Sim_Things.Init (Seed);
       Sim_Screen.Init (Seed, Coin_Cap);
       Sim_Games.Init (Seed);
+      Sim_Robot.Init (Seed);
       World_Active := World_Wanted;
       Rest_Active := Rest_Wanted;
       Grant_Active := Grant_Wanted;
       Screen_Active := Screen_Wanted;
       Chess_Active := Chess_Wanted;
+      Robot_Active := Robot_Wanted;
       if Rest_Active then Rest_Begin (Seed); end if;
       Con.Put (To_String (Pending));
       Con.Put_Line (Msg ("preview.head", Img (Seed), Img (Total)));
@@ -3185,6 +3266,7 @@ begin
          elsif Opt = "--grant" then Grant_Mode := True; Grant_Opt := To_Unbounded_String (Val);
          elsif Opt = "--perft" then Perft_Mode := True;
          elsif Opt = "--elo" then Ledger_Mode := True; Elo_View := True;
+         elsif Opt = "--robot" then Ledger_Mode := True; Robot_View := True;
          elsif Opt = "--screens" then Ledger_Mode := True; Screens_View := True;
          elsif Opt = "--ledger" then
             Ledger_Mode := True;
@@ -3324,6 +3406,7 @@ begin
    Sim_Things.Init (Seed);
    Sim_Screen.Init (Seed, Coin_Cap);
    Sim_Games.Init (Seed);
+   Sim_Robot.Init (Seed);
    for E in Entity_Id loop
       Cur_Name := To_Unbounded_String (Name (E));
       Ada.Directories.Create_Path ("entities/" & Name (E));
@@ -3359,6 +3442,8 @@ begin
    Screen_N := 0;
    Sim_Store.Open (Chess_Store, Chess_Path, "# seed " & Img (Seed));
    Chess_N := 0;
+   Sim_Store.Open (Robot_Store, Robot_Path, "# seed " & Img (Seed));
+   Robot_N := 0;
    Set_Ledger_From;
    if not Ledger_Mode then Write_Debug ("RUN", ""); end if;   --  stub: a kill -9 still leaves a file
 
@@ -3383,7 +3468,7 @@ begin
       if Ledger_Mode then   --  replayed and verified, nothing decided, nothing written: print the ledger
          for F of Out_File loop TIO.Close (F); end loop;
          for F of Side_Out loop TIO.Close (F); end loop;
-         if Elo_View then Con.Put (Elo_Text); elsif Screens_View then Con.Put (Screens_Text); else Con.Put_Line (Sim_Ledger.Report (Seed, Ledger_From, Ledger_Full)); end if;
+         if Elo_View then Con.Put (Elo_Text); elsif Robot_View then Con.Put (Robot_Text); elsif Screens_View then Con.Put (Screens_Text); else Con.Put_Line (Sim_Ledger.Report (Seed, Ledger_From, Ledger_Full)); end if;
          return;
       end if;
       for E in Entity_Id loop
@@ -3428,6 +3513,7 @@ begin
       Verify_Grants (Last_Done);
       Verify_Screens (Last_Done);
       Verify_Chess (Last_Done);
+      Verify_Robot (Last_Done);
    end if;
    if Quit_Seen then   --  Ctrl-C / SIGTERM: everything written so far is flushed; a rerun resumes
       Con.Put_Line (Msg ("quit", Sim_Quit.Which, Img (Last_Done)));
@@ -3509,6 +3595,9 @@ begin
          for C in Sim_Games.Comp_Id loop Append (Rep, Sim_Games.Summary (C) & ASCII.LF); end loop;
          Append (Rep, Msg ("chess.head") & ASCII.LF);
          for L of Sim_Games.Report (True) loop Append (Rep, L & ASCII.LF); end loop;
+      end if;
+      if Robot_Active then   --  the robot: state, commands and errors per wesen
+         for L of Sim_Robot.Report loop Append (Rep, L & ASCII.LF); end loop;
       end if;
       if not Grant_Report.Is_Empty then   --  granted petitions and the recovery rates they changed
          Append (Rep, Msg ("grant.head") & ASCII.LF);

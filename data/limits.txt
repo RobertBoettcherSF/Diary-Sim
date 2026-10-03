@@ -205,3 +205,29 @@ chess.loss = -2
 chess.cool_cut = 3
 chess.hist_shift = 2
 chess.energy = 1
+
+# robot (robot=1 sessions, needs screen=1): one robot in the world, steered through the screens by pinned command words.  battery
+# start / max; charge per tick within charge.radius cells (Manhattan) of a landmark, else +1 every trickle ticks; cost per command.
+# delay (+ 0..delay_extra by dice) ticks until it acts, at least gap ticks between two commands.  A wesen within reach cells (Manhattan) of the robot
+# steers for window ticks and learns an unknown command word with contact_pct; a steering wesen sends a command with cmd_pct
+# (sloppy_pct: pins any screen word, so an unknown command gives an error line).  Changing these numbers needs --fresh (robot.txt drifts).
+robot.enabled = 1
+robot.start = 3
+robot.reach = 6
+robot.battery.start = 100
+robot.battery.max = 100
+robot.charge = 10
+robot.charge.radius = 2
+robot.trickle = 10
+robot.delay = 3
+robot.delay_extra = 3
+robot.gap = 4
+robot.contact_pct = 35
+robot.cmd_pct = 12
+robot.sloppy_pct = 15
+robot.window = 150
+robot.cost.go = 4
+robot.cost.turn = 1
+robot.cost.look = 1
+robot.cost.pick = 3
+robot.cost.push = 5
