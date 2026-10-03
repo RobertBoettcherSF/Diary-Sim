@@ -71,3 +71,41 @@ kalpa.mood_high = 40
 # Debug digest (--debug, make run DEBUG=1 / make demo DEBUG=1): the byte cap of debug_digest.txt.
 # The least important lines are dropped first; the file ends with a note of what was dropped.
 debug.digest_bytes = 1500
+# The treadmill world (Sim_Things; sessions with world=1 only; world.enabled = 0 gives the old behaviour exactly).
+# Changing any world.* number or a list in things.txt changes the world: an existing diary then needs --fresh.
+# chunk: cells per chunk side (edits are kept per chunk); thing_percent / thing2_percent: chance of the first /
+# second thing in a cell; landmarks: office lab cafe home at fixed cells (lm0 .. lm3); leash: distance from the
+# origin beyond which a wanderer is pulled home; sense: how far a talker looks for company; churn: every n ticks
+# one thing near each wesen appears / wears out / changes (percent appear, wear; the rest changes);
+# verb.<action>: chance that the action becomes examine / push / eat / greet; push.mood.<0|1|2> and
+# eat.energy.<0|1|2>: effect by the pleasant / neutral / unpleasant block of the feel and taste lists;
+# mutate_percent: chance that a thing name changes by one letter when it is passed on (dialects).
+world.enabled = 1
+world.chunk = 8
+world.thing_percent = 30
+world.thing2_percent = 10
+world.lm0.x = -6
+world.lm0.y = -6
+world.lm1.x = 6
+world.lm1.y = -6
+world.lm2.x = -6
+world.lm2.y = 6
+world.lm3.x = 6
+world.lm3.y = 6
+world.leash = 24
+world.sense = 12
+world.churn = 100
+world.churn.appear = 45
+world.churn.wear = 30
+world.churn.radius = 3
+world.verb.rest = 20
+world.verb.explore = 70
+world.verb.talk = 80
+world.verb.wander = 50
+world.push.mood.0 = 3
+world.push.mood.1 = 0
+world.push.mood.2 = -3
+world.eat.energy.0 = 8
+world.eat.energy.1 = 3
+world.eat.energy.2 = -4
+world.mutate_percent = 20

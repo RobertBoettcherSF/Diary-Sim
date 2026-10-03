@@ -134,3 +134,23 @@ digest.dropped = ... dropped {1} lines for the byte cap ({2}); all in debug_full
 digest.path = debug digest: {1}
 digest.nosection = unknown --debug-section {1} (one of: {2})
 digest.nofull = no full record yet: {1} (run once with make run DEBUG=1)
+# The treadmill world (Sim_Things, world=1 sessions): diary details, report lines, map, menu
+detail.nothing = looked around but found nothing close by
+detail.noeat = looked around for something to eat but found nothing
+detail.examine = examined the {1}, which is called '{2}'
+detail.push = pushed the {1} and felt it was {2}
+detail.eat = ate the {1} and it tasted {2}
+detail.greet.wesen = greeted {1} with '{2}'
+detail.greet.thing = greeted the {1} with '{2}'
+detail.greet.air = greeted the empty air with '{1}'
+detail.new = new words: {1}
+since.world = world +{1}/{2}
+debug.world = {1} world {2} e{3} p{4} a{5} g{6} at {7}
+map.head = treadmill at tick {1} (digits = wesen 1-4, * = thing, other glyphs = biome)
+map.none = no world yet: new diaries start one (see docs/WORLD.md); nothing to show
+err.world = diaries/world.txt X{1}: stored and replay differ at {2}; the diaries, data/ or this build changed (use --fresh)
+hdr.world = # edits of the world (thing eaten / pushed / worn out / new): the replay checks every line; X<n> t=<tick> gone|add <thing> <x>,<y> by=<who>
+warn.things_file = warning: data/things.txt is missing or incomplete; the world (world=1) is switched off
+menu.world = world words: {1}
+menu.places = at: {1}
+debug.wordsum = words (learned from the world): {1}

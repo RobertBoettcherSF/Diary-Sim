@@ -1,0 +1,533 @@
+# World data (Sim_Things, world=1 sessions).  Every list is 60 entries = 3 blocks of 20, picked by the
+# base-60 rule (one D4 picks the block, rerolling on 1; one D20 picks the entry).  [feel] and [taste] are
+# ordered pleasant, neutral, unpleasant (block 1, 2, 3): the block decides the effect of pushing / eating.
+# [biome] is "name glyph"; [syllable] are the pieces of the made-up thing names; [drift] are "a>b" letter
+# changes a word may suffer when it is passed on (dialects).  Edit freely, but NOT the number of entries
+# (and a change of a list changes the world: a running diary needs --fresh).
+# glyphs of the treadmill view: a thing, and the digits that stand for the wesen
+glyph.thing = *
+glyph.wesen = 1234
+map.label = treadmill
+map.pos = at
+map.near = near
+map.biome = biome
+
+[biome]
+meadow .
+forest T
+marsh ,
+desert :
+hills n
+lake ~
+ruins #
+grove Y
+dunes =
+tundra -
+ridge ^
+orchard o
+fen ;
+canyon v
+moor `
+meadow .
+forest T
+marsh ,
+desert :
+hills n
+lake ~
+ruins #
+grove Y
+dunes =
+tundra -
+ridge ^
+orchard o
+fen ;
+canyon v
+moor `
+meadow .
+forest T
+marsh ,
+desert :
+hills n
+lake ~
+ruins #
+grove Y
+dunes =
+tundra -
+ridge ^
+orchard o
+fen ;
+canyon v
+moor `
+meadow .
+forest T
+marsh ,
+desert :
+hills n
+lake ~
+ruins #
+grove Y
+dunes =
+tundra -
+ridge ^
+orchard o
+fen ;
+canyon v
+moor `
+
+[material]
+stone
+wood
+iron
+clay
+glass
+bone
+shell
+leaf
+reed
+salt
+sand
+ice
+copper
+amber
+moss
+wax
+silk
+paper
+horn
+feather
+cork
+tin
+jade
+ash
+bark
+wool
+bronze
+flint
+pearl
+slate
+straw
+thorn
+ivory
+coal
+lead
+mud
+ink
+resin
+cloth
+gravel
+hide
+pine
+marble
+chalk
+silver
+sap
+hemp
+lime
+basalt
+cane
+gold
+quartz
+rust
+vine
+tar
+wire
+rope
+ore
+bead
+brick
+
+[shape]
+round
+flat
+long
+tall
+small
+broad
+thin
+curved
+hollow
+twisted
+pointed
+square
+coiled
+knotted
+ringed
+split
+ribbed
+folded
+domed
+spiral
+bent
+narrow
+wide
+short
+stout
+forked
+bulbous
+winged
+striped
+dented
+smooth
+rough
+lumpy
+tapered
+hooked
+cracked
+sealed
+open
+stacked
+braided
+cubic
+oval
+crescent
+stubby
+slender
+fluted
+pitted
+veined
+looped
+arched
+notched
+layered
+flared
+knobbed
+pleated
+ridged
+wavy
+ovoid
+blunt
+gnarled
+
+[quality]
+red
+blue
+green
+yellow
+white
+black
+grey
+pink
+brown
+violet
+orange
+pale
+dark
+bright
+dull
+shiny
+faded
+speckled
+mottled
+old
+new
+ancient
+fresh
+worn
+mossy
+dusty
+wet
+dry
+warm
+cold
+humming
+silent
+glowing
+sticky
+sweet
+bitter
+sour
+salty
+fragrant
+rusty
+frosty
+hairy
+feathery
+scaly
+leafy
+sandy
+muddy
+sunny
+shady
+windy
+rainy
+misty
+golden
+silvery
+copperish
+plain
+odd
+lucky
+tiny
+huge
+
+[feel]
+soft
+warm
+smooth
+light
+silky
+springy
+downy
+velvety
+cosy
+gentle
+supple
+fluffy
+mellow
+tender
+pliant
+cushiony
+balmy
+snug
+lush
+plush
+firm
+dry
+even
+solid
+steady
+flat
+plain
+quiet
+still
+level
+neutral
+grainy
+matte
+dense
+ordinary
+stable
+fixed
+compact
+muted
+bare
+heavy
+fragile
+sharp
+cold
+prickly
+slimy
+brittle
+rough
+jagged
+clammy
+scratchy
+greasy
+stiff
+splintery
+spiky
+crumbly
+slippery
+gritty
+bumpy
+leaden
+
+[taste]
+sweet
+tasty
+juicy
+nutty
+creamy
+rich
+honeyed
+fruity
+savoury
+filling
+minty
+crisp
+fresh
+buttery
+spicy
+ripe
+hearty
+warming
+zesty
+tender
+mild
+bland
+plain
+dry
+chewy
+starchy
+earthy
+flat
+mealy
+pulpy
+woolly
+airy
+thin
+watery
+faint
+grassy
+stale
+doughy
+floury
+cool
+bitter
+sour
+salty
+rotten
+acrid
+foul
+musty
+gamey
+smoky
+rancid
+harsh
+sharp
+metallic
+burnt
+sickly
+tart
+chalky
+soapy
+putrid
+vile
+
+[social]
+hello
+welcome
+peace
+friend
+thanks
+please
+greetings
+goodday
+cheers
+bless
+howdy
+hail
+kindly
+sorry
+pardon
+farewell
+goodbye
+listen
+look
+share
+together
+well-met
+sunrise
+goodnight
+wave
+smile
+nod
+bow
+hug
+sing
+hum
+laugh
+play
+dance
+gift
+trade
+help
+lend
+meet
+follow
+stay
+rest
+come
+gather
+hold
+gladly
+gently
+again
+soon
+often
+always
+rarely
+maybe
+truly
+surely
+warmly
+dearly
+bravely
+bye
+yes
+
+[syllable]
+ba
+be
+bi
+bo
+bu
+da
+de
+di
+do
+du
+ga
+ge
+gi
+go
+gu
+ka
+ke
+ki
+ko
+ku
+la
+le
+li
+lo
+lu
+ma
+me
+mi
+mo
+mu
+na
+ne
+ni
+no
+nu
+pa
+pe
+pi
+po
+pu
+ra
+re
+ri
+ro
+ru
+sa
+se
+si
+so
+su
+ta
+te
+ti
+to
+tu
+za
+ze
+zi
+zo
+zu
+
+[drift]
+b>p
+p>b
+d>t
+t>d
+g>k
+k>g
+s>z
+z>s
+m>n
+n>m
+l>r
+r>l
+a>e
+e>a
+i>e
+e>i
+o>u
+u>o
+a>o
+o>a
+i>a
+u>i

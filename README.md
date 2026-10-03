@@ -137,6 +137,17 @@ for a player goes on to the wesen that player watches (an answer to all players)
 relayed message raises awareness more (`aware.relay`) than a direct address (`aware.say`).
 The inbox reports what each player did with it.
 
+## The treadmill world (world=1, new sessions)
+
+Sessions started by this version carry `world=1`: the wesen walk on an endless grid generated on demand
+from the seed (`data/things.txt`, base-60 lists), with edits (eaten / pushed / worn-out / new things)
+recorded in `diaries/world.txt` and an `L` line per session end in `diaries/sessions.txt`, both replay-verified
+(tamper = DRIFT). Things met teach new words (names, feel, taste, greetings), so the vocabulary keeps growing
+past the 275 starting words. Office, lab, cafe and home are four landmark regions near the origin; talk needs
+a neighbour. `make map` (`--map`) prints position, nearest landmark, biome and a 5x5 window per wesen; the same
+view ends the session report. `world.enabled = 0` in `data/limits.txt` (or an older diary) keeps the old
+behaviour byte for byte. Design and file formats: `docs/WORLD.md`.
+
 ## The debug digest (`DEBUG=1`, `--debug`)
 
 `debug.txt` (always written, <= 1500 bytes) is unchanged. For a compact file to attach to chat:
@@ -521,7 +532,7 @@ paste it` and `back up diaries/ before the next run`.
 `diary_sim.adb` (main: CLI, loop, side files, debug.txt), `sim_menu.ads/.adb` (main menu: life intro, title, entries), `sim_quit.ads/.adb` (Ctrl-C and SIGTERM flag), `sim_world.ads/.adb` (entities,
 vocabulary, Rule 30 personality, bench kernels, votes and summary text), `sim_util.ads/.adb` (hash rolls,
 line parsing, data-file helpers), `data/words.txt`, `data/topics.txt` (petition topics), `data/limits.txt`,
-`data/messages.txt` (all console wording), `data/kalpas.txt` (session length votes), `data/menu.txt` (menu text, title, tagline), `data/fonts.txt` (title letters), `data/vocab.txt`, `data/help.txt`, `sim_dharma.ads/.adb` (karma, rebirth, unrest, ladder, awareness, players, inbox), `data/karma.txt` (numbers), `data/dharma.txt` (wording, flavour labels), `data/players.txt` (the three players),
+`data/messages.txt` (all console wording), `data/kalpas.txt` (session length votes), `data/menu.txt` (menu text, title, tagline), `data/fonts.txt` (title letters), `data/vocab.txt`, `data/help.txt`, `sim_dharma.ads/.adb` (karma, rebirth, unrest, ladder, awareness, players, inbox), `sim_things.ads/.adb` (the treadmill world), `data/things.txt` (its lists), `docs/WORLD.md`, `data/karma.txt` (numbers), `data/dharma.txt` (wording, flavour labels), `data/players.txt` (the three players),
 `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
 `Version:` header (`make version-check`); a touched file goes up by 0.001. V&V is
 suspended: no new test suites, `scripts/checks.sh` must keep passing.

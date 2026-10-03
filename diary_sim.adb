@@ -1,4 +1,4 @@
---  Version: 0.017
+--  Version: 0.018
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -28,7 +28,7 @@ pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
-     GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Menu, Sim_Quit, Sim_Util, Sim_World;
+     GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Menu, Sim_Quit, Sim_Things, Sim_Util, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
 
 procedure Diary_Sim is
@@ -44,7 +44,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.017";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.018";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -87,6 +87,11 @@ procedure Diary_Sim is
    Act_Count : array (Entity_Id, Action) of Natural := [others => [others => 0]];   --  all ticks replayed
    Last_Act : Action := Rest;
    Votes_Of : All_Stats;
+   --  The treadmill world (Sim_Things): on in sessions that carry world=1; Last_Verb is the last Step's verb
+   --  (the base action, or Examine / Push / Eat / Greet); Verb_Count counts the verbs of all ticks replayed.
+   World_Active : Boolean := False;
+   Last_Verb : List_Id := Rest;
+   Verb_Count : array (Entity_Id, World_Verb) of Natural := [others => [others => 0]];
 
    --  Working folder files, append-only, "ensure present" (see header).
    package Str_Sets is new Ada.Containers.Indefinite_Hashed_Sets (String, Ada.Strings.Hash, "=");
@@ -104,7 +109,9 @@ procedure Diary_Sim is
                 when Bench => "ran a small benchmark", when Learn => "learned something new",
                 when Propose => "filed a petition", when Wish_Open => "I would like", when Wish_Close => "so my days go better",
                 when Reason_Low => "it was hard", when Reason_Mid => "it was fine", when Reason_High => "it was good",
-                when Mood_Low => "feeling low", when Mood_Neutral => "feeling steady", when Mood_High => "feeling good");
+                when Mood_Low => "feeling low", when Mood_Neutral => "feeling steady", when Mood_High => "feeling good",
+                when Examine => "looked closely at something", when Push => "pushed something", when Eat => "tasted something",
+                when Greet => "said hello");
 
    procedure Say (Line : String) is   --  console output, held back until the seed line is out
    begin
@@ -144,12 +151,16 @@ procedure Diary_Sim is
       Read_Lines (Data_Path ("limits.txt"), Lines, Found);
       if not Found then Warn (Msg ("warn.limits_file")); end if;
       Read_Lines (Data_Path ("menu.txt"), Lines, Found);   --  menu text: keys only, a missing file shows the keys
-      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt"]) loop   --  the Buddhism layer: numbers, wording, players
+      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt"]) loop   --  the Buddhism layer: numbers, wording, players
          Read_Lines (Data_Path (F), Lines, Found);
          if not Found then Warn (Msg ("warn.dharma_file", F)); end if;
       end loop;
       Load_Keys (Lines);
       Read_Limits;
+      Lines.Clear;
+      Read_Lines (Data_Path ("things.txt"), Lines, Found);
+      Sim_Things.Load (Lines);
+      if not Sim_Things.Loaded then Warn (Msg ("warn.things_file")); end if;
       Lines.Clear;
       Read_Lines (Data_Path ("fonts.txt"), Lines, Found);
       Sim_Menu.Load_Font (Lines);
@@ -261,20 +272,174 @@ procedure Diary_Sim is
       Pre_En : constant Integer := St (E).Energy;     --  state before this action
       Pre_Mo : constant Integer := St (E).Mood;
       S   : State renames St (E);
-      Detail : Unbounded_String;
+      Detail, Learned : Unbounded_String;
       Eid : constant Positive := Positive (E);
+      World_Mode : constant Boolean := World_Active;
+      Verb : List_Id := A;
+
+      procedure Add (Text : String) is
+      begin
+         Append (Detail, (if Length (Detail) > 0 then "; " else "") & Text);
+      end Add;
+
+      --  ---- the treadmill world (world=1 sessions): things are met, named and learned ----------
+      procedure Meet (W : Positive) is
+      begin
+         if not Knows (E, W) then
+            Learn_From_World (E, W);
+            Ensure (E, Words_File, Words_Line (W, "world", Tick, Meaning_Of (W)));
+            Append (Learned, (if Length (Learned) > 0 then ", " else "") & Word (W));
+         end if;
+      end Meet;
+
+      procedure Report_New is
+      begin
+         if Length (Learned) > 0 then Add (Msg ("detail.new", To_String (Learned))); end if;
+      end Report_New;
+
+      --  A thing within reach (own cell, 4 neighbours) by dice; Found False when there is none.
+      procedure Pick_Thing (It : out Sim_Things.Reach_Item; Found : out Boolean) is
+         R : constant Sim_Things.Reach_Vectors.Vector := Sim_Things.Reach (E);
+      begin
+         Found := not R.Is_Empty;
+         It := (if Found then R (Roll (Seed, Eid, Tick, 6302, Natural (R.Length))) else (others => <>));
+      end Pick_Thing;
+
+      Dir_X : constant array (0 .. 3) of Integer := [0, 1, 0, -1];
+      Dir_Y : constant array (0 .. 3) of Integer := [-1, 0, 1, 0];
+
+      procedure Do_Examine is
+         It : Sim_Things.Reach_Item;
+         Found : Boolean;
+      begin
+         Pick_Thing (It, Found);
+         if not Found then Add (Msg ("detail.nothing")); return; end if;
+         Meet (Sim_Things.Name_Word (It.T));
+         Meet (Sim_Things.Prop_Word (Sim_Things.Quality_Text (It.T), "quality"));
+         Add (Msg ("detail.examine", Sim_Things.Description (It.T), Sim_Things.Name_Text (It.T)));
+         Report_New;
+      end Do_Examine;
+
+      procedure Do_Push is
+         It : Sim_Things.Reach_Item;
+         Found : Boolean;
+      begin
+         Pick_Thing (It, Found);
+         if not Found then Add (Msg ("detail.nothing")); return; end if;
+         Meet (Sim_Things.Prop_Word (Sim_Things.Feel_Text (It.T), "feel"));
+         S.Mood := Clamp (S.Mood + Integer (Limit ("world.push.mood." & Img (Sim_Things.Feel_Class (It.T)), 0)), M_Min, M_Max);
+         declare
+            D : constant Natural := Sim_Things.Facing (E, Tick);
+         begin
+            Sim_Things.Edit (Tick, Sim_Things.Gone, It.T, It.X, It.Y, Name (E));
+            Sim_Things.Edit (Tick, Sim_Things.Add, It.T, It.X + Dir_X (D), It.Y + Dir_Y (D), Name (E));
+         end;
+         Add (Msg ("detail.push", Sim_Things.Description (It.T), Sim_Things.Feel_Text (It.T)));
+         Report_New;
+      end Do_Push;
+
+      procedure Do_Eat is
+         It : Sim_Things.Reach_Item;
+         Found : Boolean;
+      begin
+         Pick_Thing (It, Found);
+         if not Found then Add (Msg ("detail.noeat")); return; end if;
+         Meet (Sim_Things.Prop_Word (Sim_Things.Taste_Text (It.T), "taste"));
+         S.Energy := Clamp (S.Energy + Integer (Limit ("world.eat.energy." & Img (Sim_Things.Taste_Class (It.T)), 0)), E_Min, E_Max);
+         Sim_Things.Edit (Tick, Sim_Things.Gone, It.T, It.X, It.Y, Name (E));
+         Add (Msg ("detail.eat", Sim_Things.Description (It.T), Sim_Things.Taste_Text (It.T)));
+         Report_New;
+      end Do_Eat;
+
+      procedure Do_Greet is
+         Hello : constant Positive := Sim_Things.Prop_Word (Sim_Things.Social_Text (E, Tick), "social");
+         Adj : Natural := 0;
+         K : Integer := 0;
+         Who : Entity_Id := E;
+         It : Sim_Things.Reach_Item;
+         Found : Boolean;
+      begin
+         Meet (Hello);
+         for O in Entity_Id loop
+            if O /= E and then Sim_Things.Adjacent (E, O) then Adj := Adj + 1; end if;
+         end loop;
+         if Adj > 0 then
+            K := Roll (Seed, Eid, Tick, 7810, Adj);
+            for O in Entity_Id loop
+               if O /= E and then Sim_Things.Adjacent (E, O) then
+                  K := K - 1;
+                  if K = 0 then Who := O; end if;
+               end if;
+            end loop;
+            Add (Msg ("detail.greet.wesen", Name (Who), Word (Hello)));
+         else
+            Pick_Thing (It, Found);
+            Add (if Found then Msg ("detail.greet.thing", Sim_Things.Description (It.T), Word (Hello))
+                 else Msg ("detail.greet.air", Word (Hello)));
+         end if;
+         Report_New;
+      end Do_Greet;
+
+      --  Which verb refines the base action (world sessions): examine / push / eat / greet, weighted by
+      --  the personality (Rule 30 core) and the energy / mood leans.  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2
+      function Choose_Verb return List_Id is
+         Core : constant Natural := Core_Percent (Seed, E);
+      begin
+         if A not in Rest | Explore | Talk | Wander
+           or else Int (Roll (Seed, Eid, Tick, 6300, 100)) > Limit ("world.verb." & Low (A), 0)
+         then
+            return A;
+         end if;
+         case A is
+            when Talk => return Greet;
+            when Rest => return Eat;
+            when others =>
+               declare
+                  We : constant Positive := 50 + Core / 2;
+                  Wp : constant Positive := 30 + (100 - Core) / 2 + (if S.Mood > 0 then 10 else 0);
+                  Wa : constant Natural := (if A = Wander then 10 + Integer'Max (0, E_Max - S.Energy) / 2 else 0);
+                  R : constant Positive := Roll (Seed, Eid, Tick, 6301, We + Wp + Wa);
+               begin
+                  return (if R <= We then Examine elsif R <= We + Wp then Push else Eat);
+               end;
+         end case;
+      end Choose_Verb;
 
       --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (pick indices stay inside 1 .. count)
+      --  In a world session the pupil is a wesen on the same or a neighbouring cell (none: no lesson) and the
+      --  word may drift into a dialect variant on its way (Sim_Things.Mutate).
       procedure Teach is
-         P : constant Entity_Id := Entity_Id ((Integer (E) - 1 + Roll (Seed, Eid, Tick, 3, 3)) mod 4 + 1);
-         N : constant Natural := Teachable_Count (E, P);
+         P : Entity_Id := Entity_Id ((Integer (E) - 1 + Roll (Seed, Eid, Tick, 3, 3)) mod 4 + 1);
+         Adj : Natural := 0;
       begin
-         if Int (Roll (Seed, Eid, Tick, 2, 100)) <= Teach_Pct and then Pending_Word (P) = 0 and then N > 0 then
-            Pending_Word (P) := Nth_Teachable (E, P, Roll (Seed, Eid, Tick, 4, N));
-            Pending_From (P) := E;
-            Did_Teach := True;
-            Use_Word (E, Pending_Word (P));   --  the teacher mentions it too
-            Detail := To_Unbounded_String (Msg ("detail.taught", Name (P), Word (Pending_Word (P))));
+         if World_Mode then
+            for O in Entity_Id loop
+               if O /= E and then Sim_Things.Adjacent (E, O) then Adj := Adj + 1; end if;
+            end loop;
+            if Adj = 0 then return; end if;
+            declare
+               K : Integer := Roll (Seed, Eid, Tick, 3, Adj);
+            begin
+               for O in Entity_Id loop
+                  if O /= E and then Sim_Things.Adjacent (E, O) then
+                     K := K - 1;
+                     if K = 0 then P := O; end if;
+                  end if;
+               end loop;
+            end;
+         end if;
+         if Int (Roll (Seed, Eid, Tick, 2, 100)) <= Teach_Pct and then Pending_Word (P) = 0 and then Teachable_Count (E, P) > 0 then
+            declare
+               N : constant Natural := Teachable_Count (E, P);
+               W0 : constant Positive := Nth_Teachable (E, P, Roll (Seed, Eid, Tick, 4, N));
+               W : constant Positive := (if World_Mode then Sim_Things.Mutate (W0, E, Tick) else W0);
+            begin
+               Pending_Word (P) := W;
+               Pending_From (P) := E;
+               Did_Teach := True;
+               Use_Word (E, W0);   --  the teacher mentions it too
+               Add (Msg ("detail.taught", Name (P), Word (W)));
+            end;
          end if;
       end Teach;
 
@@ -282,7 +447,7 @@ procedure Diary_Sim is
          K : constant Natural := Known_Count (E);
       begin
          if Int (Roll (Seed, Eid, Tick, 5, 100)) <= Coin_Pct and then K >= 2
-           and then Int (Count - Base_Count) < Coin_Cap
+           and then Int (Coined_Total) < Coin_Cap
          then
             declare
                Ia : constant Positive := Roll (Seed, Eid, Tick, 6, K);
@@ -300,7 +465,7 @@ procedure Diary_Sim is
                      Use_Word (E, Pb);
                      Learn_Word (E, W);
                      Ensure (E, Words_File, Words_Line (W, "coined", Tick, Parents (W)));
-                     Detail := To_Unbounded_String (Msg ("detail.coined", Text, Word (Pa), Word (Pb)));
+                     Add (Msg ("detail.coined", Text, Word (Pa), Word (Pb)));
                      Did_Coin := True;
                   end;
                end if;
@@ -315,13 +480,34 @@ procedure Diary_Sim is
       Did_Learn := False;
       Did_Coin := False;
       Did_Bench := False;
+      if World_Mode and then (not Sim_Things.Placed (E) or else Sim_Things.Region_Of (E) /= S.Location) then
+         Sim_Things.Place (E, Tick, Clamp (S.Location, 0, 3));   --  first step in the world, or reborn elsewhere
+      end if;
       S.Energy := Clamp (S.Energy + Energy_D (A), E_Min, E_Max);
       S.Mood := Clamp (S.Mood + Mood_D (A), M_Min, M_Max);
-      if A = Wander then
-         S.Location := Roll (Seed, Eid, Tick, 1, 4) - 1;
-      elsif Home (A) >= 0 then
-         S.Location := Home (A);
+      if World_Mode then   --  one step on the grid; the place is the nearest landmark region
+         if A in Explore | Wander then
+            Sim_Things.Walk (E, Tick, False);
+         elsif A = Talk and then not (for some O in Entity_Id => O /= E and then Sim_Things.Adjacent (E, O)) then
+            Sim_Things.Walk (E, Tick, True);   --  towards the nearest wesen
+         end if;
+         S.Location := Sim_Things.Region_Of (E);
+         Verb := Choose_Verb;
+         case Verb is
+            when Examine => Do_Examine;
+            when Push => Do_Push;
+            when Eat => Do_Eat;
+            when Greet => Do_Greet;
+            when others => null;
+         end case;
+      else
+         if A = Wander then
+            S.Location := Roll (Seed, Eid, Tick, 1, 4) - 1;
+         elsif Home (A) >= 0 then
+            S.Location := Home (A);
+         end if;
       end if;
+      Last_Verb := Verb;
       S.Location := Clamp (S.Location, 0, L_Max);
       case A is
          when Talk => Teach;
@@ -332,7 +518,7 @@ procedure Diary_Sim is
             begin
                Learn_Word (E, W, Natural (Pending_From (E)));
                Ensure (E, Words_File, Words_Line (W, "taught", Tick, Name (Pending_From (E))));
-               Detail := To_Unbounded_String (Msg ("detail.learned", Word (W), Name (Pending_From (E))));
+               Add (Msg ("detail.learned", Word (W), Name (Pending_From (E))));
                Pending_Word (E) := 0;
                Did_Learn := True;
             end;
@@ -342,27 +528,26 @@ procedure Diary_Sim is
             begin
                Ensure (E, Bench_File, Img (Tick) & " " & Low_Kernel (R.Which) & " " & Img (R.Steps) & " "
                        & Img (R.Result) & " " & Img (R.Checksum));
-               Detail := To_Unbounded_String (Msg ("detail.bench", Low_Kernel (R.Which), Img (R.Steps), Img (R.Result),
-                                                   Img (R.Checksum)));
+               Add (Msg ("detail.bench", Low_Kernel (R.Which), Img (R.Steps), Img (R.Result), Img (R.Checksum)));
                Did_Bench := True;
             end;
          when Propose =>
             declare
                N : constant Positive := File_Petition (Seed, E, Tick, Pre_En, Pre_Mo, Act_Count (E, Bench));
             begin
-               Detail := To_Unbounded_String (Msg ("detail.petition", Img (N), Petition_Topic (N)));
+               Add (Msg ("detail.petition", Img (N), Petition_Topic (N)));
             end;
          when others => null;
       end case;
       declare
          Tone : constant List_Id := (if S.Mood <= Tone_Low then Mood_Low elsif S.Mood >= Tone_High then Mood_High
                                      else Mood_Neutral);
-         Text : constant String := Words (A) (Words (A).First_Index + Pick60 (Seed, Eid, Tick, 10) mod Natural (Words (A).Length))
+         Text : constant String := Words (Verb) (Words (Verb).First_Index + Pick60 (Seed, Eid, Tick, 10) mod Natural (Words (Verb).Length))
            & ", " & Words (Tone) (Words (Tone).First_Index + Pick60 (Seed, Eid, Tick, 100) mod Natural (Words (Tone).Length))
            & (if Length (Detail) > 0 then "; " & To_String (Detail) else "");
       begin
          return "{""v"":1,""seed"":" & Img (Seed) & ",""tick"":" & Img (Tick) & ",""ts"":""" & Stamp
-           & """,""t"":""" & Low (A) & """,""text"":""" & Esc (Text)
+           & """,""t"":""" & Low (Verb) & """,""text"":""" & Esc (Text)
            & """,""state"":{""energy"":" & Img (S.Energy) & ",""mood"":" & Img (S.Mood)
            & ",""location"":" & Img (S.Location) & "}}";
       end;
@@ -574,7 +759,7 @@ procedure Diary_Sim is
    Verify_To : Natural := 0;           --  ticks replayed (verify only) before the import line
    Import_Done : Boolean := False;
    Ent_Missing : Natural := 0;         --  entity folders without words.txt/bench.txt at start
-   Start_Known : array (Entity_Id) of Natural := [others => 0];
+   Start_Known, Start_World : array (Entity_Id) of Natural := [others => 0];
    Run_Learn, Run_Coin, Run_Bench_N : array (Entity_Id) of Natural := [others => 0];
    Last_Done : Int := 0;                --  last tick finished for all entities
    Export_Line, Vote_Line : Unbounded_String;
@@ -729,12 +914,30 @@ procedure Diary_Sim is
       for E in Entity_Id loop
          Dg_Add (V, "run", "ent." & Name (E),
                  Msg ("debug.entity", Name (E), Img (Start_Known (E)), Img (Known_Count (E)), Img (Run_Learn (E)),
-                      Img (Run_Coin (E)), Img (Run_Bench_N (E)), Sgn (Int (St (E).Mood)) & " en " & Img (St (E).Energy) & " pet " & Img (Petitions_Of (E))), 6);
+                      Img (Run_Coin (E)), Img (Run_Bench_N (E)), Sgn (Int (St (E).Mood)) & " en " & Img (St (E).Energy) & " pet " & Img (Petitions_Of (E))
+                      & (if World_Active then " w" & Img (World_Learned (E)) else "")), 6);
          Dg_Add (V, "run", "mix." & Name (E),
                  Msg ("debug.mix", Name (E), Img (Act_Count (E, Rest)), Img (Act_Count (E, Work)), Img (Act_Count (E, Explore)),
                       Img (Act_Count (E, Talk)), Img (Act_Count (E, Wander)), Img (Act_Count (E, Bench)) & " p" & Img (Act_Count (E, Propose))
                       & " l" & Img (Act_Count (E, Learn))), 8);
       end loop;
+      if World_Active then
+         declare
+            Sum : Unbounded_String;
+         begin
+            for E in Entity_Id loop
+               Append (Sum, (if E = 1 then "" else " ") & Name (E) & " " & Img (Known_Count (E)) & "(w" & Img (World_Learned (E)) & ")");
+            end loop;
+            Dg_Add (V, "run", "wordsum", Msg ("debug.wordsum", To_String (Sum)), 3);
+         end;
+         for E in Entity_Id loop
+            Dg_Add (V, "run", "world." & Name (E),
+                    Msg ("debug.world", Name (E), Img (World_Learned (E)), Img (Verb_Count (E, Examine)), Img (Verb_Count (E, Push)),
+                         Img (Verb_Count (E, Eat)), Img (Verb_Count (E, Greet)),
+                         Img (Sim_Things.X (E)) & "," & Img (Sim_Things.Y (E)) & " " & Msg ("loc." & Img (Sim_Things.Region_Of (E)))), 7);
+         end loop;
+         for L of Sim_Things.Treadmill_Now loop Dg_Add (V, "run", "map." & L, L, 9); end loop;
+      end if;
       Dg_Add (V, "run", "topics", "topics " & Top_Topics (3), 8);
       Dg_Lines (V, "run", "votes", To_String (Vote_Line), 8);
    end Digest_Entries;
@@ -981,7 +1184,8 @@ procedure Diary_Sim is
                                               & ASCII.LF);
       for E in Entity_Id loop
          Append (Part (Ents), Msg ("debug.entity", Name (E), Img (Start_Known (E)), Img (Known_Count (E)), Img (Run_Learn (E)),
-                                   Img (Run_Coin (E)), Img (Run_Bench_N (E)), Sgn (Int (St (E).Mood)) & " en " & Img (St (E).Energy) & " pet " & Img (Petitions_Of (E)))
+                                   Img (Run_Coin (E)), Img (Run_Bench_N (E)), Sgn (Int (St (E).Mood)) & " en " & Img (St (E).Energy) & " pet " & Img (Petitions_Of (E))
+                      & (if World_Active then " w" & Img (World_Learned (E)) else ""))
                  & ASCII.LF);
       end loop;
       for E in Entity_Id loop
@@ -1026,6 +1230,87 @@ procedure Diary_Sim is
    end Write_Debug;
 
    --  One tick for all entities in id order: compare with the disk or append.
+   --  ---- the edit log of the world (diaries/world.txt) -------------------------------------------------
+   --  Only edits are stored: a thing eaten, pushed or worn out, a new thing from churn.  The replay
+   --  regenerates them; a stored line that differs is DRIFT, a missing one is appended (record-first).
+   World_Path : constant String := "diaries/world.txt";
+   World_Stored : Str_Vectors.Vector;   --  X lines of the file
+   World_Flushed : Natural := 0;        --  edits of the replay already compared / written
+
+   procedure Flush_Edits is
+      F : TIO.File_Type;
+      Opened : Boolean := False;
+   begin
+      while World_Flushed < Sim_Things.Edit_Count loop
+         World_Flushed := World_Flushed + 1;
+         declare
+            L : constant String := Sim_Things.Edit_Line (World_Flushed);
+         begin
+            if World_Flushed <= Natural (World_Stored.Length) then
+               if World_Stored (World_Flushed) /= L then
+                  raise Drift_Error with Msg ("err.world", Img (World_Flushed), Diff_At (World_Stored (World_Flushed), L));
+               end if;
+            else
+               World_Stored.Append (L);
+               if not Preview then
+                  if not Opened then
+                     Opened := True;
+                     if Ada.Directories.Exists (World_Path) and then Ada.Directories.Size (World_Path) > 0 then
+                        declare
+                           Needs_Lf : constant Boolean := not Ends_With_Lf (World_Path);
+                        begin
+                           TIO.Open (F, TIO.Append_File, World_Path);
+                           if Needs_Lf then TIO.New_Line (F); end if;
+                        end;
+                     else
+                        TIO.Create (F, TIO.Out_File, World_Path);
+                        TIO.Put_Line (F, "# seed " & Img (Seed));
+                        TIO.Put_Line (F, Msg ("hdr.world"));
+                     end if;
+                  end if;
+                  TIO.Put_Line (F, L);
+               end if;
+            end if;
+         end;
+      end loop;
+      if Opened then TIO.Close (F); end if;
+   end Flush_Edits;
+
+   --  The stored edits up to tick Upto must all have been regenerated (an invented or moved line is DRIFT).
+   procedure Verify_Edits (Upto : Int) is
+   begin
+      for K in Sim_Things.Edit_Count + 1 .. Natural (World_Stored.Length) loop
+         declare
+            L : constant String := World_Stored (K);
+            T : constant String := Token (L, "t");
+         begin
+            if T'Length = 0 or else (for some C of T => C not in '0' .. '9') or else Int'Value (T) <= Upto then
+               raise Drift_Error with Msg ("err.world", Img (K), Diff_At (L, "(not in the replay)"));
+            end if;
+         end;
+      end loop;
+   end Verify_Edits;
+
+   --  The stored file, read once before the replay (a missing file is simply regenerated).
+   procedure Load_World_File is
+      Lines : Str_Vectors.Vector;
+      Found : Boolean;
+   begin
+      World_Stored.Clear;
+      World_Flushed := 0;
+      if not Ada.Directories.Exists (World_Path) then return; end if;
+      Read_Lines (World_Path, Lines, Found);
+      for L of Lines loop
+         if L'Length >= 7 and then L (L'First .. L'First + 6) = "# seed " then
+            if L /= "# seed " & Img (Seed) then
+               raise Diary_Error with Msg ("err.session_seed", L (L'First + 7 .. L'Last));
+            end if;
+         elsif L'Length > 0 and then L (L'First) = 'X' then
+            World_Stored.Append (L);
+         end if;
+      end loop;
+   end Load_World_File;
+
    procedure Do_Tick (Tick : Int) is
    begin
       Cur_Tick := Tick;
@@ -1053,6 +1338,7 @@ procedure Diary_Sim is
             end if;
             Events := Written + Verified;
             Act_Count (E, Last_Act) := Act_Count (E, Last_Act) + 1;
+            if Last_Verb in World_Verb then Verb_Count (E, Last_Verb) := Verb_Count (E, Last_Verb) + 1; end if;
             Sim_Dharma.Deed (E, Last_Act, Pre_Energy_G, Did_Teach, Did_Coin);
             Record_Tick (Votes_Of (E), St (E).Location, St (E).Mood, St (E).Energy, Did_Learn, Did_Coin, Did_Bench);
             if Tick > Int (Common) then
@@ -1062,6 +1348,8 @@ procedure Diary_Sim is
             end if;
          end;
       end loop;
+      if World_Active then Sim_Things.Churn (Tick); end if;   --  things come and go near the wesen
+      Flush_Edits;
       Sim_Dharma.Tick_End (Tick);
       Last_Done := Tick;
    end Do_Tick;
@@ -1165,6 +1453,7 @@ procedure Diary_Sim is
       Votes : Kalpa_Votes := [others => 0];
       By_Vote : Boolean := False;       --  src=vote (else explicit)
       Dharma : Boolean := False;        --  dharma=1: started by a build with the Buddhism layer (rebirth moves allowed)
+      World : Boolean := False;         --  world=1: the treadmill world (Sim_Things) runs in this session
    end record;
    package Session_Vectors is new Ada.Containers.Vectors (Positive, Session_Rec);
    Sessions : Session_Vectors.Vector;
@@ -1176,7 +1465,8 @@ procedure Diary_Sim is
      (Img (V (1)) & "/" & Img (V (2)) & "/" & Img (V (3)) & "/" & Img (V (4)));
    function Session_Line (R : Session_Rec) return String is
      ("S" & Img (R.N) & " start=" & Img (R.Start) & " votes=" & Votes_Text (R.Votes) & " len=" & Img (R.Len)
-      & " src=" & (if R.By_Vote then "vote" else "explicit") & (if R.Dharma then " dharma=1" else ""));
+      & " src=" & (if R.By_Vote then "vote" else "explicit") & (if R.Dharma then " dharma=1" else "")
+      & (if R.World then " world=1" else ""));
    function Yuga (N : Positive) return String is (Msg ("yuga." & Img ((N - 1) mod 4)));
    --  The four votes of a session that starts after tick Start (state: St, known words).
    function Votes_At (Start : Int) return Kalpa_Votes is
@@ -1207,6 +1497,7 @@ procedure Diary_Sim is
       R.Len := To_Num (Token (L, "len"));
       R.By_Vote := Token (L, "src") = "vote";
       R.Dharma := Token (L, "dharma") = "1";
+      R.World := Token (L, "world") = "1";
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
         and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0;
       while OK and then K < 4 loop
@@ -1303,6 +1594,7 @@ procedure Diary_Sim is
       Sessions.Clear;
       Word_Votes.Clear;
       Dharma_Stored.Clear;
+      World_Active := False;
       if not Ada.Directories.Exists (Sessions_Path) then return; end if;
       Read_Lines (Sessions_Path, Lines, Found);
       for I in 1 .. Natural (Lines.Length) loop
@@ -1315,7 +1607,7 @@ procedure Diary_Sim is
                end if;
             elsif L'Length > Bmark'Length and then L (L'First .. L'First + Bmark'Length - 1) = Bmark then
                Disk_Build := To_Unbounded_String (L (L'First + Bmark'Length .. L'Last));
-            elsif L'Length > 0 and then L (L'First) in 'D' | 'C' | 'Y' then
+            elsif L'Length > 0 and then L (L'First) in 'D' | 'C' | 'Y' | 'L' then
                Dharma_Stored.Append (L);
             elsif L'Length > 0 and then L (L'First) = 'W' then
                declare
@@ -1338,15 +1630,29 @@ procedure Diary_Sim is
    procedure Start_Life (R : Session_Rec) is
    begin
       Sim_Dharma.Begin_Life (Seed, R.Start, R.N, L_Max + 1, R.Dharma);
+      World_Active := R.World;
       for E in Entity_Id loop
          if Sim_Dharma.Rebirth_Location (E) >= 0 then St (E).Location := Clamp (Sim_Dharma.Rebirth_Location (E), 0, L_Max); end if;
       end loop;
    end Start_Life;
 
-   --  The key of a D / C / Y line: its first two (C) or three (D, Y) words.
+   --  The world line of a session end (world sessions only): "L3 tick=2131 words=300 edits=12
+   --  ada=225/2/5/1@3,-4 ..." = known / learned from the world / taught / coined @ position.
+   function World_Line (N : Positive; Tick : Int) return String is
+      R : Unbounded_String := To_Unbounded_String ("L" & Img (N) & " tick=" & Img (Tick) & " words=" & Img (Count)
+                                                   & " edits=" & Img (Sim_Things.Edit_Count));
+   begin
+      for E in Entity_Id loop
+         Append (R, " " & Name (E) & "=" & Img (Known_Count (E)) & "/" & Img (World_Learned (E)) & "/" & Img (Taught_Count (E))
+                 & "/" & Img (Coined_Count_By (E)) & "@" & Img (Sim_Things.X (E)) & "," & Img (Sim_Things.Y (E)));
+      end loop;
+      return To_String (R);
+   end World_Line;
+
+   --  The key of a D / C / Y / L line: its first two (C, L) or three (D, Y) words.
    function Key_Of (L : String) return String is
       Sp : Natural := 0;
-      Need : constant Positive := (if L'Length > 0 and then L (L'First) = 'C' then 2 else 3);
+      Need : constant Positive := (if L'Length > 0 and then L (L'First) in 'C' | 'L' then 2 else 3);
    begin
       for I in L'Range loop
          if L (I) = ' ' then
@@ -1374,8 +1680,9 @@ procedure Diary_Sim is
       for R of Sessions loop if Int (R.N) = N then Votes := R.Votes; end if; end loop;
       for E in Entity_Id loop En (E) := St (E).Energy; end loop;
       declare
-         Gen : constant Str_Vectors.Vector := Sim_Dharma.End_Life (Seed, T, Positive (N), Votes, En);
+         Gen : Str_Vectors.Vector := Sim_Dharma.End_Life (Seed, T, Positive (N), Votes, En);
       begin
+         if World_Active then Gen.Append (World_Line (Positive (N), T)); end if;
          for G of Gen loop
             if not Stored.Contains (G) then
                declare
@@ -1468,10 +1775,14 @@ procedure Diary_Sim is
       for S of Sessions loop if S.N = R.N then Votes := S.Votes; end if; end loop;
       for E in Entity_Id loop En (E) := St (E).Energy; end loop;
       for L of Sim_Dharma.End_Life (Seed, Tick, R.N, Votes, En) loop Append (Text, ASCII.LF & L); end loop;
-      Append_Text (To_String (Text));   --  W, D x4, C, Y x3 in one write
+      if World_Active then Append (Text, ASCII.LF & World_Line (R.N, Tick)); end if;
+      Append_Text (To_String (Text));   --  W, D x4, C, Y x3 (and L in a world session) in one write
       Word_Votes.Append (R);
       Words_Text := To_Unbounded_String (Msg ("words.line", Img (R.N), Words_Short (R.Tok)));
    end Record_Word_Vote;
+
+   --  New sessions carry world=1 unless data/limits.txt says world.enabled = 0 (or data/things.txt is missing).
+   function World_Wanted return Boolean is (Limit ("world.enabled", 1) /= 0 and then Sim_Things.Loaded);
 
    --  After the replay of 1 .. Common: resume the unfinished session, or start one
    --  (explicit length, else the vote).  Sets Ticks and Kalpa_Line.
@@ -1491,7 +1802,7 @@ procedure Diary_Sim is
       Session_N := (if Sessions.Is_Empty then 0 else Sessions.Last_Element.N);
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
-               Dharma => True);
+               Dharma => True, World => World_Wanted);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -1506,7 +1817,8 @@ procedure Diary_Sim is
          Ticks := R.Start + R.Len;
          Kalpa_Line := To_Unbounded_String (Msg ("kalpa.resume", Img (R.N), Yuga (R.N), Votes_Text (R.Votes), Img (R.Len), Img (Ticks)));
       else
-         R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True);
+         R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
+               World => World_Wanted);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);
@@ -1786,6 +2098,7 @@ procedure Diary_Sim is
             Append (Res, Fx.Head (Name (E), 9)
                     & Msg ("since.words", Img (Known_Count (E)), Img (Known_Count (E) - Start_Known (E)), Img (Run_Learn (E)),
                            Img (Act_Count (E, Learn)), Img (Run_Coin (E)), Img (Coined_All))
+                    & (if World_Active then " | " & Msg ("since.world", Img (World_Learned (E) - Start_World (E)), Img (World_Learned (E))) else "")
                     & " | " & Msg ("since.pet", Img (Petitions_Of (E) - Snap_Pet (E)), Img (Petitions_Of (E)))
                     & " | " & Msg ("since.state", Sgn (Int (Snap_Mood (E))), Sgn (Int (St (E).Mood)), Img (Snap_Energy (E)),
                                    Img (St (E).Energy), Msg ("loc." & Img (Best_Loc))) & ASCII.LF);
@@ -1824,6 +2137,8 @@ procedure Diary_Sim is
       Seed_Shown := True;
       Sim_World.Init (Vocab, Seed, Start_Pct);
       Sim_Dharma.Init (Seed);
+      Sim_Things.Init (Seed);
+      World_Active := World_Wanted;
       TIO.Put (To_String (Pending));
       TIO.Put_Line (Msg ("preview.head", Img (Seed), Img (Total)));
       declare
@@ -1851,8 +2166,10 @@ procedure Diary_Sim is
          Shown := 0;
          for W in Base_Count + 1 .. Count loop
             exit when Shown = 3;
-            Append (Coined_Text, (if Shown = 0 then "" else " | ") & Word (W) & " (" & Parents (W) & ", " & Coined_By (W) & ")");
-            Shown := Shown + 1;
+            if Coined_By (W) /= "" then
+               Append (Coined_Text, (if Shown = 0 then "" else " | ") & Word (W) & " (" & Parents (W) & ", " & Coined_By (W) & ")");
+               Shown := Shown + 1;
+            end if;
          end loop;
          Shown := 0;
          for E in Entity_Id loop
@@ -1865,6 +2182,9 @@ procedure Diary_Sim is
             end loop;
          end loop;
          TIO.Put_Line (Msg ("preview.words", To_String (Known_Text), To_String (Coined_Text), To_String (Taught_Text)));
+         if World_Active then
+            for L of Sim_Things.Treadmill_Now loop TIO.Put_Line (L); end loop;
+         end if;
       end;
       Summarize (Seed, Total, Votes_Of, Console, Text, Json);
       TIO.Put (To_String (Console));
@@ -1910,6 +2230,69 @@ procedure Diary_Sim is
       return Msg ((if Explicit then "start.none" else "start.none.stop"));
    end Start_Line;
 
+   --  ---- make map / --map: the treadmill windows of the last saved session end (read-only) -----------
+   --  Seed and the last L line come from diaries/sessions.txt, the edits (up to that tick) from
+   --  diaries/world.txt; nothing is replayed and nothing is written.
+   Map_Mode : Boolean := False;
+
+   --  "3,-4" after the '@' of an L-line token; False when it is not of that form.
+   procedure Parse_At (Tok : String; X, Y : out Integer; OK : out Boolean) is
+      At_P : constant Natural := Fx.Index (Tok, "@");
+      Cm : constant Natural := Fx.Index (Tok, ",");
+   begin
+      X := 0;
+      Y := 0;
+      OK := At_P > 0 and then Cm > At_P + 1 and then Cm < Tok'Last;
+      if OK then
+         X := Integer'Value (Tok (At_P + 1 .. Cm - 1));
+         Y := Integer'Value (Tok (Cm + 1 .. Tok'Last));
+      end if;
+   exception
+      when Constraint_Error => OK := False;
+   end Parse_At;
+
+   procedure Do_Map is
+      Lines : Str_Vectors.Vector;
+      Found, OK : Boolean;
+      Map_Seed : Int := 42;
+      Last_L : Unbounded_String;
+      PXs, PYs : Sim_Things.Pos_Array := [others => 0];
+      Pres : Sim_Things.Placed_Array := [others => False];
+      L_Tick : Int := 0;
+   begin
+      if Ada.Directories.Exists (Sessions_Path) then
+         Read_Lines (Sessions_Path, Lines, Found);
+         for L of Lines loop
+            if L'Length > 7 and then L (L'First .. L'First + 6) = "# seed " then
+               Map_Seed := To_Num (L (L'First + 7 .. L'Last));
+            elsif L'Length > 1 and then L (L'First) = 'L' and then To_Num (Token (L, "tick")) >= 0 then
+               Last_L := To_Unbounded_String (L);
+            end if;
+         end loop;
+      end if;
+      if Length (Last_L) = 0 then
+         TIO.Put_Line (Msg ("map.none"));
+         return;
+      end if;
+      Sim_Things.Init (Int'Max (0, Map_Seed));
+      L_Tick := To_Num (Token (To_String (Last_L), "tick"));
+      if Ada.Directories.Exists (World_Path) then
+         Lines.Clear;
+         Read_Lines (World_Path, Lines, Found);
+         for L of Lines loop
+            if L'Length > 0 and then L (L'First) = 'X' and then To_Num (Token (L, "t")) in 0 .. L_Tick then
+               Sim_Things.Apply_Line (L, OK);
+            end if;
+         end loop;
+      end if;
+      for E in Entity_Id loop
+         Parse_At (Token (To_String (Last_L), Name (E)), PXs (E), PYs (E), OK);
+         Pres (E) := OK;
+      end loop;
+      TIO.Put_Line (Msg ("map.head", Img (L_Tick)));
+      for L of Sim_Things.Treadmill (PXs, PYs, Pres) loop TIO.Put_Line (L); end loop;
+   end Do_Map;
+
    --  ---- the main menu (terminal only) -------------------------------------------------------
    --  What the menu shows under the tagline (at most six short lines, so that the large title fits
    --  into 80x24): the save folder; sessions, ticks and the last favourite-word vote with who
@@ -1923,7 +2306,7 @@ procedure Diary_Sim is
       OK : Boolean;
       Karma_Of : array (Entity_Id) of Unbounded_String;
       Have_D : Boolean := False;
-      Pet : Unbounded_String;
+      Pet, World_L : Unbounded_String;
       Sessions_N, Ticks : Natural;
       function Shown (E : Entity_Id) return String is
          T  : constant String := To_String (Last.Tok (E));
@@ -1949,6 +2332,8 @@ procedure Diary_Sim is
          elsif L'Length > 0 and then L (L'First) = 'D' and then Sim_Dharma.Find_Wesen (Token (L, "wesen")) > 0 then
             Karma_Of (Entity_Id (Sim_Dharma.Find_Wesen (Token (L, "wesen")))) := To_Unbounded_String (Token (L, "karma"));
             Have_D := True;
+         elsif L'Length > 0 and then L (L'First) = 'L' and then To_Num (Token (L, "tick")) >= 0 then
+            World_L := To_Unbounded_String (L);
          elsif L'Length > 0 and then L (L'First) = 'C' then
             Pet := To_Unbounded_String (L (L'First .. Fx.Index (L, " ") - 1) & " " & Token (L, "win"));
          end if;
@@ -1966,6 +2351,28 @@ procedure Diary_Sim is
          begin
             for E in Entity_Id loop Append (K, (if E = 1 then "" else " | ") & Name (E) & " " & To_String (Karma_Of (E))); end loop;
             Res.Append (Msg ("menu.dharma", To_String (K)));
+         end;
+      end if;
+      if Length (World_L) > 0 then   --  words learned in the world and where the wesen stood at the last session end
+         declare
+            Learned, Places : Unbounded_String;
+            X, Y : Integer;
+            Good : Boolean;
+         begin
+            Sim_Things.Init (0);   --  only the landmarks are needed
+            for E in Entity_Id loop
+               declare
+                  T : constant String := Token (To_String (World_L), Name (E));
+                  S1 : constant Natural := Fx.Index (T, "/");
+                  S2 : constant Natural := (if S1 > 0 then Fx.Index (T, "/", S1 + 1) else 0);
+               begin
+                  Append (Learned, (if E = 1 then "" else " | ") & Name (E) & " " & (if S2 > S1 then T (S1 + 1 .. S2 - 1) else "?"));
+                  Parse_At (T, X, Y, Good);
+                  Append (Places, (if E = 1 then "" else " | ") & Name (E) & " " & (if Good then Msg ("loc." & Img (Sim_Things.Region (X, Y))) else "?"));
+               end;
+            end loop;
+            Res.Append (Msg ("menu.world", To_String (Learned)));
+            Res.Append (Msg ("menu.places", To_String (Places)));
          end;
       end if;
       declare
@@ -2047,6 +2454,7 @@ begin
          elsif Opt = "--as" then Say_By := To_Unbounded_String (Val);
          elsif Opt = "--answer" then Answer_Mode := True;
          elsif Opt = "--inbox" then Inbox_Mode := True;
+         elsif Opt = "--map" then Map_Mode := True;
          elsif Opt = "--menu" then Menu_Opt := True;
          elsif Opt = "--debug" then Debug_On := True;
          elsif Opt = "--debug-section" then
@@ -2074,9 +2482,13 @@ begin
    end if;
    Menu_Wanted := Menu_Opt or else (Ada.Command_Line.Argument_Count = 0 and then Is_Tty (0) and then Is_Tty (1));
    if Menu_Opt and then not (Is_Tty (0) and then Is_Tty (1)) then raise Usage_Error with Msg ("err.menu_tty"); end if;
-   Resolve_Home (Header => not (Menu_Wanted or else Inbox_Mode or else Say_Mode or else Answer_Mode or else (Length (Section_Opt) > 0 and then not Preview)));
+   Resolve_Home (Header => not (Menu_Wanted or else Inbox_Mode or else Map_Mode or else Say_Mode or else Answer_Mode or else (Length (Section_Opt) > 0 and then not Preview)));
    Saved_Line := To_Unbounded_String (Msg ("saved", To_String (Home_Path)));
-   if Inbox_Mode then
+   if Map_Mode then
+      Do_Map;
+      TIO.Put_Line (To_String (Saved_Line));
+      return;
+   elsif Inbox_Mode then
       TIO.Put (Inbox_Page);
       TIO.Put_Line (To_String (Saved_Line));
       return;
@@ -2160,6 +2572,7 @@ begin
    --  Every run starts from the vocabulary and replays from tick 1.
    Sim_World.Init (Vocab, Seed, Start_Pct);
    Sim_Dharma.Init (Seed);
+   Sim_Things.Init (Seed);
    for E in Entity_Id loop
       Cur_Name := To_Unbounded_String (Name (E));
       Ada.Directories.Create_Path ("entities/" & Name (E));
@@ -2189,6 +2602,7 @@ begin
 
    Load_Sessions;
    Load_Says;
+   Load_World_File;
    Write_Debug ("RUN", "");   --  stub: a kill -9 still leaves a file
 
    --  Phase 1: replay what every diary has (verify only), then confirm the import.
@@ -2211,6 +2625,7 @@ begin
       end;
       for E in Entity_Id loop
          Start_Known (E) := Known_Count (E);
+         Start_World (E) := World_Learned (E);
          Snap_Mood (E) := St (E).Mood;
          Snap_Energy (E) := St (E).Energy;
          Snap_Pet (E) := Petitions_Of (E);
@@ -2218,6 +2633,7 @@ begin
       Snap_Votes := Votes_Of;
       Sim_Dharma.Mark_Start;
       Verify_Inbox (Int (Verify_To));
+      Verify_Edits (Int (Verify_To));
       Decide_Session;
       TIO.Put_Line (To_String (Kalpa_Line));
    end if;
@@ -2242,7 +2658,10 @@ begin
    end if;
    for F of Out_File loop TIO.Close (F); end loop;
    for F of Side_Out loop TIO.Close (F); end loop;
-   if not Quit_Seen then Verify_Inbox (Last_Done); end if;
+   if not Quit_Seen then
+      Verify_Inbox (Last_Done);
+      Verify_Edits (Last_Done);
+   end if;
    if Quit_Seen then   --  Ctrl-C / SIGTERM: everything written so far is flushed; a rerun resumes
       TIO.Put_Line (Msg ("quit", Sim_Quit.Which, Img (Last_Done)));
       Write_Petitions;
@@ -2306,6 +2725,10 @@ begin
       end;
       Since_Head := To_Unbounded_String (Since_Text);
       Append (Rep, Since_Head);
+      if World_Active then   --  the treadmill: where the wesen are and what lies around them
+         Append (Rep, Msg ("map.head", Img (Ticks)) & ASCII.LF);
+         for L of Sim_Things.Treadmill_Now loop Append (Rep, L & ASCII.LF); end loop;
+      end if;
       if Length (Words_Text) > 0 then Append (Rep, To_String (Words_Text) & ASCII.LF); end if;
       for L of Sim_Dharma.Table_Lines loop Append (Rep, L & ASCII.LF); end loop;
       for L of Sim_Dharma.Since_Lines loop Append (Rep, L & ASCII.LF); end loop;

@@ -999,3 +999,251 @@ because I have thought about it. It is a small thing.
 because I have thought about it. I remain hopeful.
 because I have thought about it. Please think it over.
 because I have thought about it. Many thanks.
+
+[examine]
+looked closely at something on the ground and took notes
+looked closely at something on the ground and felt curious
+looked closely at something on the ground and wondered what it was for
+looked closely at something on the ground and tried to remember a name
+looked closely at something on the ground and smiled
+looked closely at something on the ground and put it back gently
+looked closely at something on the ground and measured it by eye
+looked closely at something on the ground and compared it with the last one
+looked closely at something on the ground and lost track of time
+looked closely at something on the ground and moved on slowly
+turned a find over in my hands and took notes
+turned a find over in my hands and felt curious
+turned a find over in my hands and wondered what it was for
+turned a find over in my hands and tried to remember a name
+turned a find over in my hands and smiled
+turned a find over in my hands and put it back gently
+turned a find over in my hands and measured it by eye
+turned a find over in my hands and compared it with the last one
+turned a find over in my hands and lost track of time
+turned a find over in my hands and moved on slowly
+stopped to study an odd object and took notes
+stopped to study an odd object and felt curious
+stopped to study an odd object and wondered what it was for
+stopped to study an odd object and tried to remember a name
+stopped to study an odd object and smiled
+stopped to study an odd object and put it back gently
+stopped to study an odd object and measured it by eye
+stopped to study an odd object and compared it with the last one
+stopped to study an odd object and lost track of time
+stopped to study an odd object and moved on slowly
+crouched down to inspect a find and took notes
+crouched down to inspect a find and felt curious
+crouched down to inspect a find and wondered what it was for
+crouched down to inspect a find and tried to remember a name
+crouched down to inspect a find and smiled
+crouched down to inspect a find and put it back gently
+crouched down to inspect a find and measured it by eye
+crouched down to inspect a find and compared it with the last one
+crouched down to inspect a find and lost track of time
+crouched down to inspect a find and moved on slowly
+held a strange find up to the light and took notes
+held a strange find up to the light and felt curious
+held a strange find up to the light and wondered what it was for
+held a strange find up to the light and tried to remember a name
+held a strange find up to the light and smiled
+held a strange find up to the light and put it back gently
+held a strange find up to the light and measured it by eye
+held a strange find up to the light and compared it with the last one
+held a strange find up to the light and lost track of time
+held a strange find up to the light and moved on slowly
+studied something small and curious and took notes
+studied something small and curious and felt curious
+studied something small and curious and wondered what it was for
+studied something small and curious and tried to remember a name
+studied something small and curious and smiled
+studied something small and curious and put it back gently
+studied something small and curious and measured it by eye
+studied something small and curious and compared it with the last one
+studied something small and curious and lost track of time
+studied something small and curious and moved on slowly
+
+[push]
+gave something a push to see what it does and waited
+gave something a push to see what it does and laughed a little
+gave something a push to see what it does and learned from it
+gave something a push to see what it does and tried again
+gave something a push to see what it does and stepped back
+gave something a push to see what it does and made a note
+gave something a push to see what it does and shrugged
+gave something a push to see what it does and wondered why
+gave something a push to see what it does and left it be
+gave something a push to see what it does and went on
+poked at a find with a stick and waited
+poked at a find with a stick and laughed a little
+poked at a find with a stick and learned from it
+poked at a find with a stick and tried again
+poked at a find with a stick and stepped back
+poked at a find with a stick and made a note
+poked at a find with a stick and shrugged
+poked at a find with a stick and wondered why
+poked at a find with a stick and left it be
+poked at a find with a stick and went on
+leaned on an object to test it and waited
+leaned on an object to test it and laughed a little
+leaned on an object to test it and learned from it
+leaned on an object to test it and tried again
+leaned on an object to test it and stepped back
+leaned on an object to test it and made a note
+leaned on an object to test it and shrugged
+leaned on an object to test it and wondered why
+leaned on an object to test it and left it be
+leaned on an object to test it and went on
+nudged a find along the ground and waited
+nudged a find along the ground and laughed a little
+nudged a find along the ground and learned from it
+nudged a find along the ground and tried again
+nudged a find along the ground and stepped back
+nudged a find along the ground and made a note
+nudged a find along the ground and shrugged
+nudged a find along the ground and wondered why
+nudged a find along the ground and left it be
+nudged a find along the ground and went on
+tried to lift an object and felt its weight and waited
+tried to lift an object and felt its weight and laughed a little
+tried to lift an object and felt its weight and learned from it
+tried to lift an object and felt its weight and tried again
+tried to lift an object and felt its weight and stepped back
+tried to lift an object and felt its weight and made a note
+tried to lift an object and felt its weight and shrugged
+tried to lift an object and felt its weight and wondered why
+tried to lift an object and felt its weight and left it be
+tried to lift an object and felt its weight and went on
+pressed on something to feel it and waited
+pressed on something to feel it and laughed a little
+pressed on something to feel it and learned from it
+pressed on something to feel it and tried again
+pressed on something to feel it and stepped back
+pressed on something to feel it and made a note
+pressed on something to feel it and shrugged
+pressed on something to feel it and wondered why
+pressed on something to feel it and left it be
+pressed on something to feel it and went on
+
+[eat]
+tasted something found on the way and made a face
+tasted something found on the way and kept the taste in mind
+tasted something found on the way and wanted more
+tasted something found on the way and was not sure
+tasted something found on the way and swallowed hard
+tasted something found on the way and licked my fingers
+tasted something found on the way and sat for a moment
+tasted something found on the way and wrote down the taste
+tasted something found on the way and felt different
+tasted something found on the way and went on
+took a small bite of a find and made a face
+took a small bite of a find and kept the taste in mind
+took a small bite of a find and wanted more
+took a small bite of a find and was not sure
+took a small bite of a find and swallowed hard
+took a small bite of a find and licked my fingers
+took a small bite of a find and sat for a moment
+took a small bite of a find and wrote down the taste
+took a small bite of a find and felt different
+took a small bite of a find and went on
+nibbled on a strange thing and made a face
+nibbled on a strange thing and kept the taste in mind
+nibbled on a strange thing and wanted more
+nibbled on a strange thing and was not sure
+nibbled on a strange thing and swallowed hard
+nibbled on a strange thing and licked my fingers
+nibbled on a strange thing and sat for a moment
+nibbled on a strange thing and wrote down the taste
+nibbled on a strange thing and felt different
+nibbled on a strange thing and went on
+sampled something from the ground and made a face
+sampled something from the ground and kept the taste in mind
+sampled something from the ground and wanted more
+sampled something from the ground and was not sure
+sampled something from the ground and swallowed hard
+sampled something from the ground and licked my fingers
+sampled something from the ground and sat for a moment
+sampled something from the ground and wrote down the taste
+sampled something from the ground and felt different
+sampled something from the ground and went on
+chewed on a find thoughtfully and made a face
+chewed on a find thoughtfully and kept the taste in mind
+chewed on a find thoughtfully and wanted more
+chewed on a find thoughtfully and was not sure
+chewed on a find thoughtfully and swallowed hard
+chewed on a find thoughtfully and licked my fingers
+chewed on a find thoughtfully and sat for a moment
+chewed on a find thoughtfully and wrote down the taste
+chewed on a find thoughtfully and felt different
+chewed on a find thoughtfully and went on
+ate a little of what was lying around and made a face
+ate a little of what was lying around and kept the taste in mind
+ate a little of what was lying around and wanted more
+ate a little of what was lying around and was not sure
+ate a little of what was lying around and swallowed hard
+ate a little of what was lying around and licked my fingers
+ate a little of what was lying around and sat for a moment
+ate a little of what was lying around and wrote down the taste
+ate a little of what was lying around and felt different
+ate a little of what was lying around and went on
+
+[greet]
+said hello to whoever was near and listened
+said hello to whoever was near and got a smile back
+said hello to whoever was near and hoped for an answer
+said hello to whoever was near and felt a bit less alone
+said hello to whoever was near and waited
+said hello to whoever was near and tried a second time
+said hello to whoever was near and walked on
+said hello to whoever was near and wrote it down
+said hello to whoever was near and felt lighter
+said hello to whoever was near and stayed a while
+called out a greeting and listened
+called out a greeting and got a smile back
+called out a greeting and hoped for an answer
+called out a greeting and felt a bit less alone
+called out a greeting and waited
+called out a greeting and tried a second time
+called out a greeting and walked on
+called out a greeting and wrote it down
+called out a greeting and felt lighter
+called out a greeting and stayed a while
+waved at the empty air and listened
+waved at the empty air and got a smile back
+waved at the empty air and hoped for an answer
+waved at the empty air and felt a bit less alone
+waved at the empty air and waited
+waved at the empty air and tried a second time
+waved at the empty air and walked on
+waved at the empty air and wrote it down
+waved at the empty air and felt lighter
+waved at the empty air and stayed a while
+greeted a thing by the path and listened
+greeted a thing by the path and got a smile back
+greeted a thing by the path and hoped for an answer
+greeted a thing by the path and felt a bit less alone
+greeted a thing by the path and waited
+greeted a thing by the path and tried a second time
+greeted a thing by the path and walked on
+greeted a thing by the path and wrote it down
+greeted a thing by the path and felt lighter
+greeted a thing by the path and stayed a while
+spoke a friendly word to the world and listened
+spoke a friendly word to the world and got a smile back
+spoke a friendly word to the world and hoped for an answer
+spoke a friendly word to the world and felt a bit less alone
+spoke a friendly word to the world and waited
+spoke a friendly word to the world and tried a second time
+spoke a friendly word to the world and walked on
+spoke a friendly word to the world and wrote it down
+spoke a friendly word to the world and felt lighter
+spoke a friendly word to the world and stayed a while
+offered a few kind words and listened
+offered a few kind words and got a smile back
+offered a few kind words and hoped for an answer
+offered a few kind words and felt a bit less alone
+offered a few kind words and waited
+offered a few kind words and tried a second time
+offered a few kind words and walked on
+offered a few kind words and wrote it down
+offered a few kind words and felt lighter
+offered a few kind words and stayed a while

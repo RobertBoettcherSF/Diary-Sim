@@ -1,4 +1,4 @@
---  Version: 0.007
+--  Version: 0.008
 pragma Ada_2022;
 
 with Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
@@ -20,6 +20,9 @@ package body Sim_World is
       Text   : Unbounded_String;
       P1, P2 : Natural := 0;   --  parent word ids of a coined word
       Coiner : Natural := 0;   --  entity id that coined it (0: base word)
+      Kind   : Natural := 0;   --  world words: 1 name, 2 property, 3 variant (see the spec)
+      Variant : Natural := 0;
+      Meaning : Unbounded_String;
    end record;
    package Word_Vectors is new Ada.Containers.Vectors (Positive, Word_Rec);
    package Bool_Vectors is new Ada.Containers.Vectors (Positive, Boolean);
@@ -28,6 +31,7 @@ package body Sim_World is
    package Nat_Vectors is new Ada.Containers.Vectors (Positive, Natural);
    Freq   : array (Entity_Id) of Nat_Vectors.Vector;   --  per word: how often it came up for the entity
    Taught : array (Entity_Id) of Nat_Vectors.Vector;   --  per word: the teacher's entity id, else 0
+   Via_World : array (Entity_Id) of Bool_Vectors.Vector;   --  per word: learned by meeting it in the world
    Base  : Natural := 0;
 
    --  Petitions (see the spec): topic table, filed petitions, per-entity bookkeeping.
@@ -92,12 +96,13 @@ package body Sim_World is
       Cache_Steps := [others => -1];
       Table.Clear;
       for W of Base_Words loop
-         Table.Append (Word_Rec'(Text => To_Unbounded_String (W), P1 => 0, P2 => 0, Coiner => 0));
+         Table.Append (Word_Rec'(Text => To_Unbounded_String (W), others => <>));
       end loop;
       Base := Natural (Table.Length);
       for E in Entity_Id loop
          Known (E).Clear;
          Taught (E).Clear;
+         Via_World (E).Clear;
          Freq (E).Clear;
          for W in 1 .. Base loop
             Known (E).Append (Int (Roll (Seed, Positive (E), 0, 1000 + W, 100)) <= Start_Percent);
@@ -139,6 +144,7 @@ package body Sim_World is
      (if Table (W).Coiner = Positive (E) then "coined by " & Name (E)
       elsif W <= Natural (Taught (E).Length) and then Taught (E).Element (W) /= 0
       then "taught by " & Name (Entity_Id (Taught (E).Element (W)))
+      elsif W <= Natural (Via_World (E).Length) and then Via_World (E).Element (W) then "the world"
       else "start");
 
    function Find (Text : String) return Natural is
@@ -151,9 +157,56 @@ package body Sim_World is
 
    function Add_Coined (Text : String; P1, P2 : Natural; By : Entity_Id) return Positive is
    begin
-      Table.Append (Word_Rec'(To_Unbounded_String (Text), P1, P2, Positive (By)));
+      Table.Append (Word_Rec'(Text => To_Unbounded_String (Text), P1 => P1, P2 => P2, Coiner => Positive (By), others => <>));
       return Count;
    end Add_Coined;
+
+   function Add_World_Word (Text, Meaning : String; Kind : Positive; Variant_Of : Natural := 0) return Positive is
+   begin
+      Table.Append (Word_Rec'(Text => To_Unbounded_String (Text), Kind => Kind, Variant => Variant_Of,
+                              Meaning => To_Unbounded_String (Meaning), others => <>));
+      return Count;
+   end Add_World_Word;
+
+   function Kind_Of (W : Positive) return Natural is (Table (W).Kind);
+   function Meaning_Of (W : Positive) return String is (To_String (Table (W).Meaning));
+
+   procedure Learn_From_World (E : Entity_Id; W : Positive) is
+   begin
+      Learn_Word (E, W);
+      while Natural (Via_World (E).Length) < W loop
+         Via_World (E).Append (False);
+      end loop;
+      Via_World (E) (W) := True;
+   end Learn_From_World;
+
+   function World_Learned (E : Entity_Id) return Natural is
+      N : Natural := 0;
+   begin
+      for B of Via_World (E) loop if B then N := N + 1; end if; end loop;
+      return N;
+   end World_Learned;
+
+   function Taught_Count (E : Entity_Id) return Natural is
+      N : Natural := 0;
+   begin
+      for T of Taught (E) loop if T /= 0 then N := N + 1; end if; end loop;
+      return N;
+   end Taught_Count;
+
+   function Coined_Count_By (E : Entity_Id) return Natural is
+      N : Natural := 0;
+   begin
+      for R of Table loop if R.Coiner = Positive (E) then N := N + 1; end if; end loop;
+      return N;
+   end Coined_Count_By;
+
+   function Coined_Total return Natural is
+      N : Natural := 0;
+   begin
+      for R of Table loop if R.Coiner /= 0 then N := N + 1; end if; end loop;
+      return N;
+   end Coined_Total;
 
    function Parents (W : Positive) return String is
      (if Table (W).P1 = 0 then "" else Word (Table (W).P1) & "+" & Word (Table (W).P2));

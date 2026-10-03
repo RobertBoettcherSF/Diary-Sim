@@ -1,4 +1,4 @@
---  Version: 0.007
+--  Version: 0.008
 --  The shared world of diary_sim: the four entities, the vocabulary (base
 --  words, who knows what, coined words), the bench kernels and the final votes.
 --  One world per run; Init rebuilds it from scratch, so a replay from tick 1
@@ -19,8 +19,10 @@ package Sim_World is
    --  Diary word lists (data/words.txt): action texts, mood tones, vote reasons.
    type List_Id is (Rest, Work, Explore, Talk, Wander, Bench, Propose, Learn,
                     Mood_Low, Mood_Neutral, Mood_High, Reason_Low, Reason_Mid, Reason_High,
-                    Wish_Open, Wish_Close);
+                    Wish_Open, Wish_Close,
+                    Examine, Push, Eat, Greet);   --  the world verbs (world=1 sessions only, Sim_Things)
    subtype Action is List_Id range Rest .. Learn;   --  Learn is never rolled: it delivers a lesson
+   subtype World_Verb is List_Id range Examine .. Greet;
    Words : array (List_Id) of Sim_Util.Str_Vectors.Vector;
 
    --  ---- vocabulary ------------------------------------------------------
@@ -40,6 +42,17 @@ package Sim_World is
    --  Where E's word W came from: "start" (start slice), "taught by <id>" or "coined by <id>".
    function Origin (E : Entity_Id; W : Positive) return String;
    function Coined_By (W : Positive) return String;   --  entity name, "" for a base word
+   --  ---- words from the world (Sim_Things, world=1 sessions) ----------------------------------
+   --  Kind: 1 = the made-up name of a thing, 2 = a property / social word, 3 = a dialect variant
+   --  of a name (Variant_Of is the word it drifted from).  Meaning is the description.
+   function Add_World_Word (Text, Meaning : String; Kind : Positive; Variant_Of : Natural := 0) return Positive;
+   function Kind_Of (W : Positive) return Natural;       --  0: base or coined word
+   function Meaning_Of (W : Positive) return String;
+   procedure Learn_From_World (E : Entity_Id; W : Positive);   --  learn W by meeting it (origin "world")
+   function World_Learned (E : Entity_Id) return Natural;     --  words E learned from the world
+   function Taught_Count (E : Entity_Id) return Natural;      --  words E learned in lessons
+   function Coined_Count_By (E : Entity_Id) return Natural;
+   function Coined_Total return Natural;                      --  coined words of everybody
    --  Words E knows / words From knows and To lacks, and the N-th of each.
    function Known_Count (E : Entity_Id) return Natural;
    function Nth_Known (E : Entity_Id; N : Positive) return Positive;

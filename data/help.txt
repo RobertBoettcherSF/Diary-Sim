@@ -10,6 +10,7 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
   --preview      simulate in memory, print excerpts, write nothing
   --say=W --text=T  words to a wesen/player/all; --answer: to the petition
   --inbox        print the inbox of Robert
+  --map          print the treadmill view of the last session end (make map)
   --menu         the main menu (terminal only; make menu)
   --debug        also write debug_digest.txt (make run|demo DEBUG=1)
   --debug-section=NAME  print one block of debug_full.txt (drift trace players
@@ -67,3 +68,11 @@ make run / play keep ONE persistent world and continue it. It lives in the save
 folder ../diary-data (next to the source folder; --home / $DIARY_HOME): delete
 the old source folder after an update, the save stays. 'Saved to <path>' ends
 every run. Copy diary-data to back it up.
+Treadmill world (world=1, new sessions): an endless grid generated on demand
+from the seed (data/things.txt); each wesen has (x,y) and takes one step when
+it wanders/explores; office lab cafe home are 4 landmark regions near (0,0)
+(nearest one = location). Talk needs a wesen on the same/next cell. Verbs
+examine push eat greet meet things and teach new words (names, feel, taste,
+greetings; dialects by one-letter drift). Only edits are stored:
+diaries/world.txt (replay-verified), L lines in sessions.txt. world.enabled = 0
+in limits.txt keeps the old behaviour; see docs/WORLD.md. make map shows it.

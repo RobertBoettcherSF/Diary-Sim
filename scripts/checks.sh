@@ -131,7 +131,7 @@ grep -q 'import OK: 4 entities, 1000 ticks verified, continuing from 1001 (4000 
   && grep -q 'entities/ present (4/4' again.txt && grep -q 'turns this run 200' again.txt && grep -q 'resumed from tick 1000' again.txt \
   && grep -q 'export OK: diaries/ 4 files, 4800 lines' again.txt && ok "resumed run: import OK with the right numbers, report, export OK" || bad "resumed-run lines"
 cmp <(sed -n '/^report:/,/^export OK/p' again.txt) <(sed -n '/^report:/,/^export OK/p' run_report.txt) && grep -q '^import OK' run_report.txt && ok "run_report.txt holds the same import/report lines" || bad "run_report.txt differs"
-[ "$(wc -l < again.txt)" -le 64 ] && ok "console output $(wc -l < again.txt) lines (<= 64)" || bad "console output too long"
+[ "$(wc -l < again.txt)" -le 76 ] && ok "console output $(wc -l < again.txt) lines (<= 76, with the treadmill block)" || bad "console output too long"
 rm -rf entities; "$bin" --ticks=1200 | grep -q 'entities/ rebuilt (4 of 4' && ok "missing entities/ reported as rebuilt" || bad "no rebuilt message"
 fresh_copy; sed -i '300s/"text":"[a-z]/"text":"X/' diaries/robert.jsonl
 "$bin" --ticks=1000 > drift.txt; grep -q 'import FAILED: backup and code have drifted: robert tick 300' drift.txt && ok "drift: console says 'import FAILED' with entity and tick" || bad "no import FAILED"
@@ -158,9 +158,9 @@ dbg QUIT && [ "$(cat rc.txt)" = 130 ] && grep -q "after tick $n" debug.txt && ok
 
 echo "== 16. Rule 30 personalities: different action mixes, nobody stuck at a bound =="
 cd "$w/base" || exit 1
-mix() { grep -o "\"t\":\"$2\"" "diaries/$1.jsonl" | wc -l; }
+mix() { grep -Eo "\"t\":\"($2)\"" "diaries/$1.jsonl" | wc -l; }   # the world verbs refine rest (eat) and talk (greet)
 rmin=9999; rmax=0; tmin=9999; tmax=0
-for n in ada gemini replika robert; do r=$(mix $n rest); t=$(mix $n talk); [ $r -lt $rmin ] && rmin=$r; [ $r -gt $rmax ] && rmax=$r; [ $t -lt $tmin ] && tmin=$t; [ $t -gt $tmax ] && tmax=$t; done
+for n in ada gemini replika robert; do r=$(mix $n "rest|eat"); t=$(mix $n "talk|greet"); [ $r -lt $rmin ] && rmin=$r; [ $r -gt $rmax ] && rmax=$r; [ $t -lt $tmin ] && tmin=$t; [ $t -gt $tmax ] && tmax=$t; done
 echo "   rest $rmin..$rmax, talk $tmin..$tmax ticks per entity"
 [ $((rmax - rmin)) -ge 40 ] && [ $((tmax - tmin)) -ge 60 ] && ok "action mixes differ clearly between entities" || bad "mixes too similar"
 worst=0; for n in ada gemini replika robert; do
@@ -213,7 +213,7 @@ cmp -s "$w/kal/a/diaries/sessions.txt" "$w/kal/b/diaries/sessions.txt" && cmp -s
 rec=$(grep '^S1 ' diaries/sessions.txt); echo "   $rec"; grep '^W1 ' diaries/sessions.txt | sed 's/^/   /'
 grep -Eq "^W1 tick=[0-9]+ ada=[a-z]+/(start|taught-by-[a-z]+|coined-by-ada) gemini=[a-z]+/[a-z-]+ replika=[a-z]+/[a-z-]+ robert=[a-z]+/[a-z-]+$" diaries/sessions.txt && grep -q '^words vote (session 1): ada [a-z]* | gemini [a-z]* | replika [a-z]* | robert ' out.txt && grep -q '^words vote (session 1)' debug.txt && grep -q '^words vote (session 1)' run_report.txt \
   && ok "end-of-session word vote: one favourite word per wesen with origin in sessions.txt W1, one line on console, debug.txt and run_report.txt" || bad "word vote line"
-echo "$rec" | grep -Eq '^S1 start=0 votes=[0-9]+/[0-9]+/[0-9]+/[0-9]+ len=[0-9]+ src=vote dharma=1$' && ok "sessions.txt record format" || bad "session record format"
+echo "$rec" | grep -Eq '^S1 start=0 votes=[0-9]+/[0-9]+/[0-9]+/[0-9]+ len=[0-9]+ src=vote dharma=1 world=1$' && ok "sessions.txt record format (dharma=1 world=1)" || bad "session record format"
 mapfile -t v < <(echo "$rec" | sed 's/.*votes=\([^ ]*\).*/\1/' | tr '/' '\n' | sort -n); len=$(echo "$rec" | sed 's/.*len=\([0-9]*\).*/\1/')
 med=$(( (v[1] + v[2]) / 2 )); [ "$med" -lt 20 ] && med=20; [ "$med" -gt 1500 ] && med=1500
 [ "$len" = "$med" ] && [ "$(wc -l < diaries/ada.jsonl)" = "$len" ] && ok "decided length = median of the four votes (clamped), and that many ticks ran" || bad "median ($len vs $med)"
@@ -224,17 +224,17 @@ grep -q '^S2 ' diaries/sessions.txt && grep -q '^kalpa 2 (Treta)' out.txt && ok 
 rm -rf "$w/kal/c"; mkdir "$w/kal/c"; cd "$w/kal/c" || exit 1
 "$kb" --yes --every 1000 --crash-at 120 > out.txt 2>&1; [ $? = 1 ] && grep -q "^$(echo "$rec" | cut -d' ' -f1-4)" diaries/sessions.txt && [ "$(wc -l < diaries/sessions.txt)" = 6 ] && ok "crash mid-session: the S1 record is already on disk" || bad "crash record"
 "$kb" --every 1000 > out.txt 2>&1
-grep -q '^kalpa 1 (Satya) resumes: votes' out.txt && grep -q "target tick $len" out.txt && [ "$(wc -l < diaries/sessions.txt)" = 15 ] && cmp -s "$w/kal/a/diaries/sessions.txt" <(cat diaries/sessions.txt) && [ "$(wc -l < diaries/gemini.jsonl)" = "$len" ] \
+grep -q '^kalpa 1 (Satya) resumes: votes' out.txt && grep -q "target tick $len" out.txt && [ "$(wc -l < diaries/sessions.txt)" = 16 ] && cmp -s "$w/kal/a/diaries/sessions.txt" <(cat diaries/sessions.txt) && [ "$(wc -l < diaries/gemini.jsonl)" = "$len" ] \
   && ok "crash then bare rerun: same target, no second vote, sessions.txt identical to the clean run" || bad "resume of a crashed session"
 cmp -s <(sed 's/"ts":"[^"]*"//' diaries/robert.jsonl) <(sed 's/"ts":"[^"]*"//' "$w/kal/a/diaries/robert.jsonl") && ok "resumed diaries identical to the uninterrupted run" || bad "resumed diaries differ"
 "$kb" --ticks $((len + 30)) --every 1000 > out.txt 2>&1
-grep "^S2 " diaries/sessions.txt | grep -Eq "^S2 start=$len votes=[0-9/]+ len=30 src=explicit dharma=1$" && grep -q '^kalpa 2 (Treta): explicit, 30 ticks' out.txt && ok "--ticks overrides the vote: recorded as src=explicit with the would-be votes" || bad "explicit session"
-"$kb" --more 5 --every 1000 > out.txt 2>&1; grep "^S3 " diaries/sessions.txt | grep -Eq "^S3 start=$((len + 30)) .* len=5 src=explicit dharma=1$" && ok "--more overrides the vote too (S3, Dvapara)" || bad "--more session"
+grep "^S2 " diaries/sessions.txt | grep -Eq "^S2 start=$len votes=[0-9/]+ len=30 src=explicit dharma=1 world=1$" && grep -q '^kalpa 2 (Treta): explicit, 30 ticks' out.txt && ok "--ticks overrides the vote: recorded as src=explicit with the would-be votes" || bad "explicit session"
+"$kb" --more 5 --every 1000 > out.txt 2>&1; grep "^S3 " diaries/sessions.txt | grep -Eq "^S3 start=$((len + 30)) .* len=5 src=explicit dharma=1 world=1$" && ok "--more overrides the vote too (S3, Dvapara)" || bad "--more session"
 cp -r diaries ../d_ok; sed -i '/^S1 /s/votes=[0-9]*/votes=7/' diaries/sessions.txt; "$kb" --more 0 > out.txt 2>&1
 head -1 debug.txt | grep -q '^DRIFT' && grep -q 'import FAILED.*sessions.txt S1' out.txt && ok "tampered votes in sessions.txt: import FAILED, DRIFT" || bad "tampered sessions.txt"
 rm -rf diaries; cp -r ../d_ok diaries; sed -i '/^W1 /s/ada=[^ ]*/ada=zzz\/start/' diaries/sessions.txt; "$kb" --more 0 > out.txt 2>&1
 head -1 debug.txt | grep -q '^DRIFT' && grep -q 'import FAILED.*sessions.txt W1 (tick' out.txt && ok "tampered word vote (W line): import FAILED, DRIFT" || bad "tampered W line"
-rm -rf diaries; cp -r ../d_ok diaries; head -n 15 diaries/sessions.txt > s.cut; rm -f diaries/inbox.txt; printf 'S9 start=99999 votes=1/2/3/4 len=5 src=vote\nS10 sta' >> s.cut; cp s.cut diaries/sessions.txt; "$kb" --more 0 > out.txt 2>&1
+rm -rf diaries; cp -r ../d_ok diaries; head -n 16 diaries/sessions.txt > s.cut; rm -f diaries/inbox.txt; printf 'S9 start=99999 votes=1/2/3/4 len=5 src=vote\nS10 sta' >> s.cut; cp s.cut diaries/sessions.txt; "$kb" --more 0 > out.txt 2>&1
 grep -q 'warning: sessions.txt line .* is not a complete session record' out.txt && grep -q 'session 9 starting at tick 99999' out.txt && grep -q '^import OK' out.txt && ok "half-written / ahead records only warn" || bad "sessions.txt warnings"
 rm -rf diaries; cp -r ../d_ok diaries; grep -q '^# build v' diaries/sessions.txt && ok "sessions.txt header carries '# build vX.YYY'" || bad "no build header"
 rm -f last_error.txt; sed -i 's/^# build v.*/# build v0.001/' diaries/sessions.txt; sed -i '/^S1 /s/votes=[0-9]*/votes=7/' diaries/sessions.txt; "$kb" --more 0 > out.txt 2>&1
@@ -299,7 +299,7 @@ make > /dev/null 2>&1; list() { find . -printf '%p %s %T@\n' | sort; }; list > "
 make demo > "$w/pv_out.txt" 2>&1; rc=$?; list > "$w/pv_after.txt"
 cmp -s "$w/pv_before.txt" "$w/pv_after.txt" && [ $rc = 0 ] && ok "make demo: exit 0, no file created or changed in the whole tree (listing with sizes and times compared)" || bad "make demo touched the tree (rc=$rc): $(diff "$w/pv_before.txt" "$w/pv_after.txt" | head -3)"
 n=$(sed -n '/^demo preview:/,$p' "$w/pv_out.txt" | wc -l); echo "   preview output: $n lines"
-[ "$n" -le 30 ] && grep -q '^demo preview: seed 42, 200 ticks' "$w/pv_out.txt" && grep -q '^ada  *100 ' "$w/pv_out.txt" && grep -q '^P1 tick=' "$w/pv_out.txt" && grep -q '^coined: ' "$w/pv_out.txt" && grep -q '^taught: ' "$w/pv_out.txt" \
+[ "$n" -le 40 ] && grep -q '^demo preview: seed 42, 200 ticks' "$w/pv_out.txt" && grep -q '^ada  *100 ' "$w/pv_out.txt" && grep -q '^P1 tick=' "$w/pv_out.txt" && grep -q '^coined: ' "$w/pv_out.txt" && grep -q '^taught: ' "$w/pv_out.txt" \
   && grep -q 'kalpa 1 (Satya): votes' "$w/pv_out.txt" && grep -q '^favourite location:' "$w/pv_out.txt" && grep -q '^nothing was written to disk' "$w/pv_out.txt" && ok "excerpts: diary lines per wesen, petitions, words, vote one-liner, vote table (about one screen)" || bad "preview content"
 bin/diary_sim --preview --ticks 50 --seed 7 > "$w/pv_o.txt"; grep -q '^demo preview: seed 7, 50 ticks' "$w/pv_o.txt" && ok "--preview takes --ticks and --seed" || bad "preview options"
 for o in --fresh --yes "--more 5" "--crash-at 9"; do bin/diary_sim --preview $o > "$w/pv_e.txt" 2>&1; [ $? = 2 ] && grep -q 'writes nothing' "$w/pv_e.txt" || bad "--preview $o not rejected"; done
@@ -468,6 +468,7 @@ fi
 echo "== 24. Buddhism layer + players: three sessions in a row, replay-verified, record-first =="
 rm -rf "$w/dh"; mkdir -p "$w/dh/bin" "$w/dh/a" "$w/dh/b"; cp "$bin" "$w/dh/bin/"; cp -r "$root/data" "$w/dh/data"
 sed -i 's/^liberation.karma = .*/liberation.karma = 40/' "$w/dh/data/karma.txt"
+sed -i 's/^world.enabled = .*/world.enabled = 0/' "$w/dh/data/limits.txt"   # this scenario is about the Buddhism layer; the world has scenario 26
 db="$w/dh/bin/diary_sim"
 dh_flow() {   # three sessions with Robert's words in between (same steps in a and b)
   "$db" --ticks 200 --yes --every 1000 > s1.txt 2>&1
@@ -488,7 +489,7 @@ grep -Eq '^D1 tick=200 wesen=ada karma=[+-][0-9]+ good=[0-9]+ bad=[0-9]+ life=1 
   && grep -Eq '^C1 tick=200 win=[a-z_]+ tally=[a-z_]+:[0-9]+(,[a-z_]+:[0-9]+)* votes=ada:[a-z_-]+,gemini:[a-z_-]+,replika:[a-z_-]+,robert:[a-z_-]+$' diaries/sessions.txt \
   && grep -Eq '^Y1 tick=200 player=iris attn=[0-9]+ tone=[-+0-9]+ brev=[0-9]+ warm=[-+0-9]+ trust=[0-9]+/[0-9]+/[0-9]+/[0-9]+$' diaries/sessions.txt \
   && ok "three sessions in a row: W, 4 x D (karma, life, values, unrest, rank, commitment, conflict, awareness), C (petition vote), 3 x Y (player state) each" || bad "line formats"
-[ "$(grep -c '^S[123] .* dharma=1$' diaries/sessions.txt)" = 3 ] && grep -q '^import OK: 4 entities, 400 ticks verified' s3.txt && grep -q '^import OK: 4 entities, 200 ticks verified' s2.txt \
+[ "$(grep -Ec '^S[123] .* dharma=1( world=1)?$' diaries/sessions.txt)" = 3 ] && grep -q '^import OK: 4 entities, 400 ticks verified' s3.txt && grep -q '^import OK: 4 entities, 200 ticks verified' s2.txt \
   && ok "sessions 2 and 3 replay-verified the earlier D/C/Y lines and the inbox (import OK)" || bad "replay verify"
 inl='^I[0-9]+ (info|note|alert) from=(iris|sol|noor) s[123] t[0-9]+ \| .* \| src=s[123]:t[0-9]+:(ada|gemini|replika|robert|all)$'
 n=$(grep -c '^I' diaries/inbox.txt)
@@ -572,6 +573,56 @@ cp ss.bak diaries/sessions.txt; "$gb" --more 10 --crash-at 255 --debug > g7.txt 
 head -1 debug_digest.txt | grep -q '^CRASH v' && grep -q '^traceback' debug_digest.txt && "$gb" --debug-section trace | grep -q '^traceback (innermost first):' && ok "CRASH: line 1 CRASH, error and traceback head in the digest, whole trace in section trace" || bad "crash digest"
 unset DIARY_HOME
 make -n -C "$root" run DEBUG=1 2> /dev/null | grep -q -- '--debug' && make -n -C "$root" demo DEBUG=1 2> /dev/null | grep -q -- '--preview .*--debug' && make -n -C "$root" run SECTION=inbox 2> /dev/null | grep -q -- '--debug-section inbox' && ok "make run DEBUG=1 / make demo DEBUG=1 / SECTION=inbox pass --debug / --debug-section" || bad "make DEBUG"
+
+echo "== 26. treadmill world: new sessions, edit log, L lines, tamper, old diaries, world off, --map =="
+rm -rf "$w/wd"; mkdir -p "$w/wd/bin" "$w/wd/home" "$w/wd/off/bin" "$w/wd/off/run"; cp "$bin" "$w/wd/bin/"; cp -r "$root/data" "$w/wd/data"; wb="$w/wd/bin/diary_sim"
+cp "$bin" "$w/wd/off/bin/"; cp -r "$root/data" "$w/wd/off/data"; sed -i 's/^world.enabled = .*/world.enabled = 0/' "$w/wd/off/data/limits.txt"
+cd "$w/wd/home" || exit 1; export DIARY_HOME="$w/wd/home"
+"$wb" --ticks 1200 --yes --every 5000 > w1.txt 2>&1; "$wb" --more 800 --every 5000 > w2.txt 2>&1; "$wb" --more 300 --every 5000 > w3.txt 2>&1
+[ "$(grep -c '^S[123] .* dharma=1 world=1$' diaries/sessions.txt)" = 3 ] && [ "$(grep -c '^L[123] tick=' diaries/sessions.txt)" = 3 ] && grep -q '^X1 t=[0-9]* \(gone\|add\) [0-9]*\.[0-9]* -\?[0-9]*,-\?[0-9]* by=' diaries/world.txt \
+  && grep -q '^import OK: 4 entities, 2000 ticks verified' w3.txt && ok "three world sessions: S lines carry world=1, one L line per session end, the edit log diaries/world.txt, replay-verified (import OK)" || bad "world sessions (w3.txt)"
+kn=$(grep '^import: entities' w3.txt | grep -o 'ada [0-9]* gemini [0-9]* replika [0-9]* robert [0-9]*' | tr -d 'a-z' | tr -s ' ')
+ok_n=1; for x in $kn; do [ "$x" -gt 250 ] || ok_n=0; done; echo "   words known at tick 2000:$kn"
+[ $ok_n = 1 ] && [ -n "$kn" ] && grep -Eq '^L3 tick=2300 words=[0-9]+ edits=[0-9]+ ada=[0-9]+/[0-9]+/[0-9]+/[0-9]+@-?[0-9]+,-?[0-9]+ ' diaries/sessions.txt && ok "words grow far past the old plateau of 223 (every wesen knows more than 250), learned-from-world counts and positions in the L line" || bad "word growth"
+for v in examine push eat greet; do grep -q "\"t\":\"$v\"" diaries/ada.jsonl diaries/gemini.jsonl diaries/replika.jsonl diaries/robert.jsonl || bad "no $v verb in the diaries"; done
+grep -q 'world +[0-9]*/[0-9]* ' w3.txt && grep -q '^treadmill  ada ' w3.txt && [ "$(grep -c '^           [^ ]' w3.txt)" = 5 ] \
+  && ok "diary verbs examine/push/eat/greet occur; the report has 'world +N/M' and the treadmill block (names, position, landmark, biome, 5 window rows)" || bad "report world block"
+cp diaries/world.txt ../world.keep; cp diaries/sessions.txt ../sessions.keep; cksum < diaries/world.txt > ../world.sum
+rm -f diaries/world.txt; "$wb" --more 0 --every 5000 > w4.txt 2>&1; grep -q '^import OK' w4.txt && cmp -s diaries/world.txt ../world.keep && ok "a deleted diaries/world.txt is regenerated identically by the replay" || bad "world.txt regeneration"
+sed -i '0,/ gone /s/ gone / add /' diaries/world.txt; "$wb" --more 0 --every 5000 > w5.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && grep -q 'import FAILED: diaries/world.txt X' w5.txt && ok "tampered world.txt line: import FAILED, DRIFT" || bad "tampered edit line"
+cp ../world.keep diaries/world.txt; printf 'X999 t=5 gone 1.1 0,0 by=ada\n' >> diaries/world.txt; "$wb" --more 0 --every 5000 > w6.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && grep -q 'diaries/world.txt X[0-9]*: stored and replay differ' w6.txt && ok "an invented edit line (tick within the replay): DRIFT" || bad "invented edit"
+cp ../world.keep diaries/world.txt; sed -i '/^L2 /s/ada=[0-9]*/ada=1/' diaries/sessions.txt; "$wb" --more 0 --every 5000 > w7.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && grep -q 'import FAILED' w7.txt && ok "tampered L line: import FAILED, DRIFT" || bad "tampered L line"
+cp ../sessions.keep diaries/sessions.txt; sed -i '/^S2 /s/ world=1//' diaries/sessions.txt; "$wb" --more 0 --every 5000 > w8.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "S line with its world=1 marker removed: the action table differs, DRIFT" || bad "tampered world marker"
+cp ../sessions.keep diaries/sessions.txt; "$wb" --more 0 --every 5000 > w9.txt 2>&1; grep -q '^import OK: 4 entities, 2300 ticks verified' w9.txt && ok "after restoring the files the world replays again (import OK)" || bad "restore"
+# --map: read-only, four windows, same as the end of the report
+sum_b=$(cksum < diaries/sessions.txt); "$wb" --map > m1.txt 2>&1; rc=$?
+[ $rc = 0 ] && [ "$sum_b" = "$(cksum < diaries/sessions.txt)" ] && grep -q '^treadmill at tick 2300 ' m1.txt && grep -q '^treadmill  ada  *gemini  *replika  *robert' m1.txt && grep -q '^near  *\(office\|lab\|cafe\|home\)' m1.txt \
+  && [ "$(grep -c '^           [^ ]' m1.txt)" = 5 ] && ok "--map: position, nearest landmark, biome and the 5x5 windows of the four wesen at the last session end (read-only)" || bad "--map (m1.txt)"
+make -n -C "$root" map 2> /dev/null | grep -q -- '--map' && ok "make map runs --map" || bad "make map"
+# an older diary (session 1 without world=1) replays with the old table, the next session starts the world
+rm -rf "$w/wd/old"; mkdir -p "$w/wd/old"; cd "$w/wd/old" || exit 1; export DIARY_HOME="$w/wd/old"
+"$w/wd/off/bin/diary_sim" --ticks 400 --yes --every 5000 > o1.txt 2>&1; "$wb" --more 300 --every 5000 > o2.txt 2>&1
+! grep -q '^S1 .*world=1' diaries/sessions.txt && grep -q '^S2 .* dharma=1 world=1$' diaries/sessions.txt && ! grep -q '^L1 ' diaries/sessions.txt && grep -q '^L2 tick=700 ' diaries/sessions.txt && grep -q '^import OK: 4 entities, 400 ticks verified' o2.txt \
+  && grep -q '"t":"\(examine\|push\|eat\|greet\)"' diaries/robert.jsonl && ! sed -n 1,400p diaries/robert.jsonl | grep -q '"t":"\(examine\|push\|eat\|greet\)"' \
+  && ok "an older diary (S1 without world=1) replays unchanged; the world starts with the next session (S2 world=1, no verbs before tick 401)" || bad "older diary into world"
+"$wb" --more 0 --every 5000 > o3.txt 2>&1; grep -q '^import OK: 4 entities, 700 ticks verified' o3.txt && ok "the mixed diary (old session then world session) verifies again" || bad "mixed diary replay"
+# world off: byte-identical to 0dc1a7b (golden checksum made with that build, seed 42, 300 + 200 ticks)
+rm -rf "$w/wd/gold"; mkdir -p "$w/wd/gold"; cd "$w/wd/gold" || exit 1; gh="$w/wd/gold/h"; mkdir -p "$gh"; ob="$w/wd/off/bin/diary_sim"
+DIARY_HOME="$gh" "$ob" --seed 42 --ticks 300 --yes --every 1000 > /dev/null 2>&1; DIARY_HOME="$gh" "$ob" --more 200 --every 1000 > /dev/null 2>&1
+g=$( cd "$gh" && { for e in ada gemini replika robert; do sed 's/"ts":"[^"]*"//' diaries/$e.jsonl; done; grep -v '^# build' diaries/sessions.txt; cat diaries/inbox.txt; for e in ada gemini replika robert; do cat entities/$e/words.txt; done; } | cksum )
+echo "   world off checksum: $g"
+[ "$g" = "1067539153 417506" ] && [ ! -e "$gh/diaries/world.txt" ] && ! grep -q 'world=1\|^L[0-9]' "$gh/diaries/sessions.txt" && ok "world.enabled = 0: diaries, sessions.txt (minus the build line), inbox and words files are byte-identical to 0dc1a7b (golden checksum)" || bad "world off is not identical to the old build ($g)"
+# digest and debug.txt
+cd "$w/wd/home" || exit 1; export DIARY_HOME="$w/wd/home"
+"$wb" --more 20 --every 5000 --debug > d1.txt 2>&1
+[ "$(wc -c < debug.txt)" -le 1500 ] && [ "$(wc -c < debug_digest.txt)" -le 1500 ] && grep -q '^words (learned from the world): ada [0-9]*(w[0-9]*) gemini' debug_digest.txt && grep -q ' w[0-9]*$' debug.txt && ok "debug.txt and the digest stay <= 1500 B and carry the learned-from-world counts" || bad "debug world counts"
+"$wb" --debug-section run | grep -q '^ada world [0-9]* e[0-9]* p[0-9]* a[0-9]* g[0-9]* at ' && ok "digest section run: verb counts and position per wesen" || bad "digest world lines"
+"$wb" --preview --ticks 120 > pv.txt 2>&1; grep -q '^treadmill  ada ' pv.txt && ok "--preview shows the treadmill too (in memory, nothing written)" || bad "preview treadmill"
+unset DIARY_HOME
 
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="
