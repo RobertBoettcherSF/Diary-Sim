@@ -1,4 +1,4 @@
-# Version: 0.003
+# Version: 0.004
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make demo       build + 200-tick run in demo_run/ (seed and final summary printed)
@@ -13,8 +13,10 @@ all:
 	@rm -f b~*
 
 version-check:
-	@bad=0; for f in Makefile diary_sim.adb sim_util.ads sim_util.adb sim_world.ads sim_world.adb; do \
+	@bad=0; for f in Makefile diary_sim.adb sim_util.ads sim_util.adb sim_world.ads sim_world.adb sim_quit.ads sim_quit.adb; do \
 	  head -1 $$f | grep -Eq 'Version: [0-9]+\.[0-9]{3}' || { echo "no version header: $$f"; bad=1; }; done; \
+	  v=$$(head -1 diary_sim.adb | grep -Eo '[0-9]+\.[0-9]{3}'); \
+	  grep -q "Build : constant String := \"$$v\"" diary_sim.adb || { echo "Build constant differs from diary_sim.adb header $$v"; bad=1; }; \
 	  [ $$bad = 0 ] && echo "version-check: PASS"
 
 portable:
@@ -28,4 +30,4 @@ check: version-check all
 	scripts/checks.sh
 
 clean:
-	rm -rf obj bin diaries diaries_old_* entities demo_run summary.txt summary.jsonl last_error.txt
+	rm -rf obj bin diaries diaries_old_* entities demo_run summary.txt summary.jsonl run_report.txt debug.txt debug.tmp last_error.txt

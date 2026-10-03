@@ -9,3 +9,6 @@ summary.jsonl
 last_error.txt
 b~*
 *.tmp
+run_report.txt
+debug.txt
+debug.tmp

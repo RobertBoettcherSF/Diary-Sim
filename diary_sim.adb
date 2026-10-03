@@ -1,4 +1,4 @@
---  Version: 0.004
+--  Version: 0.005
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -8,11 +8,14 @@
 --  entities/<id>/words.txt and bench.txt are append-only working files (NOT a VM):
 --  a line the replay produces and the file lacks is appended, so they can be
 --  rebuilt from nothing.  Bench hook for later: see README (PROOF-LATER).
+--  Ctrl-C and SIGTERM are caught (Sim_Quit); the runtime reserves them unless released here.
+pragma Interrupt_State (SIGINT, USER);
+pragma Interrupt_State (SIGTERM, USER);
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Directories,
      Ada.Exceptions, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
-     GNAT.Traceback.Symbolic, Sim_Util, Sim_World;
+     GNAT.Traceback.Symbolic, Sim_Quit, Sim_Util, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
 
 procedure Diary_Sim is
@@ -28,6 +31,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1];   --  wander: rolled
 
+   Build : constant String := "0.005";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Seed, Ticks, Every, Seed_Opt, Crash_At : Int := -1;
    Fresh, Seed_Shown : Boolean := False;
@@ -318,7 +322,7 @@ procedure Diary_Sim is
       end loop;
    end Load_Diary;
 
-   --  last_error.txt gets everything; the console the first 14 lines (+ a note).
+   --  last_error.txt gets everything; the console the first 11 lines (+ a note) and two hints.
    procedure Report (E : Ada.Exceptions.Exception_Occurrence) is
       Raw  : constant String := GNAT.Traceback.Symbolic.Symbolic_Traceback (E);
       Text : constant String := Msg ("err.head", Ada.Exceptions.Exception_Message (E)) & ASCII.LF
@@ -334,12 +338,32 @@ procedure Diary_Sim is
       for I in Text'Range loop
          if Text (I) = ASCII.LF then
             Count := Count + 1;
-            if Count <= 14 then TIO.Put_Line (Text (From .. I - 1)); end if;
+            if Count <= 11 then TIO.Put_Line (Text (From .. I - 1)); end if;
             From := I + 1;
          end if;
       end loop;
-      if Count > 14 then TIO.Put_Line (Msg ("err.more", Img (Count - 14))); end if;
+      if Count > 11 then TIO.Put_Line (Msg ("err.more", Img (Count - 11))); end if;
+      TIO.Put_Line (Msg ("crash.paste"));
+      TIO.Put_Line (Msg ("crash.backup"));
    end Report;
+
+   --  "error: NAME: message" and the top 5 frames, for debug.txt.
+   function Error_Brief (E : Ada.Exceptions.Exception_Occurrence) return String is
+      Fr : constant String := Frames (GNAT.Traceback.Symbolic.Symbolic_Traceback (E));
+      Res : Unbounded_String;
+      From : Positive := Fr'First;
+      N : Natural := 0;
+   begin
+      for I in Fr'Range loop
+         if Fr (I) = ASCII.LF and then N < 5 then
+            Append (Res, (if N = 0 then "" else " < ") & Fr (From .. I - 1));
+            N := N + 1;
+            From := I + 1;
+         end if;
+      end loop;
+      return "error: " & Ada.Exceptions.Exception_Name (E) & ": " & Ada.Exceptions.Exception_Message (E)
+        & ASCII.LF & "at: " & To_String (Res);
+   end Error_Brief;
 
    function Number (Opt, Text : String) return Int is
    begin
@@ -352,7 +376,154 @@ procedure Diary_Sim is
    Disk_Seed : Int := -1;
    Common, Longest : Natural := 0;
    Names : Unbounded_String;
+   Import_Block : Unbounded_String;
    I : Positive := 1;
+   Verify_To : Natural := 0;           --  ticks replayed (verify only) before the import line
+   Import_Done : Boolean := False;
+   Ent_Missing : Natural := 0;         --  entity folders without words.txt/bench.txt at start
+   Start_Known : array (Entity_Id) of Natural := [others => 0];
+   Run_Learn, Run_Coin, Run_Bench_N : array (Entity_Id) of Natural := [others => 0];
+   Last_Done : Int := 0;                --  last tick finished for all entities
+   Export_Line, Vote_Line : Unbounded_String;
+   Quit_Seen : Boolean := False;
+
+   --  debug.txt: ONE small file (<= 1500 bytes) on every exit path; Status is
+   --  RUN (stub, refreshed every --every ticks), OK, QUIT, CRASH, DRIFT or USAGE.
+   --  Parts are kept by priority (header, ticks, error, entities, votes, import,
+   --  export); what does not fit is cut, the file never exceeds the cap.
+   --  Written to debug.tmp, flushed, then renamed over debug.txt.
+   --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (length cap, text assembly)
+   procedure Write_Debug (Status, Err : String) is
+      Cap : constant := 1500;
+      type Part_Id is (Head, Ticks_P, Import_P, Export_P, Ents, Votes, Error_P);
+      Part : array (Part_Id) of Unbounded_String;
+      Order : constant array (1 .. 7) of Part_Id := [Head, Ticks_P, Error_P, Ents, Votes, Import_P, Export_P];
+      Used : Natural := 0;
+      Out_Text : Unbounded_String;
+      F : TIO.File_Type;
+   begin
+      Part (Head) := To_Unbounded_String (Status & " v" & Build & " seed " & (if Seed < 0 then "?" else Img (Seed)) & ASCII.LF);
+      Part (Ticks_P) := To_Unbounded_String
+        (Msg ("debug.ticks", Img (Int (Common) + 1), Img (Last_Done), Img (Int'Max (0, Last_Done - Int (Common))),
+              Img (Common)) & ASCII.LF);
+      Part (Import_P) := To_Unbounded_String ((if Length (Import_Block) > 0 then To_String (Import_Block) else Msg ("debug.pending", "import"))
+                                              & ASCII.LF);
+      Part (Export_P) := To_Unbounded_String ((if Length (Export_Line) > 0 then To_String (Export_Line) else Msg ("debug.pending", "export"))
+                                              & ASCII.LF);
+      for E in Entity_Id loop
+         Append (Part (Ents), Msg ("debug.entity", Name (E), Img (Start_Known (E)), Img (Known_Count (E)), Img (Run_Learn (E)),
+                                   Img (Run_Coin (E)), Img (Run_Bench_N (E)), Sgn (Int (St (E).Mood)) & " en " & Img (St (E).Energy))
+                 & ASCII.LF);
+      end loop;
+      if Length (Vote_Line) > 0 then Part (Votes) := Vote_Line & ASCII.LF; end if;
+      if Err'Length > 0 then Part (Error_P) := To_Unbounded_String (Err & ASCII.LF); end if;
+      for P of Order loop
+         declare
+            Room : constant Integer := Cap - Used;
+            T : constant String := To_String (Part (P));
+         begin
+            if Room <= 0 then
+               Part (P) := Null_Unbounded_String;
+            elsif T'Length > Room then
+               Part (P) := To_Unbounded_String (T (T'First .. T'First + Room - 1));
+               Used := Cap;
+            else
+               Used := Used + T'Length;
+            end if;
+         end;
+      end loop;
+      for P in Part_Id loop Append (Out_Text, Part (P)); end loop;
+      TIO.Create (F, TIO.Out_File, "debug.tmp");
+      TIO.Put (F, To_String (Out_Text));
+      TIO.Flush (F);
+      TIO.Close (F);
+      begin
+         Ada.Directories.Rename ("debug.tmp", "debug.txt");
+      exception
+         when others =>   --  a rename that will not replace: delete first
+            Ada.Directories.Delete_File ("debug.txt");
+            Ada.Directories.Rename ("debug.tmp", "debug.txt");
+      end;
+   exception
+      when others => TIO.Put_Line (Msg ("debug.failed"));
+   end Write_Debug;
+
+   --  One tick for all entities in id order: compare with the disk or append.
+   procedure Do_Tick (Tick : Int) is
+   begin
+      Cur_Tick := Tick;
+      for E in Entity_Id loop
+         Cur_Name := To_Unbounded_String (Name (E));
+         if Tick = Crash_At and then Tick > Int (Common) and then E = 1 then Events := Forced (Tick); end if;
+         declare
+            Line : constant String := Step (E, Tick);
+         begin
+            if Tick <= Int (Disk (E).Length) then   --  already on disk: compare, do not write
+               if No_Ts (Line) /= No_Ts (Disk (E) (Positive (Tick))) then
+                  raise Diary_Error with Msg ("err.drift", Name (E), Img (Tick),
+                                              Diff_At (No_Ts (Disk (E) (Positive (Tick))), No_Ts (Line)));
+               end if;
+               Verified := Verified + 1;
+            else
+               TIO.Put_Line (Out_File (E), Line);
+               TIO.Flush (Out_File (E));
+               Written := Written + 1;
+            end if;
+            Events := Written + Verified;
+            Record_Tick (Votes_Of (E), St (E).Location, St (E).Mood, St (E).Energy, Did_Learn, Did_Coin, Did_Bench);
+            if Tick > Int (Common) then
+               Run_Learn (E) := Run_Learn (E) + Boolean'Pos (Did_Learn);
+               Run_Coin (E) := Run_Coin (E) + Boolean'Pos (Did_Coin);
+               Run_Bench_N (E) := Run_Bench_N (E) + Boolean'Pos (Did_Bench);
+            end if;
+         end;
+      end loop;
+      Last_Done := Tick;
+   end Do_Tick;
+
+   --  Re-open what the run wrote and count it (not just a print).  Fails gets one
+   --  fragment per problem.  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (file reading, counts)
+   procedure Check_File (P : String; Expect : Integer; Kind : Character; Lines : out Natural;
+                         Fails : in out Unbounded_String)
+   is
+      V : Str_Vectors.Vector;
+      Found : Boolean;
+   begin   --  Kind: 'd' diary (complete lines, exact count), 's' side file (# seed header), 't' text (not empty)
+      Lines := 0;
+      if not Ada.Directories.Exists (P) or else Ada.Directories.Size (P) = 0 then
+         Append (Fails, " " & P & " missing or empty;");
+         return;
+      end if;
+      Read_Lines (P, V, Found);
+      for L of V loop
+         if (if Kind = 'd' then Complete (L) else L'Length > 0) then Lines := Lines + 1; end if;
+      end loop;
+      if Kind = 'd' and then Lines /= Expect then
+         Append (Fails, " " & P & " has" & Lines'Image & " lines, expected" & Expect'Image & ";");
+      elsif Kind = 's' and then (V.Is_Empty or else V.First_Element /= "# seed " & Img (Seed)) then
+         Append (Fails, " " & P & " has no '# seed " & Img (Seed) & "' header;");
+      elsif Expect > 0 and then Lines /= Expect then
+         Append (Fails, " " & P & " has" & Lines'Image & " lines, expected" & Expect'Image & ";");
+      end if;
+   end Check_File;
+
+   --  The import block (printed once the stored ticks 1..Verify_To replayed without drift).
+   function Import_Text (Total_Lines : Natural) return String is
+      Have : Natural := 0;
+      Know : Unbounded_String;
+   begin
+      for E in Entity_Id loop
+         if not Disk (E).Is_Empty then Have := Have + 1; end if;
+         Append (Know, (if E = 1 then "" else " ") & Name (E) & " " & Img (Known_Count (E)));
+      end loop;
+      if Total_Lines = 0 then return Msg ("import.none"); end if;
+      return Msg ("import.ok", Img (Have), Img (Total_Lines), Img (Longest), Img (Common),
+                  (if Verify_To > 0 then Msg ("verify.ok", Img (Verify_To)) else Msg ("verify.none")))
+        & ASCII.LF
+        & Msg ("import.entities",
+               (if Ent_Missing = 0 then Msg ("ent.present", "4") else Msg ("ent.rebuilt", Img (Ent_Missing))),
+               Img (Verify_To), To_String (Know));
+   end Import_Text;
 begin
    Load_Data;
    while I <= Ada.Command_Line.Argument_Count loop
@@ -422,13 +593,17 @@ begin
          Warn (Msg ("warn.behind", Name (E), Img (Integer (Disk (E).Length)), Img (Longest), Img (Common)));
       end if;
    end loop;
-   TIO.Put_Line (Msg ((if Common = 0 then "resume" else "verifying"), Img (Common), Img (Ticks)));
 
    --  Every run starts from the vocabulary and replays from tick 1.
    Sim_World.Init (Vocab, Seed, Start_Pct);
    for E in Entity_Id loop
       Cur_Name := To_Unbounded_String (Name (E));
       Ada.Directories.Create_Path ("entities/" & Name (E));
+      if (for some K in Side_Kind =>
+            not Ada.Directories.Exists (Side_Path (E, K)) or else Ada.Directories.Size (Side_Path (E, K)) = 0)
+      then
+         Ent_Missing := Ent_Missing + 1;
+      end if;
       for K in Side_Kind loop Open_Side (E, K); end loop;
       for W in 1 .. Base_Count loop
          if Knows (E, W) then Ensure (E, Words_File, Words_Line (W, "start", 0, "")); end if;
@@ -448,58 +623,134 @@ begin
       end if;
    end loop;
 
-   for Tick in Int range 1 .. Ticks loop
-      Cur_Tick := Tick;
-      for E in Entity_Id loop      --  fixed id order
-         Cur_Name := To_Unbounded_String (Name (E));
-         if Tick = Crash_At and then Tick > Int (Common) and then E = 1 then Events := Forced (Tick); end if;
-         declare
-            Line : constant String := Step (E, Tick);
-         begin
-            if Tick <= Int (Disk (E).Length) then   --  already on disk: compare, do not write
-               if No_Ts (Line) /= No_Ts (Disk (E) (Positive (Tick))) then
-                  raise Diary_Error with Msg ("err.drift", Name (E), Img (Tick),
-                                              Diff_At (No_Ts (Disk (E) (Positive (Tick))), No_Ts (Line)));
-               end if;
-               Verified := Verified + 1;
-            else
-               TIO.Put_Line (Out_File (E), Line);
-               TIO.Flush (Out_File (E));
-               Written := Written + 1;
-            end if;
-            Events := Written + Verified;
-            Record_Tick (Votes_Of (E), St (E).Location, St (E).Mood, St (E).Energy, Did_Learn, Did_Coin, Did_Bench);
-         end;
-      end loop;
-      if Tick > Int (Common) and then Tick mod Every = 0 then
-         TIO.Put_Line (Msg ("progress", Img (Tick), Img (Ticks), Img (Integer (Entity_Id'Last)), Img (Events)));
-      end if;
+   Write_Debug ("RUN", "");   --  stub: a kill -9 still leaves a file
+
+   --  Phase 1: replay what every diary has (verify only), then confirm the import.
+   Verify_To := Natural'Min (Common, Natural (Ticks));
+   for Tick in Int range 1 .. Int (Verify_To) loop
+      Do_Tick (Tick);
+      Quit_Seen := Sim_Quit.Requested;
+      exit when Quit_Seen;
    end loop;
+   if not Quit_Seen then
+      declare
+         Total : Natural := 0;
+      begin
+         for E in Entity_Id loop Total := Total + Natural (Disk (E).Length); end loop;
+         Import_Done := True;
+         Import_Block := To_Unbounded_String (Import_Text (Total));
+         TIO.Put_Line (To_String (Import_Block));
+      end;
+      for E in Entity_Id loop Start_Known (E) := Known_Count (E); end loop;
+   end if;
+
+   --  Phase 2: the rest of the run (ticks beyond the common tick are appended where missing).
+   if not Quit_Seen then
+      for Tick in Int range Int (Verify_To) + 1 .. Ticks loop
+         Do_Tick (Tick);
+         if Tick > Int (Common) and then Tick mod Every = 0 then
+            TIO.Put_Line (Msg ("progress", Img (Tick), Img (Ticks), Img (Integer (Entity_Id'Last)), Img (Events)));
+            Write_Debug ("RUN", "");   --  refresh the stub
+         end if;
+         Quit_Seen := Sim_Quit.Requested;
+         exit when Quit_Seen;
+      end loop;
+   end if;
    for F of Out_File loop TIO.Close (F); end loop;
    for F of Side_Out loop TIO.Close (F); end loop;
-   TIO.Put_Line (Msg ("summary", Img (Int'Min (Int (Common) + 1, Ticks)), Img (Ticks), Img (Integer (Entity_Id'Last)),
-                      Img (Events), Img (Written), Img (Verified), Img (Warnings)));
+   if Quit_Seen then   --  Ctrl-C / SIGTERM: everything written so far is flushed; a rerun resumes
+      TIO.Put_Line (Msg ("quit", Sim_Quit.Which, Img (Last_Done)));
+      Write_Debug ("QUIT", Msg ("debug.quit", Sim_Quit.Which, Img (Last_Done)));
+      TIO.Put_Line (Msg ("debug.attach"));
+      Ada.Command_Line.Set_Exit_Status (130);
+      return;
+   end if;
+
    declare
-      Console, Text, Json : Unbounded_String;
+      Console, Text, Json, Rep, Fails : Unbounded_String;
+      D_Files, D_Lines, E_Files, N, Js_Lines : Natural := 0;
       procedure Save (File : String; Content : Unbounded_String) is
          F : TIO.File_Type;
       begin
          TIO.Create (F, TIO.Out_File, File);
          TIO.Put (F, To_String (Content));
+         TIO.Flush (F);
          TIO.Close (F);
       end Save;
    begin
       Summarize (Seed, Ticks, Votes_Of, Console, Text, Json);
       Save ("summary.txt", Text);
       Save ("summary.jsonl", Json);
+      --  Export check: re-open and count what is on disk now.
+      for E in Entity_Id loop
+         Check_File (Path (E), Natural'Max (Natural (Disk (E).Length), Natural (Ticks)), 'd', N, Fails);
+         D_Files := D_Files + 1;
+         D_Lines := D_Lines + N;
+         for K in Side_Kind loop
+            Check_File (Side_Path (E, K), 0, 's', N, Fails);
+            E_Files := E_Files + 1;
+         end loop;
+      end loop;
+      Check_File ("summary.txt", 0, 't', N, Fails);
+      Check_File ("summary.jsonl", 5, 't', Js_Lines, Fails);
+      Rep := To_Unbounded_String (Msg ("report.head", Img (Int'Max (0, Ticks - Int (Common))), Img (Int'Min (Int (Common) + 1, Ticks)),
+                                       Img (Ticks), Img (Common), Img (Written), Img (Verified),
+                                       Img (Warnings)) & ASCII.LF & Msg ("report.cols") & ASCII.LF);
+      for E in Entity_Id loop
+         Append (Rep, Fx.Head (Name (E), 10) & Fx.Tail (Img (Start_Known (E)), 8) & " ->" & Fx.Tail (Img (Known_Count (E)), 6)
+                 & Fx.Tail (Img (Run_Learn (E)), 9) & Fx.Tail (Img (Run_Coin (E)), 7) & Fx.Tail (Img (Run_Bench_N (E)), 6)
+                 & " | " & Fx.Tail (Sgn (Int (St (E).Mood)), 5) & Fx.Tail (Img (St (E).Energy), 7) & ASCII.LF);
+      end loop;
+      if Length (Fails) = 0 then
+         Export_Line := To_Unbounded_String
+           (Msg ("report.export", Img (D_Files), Img (D_Lines), Img (E_Files),
+                 Img (Int (Ada.Directories.Size ("summary.txt"))), Img (Int (Ada.Directories.Size ("summary.jsonl")))));
+      else
+         Export_Line := To_Unbounded_String (Msg ("export.failed", To_String (Fails)));
+         Ada.Command_Line.Set_Exit_Status (1);
+      end if;
+      Append (Rep, Export_Line & ASCII.LF);
+      declare   --  the last two lines of the vote table: favourite, disagreement
+         C : constant String := To_String (Console);
+         Cut : Natural := 0;
+         Seen : Natural := 0;
+      begin
+         for I in reverse C'Range loop
+            if C (I) = ASCII.LF then
+               Seen := Seen + 1;
+               if Seen = 3 then Cut := I + 1; exit; end if;
+            end if;
+         end loop;
+         if Cut > 0 then
+            Vote_Line := To_Unbounded_String (C (Cut .. C'Last - 1));
+            for I in 1 .. Length (Vote_Line) loop
+               if Element (Vote_Line, I) = ASCII.LF then Replace_Element (Vote_Line, I, '|'); end if;
+            end loop;
+         end if;
+      end;
+      Save ("run_report.txt", Import_Block & ASCII.LF & Rep & Console);
+      if not Ada.Directories.Exists ("run_report.txt") or else Ada.Directories.Size ("run_report.txt") = 0 then
+         Append (Rep, Msg ("export.failed", "run_report.txt not written") & ASCII.LF);
+         Ada.Command_Line.Set_Exit_Status (1);
+      end if;
+      Write_Debug ((if Length (Fails) = 0 then "OK" else "DRIFT"), (if Length (Fails) = 0 then "" else "error: " & To_String (Export_Line)));
+      TIO.Put (To_String (Rep));
       TIO.Put (To_String (Console));
-      TIO.Put_Line (Msg ("summary.files"));
+      TIO.Put_Line (Msg ("debug.attach"));
    end;
 exception
    when E : Usage_Error =>
       TIO.Put_Line (TIO.Standard_Error, Ada.Exceptions.Exception_Message (E));
+      Write_Debug ("USAGE", "error: " & Ada.Exceptions.Exception_Message (E));
       Ada.Command_Line.Set_Exit_Status (2);
+   when E : Diary_Error =>   --  drift, bad diary, seed mismatch: a validation stop
+      if not Import_Done then TIO.Put_Line (Msg ("import.failed", Ada.Exceptions.Exception_Message (E))); end if;
+      Write_Debug ("DRIFT", Error_Brief (E));
+      Report (E);
+      Ada.Command_Line.Set_Exit_Status (1);
    when E : others =>
+      if not Import_Done then TIO.Put_Line (Msg ("import.failed", Ada.Exceptions.Exception_Message (E))); end if;
+      Write_Debug ("CRASH", Error_Brief (E));
       Report (E);
       Ada.Command_Line.Set_Exit_Status (1);
 end Diary_Sim;

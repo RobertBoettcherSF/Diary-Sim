@@ -57,21 +57,21 @@ sed -i '300s/"text":"[a-z]/"text":"X/' diaries/robert.jsonl; n=$(lines diaries)
 echo "== 6. forced crash =="
 rm -rf "$w/crash"; mkdir "$w/crash"; cd "$w/crash" || exit 1
 "$bin" --ticks=50 --crash-at=7 > out.txt; rc=$?; cat out.txt
-[ $rc = 1 ] && [ "$(wc -l < out.txt)" -le 15 ] && grep -q "traceback" last_error.txt && ok "exit 1, <= 15 lines on console, last_error.txt written" || bad "rc=$rc lines=$(wc -l < out.txt)"
+[ $rc = 1 ] && [ "$(sed -n '/diary_sim stopped/,$p' out.txt | wc -l)" -le 15 ] && grep -q "traceback" last_error.txt && ok "exit 1, error block <= 15 lines on console, last_error.txt written" || bad "rc=$rc lines=$(wc -l < out.txt)"
 grep -q "Diary_Sim.Forced" last_error.txt && ok "trace names the failing function" || bad "no symbols in trace"
 
 echo "== 7. --fresh and --seed =="
-fresh_copy; "$bin" --ticks=20 --seed=7 | head -3
+fresh_copy; "$bin" --ticks=20 --seed=7 | sed -n 1,3p
 [ "$(ls -d diaries_old_* 2>/dev/null | wc -l)" = 0 ] && ok "(existing diaries win over --seed, no move without --fresh)"
-"$bin" --ticks=20 --seed=7 --fresh | head -3
+"$bin" --ticks=20 --seed=7 --fresh | sed -n 1,3p
 ls -d diaries_old_*/ | head -1; [ "$(ls diaries_old_*/ | grep -c jsonl)" = 4 ] && [ "$(lines diaries)" = 80 ] && ok "old diaries moved, new run with seed 7" || bad "fresh failed"
 
 echo "== 8. data/ missing: built-in words + warning =="
 rm -rf "$w/nodata"; mkdir -p "$w/nodata/bin" "$w/nodata/data" "$w/nodata/run"; cp "$bin" "$w/nodata/bin/"
 cp "$root/data/messages.txt" "$root/data/help.txt" "$root/data/limits.txt" "$root/data/vocab.txt" "$w/nodata/data/"; cd "$w/nodata/run" || exit 1
-"$w/nodata/bin/diary_sim" --ticks=3 | head -4
+"$w/nodata/bin/diary_sim" --ticks=3 | sed -n 1,4p
 grep -q '"text":"\(rested a while\|did some work\|explored a little\|wanted to talk to someone\|wandered around\), feeling [a-z]*' diaries/ada.jsonl && ok "warning printed, built-in text used" || bad "no built-in text"
-rm -rf "$w/nodata/data"; "$w/nodata/bin/diary_sim" --ticks=5 --fresh | head -3
+rm -rf "$w/nodata/data"; "$w/nodata/bin/diary_sim" --ticks=5 --fresh | sed -n 1,3p
 
 echo "== 9. limits come from data/limits.txt (mood -10..10) =="
 rm -rf "$w/lim"; mkdir -p "$w/lim/bin" "$w/lim/run"; cp "$bin" "$w/lim/bin/"; cp -r "$root/data" "$w/lim/data"
@@ -105,7 +105,7 @@ rm -rf diaries; "$bin" --ticks=10 --seed=7 > out.txt; rc=$?
 echo "== 12. crash at 600, then resume to 1000 =="
 rm -rf "$w/cr"; mkdir "$w/cr"; cd "$w/cr" || exit 1
 "$bin" --ticks=1000 --crash-at=600 > out.txt; rc=$?; wc -l < out.txt | tr '\n' ' '; echo "console lines"
-[ $rc = 1 ] && [ "$(wc -l < out.txt)" -le 15 ] && [ "$(wc -l < diaries/robert.jsonl)" = 599 ] && ok "crash: exit 1, diaries flushed up to tick 599" || bad "crash rc=$rc"
+[ $rc = 1 ] && [ "$(sed -n '/diary_sim stopped/,$p' out.txt | wc -l)" -le 15 ] && grep -q 'please paste it' out.txt && grep -q 'back up diaries/' out.txt && [ "$(wc -l < diaries/robert.jsonl)" = 599 ] && ok "crash: exit 1, diaries flushed up to tick 599" || bad "crash rc=$rc"
 "$bin" --ticks=1000 --every=500 | tail -2 | head -1
 [ "$(lines diaries)" = 4000 ] && [ "$(dups diaries)" = 0 ] && ok "resumed to 1000, no duplicate tick" || bad "lines $(lines diaries)"
 same=1; for f in diaries/*.jsonl; do cmp -s <(sed 's/"ts":"[^"]*"//' "$f") <(sed 's/"ts":"[^"]*"//' "$w/base/$f") || same=0; done
@@ -117,6 +117,39 @@ rm -rf "$w/all"; mkdir -p "$w/all/bin" "$w/all/run"; cp "$bin" "$w/all/bin/"; cp
 sed -i 's/^start_percent = .*/start_percent = 100/' "$w/all/data/limits.txt"; cd "$w/all/run" || exit 1
 "$w/all/bin/diary_sim" --ticks=100 --every=100 > /dev/null; n=$(grep -c '^[^#[:space:]]' "$root/data/vocab.txt")
 [ "$(grep -c ' start 0$' entities/robert/words.txt)" = "$n" ]  && [ "$(cat entities/*/words.txt | awk -v n="$n" '$3 == "taught" && $1 <= n' | wc -l)" = 0 ] && ok "all $n words known at start, no base word taught (only coined ones)" || bad "start_percent=100"
+echo "== 14. import confirmation, end report, run_report.txt =="
+grep -q 'import OK: none (fresh start)' "$w/base/out1.txt" && grep -q 'export OK: diaries/ 4 files, 4000 lines' "$w/base/out1.txt" && ok "first run: 'import OK: none', 'export OK' with real counts" || bad "first-run import/export lines"
+cd "$w/base" || exit 1
+"$bin" --ticks=1200 --every=600 > again.txt
+grep -q 'import OK: diaries for 4/4 entities, 4000 lines on disk (longest 1000, lowest common tick 1000), replay-verify OK' again.txt \
+  && grep -q 'entities/ present (4/4' again.txt && grep -q 'turns this run 200' again.txt && grep -q 'resumed from tick 1000' again.txt \
+  && grep -q 'export OK: diaries/ 4 files, 4800 lines' again.txt && ok "resumed run: import OK with the right numbers, report, export OK" || bad "resumed-run lines"
+cmp <(sed -n '/^report:/,/^export OK/p' again.txt) <(sed -n '/^report:/,/^export OK/p' run_report.txt) && grep -q '^import OK' run_report.txt && ok "run_report.txt holds the same import/report lines" || bad "run_report.txt differs"
+[ "$(wc -l < again.txt)" -le 40 ] && ok "console output $(wc -l < again.txt) lines (<= 40)" || bad "console output too long"
+rm -rf entities; "$bin" --ticks=1200 | grep -q 'entities/ rebuilt (4 of 4' && ok "missing entities/ reported as rebuilt" || bad "no rebuilt message"
+fresh_copy; sed -i '300s/"text":"[a-z]/"text":"X/' diaries/robert.jsonl
+"$bin" --ticks=1000 > drift.txt; grep -q 'import FAILED: backup and code have drifted: robert tick 300' drift.txt && ok "drift: console says 'import FAILED' with entity and tick" || bad "no import FAILED"
+
+echo "== 15. debug.txt on every exit path (<= 1500 bytes) =="
+dbg() { # file expected-status
+  [ -f debug.txt ] && [ ! -e debug.tmp ] && [ "$(wc -c < debug.txt)" -le 1500 ] && head -1 debug.txt | grep -q "^$1 v[0-9.]* seed " ; }
+cd "$w/base" || exit 1; "$bin" --ticks=1200 > /dev/null
+dbg OK && grep -q '^import OK' debug.txt && grep -q '^export OK' debug.txt && grep -q '^ada words' debug.txt && grep -q 'favourite location' debug.txt \
+  && ok "normal/resumed run: debug.txt OK, $(wc -c < debug.txt) bytes, import/export/entities/votes" || bad "debug.txt after resumed run"
+rm -rf "$w/dbg"; mkdir "$w/dbg"; cd "$w/dbg" || exit 1
+"$bin" --ticks=1000 --crash-at=600 > out.txt
+dbg CRASH && grep -q '^error: CONSTRAINT_ERROR' debug.txt && grep -q '^at: Diary_Sim.Forced' debug.txt && ok "crash: debug.txt CRASH with exception and frames, $(wc -c < debug.txt) bytes" || bad "debug.txt after crash"
+grep -q 'attach debug.txt' out.txt || grep -q 'short version: attach debug.txt' out.txt && ok "console points to debug.txt" || bad "no debug.txt hint"
+"$bin" --ticks=1000 > /dev/null; dbg OK && grep -q 'resumed from 599' debug.txt && ok "resume after crash: debug.txt OK, resumed from 599" || bad "debug.txt after resume"
+sed -i '300s/"text":"[a-z]/"text":"X/' diaries/robert.jsonl; "$bin" --ticks=1000 > /dev/null
+dbg DRIFT && grep -q 'drifted: robert tick 300' debug.txt && ok "drift: debug.txt DRIFT names robert tick 300" || bad "debug.txt after drift"
+rm -rf "$w/q"; mkdir "$w/q"; cd "$w/q" || exit 1
+( "$bin" --ticks=5000000 --every=100000 > out.txt & p=$!; sleep 1; kill -TERM $p; wait $p; echo $? > rc.txt )
+n=$(wc -l < diaries/ada.jsonl)
+dbg QUIT && [ "$(cat rc.txt)" = 130 ] && grep -q "after tick $n" debug.txt && ok "SIGTERM: stopped cleanly after tick $n, debug.txt QUIT, exit 130" || bad "quit rc=$(cat rc.txt)"
+"$bin" --ticks=$((n + 5)) > /dev/null; [ "$(wc -l < diaries/robert.jsonl)" = $((n + 5)) ] && ok "rerun after the quit resumes at tick $n" || bad "no clean resume after quit"
+"$bin" --nope > /dev/null 2>&1; dbg USAGE && ok "usage error: debug.txt USAGE" || bad "debug.txt after usage error"
+
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="
 [ "$fails" = 0 ]

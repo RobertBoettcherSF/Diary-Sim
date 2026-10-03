@@ -130,17 +130,66 @@ base-60 pick from `[reason_low]`, `[reason_mid]` or `[reason_high]` in
 highest sum of votes; biggest disagreement = largest spread between entities on one
 location. Location names: `loc.0`..`loc.3` in `data/messages.txt`.
 
+## Import, report, export (console of a normal run, about 20-35 lines)
+
+```
+import OK: diaries for 4/4 entities, 4000 lines on disk (longest 1000, lowest common tick 1000), replay-verify OK (ticks 1..1000)
+import: entities/ present (4/4 folders); words known at tick 1000: ada 150 gemini 145 ...
+...progress lines...
+report: turns this run 200 (ticks 1001..1200; total simulated 1200), resumed from tick 1000 | events written 800, verified 4000 | warnings 0
+entity       w.start ->w.now  taught coined bench |  mood energy
+export OK: diaries/ 4 files, 4800 lines | entities/ 8 files | summary.txt .. B, summary.jsonl .. B | run_report.txt | re-read and counted
+```
+
+* **Import** (before the first new tick): `import OK: none (fresh start)`, or what was
+  found, after the stored ticks 1..lowest-common-tick were replayed and compared
+  (`replay-verify OK`). `entities/ present` or `rebuilt (N of 4 folders were missing)`
+  tells whether the working folders had to be regenerated. A drift or a bad file prints
+  `import FAILED: <reason>` and stops (exit 1, `last_error.txt`).
+* **Report:** turns simulated this run and in total, the tick it resumed from, events
+  written/verified, and per entity words known at the start of this run (`w.start`)
+  and now (`w.now`), words learned by being taught, words coined, benches run this
+  run, and mood/energy now.
+* **Export:** after the files are closed, every diary, every `entities/<id>/` file
+  and the summary files are re-opened and counted (diary lines must equal the
+  expected number, side files need their `# seed` header). Any problem prints
+  `export FAILED: ...` and exit status 1.
+
+## What to paste back, and backups
+
+* **Always attach `debug.txt`**: one small file (hard cap 1500 bytes) written on
+  every exit path, atomically (temp file, flush, rename). Line 1 is
+  `STATUS vVERSION seed N` with STATUS = `OK` (finished), `QUIT` (Ctrl-C or SIGTERM,
+  stopped cleanly after the current tick, exit 130), `CRASH` (exception name and
+  message plus the top 5 stack frames), `DRIFT` (validation stop: drift, bad diary,
+  seed mismatch, failed export check) or `USAGE`. Then: first/last tick and ticks this
+  run, the import and export lines, one line per entity (words at start>now, taught,
+  coined, benches, mood, energy) and the favourite/disagreement line when the run got
+  that far. If it grows past the cap, the least important parts are cut first (old
+  detail: export line first, then import, then votes); the file never exceeds 1500 bytes.
+* `RUN` status = an in-progress stub, written at the start and refreshed every
+  `--every` ticks. `SIGKILL` cannot be caught in plain Ada, so after a `kill -9` or a
+  power cut the stub is what remains (it shows the last refresh).
+* Normal run: `run_report.txt` is the long version (import + report + export + vote
+  table; overwritten every run). Paste it if asked.
+* Crash or error: `last_error.txt` (the console says `wrote last_error.txt, please
+  paste it`).
+* **Back up `diaries/` between tests.** That folder is all that is needed:
+  `entities/` and the summaries are rebuilt by the replay.
+
 ## Errors
 
 Any unhandled error writes `last_error.txt` (seed, tick, entity, exception,
 frames innermost first, then the raw `GNAT.Traceback.Symbolic` text) and prints the
 same to the console, at most 15 lines. Built with `-g -bargs -E` (see Makefile).
 `--crash-at=T` forces a failure in tick T (only for a tick not yet on disk) to show it.
-After a crash just run again: the diaries are flushed after every event.
+After a crash just run again: the diaries are flushed after every event. The
+console shows at most 15 lines of the error block, then `wrote last_error.txt, please
+paste it` and `back up diaries/ before the next run`.
 
 ## Files
 
-`diary_sim.adb` (main: CLI, loop, side files), `sim_world.ads/.adb` (entities,
+`diary_sim.adb` (main: CLI, loop, side files, debug.txt), `sim_quit.ads/.adb` (Ctrl-C and SIGTERM flag), `sim_world.ads/.adb` (entities,
 vocabulary, bench kernels, votes and summary text), `sim_util.ads/.adb` (hash rolls,
 line parsing, data-file helpers), `data/words.txt`, `data/limits.txt`,
 `data/messages.txt` (all console wording), `data/vocab.txt`, `data/help.txt`,
