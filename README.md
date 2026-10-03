@@ -47,11 +47,14 @@ detail: `"<action text>, <tone>; taught gemini the word 'stone'"`.
 
 * `data/vocab.txt`: **one English word per line, word id = line order** (lines
   starting with `#` and blank lines are ignored). ASCII only.
-* **The shipped file is a STAND-IN** (523 common everyday words, then `building` and
-  `go`). The real list (the German sign-language everyday-life index 'Von A - Z',
-  one English word per entry, both senses kept, duplicates dropped) was not
-  transcribed because the photos did not reach the build. Replace the file with the
-  real list (any length), then run with `--fresh`: any vocabulary change makes the
+* **Source:** the German sign-language everyday-life dictionary index 'Von A - Z'
+  (photographed pages 184-186 and the S-Z page): 274 entries in index order, each
+  translated to ONE plain ASCII English word, then `building` and `go` appended.
+  Two-sense entries keep both English words (`morning`/`tomorrow`, `sick`/`nauseous`,
+  `give`/`get`, `in`/`within`, `no`/`none`); `entweder ... oder` became `either` and
+  `or`. Exact duplicate English words are dropped. Some translations are judgement
+  calls (e.g. `Schreibtelefon` = `teletype`, `achso` = `oh`, `woher` = `whence`);
+  edit the file freely, but a changed vocabulary needs `--fresh`: any change makes
   old diaries drift.
 * **Start slice:** entity E knows base word W at tick 0 if `hash(seed, E, 0, 1000+W)`
   rolled in 1..100 is <= `start_percent` (`data/limits.txt`, default 25; 100 = all).
