@@ -1,4 +1,4 @@
---  Version: 0.020
+--  Version: 0.021
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -55,7 +55,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.020";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.021";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -94,7 +94,8 @@ procedure Diary_Sim is
    Section_Opt : Unbounded_String;                         --  --debug-section NAME
    Menu_Opt : Boolean := False;                            --  --menu: show the main menu (make menu)
    Say_Mode, Answer_Mode, Inbox_Mode : Boolean := False;   --  --say / --answer / --inbox
-   Say_To, Say_Text, Say_By : Unbounded_String;
+   Say_To, Say_Text, Say_By, Grant_Opt : Unbounded_String;
+   Grant_Mode : Boolean := False;   --  --grant P<n>
    Act_Count : array (Entity_Id, Action) of Natural := [others => [others => 0]];   --  all ticks replayed
    Last_Act : Action := Rest;
    Votes_Of : All_Stats;
@@ -106,7 +107,7 @@ procedure Diary_Sim is
 
    --  ---- rest and cool-down (rest=1 sessions): a recovery rate per wesen, a trade-off for rests, a refractory
    --  period after a work burst (data/limits.txt rest.*).  All of it is a function of the replayed actions. ------
-   Rest_Active : Boolean := False;
+   Rest_Active, Grant_Active : Boolean := False;
    Rate_Pct, Load, Hist, Cool, Streak, Since_Work, Cool_N, Cut_N, Quick_N : array (Entity_Id) of Natural := [others => 0];
    function RL (Key : String; Default : Integer) return Integer is (Integer (Limit (Key, Int (Default))));
    function Cool_Len (E : Entity_Id) return Positive is
@@ -120,6 +121,7 @@ procedure Diary_Sim is
 
    --  The energy and mood change of a rest: personal rate, quick / calm, diminishing returns.
    --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (integer percent arithmetic)
+   Ledger_Mode, Ledger_Full : Boolean := False;   --  --ledger[=full]: replay, then print the mood ledger (report only)
    Ledger_From : Int := 0;   --  the last session starts after this tick (the ledger's second scope)
    Last_Phase : Integer := 0;   --  the last rest: -1 quick, +1 calm, 0 between (for the ledger)
    procedure Rest_Effect (E : Entity_Id; En, Mo : in out Integer) is
@@ -1450,10 +1452,158 @@ procedure Diary_Sim is
       end loop;
    end Load_World_File;
 
+   --  ---- grants (grant=1 sessions): Robert grants a petition (make grant PETITION=P<n>) ------------------------
+   --  diaries/grants.txt: G<n> lines are his input (applied after the tick they carry); E<n> lines are the effect the
+   --  replay computes (rate old>new per wesen, record-first like world.txt): a differing or invented line is DRIFT.
+   Grants_Path : constant String := "diaries/grants.txt";
+   function To_Num_Safe (T : String) return Int is
+     (if T'Length in 1 .. 15 and then (for all C of T => C in '0' .. '9') then Int'Value (T) else -1);
+   type Grant_Rec is record
+      N : Positive := 1;
+      Tick : Int := 0;
+      Pet : Positive := 1;
+      Who : Entity_Id := 1;
+      Topic : Positive := 1;
+      Done : Boolean := False;
+   end record;
+   package Grant_Vectors is new Ada.Containers.Vectors (Positive, Grant_Rec);
+   Grants : Grant_Vectors.Vector;
+   Eff_Stored : Str_Vectors.Vector;
+   Eff_Hit : array (1 .. 1000) of Boolean := [others => False];
+   Grant_Report : Str_Vectors.Vector;
+
+   procedure Load_Grants is
+      Lines : Str_Vectors.Vector;
+      Found : Boolean;
+   begin
+      Grants.Clear;
+      Eff_Stored.Clear;
+      Grant_Report.Clear;
+      if not Ada.Directories.Exists (Grants_Path) then return; end if;
+      Read_Lines (Grants_Path, Lines, Found);
+      for L of Lines loop
+         if L'Length > 7 and then L (L'First .. L'First + 6) = "# seed " then
+            if L /= "# seed " & Img (Seed) then raise Diary_Error with Msg ("err.session_seed", L (L'First + 7 .. L'Last)); end if;
+         elsif L'Length > 1 and then L (L'First) = 'E' then
+            Eff_Stored.Append (L);
+         elsif L'Length > 1 and then L (L'First) = 'G' and then Fx.Index (L, " ") > 2 then
+            declare
+               Sp : constant Natural := Fx.Index (L, " ");
+               Pt : constant String := Token (L, "petition");
+               N : constant Int := (if Sp > 2 then Int'Max (-1, To_Num_Safe (L (L'First + 1 .. Sp - 1))) else -1);
+               Tk : constant Int := To_Num_Safe (Token (L, "tick"));
+               Pn : constant Int := (if Pt'Length > 1 and then Pt (Pt'First) = 'P' then To_Num_Safe (Pt (Pt'First + 1 .. Pt'Last)) else -1);
+               W : constant Natural := Sim_Dharma.Find_Wesen (Token (L, "wesen"));
+               T : constant Natural := Topic_Id (Token (L, "topic"));
+            begin
+               if N > 0 and then Tk >= 0 and then Pn > 0 and then W > 0 and then T > 0 then
+                  Grants.Append (Grant_Rec'(N => Positive (N), Tick => Tk, Pet => Positive (Pn), Who => Entity_Id (W), Topic => T, Done => False));
+               else
+                  Warn (Msg ("warn.grants_bad", L));
+               end if;
+            end;
+         end if;
+      end loop;
+   end Load_Grants;
+
+   --  Before tick Tick: the grants recorded at tick Tick - 1 take effect.
+   procedure Apply_Grants (Tick : Int) is
+   begin
+      for I in 1 .. Natural (Grants.Length) loop
+         declare
+            G : Grant_Rec := Grants (I);
+         begin
+            if not G.Done and then G.Tick = Tick - 1 then
+               if Petition_Total < G.Pet or else Petition_From (G.Pet) /= G.Who or else Petition_Topic (G.Pet) /= Topic_Name (G.Topic)
+                 or else Petition_Tick (G.Pet) > G.Tick
+               then
+                  raise Drift_Error with Msg ("err.grant", "G" & Img (G.N), "P" & Img (G.Pet), Name (G.Who), Topic_Name (G.Topic));
+               end if;
+               declare
+                  Active : constant Boolean := Grant_Active and then Rest_Active;
+                  Max_A : Natural := 0;
+                  Buf : Unbounded_String;
+                  Line : Unbounded_String;
+               begin
+                  for E in Entity_Id loop Max_A := Natural'Max (Max_A, Asked (E, G.Topic)); end loop;
+                  for E in Entity_Id loop
+                     declare
+                        A : constant Natural := Asked (E, G.Topic);
+                        Old : constant Natural := Rate_Pct (E);
+                        Cap : constant Natural := Natural (Integer'Max (1, RL ("grant.cap", 170)));
+                        Step : constant Natural := (if A > 0 and then Max_A > 0 then Natural'Max (1, Natural (Integer'Max (0, RL ("grant.step", 6))) * A / Max_A) else 0);
+                        Now : constant Natural := (if Active and then Is_Recovery_Topic (G.Topic) and then Old < Cap then Natural'Min (Cap, Old + Step) else Old);
+                     begin
+                        Rate_Pct (E) := Now;
+                        if Active and then A > 0 then Sim_World.Grant (E, G.Topic); end if;
+                        Append (Buf, " " & Name (E) & "=" & Img (Old) & ">" & Img (Now) & "/" & Img (A));
+                     end;
+                  end loop;
+                  if Active then Mark_Petition (G.Pet, G.N); end if;
+                  Line := To_Unbounded_String ("E" & Img (G.N) & " tick=" & Img (G.Tick) & " g=G" & Img (G.N) & " topic=" & Topic_Name (G.Topic)
+                                               & " applied=" & (if Active then "1" else "0") & To_String (Buf));
+                  Grant_Report.Append (To_String (Line));
+                  declare
+                     Found_At : Natural := 0;
+                  begin
+                     for K in 1 .. Natural (Eff_Stored.Length) loop
+                        declare
+                           Pfx : constant String := "E" & Img (G.N) & " ";
+                           SL : constant String := Eff_Stored (K);
+                        begin
+                           if SL'Length >= Pfx'Length and then SL (SL'First .. SL'First + Pfx'Length - 1) = Pfx then Found_At := K; end if;
+                        end;
+                     end loop;
+                     if Found_At > 0 then
+                        if Eff_Stored (Found_At) /= To_String (Line) then
+                           raise Drift_Error with Msg ("err.grant_fx", "E" & Img (G.N), Diff_At (Eff_Stored (Found_At), To_String (Line)));
+                        end if;
+                        if Found_At <= Eff_Hit'Last then Eff_Hit (Found_At) := True; end if;
+                     elsif not Preview and then not Ledger_Mode then   --  record-first: the effect is written when it first happens
+                        declare
+                           F : TIO.File_Type;
+                        begin
+                           if Ada.Directories.Exists (Grants_Path) then
+                              TIO.Open (F, TIO.Append_File, Grants_Path);
+                           else
+                              TIO.Create (F, TIO.Out_File, Grants_Path);
+                              TIO.Put_Line (F, "# seed " & Img (Seed));
+                           end if;
+                           TIO.Put_Line (F, To_String (Line));
+                           TIO.Close (F);
+                           Eff_Stored.Append (To_String (Line));
+                           if Natural (Eff_Stored.Length) <= Eff_Hit'Last then Eff_Hit (Natural (Eff_Stored.Length)) := True; end if;
+                        end;
+                     end if;
+                  end;
+               end;
+               G.Done := True;
+               Grants.Replace_Element (I, G);
+            end if;
+         end;
+      end loop;
+   end Apply_Grants;
+
+   --  After the replay: a stored effect line the replay did not produce (its grant was removed or changed) is DRIFT.
+   procedure Verify_Grants (Upto : Int) is
+   begin
+      for K in 1 .. Natural (Eff_Stored.Length) loop
+         declare
+            L : constant String := Eff_Stored (K);
+            T : constant Int := To_Num_Safe (Token (L, "tick"));
+         begin
+            if (K > Eff_Hit'Last or else not Eff_Hit (K)) and then T in 0 .. Upto - 1 then
+               raise Drift_Error with Msg ("err.grant_fx", L (L'First .. Fx.Index (L, " ") - 1), Diff_At (L, "(not in the replay)"));
+            end if;
+         end;
+      end loop;
+   end Verify_Grants;
+
    procedure Do_Tick (Tick : Int) is
    begin
       Cur_Tick := Tick;
       Sim_Dharma.Tick_Begin (Tick);
+      Apply_Grants (Tick);
       for E in Entity_Id loop
          Cur_Name := To_Unbounded_String (Name (E));
          if Tick = Crash_At and then Tick > Int (Common) and then E = 1 then Events := Forced (Tick); end if;
@@ -1594,6 +1744,7 @@ procedure Diary_Sim is
       Dharma : Boolean := False;        --  dharma=1: started by a build with the Buddhism layer (rebirth moves allowed)
       World : Boolean := False;         --  world=1: the treadmill world (Sim_Things) runs in this session
       Rest : Boolean := False;          --  rest=1: recovery rates, rest trade-off and cool-downs
+      Grant : Boolean := False;         --  grant=1: grants of petitions (diaries/grants.txt) change recovery rates
    end record;
    package Session_Vectors is new Ada.Containers.Vectors (Positive, Session_Rec);
    Sessions : Session_Vectors.Vector;
@@ -1612,7 +1763,7 @@ procedure Diary_Sim is
    function Session_Line (R : Session_Rec) return String is
      ("S" & Img (R.N) & " start=" & Img (R.Start) & " votes=" & Votes_Text (R.Votes) & " len=" & Img (R.Len)
       & " src=" & (if R.By_Vote then "vote" else "explicit") & (if R.Dharma then " dharma=1" else "")
-      & (if R.World then " world=1" else "") & (if R.Rest then " rest=1" else ""));
+      & (if R.World then " world=1" else "") & (if R.Rest then " rest=1" else "") & (if R.Grant then " grant=1" else ""));
    function Yuga (N : Positive) return String is (Msg ("yuga." & Img ((N - 1) mod 4)));
    --  The four votes of a session that starts after tick Start (state: St, known words).
    function Votes_At (Start : Int) return Kalpa_Votes is
@@ -1645,6 +1796,7 @@ procedure Diary_Sim is
       R.Dharma := Token (L, "dharma") = "1";
       R.World := Token (L, "world") = "1";
       R.Rest := Token (L, "rest") = "1";
+      R.Grant := Token (L, "grant") = "1";
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
         and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0;
       while OK and then K < 4 loop
@@ -1743,6 +1895,7 @@ procedure Diary_Sim is
       Dharma_Stored.Clear;
       World_Active := False;
       Rest_Active := False;
+      Grant_Active := False;
       if not Ada.Directories.Exists (Sessions_Path) then return; end if;
       Read_Lines (Sessions_Path, Lines, Found);
       for I in 1 .. Natural (Lines.Length) loop
@@ -1781,6 +1934,7 @@ procedure Diary_Sim is
       World_Active := R.World;
       if R.Rest and then not Rest_Active then Rest_Begin (Seed); end if;   --  the state runs on from session to session
       Rest_Active := R.Rest;
+      Grant_Active := R.Grant;
       for E in Entity_Id loop
          if Sim_Dharma.Rebirth_Location (E) >= 0 then St (E).Location := Clamp (Sim_Dharma.Rebirth_Location (E), 0, L_Max); end if;
       end loop;
@@ -1947,6 +2101,7 @@ procedure Diary_Sim is
    --  New sessions carry world=1 unless data/limits.txt says world.enabled = 0 (or data/things.txt is missing).
    function World_Wanted return Boolean is (Limit ("world.enabled", 1) /= 0 and then Sim_Things.Loaded);
    function Rest_Wanted return Boolean is (World_Wanted and then Limit ("rest.enabled", 1) /= 0);   --  rest=1 needs the world
+   function Grant_Wanted return Boolean is (Rest_Wanted and then Limit ("grant.enabled", 1) /= 0);   --  grant=1 needs rest=1
 
    --  After the replay of 1 .. Common: resume the unfinished session, or start one
    --  (explicit length, else the vote).  Sets Ticks and Kalpa_Line.
@@ -1966,7 +2121,7 @@ procedure Diary_Sim is
       Session_N := (if Sessions.Is_Empty then 0 else Sessions.Last_Element.N);
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
-               Dharma => True, World => World_Wanted, Rest => Rest_Wanted);
+               Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -1982,7 +2137,7 @@ procedure Diary_Sim is
          Kalpa_Line := To_Unbounded_String (Msg ("kalpa.resume", Img (R.N), Yuga (R.N), Votes_Text (R.Votes), Img (R.Len), Img (Ticks)));
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
-               World => World_Wanted, Rest => Rest_Wanted);
+               World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);
@@ -2113,6 +2268,85 @@ procedure Diary_Sim is
       for C of R loop if C not in 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' | '-' then C := '_'; end if; end loop;
       return (if R = "" then "player" elsif R'Length > 16 then R (R'First .. R'First + 15) else R);
    end By_Name;
+
+   --  make grant PETITION=P<n>: one G line in diaries/grants.txt at the lowest common tick (record-first, no replay);
+   --  the next run applies it from the following tick (a grant=1 session; see README).
+   procedure Do_Grant is
+      Common_T : Natural := Natural'Max (0, 0);
+      Seed_D : Int := -1;
+      Lines : Str_Vectors.Vector;
+      Found : Boolean;
+      Want : constant String := Fx.Trim (To_String (Grant_Opt), Ada.Strings.Both);
+      Num : constant Int := (if Want'Length > 1 and then Ada.Characters.Handling.To_Upper (Want (Want'First)) = 'P' then To_Num_Safe (Want (Want'First + 1 .. Want'Last))
+                             elsif Want'Length > 0 then To_Num_Safe (Want) else -1);
+      Who : Natural := 0;
+      Tick_P : Natural := 0;
+      Topic_S : Unbounded_String;
+      N_G : Natural := 0;
+      F : TIO.File_Type;
+   begin
+      if not Has_Diaries then raise Usage_Error with Msg ("say.nogame", To_String (Home_Path)); end if;
+      if Num <= 0 then raise Usage_Error with Msg ("grant.nowho"); end if;
+      Common_T := Natural'Last;
+      for E in Entity_Id loop
+         declare
+            Cnt : Natural := 0;
+            Key : constant String := " petition P" & Img (Num) & " (";
+         begin
+            Lines.Clear;
+            Read_Lines (Path (E), Lines, Found);
+            for L of Lines loop
+               if Complete (L) then
+                  Cnt := Cnt + 1;
+                  if Seed_D < 0 then Seed_D := Field (L, "seed"); end if;
+                  declare
+                     K : constant Natural := Fx.Index (L, Key);
+                     Close : constant Natural := (if K > 0 then Fx.Index (L, ")", K + Key'Length) else 0);
+                  begin
+                     if K > 0 and then Close > 0 and then Who = 0 then
+                        Who := Positive (E);
+                        Tick_P := Cnt;
+                        Topic_S := To_Unbounded_String (L (K + Key'Length .. Close - 1));
+                     end if;
+                  end;
+               end if;
+            end loop;
+            Common_T := Natural'Min (Common_T, Cnt);
+         end;
+      end loop;
+      if Who = 0 or else Tick_P > Common_T then raise Usage_Error with Msg ("grant.nopetition", "P" & Img (Num), Img (Common_T)); end if;
+      Seed := Seed_D;
+      Seed_Shown := True;
+      if Ada.Directories.Exists (Grants_Path) then
+         Lines.Clear;
+         Read_Lines (Grants_Path, Lines, Found);
+         for L of Lines loop
+            if L'Length > 1 and then L (L'First) = 'G' then
+               N_G := N_G + 1;
+               if Token (L, "petition") = "P" & Img (Num) then raise Usage_Error with Msg ("grant.already", "P" & Img (Num), L (L'First .. Fx.Index (L, " ") - 1)); end if;
+            end if;
+         end loop;
+         declare
+            Needs_Lf : constant Boolean := not Ends_With_Lf (Grants_Path);
+         begin
+            TIO.Open (F, TIO.Append_File, Grants_Path);
+            if Needs_Lf then TIO.New_Line (F); end if;
+         end;
+      else
+         TIO.Create (F, TIO.Out_File, Grants_Path);
+         TIO.Put_Line (F, "# seed " & Img (Seed));
+         TIO.Put_Line (F, Msg ("hdr.grants"));
+      end if;
+      TIO.Put_Line (F, "G" & Img (N_G + 1) & " tick=" & Img (Common_T) & " petition=P" & Img (Num) & " wesen=" & Name (Entity_Id (Who))
+                    & " topic=" & To_String (Topic_S) & " by=" & By_Name (To_String (Say_By)));
+      TIO.Flush (F);
+      TIO.Close (F);
+      Con.Put_Line (Msg ("grant.ok", "G" & Img (N_G + 1), "P" & Img (Num), Name (Entity_Id (Who)), To_String (Topic_S), Img (Common_T + 1)));
+   exception
+      when E : Usage_Error =>   --  nothing is written
+         TIO.Put_Line (TIO.Standard_Error, Ada.Exceptions.Exception_Message (E));
+         Ada.Command_Line.Set_Exit_Status (2);
+   end Do_Grant;
 
    --  make say / make answer: one A line in diaries/says.txt at the lowest common tick.  No replay,
    --  nothing else is touched; the next run applies it from the following tick.
@@ -2304,6 +2538,7 @@ procedure Diary_Sim is
       Sim_Things.Init (Seed);
       World_Active := World_Wanted;
       Rest_Active := Rest_Wanted;
+      Grant_Active := Grant_Wanted;
       if Rest_Active then Rest_Begin (Seed); end if;
       Con.Put (To_String (Pending));
       Con.Put_Line (Msg ("preview.head", Img (Seed), Img (Total)));
@@ -2400,7 +2635,6 @@ procedure Diary_Sim is
    --  Seed and the last L line come from diaries/sessions.txt, the edits (up to that tick) from
    --  diaries/world.txt; nothing is replayed and nothing is written.
    Map_Mode : Boolean := False;
-   Ledger_Mode, Ledger_Full : Boolean := False;   --  --ledger[=full]: replay, then print the mood ledger (report only)
 
    --  "3,-4" after the '@' of an L-line token; False when it is not of that form.
    procedure Parse_At (Tok : String; X, Y : out Integer; OK : out Boolean) is
@@ -2608,7 +2842,7 @@ begin
          Eq  : constant Natural := Fx.Index (A, "=");
          Opt : constant String := (if Eq > 0 then A (A'First .. Eq - 1) else A);
          Num : constant Boolean := Opt in "--ticks" | "--seed" | "--every" | "--crash-at" | "--more";
-         Sep : constant Boolean := (Num or else Opt in "--home" | "--say" | "--text" | "--as" | "--debug-section") and then Eq = 0 and then I < Ada.Command_Line.Argument_Count;   --  --ticks 200
+         Sep : constant Boolean := (Num or else Opt in "--home" | "--say" | "--text" | "--as" | "--grant" | "--debug-section") and then Eq = 0 and then I < Ada.Command_Line.Argument_Count;   --  --ticks 200
          Val : constant String := (if Eq > 0 then A (Eq + 1 .. A'Last) elsif Sep then Ada.Command_Line.Argument (I + 1) else "");
          Help  : Str_Vectors.Vector;
          Found : Boolean;
@@ -2629,6 +2863,7 @@ begin
          elsif Opt = "--answer" then Answer_Mode := True;
          elsif Opt = "--inbox" then Inbox_Mode := True;
          elsif Opt = "--map" then Map_Mode := True;
+         elsif Opt = "--grant" then Grant_Mode := True; Grant_Opt := To_Unbounded_String (Val);
          elsif Opt = "--ledger" then
             Ledger_Mode := True;
             Ledger_Full := Val = "full";
@@ -2660,7 +2895,7 @@ begin
    end if;
    Menu_Wanted := Menu_Opt or else (Ada.Command_Line.Argument_Count = 0 and then Is_Tty (0) and then Is_Tty (1));
    if Menu_Opt and then not (Is_Tty (0) and then Is_Tty (1)) then raise Usage_Error with Msg ("err.menu_tty"); end if;
-   Resolve_Home (Header => not (Menu_Wanted or else Inbox_Mode or else Map_Mode or else Ledger_Mode or else Say_Mode or else Answer_Mode or else (Length (Section_Opt) > 0 and then not Preview)));
+   Resolve_Home (Header => not (Menu_Wanted or else Inbox_Mode or else Map_Mode or else Ledger_Mode or else Grant_Mode or else Say_Mode or else Answer_Mode or else (Length (Section_Opt) > 0 and then not Preview)));
    Saved_Line := To_Unbounded_String (Msg ("saved", To_String (Home_Path)));
    if Map_Mode then
       Do_Map;
@@ -2668,6 +2903,10 @@ begin
       return;
    elsif Inbox_Mode then
       Con.Put (Inbox_Page);
+      Con.Put_Line (To_String (Saved_Line));
+      return;
+   elsif Grant_Mode then
+      Do_Grant;
       Con.Put_Line (To_String (Saved_Line));
       return;
    elsif Say_Mode or else Answer_Mode then
@@ -2787,6 +3026,7 @@ begin
    Load_Sessions;
    Load_Says;
    Load_World_File;
+   Load_Grants;
    Set_Ledger_From;
    if not Ledger_Mode then Write_Debug ("RUN", ""); end if;   --  stub: a kill -9 still leaves a file
 
@@ -2853,6 +3093,7 @@ begin
    if not Quit_Seen then
       Verify_Inbox (Last_Done);
       Verify_Edits (Last_Done);
+      Verify_Grants (Last_Done);
    end if;
    if Quit_Seen then   --  Ctrl-C / SIGTERM: everything written so far is flushed; a rerun resumes
       Con.Put_Line (Msg ("quit", Sim_Quit.Which, Img (Last_Done)));
@@ -2924,6 +3165,10 @@ begin
       if Rest_Active then   --  recovery: rate, cool-downs taken, rests cut short
          Append (Rep, Msg ("rest.head") & ASCII.LF);
          for E in Entity_Id loop Append (Rep, Rest_Text (E) & ASCII.LF); end loop;
+      end if;
+      if not Grant_Report.Is_Empty then   --  granted petitions and the recovery rates they changed
+         Append (Rep, Msg ("grant.head") & ASCII.LF);
+         for L of Grant_Report loop Append (Rep, L & ASCII.LF); end loop;
       end if;
       if Length (Words_Text) > 0 then Append (Rep, To_String (Words_Text) & ASCII.LF); end if;
       for L of Sim_Dharma.Table_Lines loop Append (Rep, L & ASCII.LF); end loop;

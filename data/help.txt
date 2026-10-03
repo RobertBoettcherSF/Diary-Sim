@@ -10,6 +10,7 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
   --preview      simulate in memory, print excerpts, write nothing
   --say=W --text=T  words to a wesen/player/all; --answer: to the petition
   --inbox        print the inbox of Robert
+  --grant=P<n>   grant a petition (make grant PETITION=P12): more recovery
   --map          print the treadmill view of the last session end (make map)
   --ledger[=full] where each wesen's mood comes from (make ledger; report only)
   --menu         the main menu (terminal only; make menu)

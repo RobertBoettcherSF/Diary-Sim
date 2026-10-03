@@ -1,4 +1,4 @@
---  Version: 0.010
+--  Version: 0.011
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
@@ -154,6 +154,7 @@ package body Sim_World is
       From : Entity_Id;
       Topic, Repeat : Natural;
       Wish : Unbounded_String;
+      Granted : Natural;   --  the number of the grant (G<n>) that granted it, else 0
    end record;
    package Petition_Vectors is new Ada.Containers.Vectors (Positive, Petition_Rec);
    Petitions : Petition_Vectors.Vector;
@@ -162,6 +163,7 @@ package body Sim_World is
    Topic_Used : array (1 .. Max_Topics) of Natural := [others => 0];
    Topic_By  : array (Entity_Id, 1 .. Max_Topics) of Natural := [others => [others => 0]];
    Topic_Last : array (Entity_Id) of Natural := [others => 0];
+   Done_Topic : array (Entity_Id, 1 .. Max_Topics) of Boolean := [others => [others => False]];   --  granted: not filed again
 
    --  Tunables of the personality (data/limits.txt), read by Init.
    type Weight_Array is array (Rest .. Propose) of Integer;
@@ -193,6 +195,7 @@ package body Sim_World is
       Topic_Used := [others => 0];
       Topic_By := [others => [others => 0]];
       Topic_Last := [others => 0];
+      Done_Topic := [others => [others => False]];
       Lean_Low_Energy := Clamp (Integer (Limit ("lean.low_energy", 60)), 0, 1000);
       Lean_High_Energy := Clamp (Integer (Limit ("lean.high_energy", 20)), 0, 1000);
       Lean_Low_Mood := Clamp (Integer (Limit ("lean.low_mood", 30)), 0, 1000);
@@ -530,13 +533,14 @@ package body Sim_World is
       Open_L : Str_Vectors.Vector renames Words (Wish_Open);
       Close_L : Str_Vectors.Vector renames Words (Wish_Close);
    begin
-      if Topic_Last (E) > 0 and then Roll (Seed, Eid, Tick, 11, 100) <= Pet_Repeat_Pct then
+      if Topic_Last (E) > 0 and then not Done_Topic (E, Topic_Last (E)) and then Roll (Seed, Eid, Tick, 11, 100) <= Pet_Repeat_Pct then
          Topic := Topic_Last (E);   --  files its previous topic again
       else
          for T in 1 .. N_Topics loop
             W (T) := Integer'Max (1, Topics (T).Base + (Topics (T).Low_En * Low_E + Topics (T).Low_Mood * Low_M
                                                          + Topics (T).Few_Words * Few + Topics (T).Benches * Ben
                                                          + Topics (T).Cooling * Strain) / 100);
+            if Done_Topic (E, T) then W (T) := 1; end if;   --  a granted wish is not asked for again
             Total := Total + W (T);
          end loop;
          Pick := Roll (Seed, Eid, Tick, 9, Total);
@@ -549,6 +553,7 @@ package body Sim_World is
       Petitions.Append
         (Petition_Rec'
            (Tick => Tick, From => E, Topic => Topic, Repeat => Rep,
+            Granted => 0,
             Wish => To_Unbounded_String
               (Open_L (Open_L.First_Index + Pick60 (Seed, Eid, Tick, 800) mod Natural (Open_L.Length)) & " "
                & To_String (Topics (Topic).Phrase) & " "
@@ -565,12 +570,32 @@ package body Sim_World is
    function Petitions_Of (E : Entity_Id) return Natural is (Pet_N (E));
 
    function Petition_Topic (N : Positive) return String is (To_String (Topics (Petitions (N).Topic).Name));
+   function Petition_From (N : Positive) return Entity_Id is (Petitions (N).From);
+   function Petition_Tick (N : Positive) return Int is (Petitions (N).Tick);
+   function Topic_Id (Name : String) return Natural is
+   begin
+      for T in 1 .. N_Topics loop
+         if To_String (Topics (T).Name) = Name then return T; end if;
+      end loop;
+      return 0;
+   end Topic_Id;
+   function Asked (E : Entity_Id; Topic : Positive) return Natural is (Topic_By (E, Topic));
+   function Is_Recovery_Topic (Topic : Positive) return Boolean is (Topics (Topic).Cooling > 0);
+   procedure Grant (E : Entity_Id; Topic : Positive) is
+   begin
+      Done_Topic (E, Topic) := True;
+   end Grant;
+   procedure Mark_Petition (N : Positive; G : Positive) is
+   begin
+      Petitions (N).Granted := G;
+   end Mark_Petition;
 
    function Petition_Line (N : Positive) return String is
       P : constant Petition_Rec := Petitions (N);
    begin
       return "P" & Img (N) & " tick=" & Img (P.Tick) & " from=" & Name (P.From) & " topic=" & To_String (Topics (P.Topic).Name)
-        & (if P.Repeat > 0 then " repeat=" & Img (P.Repeat) else "") & " wish=" & To_String (P.Wish);
+        & (if P.Repeat > 0 then " repeat=" & Img (P.Repeat) else "") & (if P.Granted > 0 then " granted=G" & Img (P.Granted) else "")
+        & " wish=" & To_String (P.Wish);
    end Petition_Line;
 
    function Top_Topics (N : Positive) return String is

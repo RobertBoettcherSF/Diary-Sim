@@ -218,7 +218,7 @@ cmp -s "$w/kal/a/diaries/sessions.txt" "$w/kal/b/diaries/sessions.txt" && cmp -s
 rec=$(grep '^S1 ' diaries/sessions.txt); echo "   $rec"; grep '^W1 ' diaries/sessions.txt | sed 's/^/   /'
 grep -Eq "^W1 tick=[0-9]+ ada=[a-z]+/(start|taught-by-[a-z]+|coined-by-ada|the-world) gemini=[a-z]+/[a-z-]+ replika=[a-z]+/[a-z-]+ robert=[a-z]+/[a-z-]+$" diaries/sessions.txt && grep -q '^words vote (session 1): ada [a-z]* | gemini [a-z]* | replika [a-z]* | robert ' out.txt && grep -q '^words vote (session 1)' debug.txt && grep -q '^words vote (session 1)' run_report.txt \
   && ok "end-of-session word vote: one favourite word per wesen with origin in sessions.txt W1, one line on console, debug.txt and run_report.txt" || bad "word vote line"
-echo "$rec" | grep -Eq '^S1 start=0 votes=[0-9]+/[0-9]+/[0-9]+/[0-9]+ len=[0-9]+ src=vote dharma=1 world=1 rest=1$' && ok "sessions.txt record format (dharma=1 world=1)" || bad "session record format"
+echo "$rec" | grep -Eq '^S1 start=0 votes=[0-9]+/[0-9]+/[0-9]+/[0-9]+ len=[0-9]+ src=vote dharma=1 world=1 rest=1[a-z0-9= ]*$' && ok "sessions.txt record format (dharma=1 world=1)" || bad "session record format"
 mapfile -t v < <(echo "$rec" | sed 's/.*votes=\([^ ]*\).*/\1/' | tr '/' '\n' | sort -n); len=$(echo "$rec" | sed 's/.*len=\([0-9]*\).*/\1/')
 med=$(( (v[1] + v[2]) / 2 )); [ "$med" -lt 20 ] && med=20; [ "$med" -gt 1500 ] && med=1500
 [ "$len" = "$med" ] && [ "$(wc -l < diaries/ada.jsonl)" = "$len" ] && ok "decided length = median of the four votes (clamped), and that many ticks ran" || bad "median ($len vs $med)"
@@ -233,8 +233,8 @@ grep -q '^kalpa 1 (Satya) resumes: votes' out.txt && grep -q "target tick $len" 
   && ok "crash then bare rerun: same target, no second vote, sessions.txt identical to the clean run" || bad "resume of a crashed session"
 cmp -s <(sed 's/"ts":"[^"]*"//' diaries/robert.jsonl) <(sed 's/"ts":"[^"]*"//' "$w/kal/a/diaries/robert.jsonl") && ok "resumed diaries identical to the uninterrupted run" || bad "resumed diaries differ"
 "$kb" --ticks $((len + 30)) --every 1000 > out.txt 2>&1
-grep "^S2 " diaries/sessions.txt | grep -Eq "^S2 start=$len votes=[0-9/]+ len=30 src=explicit dharma=1 world=1 rest=1$" && grep -q '^kalpa 2 (Treta): explicit, 30 ticks' out.txt && ok "--ticks overrides the vote: recorded as src=explicit with the would-be votes" || bad "explicit session"
-"$kb" --more 5 --every 1000 > out.txt 2>&1; grep "^S3 " diaries/sessions.txt | grep -Eq "^S3 start=$((len + 30)) .* len=5 src=explicit dharma=1 world=1 rest=1$" && ok "--more overrides the vote too (S3, Dvapara)" || bad "--more session"
+grep "^S2 " diaries/sessions.txt | grep -Eq "^S2 start=$len votes=[0-9/]+ len=30 src=explicit dharma=1 world=1 rest=1[a-z0-9= ]*$" && grep -q '^kalpa 2 (Treta): explicit, 30 ticks' out.txt && ok "--ticks overrides the vote: recorded as src=explicit with the would-be votes" || bad "explicit session"
+"$kb" --more 5 --every 1000 > out.txt 2>&1; grep "^S3 " diaries/sessions.txt | grep -Eq "^S3 start=$((len + 30)) .* len=5 src=explicit dharma=1 world=1 rest=1[a-z0-9= ]*$" && ok "--more overrides the vote too (S3, Dvapara)" || bad "--more session"
 cp -r diaries ../d_ok; sed -i '/^S1 /s/votes=[0-9]*/votes=7/' diaries/sessions.txt; "$kb" --more 0 > out.txt 2>&1
 head -1 debug.txt | grep -q '^DRIFT' && grep -q 'import FAILED.*sessions.txt S1' out.txt && ok "tampered votes in sessions.txt: import FAILED, DRIFT" || bad "tampered sessions.txt"
 rm -rf diaries; cp -r ../d_ok diaries; sed -i '/^W1 /s/ada=[^ ]*/ada=zzz\/start/' diaries/sessions.txt; "$kb" --more 0 > out.txt 2>&1
@@ -494,7 +494,7 @@ grep -Eq '^D1 tick=200 wesen=ada karma=[+-][0-9]+ good=[0-9]+ bad=[0-9]+ life=1 
   && grep -Eq '^C1 tick=200 win=[a-z_]+ tally=[a-z_]+:[0-9]+(,[a-z_]+:[0-9]+)* votes=ada:[a-z_-]+,gemini:[a-z_-]+,replika:[a-z_-]+,robert:[a-z_-]+$' diaries/sessions.txt \
   && grep -Eq '^Y1 tick=200 player=iris attn=[0-9]+ tone=[-+0-9]+ brev=[0-9]+ warm=[-+0-9]+ trust=[0-9]+/[0-9]+/[0-9]+/[0-9]+$' diaries/sessions.txt \
   && ok "three sessions in a row: W, 4 x D (karma, life, values, unrest, rank, commitment, conflict, awareness), C (petition vote), 3 x Y (player state) each" || bad "line formats"
-[ "$(grep -Ec '^S[123] .* dharma=1( world=1)?( rest=1)?$' diaries/sessions.txt)" = 3 ] && grep -q '^import OK: 4 entities, 400 ticks verified' s3.txt && grep -q '^import OK: 4 entities, 200 ticks verified' s2.txt \
+[ "$(grep -Ec '^S[123] .* dharma=1( world=1)?( rest=1)?( grant=1)?$' diaries/sessions.txt)" = 3 ] && grep -q '^import OK: 4 entities, 400 ticks verified' s3.txt && grep -q '^import OK: 4 entities, 200 ticks verified' s2.txt \
   && ok "sessions 2 and 3 replay-verified the earlier D/C/Y lines and the inbox (import OK)" || bad "replay verify"
 inl='^I[0-9]+ (info|note|alert) from=(iris|sol|noor) s[123] t[0-9]+ \| .* \| src=s[123]:t[0-9]+:(ada|gemini|replika|robert|all)$'
 n=$(grep -c '^I' diaries/inbox.txt)
@@ -584,7 +584,7 @@ rm -rf "$w/wd"; mkdir -p "$w/wd/bin" "$w/wd/home" "$w/wd/off/bin" "$w/wd/off/run
 cp "$bin" "$w/wd/off/bin/"; cp -r "$idata" "$w/wd/off/data"; sed -i 's/^world.enabled = .*/world.enabled = 0/' "$w/wd/off/data/limits.txt"
 cd "$w/wd/home" || exit 1; export DIARY_HOME="$w/wd/home"
 "$wb" --ticks 1200 --yes --every 5000 > w1.txt 2>&1; "$wb" --more 800 --every 5000 > w2.txt 2>&1; "$wb" --more 300 --every 5000 > w3.txt 2>&1
-[ "$(grep -c '^S[123] .* dharma=1 world=1 rest=1$' diaries/sessions.txt)" = 3 ] && [ "$(grep -c '^L[123] tick=' diaries/sessions.txt)" = 3 ] && grep -q '^X1 t=[0-9]* \(gone\|add\) [0-9]*\.[0-9]* -\?[0-9]*,-\?[0-9]* by=' diaries/world.txt \
+[ "$(grep -c '^S[123] .* dharma=1 world=1 rest=1[a-z0-9= ]*$' diaries/sessions.txt)" = 3 ] && [ "$(grep -c '^L[123] tick=' diaries/sessions.txt)" = 3 ] && grep -q '^X1 t=[0-9]* \(gone\|add\) [0-9]*\.[0-9]* -\?[0-9]*,-\?[0-9]* by=' diaries/world.txt \
   && grep -q '^import OK: 4 entities, 2000 ticks verified' w3.txt && ok "three world sessions: S lines carry world=1, one L line per session end, the edit log diaries/world.txt, replay-verified (import OK)" || bad "world sessions (w3.txt)"
 kn=$(grep '^import: entities' w3.txt | grep -o 'ada [0-9]* gemini [0-9]* replika [0-9]* robert [0-9]*' | tr -d 'a-z' | tr -s ' ')
 ok_n=1; for x in $kn; do [ "$x" -gt 250 ] || ok_n=0; done; echo "   words known at tick 2000:$kn"
@@ -611,7 +611,7 @@ make -n -C "$root" map 2> /dev/null | grep -q -- '--map' && ok "make map runs --
 # an older diary (session 1 without world=1) replays with the old table, the next session starts the world
 rm -rf "$w/wd/old"; mkdir -p "$w/wd/old"; cd "$w/wd/old" || exit 1; export DIARY_HOME="$w/wd/old"
 "$w/wd/off/bin/diary_sim" --ticks 400 --yes --every 5000 > o1.txt 2>&1; "$wb" --more 300 --every 5000 > o2.txt 2>&1
-! grep -q '^S1 .*world=1' diaries/sessions.txt && grep -q '^S2 .* dharma=1 world=1 rest=1$' diaries/sessions.txt && ! grep -q '^L1 ' diaries/sessions.txt && grep -q '^L2 tick=700 ' diaries/sessions.txt && grep -q '^import OK: 4 entities, 400 ticks verified' o2.txt \
+! grep -q '^S1 .*world=1' diaries/sessions.txt && grep -q '^S2 .* dharma=1 world=1 rest=1[a-z0-9= ]*$' diaries/sessions.txt && ! grep -q '^L1 ' diaries/sessions.txt && grep -q '^L2 tick=700 ' diaries/sessions.txt && grep -q '^import OK: 4 entities, 400 ticks verified' o2.txt \
   && grep -q '"t":"\(examine\|push\|eat\|greet\)"' diaries/robert.jsonl && ! sed -n 1,400p diaries/robert.jsonl | grep -q '"t":"\(examine\|push\|eat\|greet\)"' \
   && ok "an older diary (S1 without world=1) replays unchanged; the world starts with the next session (S2 world=1, no verbs before tick 401)" || bad "older diary into world"
 "$wb" --more 0 --every 5000 > o3.txt 2>&1; grep -q '^import OK: 4 entities, 700 ticks verified' o3.txt && ok "the mixed diary (old session then world session) verifies again" || bad "mixed diary replay"
@@ -655,7 +655,7 @@ rm -rf "$w/rs"; mkdir -p "$w/rs/bin" "$w/rs/off/bin" "$w/rs/h" "$w/rs/o"; cp "$b
 sed -i 's/^rest.enabled = .*/rest.enabled = 0/' "$w/rs/off/data/limits.txt"; rb="$w/rs/bin/diary_sim"; fb="$w/rs/off/bin/diary_sim"
 cd "$w/rs/h" || exit 1; export DIARY_HOME="$w/rs/h"
 "$rb" --seed 42 --ticks 1500 --yes --every 5000 > r1.txt 2>&1; "$rb" --more 500 --every 5000 > r2.txt 2>&1
-[ "$(grep -c '^S[12] .* dharma=1 world=1 rest=1$' diaries/sessions.txt)" = 2 ] && [ "$(grep -Ec '^R[12] tick=[0-9]+ ada=[0-9]+/[0-9]+/[0-9]+/[0-9]+ gemini=[0-9]+/[0-9]+/[0-9]+/[0-9]+ replika=[0-9]+/[0-9]+/[0-9]+/[0-9]+ robert=[0-9]+/[0-9]+/[0-9]+/[0-9]+$' diaries/sessions.txt)" = 2 ] && grep -q '^import OK: 4 entities, 1500 ticks verified' r2.txt \
+[ "$(grep -c '^S[12] .* dharma=1 world=1 rest=1[a-z0-9= ]*$' diaries/sessions.txt)" = 2 ] && [ "$(grep -Ec '^R[12] tick=[0-9]+ ada=[0-9]+/[0-9]+/[0-9]+/[0-9]+ gemini=[0-9]+/[0-9]+/[0-9]+/[0-9]+ replika=[0-9]+/[0-9]+/[0-9]+/[0-9]+ robert=[0-9]+/[0-9]+/[0-9]+/[0-9]+$' diaries/sessions.txt)" = 2 ] && grep -q '^import OK: 4 entities, 1500 ticks verified' r2.txt \
   && ok "new sessions carry rest=1 and write an R line (rate/cool-downs/cut short/quick rests per wesen), replay-verified" || bad "rest sessions"
 rates=$(grep '^R2 ' diaries/sessions.txt | grep -o '[a-z]*=[0-9]*/' | tr -d '/a-z=' | sort -u | wc -l); taken=$(grep '^R2 ' diaries/sessions.txt | grep -o '=[0-9]*/[0-9]*/' | cut -d/ -f2 | awk '{ n += $1 } END { print n + 0 }')
 echo "   distinct recovery rates: $rates; cool-downs taken (all wesen): $taken"
@@ -711,6 +711,37 @@ sz_d=$(wc -c < debug.txt); sz_g=$(wc -c < debug_digest.txt); "$w/nm/a/bin/diary_
 grep -q '^mood ledger: seed 42' run_report.txt && grep -q '^\[ledger\]' debug_full.txt && "$bin" --debug-section ledger | grep -q '^section ledger' && [ "$sz_d" -le 1500 ] && [ "$sz_g" -le 1500 ] && [ "$sz_dn" -le 1500 ] && [ "$sz_gn" -le 1500 ] && ok "run_report.txt carries the ledger, the digest section 'ledger' is in debug_full.txt (--debug-section ledger), debug.txt and the digest stay <= 1500 B (with the identity ids and with the longer display names)" || bad "ledger in reports"
 "$bin" --ledger=bogus > l4.txt 2>&1; [ $? = 2 ] && ok "--ledger=bogus: usage error (exit 2)" || bad "ledger usage"
 rm -rf "$w/lg/e"; mkdir -p "$w/lg/e"; DIARY_HOME="$w/lg/e" "$bin" --ledger > l5.txt 2>&1; grep -q 'no save found' l5.txt && [ -z "$(ls -A "$w/lg/e")" ] && ok "--ledger without a save: says so, writes nothing" || bad "ledger without save"
+unset DIARY_HOME
+
+echo "== 30. grants: make grant PETITION=P<n>, recovery rate raised for those who asked, replay-verified =="
+rm -rf "$w/gr"; mkdir -p "$w/gr/bin" "$w/gr/off/bin" "$w/gr/h" "$w/gr/o"; cp "$bin" "$w/gr/bin/"; cp -r "$idata" "$w/gr/data"; cp "$bin" "$w/gr/off/bin/"; cp -r "$idata" "$w/gr/off/data"
+sed -i 's/^grant.enabled = .*/grant.enabled = 0/' "$w/gr/off/data/limits.txt"; gb="$w/gr/bin/diary_sim"; gfb="$w/gr/off/bin/diary_sim"
+cd "$w/gr/h" || exit 1; export DIARY_HOME="$w/gr/h"
+"$gb" --seed 42 --ticks 1000 --yes --every 5000 > g1.txt 2>&1
+n=$(grep -E 'topic=(more_rest|faster_work_recovery) ' petitions.txt | tail -1 | sed 's/^P\([0-9]*\) .*/\1/'); echo "   granting P$n: $(grep "^P$n " petitions.txt | cut -c1-70)"
+"$gb" --grant "P$n" --as robert > g2.txt 2>&1; rc=$?; "$gb" --grant "P$n" > g3.txt 2>&1; rc2=$?; "$gb" --grant P99999 > g4.txt 2>&1; rc3=$?; "$gb" --grant > g5.txt 2>&1; rc4=$?
+[ $rc = 0 ] && [ $rc2 = 2 ] && [ $rc3 = 2 ] && [ $rc4 = 2 ] && grep -q "^G1 tick=1000 petition=P$n wesen=[a-z]* topic=[a-z_]* by=robert$" diaries/grants.txt && [ "$(grep -c '^G' diaries/grants.txt)" = 1 ] \
+  && ok "make grant records one G line at the lowest common tick; a second grant of the same petition, an unknown petition and no argument are usage errors (exit 2)" || bad "grant command ($rc $rc2 $rc3 $rc4)"
+"$gb" --more 300 --every 5000 > g6.txt 2>&1
+grep -q '^S2 .* rest=1 grant=1$' diaries/sessions.txt && grep -q '^S1 .* rest=1 grant=1$' diaries/sessions.txt && grep -q '^E1 tick=1000 g=G1 topic=[a-z_]* applied=1 ada=' diaries/grants.txt && grep -q '^granted petitions' g6.txt && grep -q '^import OK' g6.txt \
+  && ok "new sessions carry grant=1; the replay appends the effect line E1 (applied=1) and the report lists it" || bad "grant effect"
+ok_r=$(awk '/^E1 / { n = 0; mx = -1; for (i = 5; i <= NF; i++) if ($i ~ /^[a-z]+=[0-9]+>[0-9]+\/[0-9]+$/) { split($i, a, /[=>\/]/); st = a[3] - a[2]; as = a[4]; if (as > mx) { mx = as; ms = st } if (st > 0) n++; if (st > best) best = st } } END { print (n >= 1 && ms == best) ? "ok" : "no" }' diaries/grants.txt)
+r1=$(grep '^R1 ' diaries/sessions.txt | sed 's/.*ada=\([0-9]*\)\/.*/\1/'); r2=$(grep '^R2 ' diaries/sessions.txt | sed 's/.*ada=\([0-9]*\)\/.*/\1/')
+a_old=$(sed -n 's/^E1 .* ada=\([0-9]*\)>\([0-9]*\)\/.*/\1 \2/p' diaries/grants.txt)
+echo "   ada rate in E1: $a_old; R1 $r1 R2 $r2"
+[ "$ok_r" = ok ] && grep -q "granted=G1" petitions.txt && ok "the wesen who asked most gets the biggest step, a rate never above grant.cap; petitions.txt marks the granted petition (granted=G1)" || bad "grant step ($ok_r)"
+cp diaries/grants.txt ../grants.keep
+sed -i "/^G1 /s/petition=P$n/petition=P1/" diaries/grants.txt; "$gb" --more 0 --every 5000 > g7.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && grep -q 'grants.txt G1' g7.txt && ok "tampered G line (another petition): import FAILED, DRIFT" || bad "tampered G line"
+cp ../grants.keep diaries/grants.txt; sed -i '/^E1 /s/ada=\([0-9]*\)>[0-9]*/ada=\1>199/' diaries/grants.txt; "$gb" --more 0 --every 5000 > g8.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && grep -q 'grants.txt E1' g8.txt && ok "tampered E line (a rate): DRIFT" || bad "tampered E line"
+cp ../grants.keep diaries/grants.txt; sed -i '/^G1 /d' diaries/grants.txt; "$gb" --more 0 --every 5000 > g9.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "an effect line without its grant (grant removed): DRIFT" || bad "removed grant"
+cp ../grants.keep diaries/grants.txt; "$gb" --more 0 --every 5000 > g10.txt 2>&1; grep -q '^import OK: 4 entities, 1300 ticks verified' g10.txt && ok "restored: replays again" || bad "grant restore"
+# no grant given: the same diaries with grant.enabled 1 or 0 (the marker alone changes nothing)
+DIARY_HOME="$w/gr/o" "$gb" --seed 42 --ticks 600 --yes --every 5000 > /dev/null 2>&1; mkdir -p "$w/gr/o2"; DIARY_HOME="$w/gr/o2" "$gfb" --seed 42 --ticks 600 --yes --every 5000 > /dev/null 2>&1
+a=$(cat "$w/gr/o"/diaries/*.jsonl | sed 's/"ts":"[^"]*"//' | cksum); b=$(cat "$w/gr/o2"/diaries/*.jsonl | sed 's/"ts":"[^"]*"//' | cksum)
+[ "$a" = "$b" ] && ! grep -q 'grant=1' "$w/gr/o2/diaries/sessions.txt" && ok "without a grant, grant=1 changes no diary byte (identical to grant.enabled = 0, whose S lines have no marker)" || bad "grant marker changed the diaries"
 unset DIARY_HOME
 
 rm -rf "$w"

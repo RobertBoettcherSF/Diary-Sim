@@ -1,4 +1,4 @@
---  Version: 0.010
+--  Version: 0.011
 --  The shared world of diary_sim: the four entities, the vocabulary (base
 --  words, who knows what, coined words), the bench kernels and the final votes.
 --  One world per run; Init rebuilds it from scratch, so a replay from tick 1
@@ -99,6 +99,14 @@ package Sim_World is
    function Petition_Total return Natural;
    function Petitions_Of (E : Entity_Id) return Natural;
    function Petition_Topic (N : Positive) return String;
+   function Petition_From (N : Positive) return Entity_Id;
+   function Petition_Tick (N : Positive) return Int;
+   function Topic_Id (Name : String) return Natural;   --  0: no such topic
+   function Asked (E : Entity_Id; Topic : Positive) return Natural;   --  petitions of E on the topic so far
+   function Is_Recovery_Topic (Topic : Positive) return Boolean;      --  has a 'cooling' weight (more_rest, faster_work_recovery)
+   --  A grant: E does not file this topic again (a granted wish stays granted); Mark_Petition tags P<N> with G<G>.
+   procedure Grant (E : Entity_Id; Topic : Positive);
+   procedure Mark_Petition (N : Positive; G : Positive);
    function Petition_Line (N : Positive) return String;   --  P<n> tick=<t> from=<id> topic=<topic> [repeat=<k>] wish=<text>
    function Top_Topics (N : Positive) return String;      --  "more_rest 5, quieter_mood 4"
 

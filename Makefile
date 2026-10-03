@@ -1,4 +1,4 @@
-# Version: 0.014
+# Version: 0.015
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -19,6 +19,9 @@
 #                 make say WESEN=ada TEXT="..." (direct), make say TEXT="..." (all four);
 #                 optional AS=name.  make answer TEXT="..." answers the latest collective petition.
 # make inbox      print the inbox: the reports of the players to Robert (newest 40 lines)
+# make grant     Robert grants a petition: make grant PETITION=P12 [AS=name] (one G line in diaries/grants.txt at the lowest
+#                 common tick; the next run applies it: more_rest / faster_work_recovery raise the recovery rate of those who
+#                 asked, most for the one who asked most; the topic is not filed again; replay-verified, tamper = DRIFT)
 # make map        print the treadmill view: for each wesen its position, nearest landmark, biome and a
 #                 5x5 window of its surroundings, as of the end of the last saved session (read-only)
 # make ledger    print the mood ledger (report only): per wesen the top 3 drains and gains of mood, whole run and last
@@ -33,7 +36,7 @@
 GNATMAKE ?= gnatmake
 FLAGS = -g -O1 -fno-inline -gnatwa -gnat2022 -gnata
 
-.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger
+.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant
 export WESEN PLAYER TEXT AS
 
 EVERY ?= 100
@@ -75,6 +78,9 @@ inbox: all
 
 map: all
 	bin/diary_sim --map
+
+grant: all
+	bin/diary_sim --grant $(PETITION) $(if $(AS),--as $(AS))
 
 ledger: all
 	bin/diary_sim --ledger$(if $(FULL),=full)

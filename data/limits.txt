@@ -137,3 +137,11 @@ rest.calm.mood = 3
 rest.repeat_pct = 80
 rest.min_ticks = 2
 rest.petition_ref = 30
+
+# Grants (make grant PETITION=P<n>; grant=1 sessions; needs rest=1): a granted more_rest / faster_work_recovery petition raises the
+# recovery rate of every wesen that asked for that topic by grant.step percent points, scaled by how often it asked (the one who asked
+# most gets the full step, others at least 1), never above grant.cap.  The topic is then not filed again by those who got it.
+# Changing these numbers needs --fresh (or the stored E lines drift).
+grant.enabled = 1
+grant.step = 6
+grant.cap = 170

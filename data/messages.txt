@@ -158,3 +158,13 @@ warn.names_file = warning: data/names.txt not found; internal ids are shown (ada
 # Rest and cool-down (rest=1 sessions)
 rest.head = recovery since the rest model began: rate (100% = base rest gain) | cool-down length | taken | rests cut short | quick rests
 rest.line = {1} rate {2}% | cool-down {3} ticks | taken {4} | cut short {5} | quick rests {6}
+# Grants (make grant PETITION=P<n>)
+hdr.grants = # G<n> tick=<T> petition=P<k> wesen=<id> topic=<name> by=<who>  (a petition Robert granted, applied after tick T) | E<n>: the effect the replay computed (rate old>new/asks per wesen), verified
+grant.ok = {1}: petition {2} of {3} ({4}) granted; it takes effect from tick {5} (grant=1 sessions: raises the recovery rate of those who asked, the topic is not filed again)
+grant.nowho = give the petition: make grant PETITION=P12 (the numbers are in petitions.txt)
+grant.nopetition = no petition {1} in the diaries up to tick {2} (petitions.txt lists them; a grant needs a petition already filed)
+grant.already = petition {1} is already granted ({2})
+grant.head = granted petitions (E<n> tick, topic, applied, per wesen: recovery rate old>new / times asked):
+err.grant = grants.txt {1} names petition {2} by {3} on {4}, but the replay has no such petition at that point
+err.grant_fx = grants.txt {1}: the stored effect differs from the replay: {2}
+warn.grants_bad = grants.txt: a line is not a grant and is ignored: {1}

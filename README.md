@@ -211,6 +211,24 @@ sums by action, by place and by diary verb (examine / push / eat / greet include
 things) and the cool-down ticks. There is no quarrel source in this simulation, so none is listed; clashes of the
 Buddhism layer do not touch mood. `scripts/checks.sh` (scenario 29) compares the ledger with the mood changes of the diaries.
 
+## Granting petitions (`make grant PETITION=P<n>`, `grant=1` sessions)
+
+Petitions (`petitions.txt`) can now be answered with more than words. `make grant PETITION=P12` (`--grant P12`, optional
+`AS=name`) records one line `G<n> tick=<T> petition=P12 wesen=<id> topic=<topic> by=<name>` in `diaries/grants.txt`
+at the lowest common tick (no replay, like `make say`). The next run applies it from tick T+1, in sessions that carry
+`grant=1` (new sessions; needs `rest=1`; `grant.enabled = 0` in `data/limits.txt` turns it off and nothing changes):
+
+* **Effect:** for `more_rest` and `faster_work_recovery` (the topics with a "cooling" weight in `data/topics.txt`) the recovery
+  rate of every wesen that asked for that topic rises by `grant.step` percent points scaled by how often it asked: the one who asked
+  most gets the full step, the others at least 1 (cap `grant.cap`, default 170%). Other topics: recorded, no rate change.
+* **A granted wish is not asked for again:** the wesen who benefited no longer re-files that topic (its weight drops to 1,
+  no automatic repeat). `petitions.txt` marks the petition with `granted=G<n>`.
+* **Record and verify:** the replay writes the effect as an `E<n> tick=T g=G<n> topic=... applied=1 ada=126>132/7 ...` line
+  (per wesen: rate old>new / times asked) into `grants.txt`; every later run recomputes it. A grant whose petition does not exist
+  (or is by another wesen / on another topic), a changed `E` line, or an `E` line without its grant is DRIFT. The end report lists
+  the effects ("granted petitions"). A grant is refused when the petition is unknown, not yet filed at the common tick, or
+  already granted (exit 2).
+
 ## The debug digest (`DEBUG=1`, `--debug`)
 
 `debug.txt` (always written, <= 1500 bytes) is unchanged. For a compact file to attach to chat:
