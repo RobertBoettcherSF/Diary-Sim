@@ -109,8 +109,8 @@ rm -rf "$w/cr"; mkdir "$w/cr"; cd "$w/cr" || exit 1
 "$bin" --ticks=1000 --every=500 | tail -2 | head -1
 [ "$(lines diaries)" = 4000 ] && [ "$(dups diaries)" = 0 ] && ok "resumed to 1000, no duplicate tick" || bad "lines $(lines diaries)"
 same=1; for f in diaries/*.jsonl; do cmp -s <(sed 's/"ts":"[^"]*"//' "$f") <(sed 's/"ts":"[^"]*"//' "$w/base/$f") || same=0; done
-for f in entities/*/*.txt; do cmp -s "$f" "$w/base/$f" || same=0; done
-[ $same = 1 ] && ok "after crash+resume diaries and working files equal the uninterrupted run" || bad "crash/resume differs"
+for f in entities/*/*.txt petitions.txt; do cmp -s "$f" "$w/base/$f" || same=0; done
+[ $same = 1 ] && ok "after crash+resume diaries, working files and petitions.txt equal the uninterrupted run" || bad "crash/resume differs"
 
 echo "== 13. start_percent = 100: everyone knows everything =="
 rm -rf "$w/all"; mkdir -p "$w/all/bin" "$w/all/run"; cp "$bin" "$w/all/bin/"; cp -r "$root/data" "$w/all/data"
@@ -166,6 +166,19 @@ sed -i 's/^rule30.enabled = .*/rule30.enabled = 0/' "$w/off/data/limits.txt"; cd
 "$w/off/bin/diary_sim" --ticks=1000 --every=1000 > /dev/null; "$w/off/bin/diary_sim" --ticks=1000 --every=1000 | grep -q 'replay-verify OK' \
   && ! cmp -s <(sed 's/"ts":"[^"]*"//' diaries/ada.jsonl) <(sed 's/"ts":"[^"]*"//' "$w/base/diaries/ada.jsonl") && ok "rule30.enabled=0: old fixed table, deterministic, differs from rule 30" || bad "rule30.enabled=0"
 grep -q '^ada acts r' "$w/base/debug.txt" && grep -q '^actions ' "$w/base/run_report.txt" && ok "action counts in debug.txt and run_report.txt" || bad "no action counts"
+
+echo "== 17. petitions =="
+cd "$w/off/run" || exit 1; rm -rf "$w/pet"; mkdir -p "$w/pet/bin" "$w/pet/run"; cp "$bin" "$w/pet/bin/"; cp -r "$root/data" "$w/pet/data"; cd "$w/pet/run" || exit 1
+"$w/pet/bin/diary_sim" --ticks=1000 --every=1000 > out.txt
+total=$(grep -h -o 'filed petition P[0-9]*' diaries/*.jsonl | wc -l); lines=$(grep -c '^P[0-9]* tick=' petitions.txt)
+echo "   $total petitions in the diaries, $lines in petitions.txt"
+[ "$total" -ge 8 ] && [ "$total" -le 60 ] && [ "$lines" = "$total" ] && ok "a handful of petitions, one per diary line, all in petitions.txt" || bad "petition counts"
+grep -q '^P1 tick=[0-9]* from=[a-z]* topic=[a-z_]* .*wish=' petitions.txt && ok "line format P<n> tick= from= topic= wish=" || bad "petition line format"
+for n in ada gemini replika robert; do c=$(grep -c "from=$n " petitions.txt); [ "$c" -ge 1 ] && [ "$c" -le 30 ] || bad "$n filed $c petitions"; done
+grep -q 'petitions.txt (small) for the agenda' out.txt && grep -q 'wrote petitions.txt' out.txt && grep -q '^ada words.* pet [0-9]' debug.txt && grep -q '^topics ' debug.txt && ok "console/debug.txt mention petitions, topics line present" || bad "console/debug petition lines"
+cp petitions.txt p_full.txt; sed -i 's/^propose.file_cap = .*/propose.file_cap = 5/' "$w/pet/data/limits.txt"; "$w/pet/bin/diary_sim" --ticks=1000 > /dev/null
+[ "$(grep -c '^P[0-9]* tick=' petitions.txt)" = 5 ] && head -1 petitions.txt | grep -q "last 5 of $total" && [ "$(grep -c filed diaries/ada.jsonl)" -ge 1 ] && cmp -s <(tail -n 5 p_full.txt) <(tail -n 5 petitions.txt) && ok "file cap keeps the newest 5 lines; the diaries keep all" || bad "file cap"
+rm -f petitions.txt; "$w/pet/bin/diary_sim" --ticks=1000 > /dev/null; [ -s petitions.txt ] && ok "deleted petitions.txt is rebuilt by the replay" || bad "petitions.txt not rebuilt"
 
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="

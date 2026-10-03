@@ -1,0 +1,13 @@
+# Petition topics: name base low_energy low_mood few_words many_benches = phrase
+# weight of a topic = base + lean * state / 100 (state 0..100: low energy, low mood,
+# few known words, benches so far, 100 = full).  Fixed list; the wish text is
+# [wish_open] + phrase + [wish_close] from data/words.txt.
+more_rest 2 40 0 0 0 = more time to rest
+faster_work_recovery 2 25 0 0 0 = quicker recovery after hard work
+bigger_bench_budget 1 0 0 0 12 = a bigger step budget for bench runs
+more_words 2 0 0 40 0 = more words to learn and share
+new_action 3 0 10 0 5 = a new kind of action to try
+different_locations 2 0 10 0 0 = different places to be in
+more_talk_partners 2 0 30 10 0 = more people to talk to
+quieter_mood 2 0 35 0 0 = a calmer and steadier mood
+other 3 0 0 0 0 = something small changed in my world

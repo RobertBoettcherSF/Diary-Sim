@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 pragma Ada_2022;
 
 with Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
@@ -26,12 +26,36 @@ package body Sim_World is
    Known : array (Entity_Id) of Bool_Vectors.Vector;
    Base  : Natural := 0;
 
+   --  Petitions (see the spec): topic table, filed petitions, per-entity bookkeeping.
+   Max_Topics : constant := 40;
+   type Topic_Rec is record
+      Name, Phrase : Unbounded_String;
+      Base, Low_En, Low_Mood, Few_Words, Benches : Integer := 0;
+   end record;
+   type Topic_Array is array (1 .. Max_Topics) of Topic_Rec;
+   Topics : Topic_Array;
+   N_Topics : Natural := 0;
+   type Petition_Rec is record
+      Tick : Int;
+      From : Entity_Id;
+      Topic, Repeat : Natural;
+      Wish : Unbounded_String;
+   end record;
+   package Petition_Vectors is new Ada.Containers.Vectors (Positive, Petition_Rec);
+   Petitions : Petition_Vectors.Vector;
+   Pet_Last  : array (Entity_Id) of Int := [others => -1];             --  tick of the last petition
+   Pet_N     : array (Entity_Id) of Natural := [others => 0];
+   Topic_Used : array (1 .. Max_Topics) of Natural := [others => 0];
+   Topic_By  : array (Entity_Id, 1 .. Max_Topics) of Natural := [others => [others => 0]];
+   Topic_Last : array (Entity_Id) of Natural := [others => 0];
+
    --  Tunables of the personality (data/limits.txt), read by Init.
-   type Weight_Array is array (Rest .. Bench) of Integer;
+   type Weight_Array is array (Rest .. Propose) of Integer;
    R30_On : Boolean := True;
    R30_Width : Integer := 32;
    R30_Period, R30_Strength, R30_Core : Integer := 1;
-   Base_W : Weight_Array := [30, 20, 15, 15, 15, 5];
+   Base_W : Weight_Array := [30, 20, 15, 15, 15, 5, 1];
+   Lean_Propose, Pet_Cooldown, Pet_Repeat_Pct : Integer := 0;
    Lean_Low_Energy, Lean_High_Energy, Lean_Low_Mood, Lean_High_Mood, Lean_Few_Words, Few_Words_N : Integer := 0;
    Cache_Steps : array (Entity_Id) of Int := [others => -1];
    Cache_Row   : array (Entity_Id) of Interfaces.Unsigned_64 := [others => 0];
@@ -45,7 +69,16 @@ package body Sim_World is
       R30_Core := Clamp (Integer (Limit ("rule30.core", 40)), 0, 100);
       Base_W := [Integer (Limit ("weight.rest", 30)), Integer (Limit ("weight.work", 20)),
                  Integer (Limit ("weight.explore", 15)), Integer (Limit ("weight.talk", 15)),
-                 Integer (Limit ("weight.wander", 15)), Integer (Limit ("weight.bench", 5))];
+                 Integer (Limit ("weight.wander", 15)), Integer (Limit ("weight.bench", 5)), Integer (Limit ("weight.propose", 1))];
+      Lean_Propose := Clamp (Integer (Limit ("lean.propose", 5)), 0, 1000);
+      Pet_Cooldown := Clamp (Integer (Limit ("propose.cooldown", 80)), 0, 1_000_000);
+      Pet_Repeat_Pct := Clamp (Integer (Limit ("propose.repeat_percent", 15)), 0, 100);
+      Petitions.Clear;
+      Pet_Last := [others => -1];
+      Pet_N := [others => 0];
+      Topic_Used := [others => 0];
+      Topic_By := [others => [others => 0]];
+      Topic_Last := [others => 0];
       Lean_Low_Energy := Clamp (Integer (Limit ("lean.low_energy", 60)), 0, 1000);
       Lean_High_Energy := Clamp (Integer (Limit ("lean.high_energy", 20)), 0, 1000);
       Lean_Low_Mood := Clamp (Integer (Limit ("lean.low_mood", 30)), 0, 1000);
@@ -200,7 +233,7 @@ package body Sim_World is
          High_Mood : constant Integer := Integer'Max (0, Mood - 50);         --  0 .. 50
          Few      : constant Integer := Integer'Max (0, Few_Words_N - Known_Count (E));
       begin
-         for A in W'Range loop   --  personality: the bits of this action's segment
+         for A in Rest .. Bench loop   --  personality: the bits of this action's segment
             declare
                Pop, Pop0 : Integer := 0;
                Off : constant Integer := Action'Pos (A) * Seg;
@@ -219,11 +252,16 @@ package body Sim_World is
          W (Explore) := W (Explore) + Low_Mood * Lean_Low_Mood / 200 - High_Mood * Lean_High_Mood / 100;
          W (Work) := W (Work) + High_Mood * Lean_High_Mood / 50;
          W (Talk) := W (Talk) - High_Mood * Lean_High_Mood / 100;
+         W (Propose) := W (Propose) + (Low_En * 2 + Low_Mood) * Lean_Propose / 200;
       end;
       for A in W'Range loop
          W (A) := Integer'Max (1, W (A));
          Total := Total + W (A);
       end loop;
+      if Pet_Last (E) >= 0 and then Tick - Pet_Last (E) < Int (Pet_Cooldown) then   --  petition cooldown
+         Total := Total - W (Propose);
+         W (Propose) := 0;
+      end if;
       Pick := Roll (Seed, Positive (E), Tick, 0, Total);
       for A in W'Range loop
          if Pick <= W (A) then return A; end if;
@@ -231,6 +269,138 @@ package body Sim_World is
       end loop;
       return Rest;
    end Choose;
+
+   --  ---- petitions -------------------------------------------------------------------
+
+   function Topic_Count return Natural is (N_Topics);
+
+   --  A topic line: "name base low_energy low_mood few_words benches = phrase".
+   procedure Load_Topics (Lines : Str_Vectors.Vector) is
+   begin
+      N_Topics := 0;
+      for L of Lines loop
+         declare
+            T : constant String := Ada.Strings.Fixed.Trim (L, Ada.Strings.Both);
+            Eq : constant Natural := Ada.Strings.Fixed.Index (T, " = ");
+            Pos : Positive;
+            Rec : Topic_Rec;
+            Num : Integer;
+            Fields : Natural := 0;
+         begin
+            if T'Length > 0 and then T (T'First) /= '#' and then Eq > 0 and then N_Topics < Max_Topics then
+               Rec.Phrase := To_Unbounded_String (Ada.Strings.Fixed.Trim (T (Eq + 3 .. T'Last), Ada.Strings.Both));
+               Pos := T'First;
+               while Pos < Eq loop
+                  declare
+                     Stop : Natural := Ada.Strings.Fixed.Index (T (Pos .. Eq - 1), " ");
+                  begin
+                     if Stop = 0 then Stop := Eq; end if;
+                     if Stop > Pos then
+                        Fields := Fields + 1;
+                        if Fields = 1 then
+                           Rec.Name := To_Unbounded_String (T (Pos .. Stop - 1));
+                        elsif (for all C of T (Pos .. Stop - 1) => C in '0' .. '9') then
+                           Num := Integer'Value (T (Pos .. Stop - 1));
+                           case Fields is
+                              when 2 => Rec.Base := Num;
+                              when 3 => Rec.Low_En := Num;
+                              when 4 => Rec.Low_Mood := Num;
+                              when 5 => Rec.Few_Words := Num;
+                              when 6 => Rec.Benches := Num;
+                              when others => null;
+                           end case;
+                        end if;
+                     end if;
+                     Pos := Stop + 1;
+                  end;
+               end loop;
+               if Fields >= 1 then
+                  N_Topics := N_Topics + 1;
+                  Topics (N_Topics) := Rec;
+               end if;
+            end if;
+         end;
+      end loop;
+      if N_Topics = 0 then
+         Topics (1) := (To_Unbounded_String ("other"), To_Unbounded_String ("a small change"), 1, 0, 0, 0, 0);
+         N_Topics := 1;
+      end if;
+   end Load_Topics;
+
+   function File_Petition (Seed : Int; E : Entity_Id; Tick : Int; Energy, Mood, Benches : Integer) return Positive is
+      Eid : constant Positive := Positive (E);
+      Topic : Positive := 1;
+      Low_E : constant Integer := Integer'Max (0, 50 - Energy) * 2;          --  0 .. 100
+      Low_M : constant Integer := Integer'Min (100, Integer'Max (0, -Mood));
+      Few   : constant Integer := Integer'Max (0, Few_Words_N - Known_Count (E)) * 100 / Few_Words_N;
+      Ben   : constant Integer := Integer'Min (100, Benches);
+      Total : Integer := 0;
+      Pick  : Positive;
+      Rep   : Natural;
+      W     : array (1 .. Max_Topics) of Integer := [others => 0];
+      Open_L : Str_Vectors.Vector renames Words (Wish_Open);
+      Close_L : Str_Vectors.Vector renames Words (Wish_Close);
+   begin
+      if Topic_Last (E) > 0 and then Roll (Seed, Eid, Tick, 11, 100) <= Pet_Repeat_Pct then
+         Topic := Topic_Last (E);   --  files its previous topic again
+      else
+         for T in 1 .. N_Topics loop
+            W (T) := Integer'Max (1, Topics (T).Base + (Topics (T).Low_En * Low_E + Topics (T).Low_Mood * Low_M
+                                                         + Topics (T).Few_Words * Few + Topics (T).Benches * Ben) / 100);
+            Total := Total + W (T);
+         end loop;
+         Pick := Roll (Seed, Eid, Tick, 9, Total);
+         for T in 1 .. N_Topics loop
+            if Pick <= W (T) then Topic := T; exit; end if;
+            Pick := Pick - W (T);
+         end loop;
+      end if;
+      Rep := Topic_By (E, Topic);
+      Petitions.Append
+        (Petition_Rec'
+           (Tick => Tick, From => E, Topic => Topic, Repeat => Rep,
+            Wish => To_Unbounded_String
+              (Open_L (Open_L.First_Index + Pick60 (Seed, Eid, Tick, 800) mod Natural (Open_L.Length)) & " "
+               & To_String (Topics (Topic).Phrase) & " "
+               & Close_L (Close_L.First_Index + Pick60 (Seed, Eid, Tick, 850) mod Natural (Close_L.Length)))));
+      Topic_By (E, Topic) := Rep + 1;
+      Topic_Used (Topic) := Topic_Used (Topic) + 1;
+      Topic_Last (E) := Topic;
+      Pet_Last (E) := Tick;
+      Pet_N (E) := Pet_N (E) + 1;
+      return Natural (Petitions.Length);
+   end File_Petition;
+
+   function Petition_Total return Natural is (Natural (Petitions.Length));
+   function Petitions_Of (E : Entity_Id) return Natural is (Pet_N (E));
+
+   function Petition_Topic (N : Positive) return String is (To_String (Topics (Petitions (N).Topic).Name));
+
+   function Petition_Line (N : Positive) return String is
+      P : constant Petition_Rec := Petitions (N);
+   begin
+      return "P" & Img (N) & " tick=" & Img (P.Tick) & " from=" & Name (P.From) & " topic=" & To_String (Topics (P.Topic).Name)
+        & (if P.Repeat > 0 then " repeat=" & Img (P.Repeat) else "") & " wish=" & To_String (P.Wish);
+   end Petition_Line;
+
+   function Top_Topics (N : Positive) return String is
+      Used : array (1 .. Max_Topics) of Boolean := [others => False];
+      Res : Unbounded_String;
+      Best : Natural;
+   begin
+      for K in 1 .. N loop
+         Best := 0;
+         for T in 1 .. N_Topics loop
+            if not Used (T) and then Topic_Used (T) > 0 and then (Best = 0 or else Topic_Used (T) > Topic_Used (Best)) then
+               Best := T;
+            end if;
+         end loop;
+         exit when Best = 0;
+         Used (Best) := True;
+         Append (Res, (if K > 1 then ", " else "") & To_String (Topics (Best).Name) & " " & Img (Topic_Used (Best)));
+      end loop;
+      return (if Length (Res) = 0 then "none" else To_String (Res));
+   end Top_Topics;
 
    --  ---- bench --------------------------------------------------------------------
 

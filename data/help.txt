@@ -10,20 +10,20 @@ Entities: ada (engineer), gemini (reviewer), replika (vice_president),
 robert (human). State: energy 0..100, mood -100..100, location 0..3
 (ranges, word-game limits, vote thresholds: data/limits.txt; wording:
 data/words.txt, data/messages.txt; vocabulary: data/vocab.txt).
-Actions: rest work explore talk wander bench, chosen by weights from a Rule 30
-personality plus energy/mood/words (data/limits.txt rule30.*, lean.*). Talk may
-teach a word, explore and wander may coin one; a taught word arrives as a
-"learn" event.
+Actions: rest work explore talk wander bench propose, chosen by weights from
+a Rule 30 personality plus energy/mood/words (data/limits.txt rule30.*,
+lean.*). Talk may teach a word, explore and wander may coin one; a taught word
+arrives as a "learn" event. Propose files a petition (a wish for a change;
+topics: data/topics.txt) into petitions.txt: attach it for the agenda.
 Diaries: diaries/<id>.jsonl, append-only. Every run replays ticks 1..N and
 verifies the stored lines (ts ignored), then appends the rest.
 Working folder entities/<id>/: words.txt, bench.txt (NOT a VM).
-Start: an 'import OK / FAILED' line says what was read from disk. End: a report
-(turns, words, benches), 'export OK' (files re-read and counted),
+Start: 'import OK / FAILED' says what was read from disk. End: a report
+(turns, words, benches, petitions), 'export OK' (files re-read and counted),
 run_report.txt (long), summary.txt/.jsonl, a vote table.
 debug.txt (<= 1500 bytes) is written on EVERY exit; attach it to chat messages.
 Ctrl-C / SIGTERM stop cleanly after the current tick (exit 130, status QUIT).
 Old diaries (before this version) are incompatible: use --fresh.
 Errors: last_error.txt (seed, tick, entity, exception, traceback); paste it
 if asked. Back up diaries/ between tests. Exit 130: quit by signal.
-Exit: 0 ok, 1 error (drift, bad diary, crash), 2 usage.
 make demo: build + short run in demo_run/.

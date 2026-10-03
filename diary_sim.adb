@@ -1,4 +1,4 @@
---  Version: 0.006
+--  Version: 0.007
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -26,12 +26,12 @@ procedure Diary_Sim is
    type State is record
       Energy, Mood, Location : Integer;   --  ranges: data/limits.txt; location: office lab cafe home
    end record;
-   --  Rest Work Explore Talk Wander Bench Learn.  Learn keeps the location (Home -1).
-   Energy_D : constant array (Action) of Integer := [14, -8, -10, -2, -3, -4, -1];
-   Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 1];
-   Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1];   --  wander: rolled
+   --  Rest Work Explore Talk Wander Bench Propose Learn.  Propose and Learn keep the location (Home -1).
+   Energy_D : constant array (Action) of Integer := [14, -8, -10, -2, -3, -4, -1, -1];
+   Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
+   Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.006";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.007";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Seed, Ticks, Every, Seed_Opt, Crash_At : Int := -1;
    Fresh, Seed_Shown : Boolean := False;
@@ -69,6 +69,7 @@ procedure Diary_Sim is
      (case A is when Rest => "rested a while", when Work => "did some work", when Explore => "explored a little",
                 when Talk => "wanted to talk to someone", when Wander => "wandered around",
                 when Bench => "ran a small benchmark", when Learn => "learned something new",
+                when Propose => "filed a petition", when Wish_Open => "I would like", when Wish_Close => "so my days go better",
                 when Reason_Low => "it was hard", when Reason_Mid => "it was fine", when Reason_High => "it was good",
                 when Mood_Low => "feeling low", when Mood_Neutral => "feeling steady", when Mood_High => "feeling good");
 
@@ -125,12 +126,14 @@ procedure Diary_Sim is
          if Words (A).Is_Empty then
             if Found then Warn (Msg ("warn.words_empty", Low (A))); end if;
             Words (A).Append (Built_In (A));
-         elsif Natural (Words (A).Length) /= 60 and then A in Action | Reason_Low | Reason_Mid | Reason_High | Mood_Low
-           | Mood_Neutral | Mood_High
-         then
+         elsif Natural (Words (A).Length) /= 60 then
             Warn (Msg ("warn.words_list", Low (A), Img (Integer (Words (A).Length))));
          end if;
       end loop;
+      Lines.Clear;
+      Read_Lines (Data_Path ("topics.txt"), Lines, Found);
+      Load_Topics (Lines);
+      if Topic_Count = 1 and then (not Found or else Lines.Is_Empty) then Warn (Msg ("warn.topics_file")); end if;
       --  Vocabulary: one English word per line, id = line order; '#' and blank lines ignored.
       Lines.Clear;
       Read_Lines (Data_Path ("vocab.txt"), Lines, Found);
@@ -199,6 +202,8 @@ procedure Diary_Sim is
    function Step (E : Entity_Id; Tick : Int) return String is
       A   : constant Action :=
         (if Pending_Word (E) /= 0 then Learn else Choose (Seed, E, Tick, St (E).Energy, St (E).Mood));
+      Pre_En : constant Integer := St (E).Energy;     --  state before this action
+      Pre_Mo : constant Integer := St (E).Mood;
       S   : State renames St (E);
       Detail : Unbounded_String;
       Eid : constant Positive := Positive (E);
@@ -278,6 +283,12 @@ procedure Diary_Sim is
                Detail := To_Unbounded_String (Msg ("detail.bench", Low_Kernel (R.Which), Img (R.Steps), Img (R.Result),
                                                    Img (R.Checksum)));
                Did_Bench := True;
+            end;
+         when Propose =>
+            declare
+               N : constant Positive := File_Petition (Seed, E, Tick, Pre_En, Pre_Mo, Act_Count (E, Bench));
+            begin
+               Detail := To_Unbounded_String (Msg ("detail.petition", Img (N), Petition_Topic (N)));
             end;
          when others => null;
       end case;
@@ -395,9 +406,9 @@ procedure Diary_Sim is
    --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (length cap, text assembly)
    procedure Write_Debug (Status, Err : String) is
       Cap : constant := 1500;
-      type Part_Id is (Head, Ticks_P, Import_P, Export_P, Ents, Mix_P, Votes, Error_P);
+      type Part_Id is (Head, Ticks_P, Import_P, Export_P, Ents, Mix_P, Topics_P, Votes, Error_P);
       Part : array (Part_Id) of Unbounded_String;
-      Order : constant array (1 .. 8) of Part_Id := [Head, Ticks_P, Error_P, Ents, Mix_P, Votes, Import_P, Export_P];
+      Order : constant array (1 .. 9) of Part_Id := [Head, Ticks_P, Error_P, Ents, Mix_P, Topics_P, Votes, Import_P, Export_P];
       Used : Natural := 0;
       Out_Text : Unbounded_String;
       F : TIO.File_Type;
@@ -412,14 +423,16 @@ procedure Diary_Sim is
                                               & ASCII.LF);
       for E in Entity_Id loop
          Append (Part (Ents), Msg ("debug.entity", Name (E), Img (Start_Known (E)), Img (Known_Count (E)), Img (Run_Learn (E)),
-                                   Img (Run_Coin (E)), Img (Run_Bench_N (E)), Sgn (Int (St (E).Mood)) & " en " & Img (St (E).Energy))
+                                   Img (Run_Coin (E)), Img (Run_Bench_N (E)), Sgn (Int (St (E).Mood)) & " en " & Img (St (E).Energy) & " pet " & Img (Petitions_Of (E)))
                  & ASCII.LF);
       end loop;
       for E in Entity_Id loop
          Append (Part (Mix_P), Msg ("debug.mix", Name (E), Img (Act_Count (E, Rest)), Img (Act_Count (E, Work)),
                                     Img (Act_Count (E, Explore)), Img (Act_Count (E, Talk)), Img (Act_Count (E, Wander)),
-                                    Img (Act_Count (E, Bench)) & " l" & Img (Act_Count (E, Learn))) & ASCII.LF);
+                                    Img (Act_Count (E, Bench)) & " p" & Img (Act_Count (E, Propose)) & " l" & Img (Act_Count (E, Learn)))
+                 & ASCII.LF);
       end loop;
+      Part (Topics_P) := To_Unbounded_String ("topics " & Top_Topics (3) & ASCII.LF);
       if Length (Vote_Line) > 0 then Part (Votes) := Vote_Line & ASCII.LF; end if;
       if Err'Length > 0 then Part (Error_P) := To_Unbounded_String (Err & ASCII.LF); end if;
       for P of Order loop
@@ -486,6 +499,30 @@ procedure Diary_Sim is
       end loop;
       Last_Done := Tick;
    end Do_Tick;
+
+   --  petitions.txt: a view of the petitions the replay filed (the last propose.file_cap lines;
+   --  the oldest drop out of the file, never out of the diaries).  Rewritten atomically.
+   procedure Write_Petitions is
+      Cap : constant Natural := Natural (Int'Max (1, Limit ("propose.file_cap", 40)));
+      Total : constant Natural := Petition_Total;
+      First : constant Natural := (if Total > Cap then Total - Cap + 1 else 1);
+      F : TIO.File_Type;
+   begin
+      TIO.Create (F, TIO.Out_File, "petitions.tmp");
+      TIO.Put_Line (F, Msg ("pet.head", Img (Seed), Img (Integer (Total) - First + 1), Img (Total)));
+      for N in First .. Total loop TIO.Put_Line (F, Petition_Line (N)); end loop;
+      TIO.Flush (F);
+      TIO.Close (F);
+      begin
+         Ada.Directories.Rename ("petitions.tmp", "petitions.txt");
+      exception
+         when others =>
+            Ada.Directories.Delete_File ("petitions.txt");
+            Ada.Directories.Rename ("petitions.tmp", "petitions.txt");
+      end;
+   exception
+      when others => TIO.Put_Line (Msg ("debug.failed"));
+   end Write_Petitions;
 
    --  Re-open what the run wrote and count it (not just a print).  Fails gets one
    --  fragment per problem.  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (file reading, counts)
@@ -666,6 +703,7 @@ begin
    for F of Side_Out loop TIO.Close (F); end loop;
    if Quit_Seen then   --  Ctrl-C / SIGTERM: everything written so far is flushed; a rerun resumes
       TIO.Put_Line (Msg ("quit", Sim_Quit.Which, Img (Last_Done)));
+      Write_Petitions;
       Write_Debug ("QUIT", Msg ("debug.quit", Sim_Quit.Which, Img (Last_Done)));
       TIO.Put_Line (Msg ("debug.attach"));
       Ada.Command_Line.Set_Exit_Status (130);
@@ -705,14 +743,23 @@ begin
       for E in Entity_Id loop
          Append (Rep, Fx.Head (Name (E), 10) & Fx.Tail (Img (Start_Known (E)), 8) & " ->" & Fx.Tail (Img (Known_Count (E)), 6)
                  & Fx.Tail (Img (Run_Learn (E)), 9) & Fx.Tail (Img (Run_Coin (E)), 7) & Fx.Tail (Img (Run_Bench_N (E)), 6)
-                 & " | " & Fx.Tail (Sgn (Int (St (E).Mood)), 5) & Fx.Tail (Img (St (E).Energy), 7) & ASCII.LF);
+                 & " | " & Fx.Tail (Sgn (Int (St (E).Mood)), 5) & Fx.Tail (Img (St (E).Energy), 7)
+                 & Fx.Tail (Img (Petitions_Of (E)), 5) & ASCII.LF);
       end loop;
       Append (Rep, Msg ("report.mixcols") & ASCII.LF);
       for E in Entity_Id loop
          Append (Rep, Fx.Head (Name (E), 10));
-         for A in Action loop Append (Rep, Fx.Tail (Img (Act_Count (E, A)), (if A = Explore then 8 else 7))); end loop;
+         for A in Action loop Append (Rep, Fx.Tail (Img (Act_Count (E, A)), (if A in Explore | Propose then 8 else 7))); end loop;
          Append (Rep, ASCII.LF);
       end loop;
+      declare
+         Per : Unbounded_String;
+      begin
+         for E in Entity_Id loop
+            Append (Per, (if E = 1 then "" else " ") & Name (E) & " " & Img (Petitions_Of (E)));
+         end loop;
+         Append (Rep, Msg ("report.pet", Img (Petition_Total), To_String (Per), Top_Topics (3)) & ASCII.LF);
+      end;
       if Length (Fails) = 0 then
          Export_Line := To_Unbounded_String
            (Msg ("report.export", Img (D_Files), Img (D_Lines), Img (E_Files),
@@ -745,10 +792,14 @@ begin
          Append (Rep, Msg ("export.failed", "run_report.txt not written") & ASCII.LF);
          Ada.Command_Line.Set_Exit_Status (1);
       end if;
+      Write_Petitions;
       Write_Debug ((if Length (Fails) = 0 then "OK" else "DRIFT"), (if Length (Fails) = 0 then "" else "error: " & To_String (Export_Line)));
       TIO.Put (To_String (Rep));
       TIO.Put (To_String (Console));
       TIO.Put_Line (Msg ("debug.attach"));
+      TIO.Put_Line (Msg ("pet.file", Img (Integer'Min (Petition_Total, Integer (Limit ("propose.file_cap", 40)))),
+                         Img (Petition_Total), Ada.Directories.Full_Name ("petitions.txt")));
+      TIO.Put_Line (Msg ("pet.attach"));
    end;
 exception
    when E : Usage_Error =>
@@ -757,11 +808,13 @@ exception
       Ada.Command_Line.Set_Exit_Status (2);
    when E : Diary_Error =>   --  drift, bad diary, seed mismatch: a validation stop
       if not Import_Done then TIO.Put_Line (Msg ("import.failed", Ada.Exceptions.Exception_Message (E))); end if;
+      if Import_Done then Write_Petitions; end if;
       Write_Debug ("DRIFT", Error_Brief (E));
       Report (E);
       Ada.Command_Line.Set_Exit_Status (1);
    when E : others =>
       if not Import_Done then TIO.Put_Line (Msg ("import.failed", Ada.Exceptions.Exception_Message (E))); end if;
+      if Import_Done then Write_Petitions; end if;
       Write_Debug ("CRASH", Error_Brief (E));
       Report (E);
       Ada.Command_Line.Set_Exit_Status (1);

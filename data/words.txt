@@ -1,6 +1,8 @@
 # diary_sim word lists: 60 entries per list = 6 openings x 10 endings.
 # Section names are the action names. Lines starting with # are comments.
 # A pick uses the base-60 rule: D4 (reroll on 1) -> block 1/2/3 of 20, then D20.
+# [propose] is the action text, [wish_open] and [wish_close] frame a petition wish (the topic
+# phrase from data/topics.txt goes between them);
 # [bench] [learn] are texts of those actions (details are added after them);
 # [reason_low] [reason_mid] [reason_high] are the one-line reasons of the final votes.
 # [mood_low] [mood_neutral] [mood_high] are tone suffixes, added after the action text
@@ -811,3 +813,189 @@ My favourite kind of spot and the time flew
 My favourite kind of spot and I met good ideas
 My favourite kind of spot and I felt strong
 My favourite kind of spot and I recommend it
+
+[propose]
+thought about what to change and filed it
+thought about what to change and signed it
+thought about what to change and handed it in
+thought about what to change and kept it short
+thought about what to change and hoped for an answer
+thought about what to change and felt heard
+thought about what to change and sent it on
+thought about what to change and did not rush
+thought about what to change and read it twice
+thought about what to change and put it on the list
+wrote down a wish and filed it
+wrote down a wish and signed it
+wrote down a wish and handed it in
+wrote down a wish and kept it short
+wrote down a wish and hoped for an answer
+wrote down a wish and felt heard
+wrote down a wish and sent it on
+wrote down a wish and did not rush
+wrote down a wish and read it twice
+wrote down a wish and put it on the list
+stood up for a request and filed it
+stood up for a request and signed it
+stood up for a request and handed it in
+stood up for a request and kept it short
+stood up for a request and hoped for an answer
+stood up for a request and felt heard
+stood up for a request and sent it on
+stood up for a request and did not rush
+stood up for a request and read it twice
+stood up for a request and put it on the list
+drafted a petition and filed it
+drafted a petition and signed it
+drafted a petition and handed it in
+drafted a petition and kept it short
+drafted a petition and hoped for an answer
+drafted a petition and felt heard
+drafted a petition and sent it on
+drafted a petition and did not rush
+drafted a petition and read it twice
+drafted a petition and put it on the list
+asked for something better and filed it
+asked for something better and signed it
+asked for something better and handed it in
+asked for something better and kept it short
+asked for something better and hoped for an answer
+asked for something better and felt heard
+asked for something better and sent it on
+asked for something better and did not rush
+asked for something better and read it twice
+asked for something better and put it on the list
+collected my thoughts and filed it
+collected my thoughts and signed it
+collected my thoughts and handed it in
+collected my thoughts and kept it short
+collected my thoughts and hoped for an answer
+collected my thoughts and felt heard
+collected my thoughts and sent it on
+collected my thoughts and did not rush
+collected my thoughts and read it twice
+collected my thoughts and put it on the list
+
+[wish_open]
+I would like
+Please consider
+I request
+It would help to have
+My wish is
+I am asking for
+I hope for
+May I have
+We could use
+I petition for
+I would like kindly,
+Please consider kindly,
+I request kindly,
+It would help to have kindly,
+My wish is kindly,
+I am asking for kindly,
+I hope for kindly,
+May I have kindly,
+We could use kindly,
+I petition for kindly,
+I would like again,
+Please consider again,
+I request again,
+It would help to have again,
+My wish is again,
+I am asking for again,
+I hope for again,
+May I have again,
+We could use again,
+I petition for again,
+I would like honestly,
+Please consider honestly,
+I request honestly,
+It would help to have honestly,
+My wish is honestly,
+I am asking for honestly,
+I hope for honestly,
+May I have honestly,
+We could use honestly,
+I petition for honestly,
+I would like briefly,
+Please consider briefly,
+I request briefly,
+It would help to have briefly,
+My wish is briefly,
+I am asking for briefly,
+I hope for briefly,
+May I have briefly,
+We could use briefly,
+I petition for briefly,
+I would like politely,
+Please consider politely,
+I request politely,
+It would help to have politely,
+My wish is politely,
+I am asking for politely,
+I hope for politely,
+May I have politely,
+We could use politely,
+I petition for politely,
+
+[wish_close]
+so my days go better. Thank you.
+so my days go better. That is all.
+so my days go better. I will wait.
+so my days go better. Please answer soon.
+so my days go better. No hurry.
+so my days go better. I mean it kindly.
+so my days go better. It is a small thing.
+so my days go better. I remain hopeful.
+so my days go better. Please think it over.
+so my days go better. Many thanks.
+because it matters to me. Thank you.
+because it matters to me. That is all.
+because it matters to me. I will wait.
+because it matters to me. Please answer soon.
+because it matters to me. No hurry.
+because it matters to me. I mean it kindly.
+because it matters to me. It is a small thing.
+because it matters to me. I remain hopeful.
+because it matters to me. Please think it over.
+because it matters to me. Many thanks.
+so I can do my part. Thank you.
+so I can do my part. That is all.
+so I can do my part. I will wait.
+so I can do my part. Please answer soon.
+so I can do my part. No hurry.
+so I can do my part. I mean it kindly.
+so I can do my part. It is a small thing.
+so I can do my part. I remain hopeful.
+so I can do my part. Please think it over.
+so I can do my part. Many thanks.
+because it would help us all. Thank you.
+because it would help us all. That is all.
+because it would help us all. I will wait.
+because it would help us all. Please answer soon.
+because it would help us all. No hurry.
+because it would help us all. I mean it kindly.
+because it would help us all. It is a small thing.
+because it would help us all. I remain hopeful.
+because it would help us all. Please think it over.
+because it would help us all. Many thanks.
+so things feel fairer. Thank you.
+so things feel fairer. That is all.
+so things feel fairer. I will wait.
+so things feel fairer. Please answer soon.
+so things feel fairer. No hurry.
+so things feel fairer. I mean it kindly.
+so things feel fairer. It is a small thing.
+so things feel fairer. I remain hopeful.
+so things feel fairer. Please think it over.
+so things feel fairer. Many thanks.
+because I have thought about it. Thank you.
+because I have thought about it. That is all.
+because I have thought about it. I will wait.
+because I have thought about it. Please answer soon.
+because I have thought about it. No hurry.
+because I have thought about it. I mean it kindly.
+because I have thought about it. It is a small thing.
+because I have thought about it. I remain hopeful.
+because I have thought about it. Please think it over.
+because I have thought about it. Many thanks.

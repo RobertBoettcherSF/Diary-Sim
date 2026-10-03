@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  The shared world of diary_sim: the four entities, the vocabulary (base
 --  words, who knows what, coined words), the bench kernels and the final votes.
 --  One world per run; Init rebuilds it from scratch, so a replay from tick 1
@@ -17,8 +17,9 @@ package Sim_World is
    function Kind (E : Entity_Id) return String;   --  engineer reviewer vice_president human
 
    --  Diary word lists (data/words.txt): action texts, mood tones, vote reasons.
-   type List_Id is (Rest, Work, Explore, Talk, Wander, Bench, Learn,
-                    Mood_Low, Mood_Neutral, Mood_High, Reason_Low, Reason_Mid, Reason_High);
+   type List_Id is (Rest, Work, Explore, Talk, Wander, Bench, Propose, Learn,
+                    Mood_Low, Mood_Neutral, Mood_High, Reason_Low, Reason_Mid, Reason_High,
+                    Wish_Open, Wish_Close);
    subtype Action is List_Id range Rest .. Learn;   --  Learn is never rolled: it delivers a lesson
    Words : array (List_Id) of Sim_Util.Str_Vectors.Vector;
 
@@ -54,6 +55,22 @@ package Sim_World is
    --  total weight.  rule30.enabled = 0 gives the old fixed D20 table.
    --  PROOF-LATER: Importance 4/10, Urgency 3/10, SPARK2 (bit arithmetic, weight sums > 0)
    function Choose (Seed : Int; E : Entity_Id; Tick : Int; Energy, Mood : Integer) return Action;
+
+   --  ---- petitions ------------------------------------------------------------------
+   --  The propose action files a wish for a change in its own world.  Topics come from
+   --  data/topics.txt (name, five weights, phrase); the topic is rolled by state-weighted
+   --  dice, the wording from the [wish_open] / [wish_close] lists (base-60 picks).  All of
+   --  it is a pure function of (seed, entity, tick, state); a replay rebuilds the list.
+   --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (parsing the topic table, weight sums)
+   procedure Load_Topics (Lines : Sim_Util.Str_Vectors.Vector);   --  call before Init
+   function Topic_Count return Natural;
+   --  Files a petition by E at Tick (state: energy, mood, benches so far); returns its number P<n>.
+   function File_Petition (Seed : Int; E : Entity_Id; Tick : Int; Energy, Mood, Benches : Integer) return Positive;
+   function Petition_Total return Natural;
+   function Petitions_Of (E : Entity_Id) return Natural;
+   function Petition_Topic (N : Positive) return String;
+   function Petition_Line (N : Positive) return String;   --  P<n> tick=<t> from=<id> topic=<topic> [repeat=<k>] wish=<text>
+   function Top_Topics (N : Positive) return String;      --  "more_rest 5, quieter_mood 4"
 
    --  ---- bench ------------------------------------------------------------
    --  A built-in integer kernel with a fixed step budget.  Steps, result and

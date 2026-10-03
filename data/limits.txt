@@ -47,3 +47,13 @@ lean.low_mood = 30
 lean.high_mood = 30
 lean.few_words = 20
 lean.few_words_n = 100
+# Petitions (propose action; only with rule30.enabled = 1).  weight.propose: base weight
+# (like weight.rest); lean.propose: extra points when tired or unhappy; propose.cooldown:
+# ticks an entity waits after a petition; propose.repeat_percent: chance that it re-files
+# its previous topic (the line then gets a repeat=N marker); propose.file_cap: lines kept
+# in petitions.txt (the oldest drop out of the file, never out of the diaries).
+weight.propose = 1
+lean.propose = 5
+propose.cooldown = 80
+propose.repeat_percent = 15
+propose.file_cap = 40

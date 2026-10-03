@@ -29,7 +29,7 @@ vocabulary): start with `--fresh`.
 State per entity: energy 0..100, mood -100..100 (signed in the JSON), location
 0..3 (office, lab, cafe, home), all clamped. The ranges are data, not code:
 `data/limits.txt` (built-in defaults if the file is missing). Entities start at
-energy 80, mood 0, home. Actions: rest, work, explore, talk, wander, bench, chosen by
+energy 80, mood 0, home. Actions: rest, work, explore, talk, wander, bench, propose, chosen by
 a weighted roll (below); `learn` is never rolled, it is the forced next event of an
 entity that was taught a word. Each action is a small fixed change (`Energy_D`,
 `Mood_D`, `Home` in `diary_sim.adb`); mood stays -100..100. Per tick the entities
@@ -54,12 +54,12 @@ drift (up to `rule30.strength` points). On top of that the state leans the weigh
 low energy -> rest (less work), high energy -> work and bench (less rest), low mood ->
 talk and explore, high mood -> work (less talk and explore, so mood does not sit at the
 ceiling), few known words -> talk. Base weights (rest 30, work 20, explore 15, talk 15,
-wander 15, bench 5), the strengths of all leans and the Rule 30 settings are in
+wander 15, bench 5, propose 1), the strengths of all leans and the Rule 30 settings are in
 `data/limits.txt`. One `Roll` (salt 0) over the weight total picks the action.
 `rule30.enabled = 0` restores the old fixed D20 table exactly. The end report and
 `debug.txt` show each entity's action counts. Seed 42, 1000 ticks (rest/work/explore/
-talk/wander/bench): ada 255/123/63/113/153/195, gemini 278/236/135/165/40/61, replika
-308/248/162/123/45/28, robert 198/147/10/320/114/148.
+talk/wander/bench/propose): ada 252/120/65/110/175/179/6, gemini 277/226/135/171/34/87/4,
+replika 304/243/163/100/58/21/4, robert 203/159/13/320/97/139/8 (plus the forced learn events).
 
 Every random choice is `hash(seed, entity, tick, salt)` (splitmix64-style mix, no
 running RNG), so any tick can be recomputed alone. Diary wording is picked from
@@ -156,6 +156,36 @@ base-60 pick from `[reason_low]`, `[reason_mid]` or `[reason_high]` in
 highest sum of votes; biggest disagreement = largest spread between entities on one
 location. Location names: `loc.0`..`loc.3` in `data/messages.txt`.
 
+## Petitions (the propose action)
+
+`propose` lets an entity file a petition: a wish for a change to its own world or
+source. Weights: `weight.propose` (1) plus `lean.propose` extra points when tired or
+unhappy; after a petition the entity cannot file another for `propose.cooldown` ticks
+(80). Only active with `rule30.enabled = 1` (the old fixed table has no propose).
+The topic is rolled by state-weighted dice from the fixed list `data/topics.txt`
+(`name base low_energy low_mood few_words many_benches = phrase`: tired -> `more_rest`,
+`faster_work_recovery`; low mood -> `quieter_mood`, `more_talk_partners`; few known
+words -> `more_words`; many benches -> `bigger_bench_budget`; plus `new_action`,
+`different_locations`, `other`). With `propose.repeat_percent` (15) chance the entity
+re-files its previous topic; the line then carries `repeat=N` (N earlier petitions of
+that entity on that topic). The wish text is `[wish_open]` + topic phrase +
+`[wish_close]` from `data/words.txt` (60 entries each, base-60 picks). Everything is a
+pure function of (seed, entity, tick, state), so the replay rebuilds it.
+
+`petitions.txt` (in the working directory) is a **view**, rewritten atomically at the end
+of every run (also on quit, crash and drift): a `# seed ...` header, then the newest
+`propose.file_cap` (40) lines, one per petition:
+
+```
+P12 tick=560 from=robert topic=faster_work_recovery repeat=1 wish=Please consider ... Thank you.
+```
+
+Older petitions drop out of the file, never out of the diaries (each petition has a
+`filed petition P<n> (<topic>)` diary line). Delete the file and rerun to rebuild it.
+Console and `debug.txt` show petitions per entity (`pet N`) and the top topics;
+the console prints the path and `attach petitions.txt (small) for the agenda`.
+Old diaries are incompatible: use `--fresh`.
+
 ## Import, report, export (console of a normal run, about 20-35 lines)
 
 ```
@@ -217,7 +247,7 @@ paste it` and `back up diaries/ before the next run`.
 
 `diary_sim.adb` (main: CLI, loop, side files, debug.txt), `sim_quit.ads/.adb` (Ctrl-C and SIGTERM flag), `sim_world.ads/.adb` (entities,
 vocabulary, Rule 30 personality, bench kernels, votes and summary text), `sim_util.ads/.adb` (hash rolls,
-line parsing, data-file helpers), `data/words.txt`, `data/limits.txt`,
+line parsing, data-file helpers), `data/words.txt`, `data/topics.txt` (petition topics), `data/limits.txt`,
 `data/messages.txt` (all console wording), `data/vocab.txt`, `data/help.txt`,
 `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
 `Version:` header (`make version-check`); a touched file goes up by 0.001. V&V is
