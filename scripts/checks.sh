@@ -4,6 +4,7 @@
 # folders (words, bench), summary, crash then resume, start_percent, petitions,
 # make run, kalpa sessions (vote, median, resume, explicit, drift).
 # Usage: scripts/checks.sh [BIN]     (works in a scratch directory)
+export DIARY_HOME=.   # every scenario saves in its own current directory (the default is ../diary-data, see scenario 22)
 exec < /dev/null   # never a terminal: the 'no previous diary' question is not asked (see scenario 20)
 root=$(cd "$(dirname "$0")/.." && pwd)
 bin=$(readlink -f "${1:-$root/bin/diary_sim}")
@@ -53,7 +54,7 @@ echo "== 5. drift: robert's stored line 300 edited, ada cut to 100 lines =="
 fresh_copy; head -n 100 "$w/base/diaries/ada.jsonl" > diaries/ada.jsonl
 sed -i '300s/"text":"[a-z]/"text":"X/' diaries/robert.jsonl; n=$(lines diaries)
 rm -f last_error.txt; "$bin" --ticks=1000 > drift5.txt 2>&1; rc=$?; cat drift5.txt
-[ $rc = 1 ] && ! [ -e last_error.txt ] && ! grep -qi 'traceback\|Diary_Sim at\|last_error' drift5.txt && [ "$(sed -n '/drifted/,$p' drift5.txt | wc -l)" -le 4 ] && grep -q '^likely cause: these diaries were probably written by an older build or with different data/ settings' drift5.txt \
+[ $rc = 1 ] && ! [ -e last_error.txt ] && ! grep -qi 'traceback\|Diary_Sim at\|last_error' drift5.txt && [ "$(sed -n '/drifted/,$p' drift5.txt | wc -l)" -le 5 ] && grep -q '^likely cause: these diaries were probably written by an older build or with different data/ settings' drift5.txt \
   && grep -q '^fix: move them aside (mv diaries diaries_old_X) or start over with --fresh' drift5.txt && grep -q 'first difference at column [0-9]*: stored ".*" vs generated' drift5.txt \
   && ok "drift: exit 1, 3 plain lines (what differs, likely cause, fixes), no traceback, no last_error.txt" || bad "drift console"
 [ $rc = 1 ] && grep -q "robert tick 300" debug.txt && ok "stopped (exit 1), names robert tick 300 in debug.txt" || bad "rc=$rc"
@@ -242,7 +243,7 @@ grep -q 'sessions.txt is from seed 7' out.txt && ok "sessions.txt of another see
 echo "== 20. no previous diary: the question (terminal) and the non-interactive paths =="
 rm -rf "$w/ask"; mkdir -p "$w/ask/bin" "$w/ask/run"; cp "$bin" "$w/ask/bin/"; cp -r "$root/data" "$w/ask/data"; ab="$w/ask/bin/diary_sim"; cd "$w/ask/run" || exit 1
 "$ab" > out.txt 2>&1; rc=$?
-[ $rc = 2 ] && grep -q '^No previous diary found in ./diaries and no terminal to ask: copy a backed-up diaries/ here, then make run' out.txt && [ -z "$(ls -A . | grep -v "^out.txt$")" ] \
+[ $rc = 2 ] && grep -q '^No previous diary found in .*/diaries and no terminal to ask: copy a backed-up diaries/ here, then make run' out.txt && [ -z "$(ls -A . | grep -v "^out.txt$")" ] \
   && ok "no diaries, no terminal, no length: exit 2 with the hint, nothing written (not even diaries/ or debug.txt)" || bad "no-terminal stop (rc=$rc: $(ls -A . | tr '\n' ' '))"
 mkdir diaries; "$ab" > out.txt 2>&1; rc=$?; [ $rc = 2 ] && [ -z "$(ls -A diaries)" ] && ok "an EMPTY diaries/ counts as no previous diary" || bad "empty diaries/ (rc=$rc)"
 echo "# seed 42" > diaries/sessions.txt; "$ab" > out.txt 2>&1; rc=$?; [ $rc = 2 ] && ok "diaries/ without any *.jsonl counts as no previous diary" || bad "no jsonl (rc=$rc)"
@@ -301,6 +302,38 @@ for o in --fresh --yes "--more 5" "--crash-at 9"; do bin/diary_sim --preview $o 
 list > "$w/pv_after2.txt"; cmp -s "$w/pv_before.txt" "$w/pv_after2.txt" && ok "--preview with --fresh/--yes/--more/--crash-at: usage error (exit 2), still nothing written" || bad "rejected preview wrote files"
 bin/diary_sim --ticks 20 > /dev/null 2>&1; cp -r diaries "$w/pv_d"; list > "$w/pv_b3.txt"; bin/diary_sim --preview > /dev/null 2>&1; list > "$w/pv_a3.txt"
 cmp -s "$w/pv_b3.txt" "$w/pv_a3.txt" && ok "--preview next to an existing ./diaries leaves it (and the rest of the tree) untouched" || bad "preview touched existing diaries"
+
+echo "== 22. the save lives next to the source folder: replace the source, the world continues =="
+rm -rf "$w/par"; mkdir -p "$w/par/A"; tar -C "$root" --exclude=.git --exclude=obj --exclude=bin --exclude=diaries --exclude=entities -cf - . | tar -C "$w/par/A" -xf -
+( cd "$w/par/A" && make > /dev/null 2>&1 && cd / && env -u DIARY_HOME "$w/par/A/bin/diary_sim" --more 30 --every 1000 > "$w/par/o1.txt" 2>&1 )
+[ -d "$w/par/diary-data/diaries" ] && [ ! -e "$w/par/A/diaries" ] && [ "$(wc -l < "$w/par/diary-data/diaries/ada.jsonl")" = 30 ] && grep -q "^Saved to $w/par/diary-data\$" "$w/par/o1.txt" \
+  && ok "default save folder = ../diary-data (started from /, not from the source folder); nothing inside the source tree; 'Saved to <abs path>' printed" || bad "save location"
+rm -rf "$w/par/A"; mkdir "$w/par/B"; tar -C "$root" --exclude=.git --exclude=obj --exclude=bin --exclude=diaries --exclude=entities -cf - . | tar -C "$w/par/B" -xf -
+( cd "$w/par/B" && env -u DIARY_HOME make run TICKS=25 EVERY=1000 > "$w/par/o2.txt" 2>&1 )
+grep -q 'import OK: 4 entities, 30 ticks verified, continuing from 31' "$w/par/o2.txt" && [ "$(wc -l < "$w/par/diary-data/diaries/ada.jsonl")" = 55 ] && grep -q '^S2 start=30 ' "$w/par/diary-data/diaries/sessions.txt" && grep -q '^session 2 ' "$w/par/o2.txt" \
+  && ok "source folder deleted and a fresh copy built next to diary-data: the world continues (session 2, replay-verified)" || bad "continue after replacing the source"
+cd "$w/par/B" && env -u DIARY_HOME bin/diary_sim --more 0 --home "$w/par/other" > /dev/null 2>&1; [ -d "$w/par/other" ] && ok "--home DIR chooses the save folder" || bad "--home"
+echo "   --- three short sessions in a row accumulate ---"
+rm -rf "$w/acc"; mkdir -p "$w/acc"; cd "$w/acc" || exit 1; pw=0; pt=0
+for i in 1 2 3; do
+  "$bin" --more 40 --every 1000 > "o$i.txt" 2>&1; rc=$?
+  t=$(wc -l < diaries/ada.jsonl); s=$(grep -c '^S[0-9]* ' diaries/sessions.txt); words=$(cat entities/*/words.txt | grep -vc '^#')
+  echo "   run $i: exit $rc, ada ticks $t, sessions $s, word lines $words"
+  [ $rc = 0 ] && [ "$t" = $((40 * i)) ] && [ "$s" = $i ] && [ "$words" -gt "$pw" ] && grep -q "^session $i " "o$i.txt" || bad "run $i did not accumulate"
+  [ $i -gt 1 ] && ! grep -q "import OK: 4 entities, $((40 * (i - 1))) ticks verified" "o$i.txt" && bad "run $i did not verify the earlier ticks"
+  pw=$words
+done
+grep -q 'import OK: 4 entities, 80 ticks verified, continuing from 81' o3.txt && grep -q '^session 3 .*ticks 80 -> 120 (+40)' o3.txt && [ "$(grep -c . diaries/sessions.txt)" -ge 5 ] && ok "1, 2, 3 runs: ticks 40/80/120, sessions 1/2/3, word lines grow, each run replay-verifies the earlier ones, 'since the last session' block shown" || bad "accumulation"
+[ "$(wc -c < debug.txt)" -le 1500 ] && grep -q '^session 3 ' debug.txt && grep -q '^Saved to ' debug.txt && ok "debug.txt stays <= 1500 B and carries the session and save lines" || bad "debug.txt session lines"
+rm -rf "$w/mig"; mkdir -p "$w/mig/S"; tar -C "$root" --exclude=.git --exclude=obj --exclude=bin --exclude=diaries --exclude=entities -cf - . | tar -C "$w/mig/S" -xf -; ( cd "$w/mig/S" && make > /dev/null 2>&1 && DIARY_HOME=. bin/diary_sim --more 10 --every 1000 > /dev/null 2>&1 )
+cd "$w/mig/S" && env -u DIARY_HOME bin/diary_sim --more 5 --every 1000 > "$w/mig/o.txt" 2>&1
+grep -q '^Found a save inside the source folder' "$w/mig/o.txt" && [ -d diaries ] && grep -q 'import OK: none (fresh start' "$w/mig/o.txt" && ok "a save inside the source folder, no terminal: hint only, nothing copied or touched" || bad "migration hint"
+if command -v python3 > /dev/null; then
+  rm -rf "$w/mig/diary-data"
+  env -u DIARY_HOME python3 "$w/pty_run.py" "$w/mig/S" 'y\n' "$w/mig/S/bin/diary_sim" --more 5 --every 1000 > "$w/mig/o2.txt" 2>&1
+  grep -q 'Copy it to ../diary-data? \[y/N\]' "$w/mig/o2.txt" && [ "$(wc -l < "$w/mig/diary-data/diaries/ada.jsonl")" = 15 ] && [ "$(wc -l < diaries/ada.jsonl)" = 10 ] && grep -q 'import OK: 4 entities, 10 ticks verified' "$w/mig/o2.txt" \
+    && ok "terminal, answer y: the save is COPIED to ../diary-data (original untouched) and continued there" || bad "migration copy"
+fi
 
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="

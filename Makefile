@@ -1,8 +1,8 @@
-# Version: 0.008
+# Version: 0.009
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then continue the simulation in this folder: loads (imports and
-#                 replay-verifies) ./diaries (and ./entities if present), never --fresh.
+#                 replay-verifies) the save in ../diary-data (--home / $DIARY_HOME), never --fresh.
 #                 make run TICKS=400 EVERY=100 SEED=42   (TICKS = NEW ticks on top of the
 #                 lowest common tick on disk; without TICKS the four entities VOTE on the
 #                 session length (data/kalpas.txt, median); SEED only matters when there

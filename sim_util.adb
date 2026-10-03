@@ -1,8 +1,8 @@
---  Version: 0.006
+--  Version: 0.007
 pragma Ada_2022;
 
 with Ada.Calendar.Formatting, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Maps, Ada.Directories,
-     Ada.Streams.Stream_IO, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO, Interfaces, Interfaces.C;
+     Ada.Streams.Stream_IO, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO, GNAT.OS_Lib, Interfaces, Interfaces.C;
 
 package body Sim_Util is
 
@@ -23,13 +23,81 @@ package body Sim_Util is
    function Clamp (V, Lo, Hi : Integer) return Integer is (Integer'Max (Lo, Integer'Min (Hi, V)));
    function Sgn (V : Int) return String is ((if V > 0 then "+" else "") & Img (V));
 
+   Root_Cache : Ada.Strings.Unbounded.Unbounded_String;
+
+   function Project_Root return String is
+      use Ada.Strings.Unbounded;
+      function Exe_Path return String is
+         use type GNAT.OS_Lib.String_Access;
+         Name : constant String := Ada.Command_Line.Command_Name;
+         P    : GNAT.OS_Lib.String_Access;
+      begin
+         if Fx.Index (Name, "/") > 0 then return Ada.Directories.Full_Name (Name); end if;
+         P := GNAT.OS_Lib.Locate_Exec_On_Path (Name);   --  started through PATH
+         if P = null then return Ada.Directories.Full_Name (Name); end if;
+         declare
+            R : constant String := P.all;
+         begin
+            GNAT.OS_Lib.Free (P);
+            return R;
+         end;
+      end Exe_Path;
+   begin
+      if Length (Root_Cache) = 0 then
+         declare
+            Dir : constant String := Ada.Directories.Containing_Directory (Exe_Path);
+         begin
+            Root_Cache := To_Unbounded_String
+              ((if Ada.Directories.Simple_Name (Dir) = "bin" then Ada.Directories.Containing_Directory (Dir) else Dir));
+         end;
+      end if;
+      return To_String (Root_Cache);
+   exception
+      when others => return ".";
+   end Project_Root;
+
    function Data_Path (File : String) return String is
    begin
-      return (if Ada.Directories.Exists ("data/" & File) then "data/" & File
-              else Ada.Directories.Containing_Directory (Ada.Command_Line.Command_Name) & "/../data/" & File);
+      return (if Ada.Directories.Exists ("data/" & File) then "data/" & File else Project_Root & "/data/" & File);
    exception
       when others => return "data/" & File;
    end Data_Path;
+
+   procedure Copy_File_Bytes (From, To : String) is
+      use Ada.Streams;
+      Src, Dst : Ada.Streams.Stream_IO.File_Type;
+      Buf  : Stream_Element_Array (1 .. 65_536);
+      Last : Stream_Element_Offset;
+   begin
+      Ada.Streams.Stream_IO.Open (Src, Ada.Streams.Stream_IO.In_File, From);
+      Ada.Streams.Stream_IO.Create (Dst, Ada.Streams.Stream_IO.Out_File, To);
+      while not Ada.Streams.Stream_IO.End_Of_File (Src) loop
+         Ada.Streams.Stream_IO.Read (Src, Buf, Last);
+         Ada.Streams.Stream_IO.Write (Dst, Buf (1 .. Last));
+      end loop;
+      Ada.Streams.Stream_IO.Close (Src);
+      Ada.Streams.Stream_IO.Close (Dst);
+   end Copy_File_Bytes;
+
+   procedure Copy_Tree (From, To : String) is
+      use Ada.Directories;
+      S : Search_Type;
+      D : Directory_Entry_Type;
+   begin
+      Create_Path (To);
+      Start_Search (S, From, "*", [Directory | Ordinary_File => True, others => False]);
+      while More_Entries (S) loop
+         Get_Next_Entry (S, D);
+         if Simple_Name (D) not in "." | ".." then
+            if Kind (D) = Directory then
+               Copy_Tree (Full_Name (D), To & "/" & Simple_Name (D));
+            else
+               Copy_File_Bytes (Full_Name (D), To & "/" & Simple_Name (D));
+            end if;
+         end if;
+      end loop;
+      End_Search (S);
+   end Copy_Tree;
 
    procedure Read_Lines (File : String; Into : in out Str_Vectors.Vector; Found : out Boolean) is
       F : Ada.Text_IO.File_Type;

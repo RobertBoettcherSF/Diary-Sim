@@ -1,4 +1,4 @@
---  Version: 0.006
+--  Version: 0.007
 --  Pure helpers of diary_sim: deterministic hash rolls and the diary line
 --  format (read side).  Standard library only.
 pragma Ada_2022;
@@ -12,7 +12,12 @@ package Sim_Util is
    No_Value : constant Int := Int'First;   --  Field: key missing or not a number
 
    --  ---- data/ files: "key = text" lines and wording ------------------------
-   function Data_Path (File : String) return String;   --  ./data or next to the exe
+   function Data_Path (File : String) return String;   --  ./data or <project root>/data
+   --  The project (source) folder: the folder above bin/ that holds the executable (or the
+   --  executable's own folder), absolute and fixed at the first call (call it before any cd).
+   function Project_Root return String;
+   --  Copies a folder with everything in it (never moves or deletes anything).
+   procedure Copy_Tree (From, To : String);
    procedure Read_Lines (File : String; Into : in out Str_Vectors.Vector; Found : out Boolean);
    procedure Load_Keys (Lines : Str_Vectors.Vector);   --  keep every "key = text" line
    --  A loaded text with {1}..{7} filled in and \n as line break; if the key

@@ -1,4 +1,4 @@
---  Version: 0.012
+--  Version: 0.013
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -8,6 +8,9 @@
 --  Session length: without --ticks / --more the four entities vote (Kalpas, data/kalpas.txt)
 --  and the median is the number of new ticks; diaries/sessions.txt records every session
 --  and is verified on import (see README).
+--  Where it saves: everything (diaries/, entities/, debug.txt, reports) lives in ONE save folder:
+--  --home DIR, else $DIARY_HOME, else ../diary-data next to the source folder, so the source
+--  folder can be deleted and replaced after every build (see README).
 --  entities/<id>/words.txt and bench.txt are append-only working files (NOT a VM):
 --  a line the replay produces and the file lacks is appended, so they can be
 --  rebuilt from nothing.  Bench hook for later: see README (PROOF-LATER).
@@ -16,7 +19,7 @@ pragma Interrupt_State (SIGINT, USER);
 pragma Interrupt_State (SIGTERM, USER);
 pragma Ada_2022;
 
-with Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories,
+with Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
      GNAT.Traceback.Symbolic, Sim_Quit, Sim_Util, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
@@ -34,11 +37,18 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.012";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.013";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
    Fresh, Seed_Shown : Boolean := False;
+   Src_Root : constant String := Project_Root;   --  the source folder, fixed before any cd
+   Home_Opt, Home_Path : Unbounded_String;      --  --home DIR / the save folder in use
+   Session_N : Natural := 0;                    --  this run's session number (sessions.txt)
+   Snap_Mood, Snap_Energy : array (Entity_Id) of Integer := [others => 0];   --  state at the session start
+   Snap_Pet : array (Entity_Id) of Natural := [others => 0];
+   Snap_Votes : All_Stats;
+   Since_Head, Saved_Line : Unbounded_String;   --  for debug.txt
    Preview : Boolean := False;         --  --preview: simulate in memory, write nothing, show excerpts
    Sample : array (Entity_Id) of Str_Vectors.Vector;   --  preview: every diary line
    Yes : Boolean := False;             --  --yes: no question when there is no previous diary
@@ -448,9 +458,9 @@ procedure Diary_Sim is
 
    --  No previous diary and no --fresh / --yes: ask on a terminal.  True = go on.  Nothing is
    --  written before the answer (no diaries/, no debug.txt), and nothing for an N.
-   function Confirm_New return Boolean is
+   function Ask_Yes (Prompt : String) return Boolean is
    begin
-      TIO.Put (Msg ("ask.prompt") & " ");
+      TIO.Put (Prompt & " ");
       TIO.Flush;
       declare
          Answer : constant String :=
@@ -462,7 +472,39 @@ procedure Diary_Sim is
       when TIO.End_Error =>
          TIO.New_Line;
          return False;
-   end Confirm_New;
+   end Ask_Yes;
+
+   function Confirm_New return Boolean is (Ask_Yes (Msg ("ask.prompt", Ada.Directories.Full_Name ("diaries"))));
+
+   --  The save folder: --home DIR, else $DIARY_HOME, else ../diary-data next to the source folder
+   --  (so the source folder can be replaced at will).  A save inside the source folder is COPIED
+   --  there on a yes (never moved or deleted); without a terminal only a hint is printed.
+   --  Then every relative path of the program is relative to it (cd).
+   procedure Resolve_Home is
+      Env : constant String := Ada.Environment_Variables.Value ("DIARY_HOME", "");
+      Def : constant String := Ada.Directories.Containing_Directory (Src_Root) & "/diary-data";
+   begin
+      if Length (Home_Opt) > 0 then
+         Home_Path := To_Unbounded_String (Ada.Directories.Full_Name (To_String (Home_Opt)));
+      elsif Env /= "" then
+         Home_Path := To_Unbounded_String (Ada.Directories.Full_Name (Env));
+      else
+         Home_Path := To_Unbounded_String (Def);
+         if Ada.Directories.Exists (Src_Root & "/diaries") and then not Ada.Directories.Exists (Def) then
+            if Is_Tty (0) and then Is_Tty (1) then
+               if Ask_Yes (Msg ("migrate.ask")) then
+                  Copy_Tree (Src_Root & "/diaries", Def & "/diaries");
+                  if Ada.Directories.Exists (Src_Root & "/entities") then Copy_Tree (Src_Root & "/entities", Def & "/entities"); end if;
+                  TIO.Put_Line (Msg ("migrate.done", Src_Root & "/diaries", Def));
+               end if;
+            else
+               TIO.Put_Line (Msg ("migrate.hint", Src_Root & "/diaries", Def, Src_Root));
+            end if;
+         end if;
+      end if;
+      Ada.Directories.Create_Path (To_String (Home_Path));
+      Ada.Directories.Set_Directory (To_String (Home_Path));
+   end Resolve_Home;
 
    function Number (Opt, Text : String) return Int is
    begin
@@ -495,9 +537,9 @@ procedure Diary_Sim is
    --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (length cap, text assembly)
    procedure Write_Debug (Status, Err : String) is
       Cap : constant := 1500;
-      type Part_Id is (Head, Ticks_P, Kalpa_P, Import_P, Export_P, Ents, Mix_P, Topics_P, Votes, Error_P);
+      type Part_Id is (Head, Ticks_P, Kalpa_P, Since_P, Import_P, Export_P, Ents, Mix_P, Topics_P, Votes, Error_P);
       Part : array (Part_Id) of Unbounded_String;
-      Order : constant array (1 .. 10) of Part_Id := [Head, Ticks_P, Kalpa_P, Error_P, Ents, Mix_P, Topics_P, Votes, Import_P, Export_P];
+      Order : constant array (1 .. 11) of Part_Id := [Head, Ticks_P, Kalpa_P, Since_P, Error_P, Ents, Mix_P, Topics_P, Votes, Import_P, Export_P];
       Used : Natural := 0;
       Out_Text : Unbounded_String;
       F : TIO.File_Type;
@@ -509,6 +551,14 @@ procedure Diary_Sim is
           then Msg ("debug.ticks", Img (Int (Common) + 1), Img (Last_Done), Img (Last_Done - Int (Common)), Img (Common))
           else Msg ("debug.ticks_v", Img (Last_Done), Img (Common))) & ASCII.LF);
       if Length (Kalpa_Line) > 0 then Part (Kalpa_P) := Kalpa_Line & ASCII.LF; end if;
+      if Length (Since_Head) > 0 then
+         declare
+            T : constant String := To_String (Since_Head);
+         begin
+            Part (Since_P) := To_Unbounded_String (T (T'First .. Fx.Index (T, "" & ASCII.LF) - 1) & ASCII.LF);
+         end;
+      end if;
+      if Length (Saved_Line) > 0 then Append (Part (Since_P), To_String (Saved_Line) & ASCII.LF); end if;
       Part (Import_P) := To_Unbounded_String ((if Length (Import_Block) > 0 then To_String (Import_Block) else Msg ("debug.pending", "import"))
                                               & ASCII.LF);
       Part (Export_P) := To_Unbounded_String ((if Length (Export_Line) > 0 then To_String (Export_Line) else Msg ("debug.pending", "export"))
@@ -822,20 +872,26 @@ procedure Diary_Sim is
             Warn (Msg ("warn.session_ahead", Img (Sessions (I).N), Img (Sessions (I).Start), Img (Common)));
          end if;
       end loop;
+      Session_N := (if Sessions.Is_Empty then 0 else Sessions.Last_Element.N);
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False);
-         if R.Len > 0 then Append_Session (R); end if;
+         if R.Len > 0 then
+            Append_Session (R);
+            Session_N := Next_N;
+         end if;
          Kalpa_Line := To_Unbounded_String
            ((if R.Len > 0 then Msg ("kalpa.explicit", Img (Next_N), Yuga (Next_N), Img (R.Len), Votes_Text (V))
              else Msg ("kalpa.none", Votes_Text (V))));
       elsif Last_Ok > 0 and then Sessions (Last_Ok).Start + Sessions (Last_Ok).Len > Int (Common) then
          R := Sessions (Last_Ok);   --  an unfinished session (crash, quit): same target as decided
+         Session_N := R.N;
          Ticks := R.Start + R.Len;
          Kalpa_Line := To_Unbounded_String (Msg ("kalpa.resume", Img (R.N), Yuga (R.N), Votes_Text (R.Votes), Img (R.Len), Img (Ticks)));
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
+         Session_N := Next_N;
          Kalpa_Line := To_Unbounded_String (Msg ("kalpa.vote", Img (Next_N), Yuga (Next_N), Votes_Text (V), Img (R.Len)));
       end if;
    end Decide_Session;
@@ -855,9 +911,47 @@ procedure Diary_Sim is
       if Import_Done then Write_Petitions; end if;
       Write_Debug ("DRIFT", "error: " & Message & (if Built'Length > 0 then ASCII.LF & Msg ("drift.cause", Built) else ""));
       TIO.Put_Line (Msg ("debug.attach"));
+      TIO.Put_Line (To_String (Saved_Line));
       Ada.Command_Line.Set_Exit_Status (1);
    end Validation_Stop;
 
+
+   --  The block after a session: what changed since the loaded diaries (the session start).
+   function Since_Text return String is
+      New_Ticks : constant Int := Int'Max (0, Ticks - Int (Common));
+      Res : Unbounded_String;
+   begin
+      if New_Ticks = 0 then return Msg ("since.none", Img (Session_N), Img (Ticks)) & ASCII.LF; end if;
+      Res := To_Unbounded_String (Msg ("since.head", Img (Session_N), Yuga (Positive'Max (1, Session_N)), Img (Common),
+                                       Img (Ticks), Img (New_Ticks)) & ASCII.LF);
+      for E in Entity_Id loop
+         declare
+            Coined_All, Best_Loc : Natural := 0;
+            Best : Int := Int'First;
+         begin
+            for W in Base_Count + 1 .. Count loop
+               if Coined_By (W) = Name (E) then Coined_All := Coined_All + 1; end if;
+            end loop;
+            for L in 0 .. 3 loop   --  favourite place of this session: vote of the new ticks only
+               declare
+                  A : Loc_Stats renames Votes_Of (E) (L);
+                  B : Loc_Stats renames Snap_Votes (E) (L);
+                  D : constant Loc_Stats := (A.N - B.N, A.Mood - B.Mood, A.Energy - B.Energy, A.Learned - B.Learned,
+                                             A.Coined - B.Coined, A.Benches - B.Benches);
+               begin
+                  if D.N > 0 and then Vote (D) > Best then Best := Vote (D); Best_Loc := L; end if;
+               end;
+            end loop;
+            Append (Res, Fx.Head (Name (E), 9)
+                    & Msg ("since.words", Img (Known_Count (E)), Img (Known_Count (E) - Start_Known (E)), Img (Run_Learn (E)),
+                           Img (Act_Count (E, Learn)), Img (Run_Coin (E)), Img (Coined_All))
+                    & " | " & Msg ("since.pet", Img (Petitions_Of (E) - Snap_Pet (E)), Img (Petitions_Of (E)))
+                    & " | " & Msg ("since.state", Sgn (Int (Snap_Mood (E))), Sgn (Int (St (E).Mood)), Img (Snap_Energy (E)),
+                                   Img (St (E).Energy), Msg ("loc." & Img (Best_Loc))) & ASCII.LF);
+         end;
+      end loop;
+      return To_String (Res);
+   end Since_Text;
 
    --  --preview (make demo): 200 ticks of a new world in memory, a few excerpts on screen,
    --  nothing on disk (no diaries/, entities/, debug.txt, reports, petitions.txt).
@@ -943,7 +1037,7 @@ begin
          Eq  : constant Natural := Fx.Index (A, "=");
          Opt : constant String := (if Eq > 0 then A (A'First .. Eq - 1) else A);
          Num : constant Boolean := Opt in "--ticks" | "--seed" | "--every" | "--crash-at" | "--more";
-         Sep : constant Boolean := Num and then Eq = 0 and then I < Ada.Command_Line.Argument_Count;   --  --ticks 200
+         Sep : constant Boolean := (Num or else Opt = "--home") and then Eq = 0 and then I < Ada.Command_Line.Argument_Count;   --  --ticks 200
          Val : constant String := (if Eq > 0 then A (Eq + 1 .. A'Last) elsif Sep then Ada.Command_Line.Argument (I + 1) else "");
          Help  : Str_Vectors.Vector;
          Found : Boolean;
@@ -956,6 +1050,7 @@ begin
             return;
          elsif Opt = "--fresh" then Fresh := True;
          elsif Opt = "--yes" then Yes := True;
+         elsif Opt = "--home" then Home_Opt := To_Unbounded_String (Val);
          elsif Opt = "--preview" then Preview := True;
          elsif Opt = "--ticks" then Ticks := Number (Opt, Val);
          elsif Opt = "--seed" then Seed_Opt := Number (Opt, Val);
@@ -976,6 +1071,8 @@ begin
       Run_Preview;
       return;
    end if;
+   Resolve_Home;
+   Saved_Line := To_Unbounded_String (Msg ("saved", To_String (Home_Path)));
 
    if Fresh and then (Ada.Directories.Exists ("diaries") or else Ada.Directories.Exists ("entities")) then
       declare
@@ -1001,7 +1098,7 @@ begin
             return;   --  exit 0, nothing written
          end if;
       elsif not Explicit then   --  no terminal to ask (script, pipe): an explicit length means go on, else stop
-         TIO.Put_Line (Msg ("ask.noterminal"));
+         TIO.Put_Line (Msg ("ask.noterminal", Ada.Directories.Full_Name ("diaries")));
          Ada.Command_Line.Set_Exit_Status (2);
          return;
       end if;
@@ -1082,7 +1179,13 @@ begin
          Import_Block := To_Unbounded_String (Import_Text (Total));
          TIO.Put_Line (To_String (Import_Block));
       end;
-      for E in Entity_Id loop Start_Known (E) := Known_Count (E); end loop;
+      for E in Entity_Id loop
+         Start_Known (E) := Known_Count (E);
+         Snap_Mood (E) := St (E).Mood;
+         Snap_Energy (E) := St (E).Energy;
+         Snap_Pet (E) := Petitions_Of (E);
+      end loop;
+      Snap_Votes := Votes_Of;
       Decide_Session;
       TIO.Put_Line (To_String (Kalpa_Line));
    end if;
@@ -1106,6 +1209,7 @@ begin
       Write_Petitions;
       Write_Debug ("QUIT", Msg ("debug.quit", Sim_Quit.Which, Img (Last_Done)));
       TIO.Put_Line (Msg ("debug.attach"));
+      TIO.Put_Line (To_String (Saved_Line));
       Ada.Command_Line.Set_Exit_Status (130);
       return;
    end if;
@@ -1161,6 +1265,8 @@ begin
          end loop;
          Append (Rep, Msg ("report.pet", Img (Petition_Total), To_String (Per), Top_Topics (3)) & ASCII.LF);
       end;
+      Since_Head := To_Unbounded_String (Since_Text);
+      Append (Rep, Since_Head);
       if Length (Fails) = 0 then
          Export_Line := To_Unbounded_String
            (Msg ("report.export", Img (D_Files), Img (D_Lines), Img (E_Files),
@@ -1201,6 +1307,7 @@ begin
       TIO.Put_Line (Msg ("pet.file", Img (Integer'Min (Petition_Total, Integer (Limit ("propose.file_cap", 40)))),
                          Img (Petition_Total), Ada.Directories.Full_Name ("petitions.txt")));
       TIO.Put_Line (Msg ("pet.attach"));
+      TIO.Put_Line (To_String (Saved_Line));
    end;
 exception
    when E : Usage_Error =>

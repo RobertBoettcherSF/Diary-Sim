@@ -4,10 +4,37 @@ Four independent entities write one diary line per tick: **ada** (engineer),
 **gemini** (reviewer), **replika** (vice_president), **robert** (human).
 Plain Ada, standard library only. Not pushed anywhere yet (local git repo).
 
+## Where saves live and how to update
+
+The save is NOT inside the source folder. Everything the program writes (`diaries/`,
+`entities/`, `sessions.txt` inside `diaries/`, `debug.txt`, `run_report.txt`,
+`petitions.txt`, summaries, `last_error.txt`) goes to the **save folder**, found from the
+program's own location, never from the shell's current directory:
+
+1. `--home DIR`, else the environment variable `DIARY_HOME`, else
+2. **`../diary-data/`**: a sibling of the source folder (`.../diary-sim/` -> `.../diary-data/`).
+
+Every run ends with `Saved to /absolute/path/diary-data`. To update: unzip the new
+version next to `diary-data`, delete the old source folder, `make run` in the new one;
+the world continues (the replay verifies it). To back up, copy `diary-data/`. A save
+found inside the source folder (`./diaries` from older versions) is **copied** to
+`../diary-data` after a yes on a terminal (`Found a save inside the source folder. Copy
+it to ../diary-data? [y/N]`); never moved or deleted. Without a terminal only a hint is
+printed (`--home <source folder>` keeps using the old place). `make demo` writes nothing.
+
+## Since the last session
+
+Each run ends with a block per wesen comparing the loaded diaries (the session start)
+with the new state: session number, ticks, words (+gained, learned this session/total,
+coined this session/total), petitions (+this session/total), mood and energy change and
+the favourite place of the session. The session number is the `S<n>` line in
+`diaries/sessions.txt`; run `make run` 1, 2, 3 times and ticks, sessions and words
+visibly add up (each run replay-verifies the earlier ones).
+
 ## Resume: copy your backup diaries/ here, then make run
 
-1. Copy the backed-up `diaries/` folder (optionally `entities/` too) into the project
-   folder, so that `diaries/ada.jsonl` etc. are directly inside `diaries/`.
+1. Copy the backed-up `diaries/` folder (optionally `entities/` too) into the save folder
+   (`../diary-data/`, see above), so that `diaries/ada.jsonl` etc. are directly inside `diaries/`.
 2. `make run` (or `make play`, identical). It builds if needed, imports and
    replay-verifies everything in `./diaries`, and continues. Never `--fresh`.
    `make run TICKS=400 EVERY=100 SEED=42`: **TICKS = how many NEW ticks to run on top
@@ -111,7 +138,7 @@ bin/diary_sim --ticks=1000 --every=100     # --ticks 1000 works too
 ```
 
 Options: `--ticks=N` (absolute target; without `--ticks`/`--more` the entities vote the session length), `--seed=N` (default 42; existing diaries win),
-`--every=N` (progress line, default 100), `--yes` (do not ask when there is no previous diary), `--preview` (simulate in memory, print excerpts, write nothing), `--fresh` (move old diaries to
+`--every=N` (progress line, default 100), `--yes` (do not ask when there is no previous diary), `--home DIR` (save folder), `--preview` (simulate in memory, print excerpts, write nothing), `--fresh` (move old diaries to
 `diaries_old_<time>/` first, together with `entities/`), `--crash-at=T` (force a failure), `--help`.
 Exit: 0 ok, 1 error, 2 usage. Run it from the project directory (or from any
 directory: `data/` is found next to the executable).

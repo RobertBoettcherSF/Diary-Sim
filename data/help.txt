@@ -5,6 +5,7 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
   --seed=N       seed for a new run (default 42; existing diaries win)
   --every=N      progress line every N ticks (default 100)
   --fresh        move old diaries/ and entities/ to diaries_old_<time>/
+  --home=DIR     save folder (else $DIARY_HOME, else ../diary-data)
   --yes          no question when diaries/ has no *.jsonl (start a new world)
   --preview      simulate in memory, print excerpts, write nothing
   --crash-at=T   force a failure at tick T (shows the error trace)
@@ -28,9 +29,9 @@ debug.txt (<= 1500 bytes) is written on EVERY exit; attach it to chat messages.
 Ctrl-C / SIGTERM stop cleanly after the current tick (exit 130, status QUIT).
 Old diaries (before this version) are incompatible: use --fresh.
 Errors: last_error.txt (seed, tick, entity, exception, traceback); paste it
-if asked. Back up diaries/ between tests. Exit 130: quit by signal.
-make run | make play [TICKS=N EVERY=100 SEED=42 YES=1]: build, load ./diaries,
-run TICKS new ticks (--more). Paste a backup diaries/ here first.
+if asked. Back up diary-data/ between tests. Exit 130: quit by signal.
+make run | make play [TICKS=N EVERY=100 SEED=42 YES=1]: build, load the save,
+run TICKS new ticks (--more). Copy a backup into ../diary-data/diaries first.
 Without --ticks/--more/TICKS the 4 entities VOTE the session length (data/
 kalpas.txt: 60 counts, short/medium/long; the median, kalpa.min..max in
 limits.txt). diaries/sessions.txt records and verifies it; a crashed
@@ -40,4 +41,7 @@ nothing written); without a terminal an explicit length starts fresh, else
 exit 2 (use --yes / YES=1). Drift at import is a 3-line stop, not a crash.
 make demo: PREVIEW only (--preview): 200 ticks of a new world in memory, one
 screen of excerpts, nothing written to disk.
-make run / play keep ONE persistent world in ./diaries and continue it.
+make run / play keep ONE persistent world and continue it. It lives in the save
+folder ../diary-data (next to the source folder; --home / $DIARY_HOME): delete
+the old source folder after an update, the save stays. 'Saved to <path>' ends
+every run. Copy diary-data to back it up.
