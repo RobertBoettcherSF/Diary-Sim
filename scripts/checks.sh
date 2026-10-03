@@ -661,6 +661,7 @@ rates=$(grep '^R2 ' diaries/sessions.txt | grep -o '[a-z]*=[0-9]*/' | tr -d '/a-
 echo "   distinct recovery rates: $rates; cool-downs taken (all wesen): $taken"
 [ "$rates" -ge 3 ] && [ "$taken" -gt 0 ] && [ "$(grep -Ec '^[a-z]+ rate [0-9]+% \| cool-down [0-9]+ ticks \| taken [0-9]+ \| cut short [0-9]+ \| quick rests [0-9]+$' r2.txt)" = 4 ] && ok "the end report shows rate, cool-down, taken, cut short and quick rests per wesen; the wesen differ in rate and cool-downs happen" || bad "rest report ($rates rates, $taken taken)"
 grep -Eq 'topic=(more_rest|faster_work_recovery) ' petitions.txt && ok "more_rest / faster_work_recovery petitions are filed" || bad "no recovery petitions"
+! grep -Eq 'wish=.*(for|like|have|consider|is|use|request) (kindly|again|honestly|briefly|politely),' petitions.txt && grep -Eq 'wish=(Kindly|Honestly|Briefly|Politely|Once again), ' petitions.txt && ok "petition wording: the adverb opens the sentence ('Briefly, I would like ...'), never sits in the middle" || bad "petition adverb slot"
 cp diaries/sessions.txt ../s.keep; cp diaries/world.txt ../w.keep
 sed -i '/^R1 /s/ada=[0-9]*/ada=1/' diaries/sessions.txt; "$rb" --more 0 --every 5000 > r3.txt 2>&1
 head -1 debug.txt | grep -q '^DRIFT' && grep -q 'import FAILED' r3.txt && ok "tampered R line: import FAILED, DRIFT" || bad "tampered R line"

@@ -1,4 +1,5 @@
 # diary_sim word lists: 60 entries per list = 6 openings x 10 endings.
+# [wish_open]: 6 blocks of 10: no adverb, then Kindly, Once again, Honestly, Briefly, Politely at the START of the sentence.
 # Section names are the action names. Lines starting with # are comments.
 # A pick uses the base-60 rule: D4 (reroll on 1) -> block 1/2/3 of 20, then D20.
 # [propose] is the action text, [wish_open] and [wish_close] frame a petition wish (the topic
@@ -887,56 +888,56 @@ I hope for
 May I have
 We could use
 I petition for
-I would like kindly,
-Please consider kindly,
-I request kindly,
-It would help to have kindly,
-My wish is kindly,
-I am asking for kindly,
-I hope for kindly,
-May I have kindly,
-We could use kindly,
-I petition for kindly,
-I would like again,
-Please consider again,
-I request again,
-It would help to have again,
-My wish is again,
-I am asking for again,
-I hope for again,
-May I have again,
-We could use again,
-I petition for again,
-I would like honestly,
-Please consider honestly,
-I request honestly,
-It would help to have honestly,
-My wish is honestly,
-I am asking for honestly,
-I hope for honestly,
-May I have honestly,
-We could use honestly,
-I petition for honestly,
-I would like briefly,
-Please consider briefly,
-I request briefly,
-It would help to have briefly,
-My wish is briefly,
-I am asking for briefly,
-I hope for briefly,
-May I have briefly,
-We could use briefly,
-I petition for briefly,
-I would like politely,
-Please consider politely,
-I request politely,
-It would help to have politely,
-My wish is politely,
-I am asking for politely,
-I hope for politely,
-May I have politely,
-We could use politely,
-I petition for politely,
+Kindly, I would like
+Kindly, please consider
+Kindly, I request
+Kindly, it would help to have
+Kindly, my wish is
+Kindly, I am asking for
+Kindly, I hope for
+Kindly, may I have
+Kindly, we could use
+Kindly, I petition for
+Once again, I would like
+Once again, please consider
+Once again, I request
+Once again, it would help to have
+Once again, my wish is
+Once again, I am asking for
+Once again, I hope for
+Once again, may I have
+Once again, we could use
+Once again, I petition for
+Honestly, I would like
+Honestly, please consider
+Honestly, I request
+Honestly, it would help to have
+Honestly, my wish is
+Honestly, I am asking for
+Honestly, I hope for
+Honestly, may I have
+Honestly, we could use
+Honestly, I petition for
+Briefly, I would like
+Briefly, please consider
+Briefly, I request
+Briefly, it would help to have
+Briefly, my wish is
+Briefly, I am asking for
+Briefly, I hope for
+Briefly, may I have
+Briefly, we could use
+Briefly, I petition for
+Politely, I would like
+Politely, please consider
+Politely, I request
+Politely, it would help to have
+Politely, my wish is
+Politely, I am asking for
+Politely, I hope for
+Politely, may I have
+Politely, we could use
+Politely, I petition for
 
 [wish_close]
 so my days go better. Thank you.
