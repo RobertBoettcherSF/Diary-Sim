@@ -1,4 +1,4 @@
---  Version: 0.005
+--  Version: 0.006
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -31,7 +31,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1];   --  wander: rolled
 
-   Build : constant String := "0.005";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.006";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Seed, Ticks, Every, Seed_Opt, Crash_At : Int := -1;
    Fresh, Seed_Shown : Boolean := False;
@@ -51,6 +51,8 @@ procedure Diary_Sim is
    Pending_Word : array (Entity_Id) of Natural := [others => 0];
    Pending_From : array (Entity_Id) of Entity_Id := [others => 1];
    Did_Learn, Did_Coin, Did_Bench : Boolean := False;   --  what the last Step did
+   Act_Count : array (Entity_Id, Action) of Natural := [others => [others => 0]];   --  all ticks replayed
+   Last_Act : Action := Rest;
    Votes_Of : All_Stats;
 
    --  Working folder files, append-only, "ensure present" (see header).
@@ -195,11 +197,8 @@ procedure Diary_Sim is
    --  Advance entity E by one tick; returns its diary line.  Teaching, coining and
    --  bench happen here; their working-folder lines are ensured as they occur.
    function Step (E : Entity_Id; Tick : Int) return String is
-      Die : constant Positive := Roll (Seed, Positive (E), Tick, 0, 20);
       A   : constant Action :=
-        (if Pending_Word (E) /= 0 then Learn
-         else (case Die is when 1 .. 6 => Rest, when 7 .. 10 => Work, when 11 .. 13 => Explore,
-                           when 14 .. 16 => Talk, when 17 .. 19 => Wander, when others => Bench));
+        (if Pending_Word (E) /= 0 then Learn else Choose (Seed, E, Tick, St (E).Energy, St (E).Mood));
       S   : State renames St (E);
       Detail : Unbounded_String;
       Eid : constant Positive := Positive (E);
@@ -245,6 +244,7 @@ procedure Diary_Sim is
       end Coin;
 
    begin
+      Last_Act := A;
       Did_Learn := False;
       Did_Coin := False;
       Did_Bench := False;
@@ -395,9 +395,9 @@ procedure Diary_Sim is
    --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (length cap, text assembly)
    procedure Write_Debug (Status, Err : String) is
       Cap : constant := 1500;
-      type Part_Id is (Head, Ticks_P, Import_P, Export_P, Ents, Votes, Error_P);
+      type Part_Id is (Head, Ticks_P, Import_P, Export_P, Ents, Mix_P, Votes, Error_P);
       Part : array (Part_Id) of Unbounded_String;
-      Order : constant array (1 .. 7) of Part_Id := [Head, Ticks_P, Error_P, Ents, Votes, Import_P, Export_P];
+      Order : constant array (1 .. 8) of Part_Id := [Head, Ticks_P, Error_P, Ents, Mix_P, Votes, Import_P, Export_P];
       Used : Natural := 0;
       Out_Text : Unbounded_String;
       F : TIO.File_Type;
@@ -414,6 +414,11 @@ procedure Diary_Sim is
          Append (Part (Ents), Msg ("debug.entity", Name (E), Img (Start_Known (E)), Img (Known_Count (E)), Img (Run_Learn (E)),
                                    Img (Run_Coin (E)), Img (Run_Bench_N (E)), Sgn (Int (St (E).Mood)) & " en " & Img (St (E).Energy))
                  & ASCII.LF);
+      end loop;
+      for E in Entity_Id loop
+         Append (Part (Mix_P), Msg ("debug.mix", Name (E), Img (Act_Count (E, Rest)), Img (Act_Count (E, Work)),
+                                    Img (Act_Count (E, Explore)), Img (Act_Count (E, Talk)), Img (Act_Count (E, Wander)),
+                                    Img (Act_Count (E, Bench)) & " l" & Img (Act_Count (E, Learn))) & ASCII.LF);
       end loop;
       if Length (Vote_Line) > 0 then Part (Votes) := Vote_Line & ASCII.LF; end if;
       if Err'Length > 0 then Part (Error_P) := To_Unbounded_String (Err & ASCII.LF); end if;
@@ -470,6 +475,7 @@ procedure Diary_Sim is
                Written := Written + 1;
             end if;
             Events := Written + Verified;
+            Act_Count (E, Last_Act) := Act_Count (E, Last_Act) + 1;
             Record_Tick (Votes_Of (E), St (E).Location, St (E).Mood, St (E).Energy, Did_Learn, Did_Coin, Did_Bench);
             if Tick > Int (Common) then
                Run_Learn (E) := Run_Learn (E) + Boolean'Pos (Did_Learn);
@@ -700,6 +706,12 @@ begin
          Append (Rep, Fx.Head (Name (E), 10) & Fx.Tail (Img (Start_Known (E)), 8) & " ->" & Fx.Tail (Img (Known_Count (E)), 6)
                  & Fx.Tail (Img (Run_Learn (E)), 9) & Fx.Tail (Img (Run_Coin (E)), 7) & Fx.Tail (Img (Run_Bench_N (E)), 6)
                  & " | " & Fx.Tail (Sgn (Int (St (E).Mood)), 5) & Fx.Tail (Img (St (E).Energy), 7) & ASCII.LF);
+      end loop;
+      Append (Rep, Msg ("report.mixcols") & ASCII.LF);
+      for E in Entity_Id loop
+         Append (Rep, Fx.Head (Name (E), 10));
+         for A in Action loop Append (Rep, Fx.Tail (Img (Act_Count (E, A)), (if A = Explore then 8 else 7))); end loop;
+         Append (Rep, ASCII.LF);
       end loop;
       if Length (Fails) = 0 then
          Export_Line := To_Unbounded_String

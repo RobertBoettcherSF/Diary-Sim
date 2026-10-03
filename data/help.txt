@@ -10,8 +10,10 @@ Entities: ada (engineer), gemini (reviewer), replika (vice_president),
 robert (human). State: energy 0..100, mood -100..100, location 0..3
 (ranges, word-game limits, vote thresholds: data/limits.txt; wording:
 data/words.txt, data/messages.txt; vocabulary: data/vocab.txt).
-Actions: rest work explore talk wander bench; talk may teach a word, explore
-and wander may coin one; a taught word arrives as a "learn" event.
+Actions: rest work explore talk wander bench, chosen by weights from a Rule 30
+personality plus energy/mood/words (data/limits.txt rule30.*, lean.*). Talk may
+teach a word, explore and wander may coin one; a taught word arrives as a
+"learn" event.
 Diaries: diaries/<id>.jsonl, append-only. Every run replays ticks 1..N and
 verifies the stored lines (ts ignored), then appends the rest.
 Working folder entities/<id>/: words.txt, bench.txt (NOT a VM).

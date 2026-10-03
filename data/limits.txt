@@ -21,3 +21,29 @@ bench_steps = 2000
 # Final vote reasons: vote <= vote.low picks [reason_low], vote >= vote.high [reason_high], else [reason_mid].
 vote.low = -20
 vote.high = 20
+# Personality (Rule 30) and action weights.  rule30.enabled = 0 gives the old fixed table
+# (rest 30, work 20, explore 15, talk 15, wander 15, bench 5 out of 100).
+rule30.enabled = 1
+# Ring width in cells (12..60) and ticks per Rule 30 step (the personality drifts slowly).
+rule30.width = 60
+rule30.period = 50
+# Points the segments of the start row (core) and of the current row (drift) can add
+# to or take from an action's weight.
+rule30.core = 40
+rule30.strength = 15
+weight.rest = 30
+weight.work = 20
+weight.explore = 15
+weight.talk = 15
+weight.wander = 15
+weight.bench = 5
+# State leans (points at the extreme): low energy (below 50) -> rest, less work;
+# high energy (above 60) -> work, bench, less rest; low mood (below 0) -> talk, explore;
+# high mood (above 50) -> work, less talk and explore (keeps mood off the ceiling);
+# fewer than lean.few_words_n known words -> talk.
+lean.low_energy = 60
+lean.high_energy = 20
+lean.low_mood = 30
+lean.high_mood = 30
+lean.few_words = 20
+lean.few_words_n = 100

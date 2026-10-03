@@ -29,11 +29,37 @@ vocabulary): start with `--fresh`.
 State per entity: energy 0..100, mood -100..100 (signed in the JSON), location
 0..3 (office, lab, cafe, home), all clamped. The ranges are data, not code:
 `data/limits.txt` (built-in defaults if the file is missing). Entities start at
-energy 80, mood 0, home. Actions (D20 per entity and tick): rest 1-6, work 7-10,
-explore 11-13, talk 14-16, wander 17-19, bench 20; `learn` is never rolled, it is
-the forced next event of an entity that was taught a word. Each action is a small
-fixed change (`Energy_D`, `Mood_D`, `Home` in `diary_sim.adb`); mood stays -100..100.
-Per tick the entities run in fixed id order.
+energy 80, mood 0, home. Actions: rest, work, explore, talk, wander, bench, chosen by
+a weighted roll (below); `learn` is never rolled, it is the forced next event of an
+entity that was taught a word. Each action is a small fixed change (`Energy_D`,
+`Mood_D`, `Home` in `diary_sim.adb`); mood stays -100..100. Per tick the entities
+run in fixed id order.
+
+**Old diaries are incompatible** with this version (personality weights change the
+action rolls): run once with `--fresh`.
+
+## Personality: Rule 30 and state-driven weights
+
+Each entity has a ring of `rule30.width` cells (default 60 bits, plain
+`Interfaces.Unsigned_64`, no allocation) running Rule 30 (`new = left xor (centre or
+right)`, wrapped). The start row is hashed from (seed, entity); the row is stepped once
+per `rule30.period` ticks (50), so the row at tick T is a pure function of (seed,
+entity, T). Nothing is stored: a resume or crash-resume replays from tick 1 and gets the
+same rows (a small cache only saves time and is rebuilt on demand).
+
+Six segments of the ring belong to rest, work, explore, talk, wander, bench. The
+segments of the *start* row are the entity's constant core personality (up to
+`rule30.core` weight points either way), the segments of the *current* row are its slow
+drift (up to `rule30.strength` points). On top of that the state leans the weights:
+low energy -> rest (less work), high energy -> work and bench (less rest), low mood ->
+talk and explore, high mood -> work (less talk and explore, so mood does not sit at the
+ceiling), few known words -> talk. Base weights (rest 30, work 20, explore 15, talk 15,
+wander 15, bench 5), the strengths of all leans and the Rule 30 settings are in
+`data/limits.txt`. One `Roll` (salt 0) over the weight total picks the action.
+`rule30.enabled = 0` restores the old fixed D20 table exactly. The end report and
+`debug.txt` show each entity's action counts. Seed 42, 1000 ticks (rest/work/explore/
+talk/wander/bench): ada 255/123/63/113/153/195, gemini 278/236/135/165/40/61, replika
+308/248/162/123/45/28, robert 198/147/10/320/114/148.
 
 Every random choice is `hash(seed, entity, tick, salt)` (splitmix64-style mix, no
 running RNG), so any tick can be recomputed alone. Diary wording is picked from
@@ -190,7 +216,7 @@ paste it` and `back up diaries/ before the next run`.
 ## Files
 
 `diary_sim.adb` (main: CLI, loop, side files, debug.txt), `sim_quit.ads/.adb` (Ctrl-C and SIGTERM flag), `sim_world.ads/.adb` (entities,
-vocabulary, bench kernels, votes and summary text), `sim_util.ads/.adb` (hash rolls,
+vocabulary, Rule 30 personality, bench kernels, votes and summary text), `sim_util.ads/.adb` (hash rolls,
 line parsing, data-file helpers), `data/words.txt`, `data/limits.txt`,
 `data/messages.txt` (all console wording), `data/vocab.txt`, `data/help.txt`,
 `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a

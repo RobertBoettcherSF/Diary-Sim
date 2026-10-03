@@ -68,3 +68,5 @@ debug.entity = {1} words {2}>{3} taught {4} coined {5} bench {6} mood {7}
 debug.failed = warning: debug.txt could not be written
 debug.quit = error: stopped by {1} after tick {2}; diaries flushed, a rerun resumes
 quit = {1} received: stopped after tick {2}; diaries are flushed, a rerun resumes there
+report.mixcols = actions      rest   work explore   talk wander  bench  learn
+debug.mix = {1} acts r{2} w{3} x{4} t{5} d{6} b{7}

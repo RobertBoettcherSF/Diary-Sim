@@ -150,6 +150,23 @@ dbg QUIT && [ "$(cat rc.txt)" = 130 ] && grep -q "after tick $n" debug.txt && ok
 "$bin" --ticks=$((n + 5)) > /dev/null; [ "$(wc -l < diaries/robert.jsonl)" = $((n + 5)) ] && ok "rerun after the quit resumes at tick $n" || bad "no clean resume after quit"
 "$bin" --nope > /dev/null 2>&1; dbg USAGE && ok "usage error: debug.txt USAGE" || bad "debug.txt after usage error"
 
+echo "== 16. Rule 30 personalities: different action mixes, nobody stuck at a bound =="
+cd "$w/base" || exit 1
+mix() { grep -o "\"t\":\"$2\"" "diaries/$1.jsonl" | wc -l; }
+rmin=9999; rmax=0; tmin=9999; tmax=0
+for n in ada gemini replika robert; do r=$(mix $n rest); t=$(mix $n talk); [ $r -lt $rmin ] && rmin=$r; [ $r -gt $rmax ] && rmax=$r; [ $t -lt $tmin ] && tmin=$t; [ $t -gt $tmax ] && tmax=$t; done
+echo "   rest $rmin..$rmax, talk $tmin..$tmax ticks per entity"
+[ $((rmax - rmin)) -ge 40 ] && [ $((tmax - tmin)) -ge 60 ] && ok "action mixes differ clearly between entities" || bad "mixes too similar"
+worst=0; for n in ada gemini replika robert; do
+  b=$(grep -Ec '"mood":(-100|100),|"energy":(0|100),' diaries/$n.jsonl); [ $b -gt $worst ] && worst=$b; done
+echo "   most ticks at a mood/energy bound: $worst of $(wc -l < diaries/ada.jsonl)"
+[ $worst -lt 150 ] && ok "nobody stuck at a bound" || bad "an entity sits at a bound ($worst ticks)"
+rm -rf "$w/off"; mkdir -p "$w/off/bin" "$w/off/run"; cp "$bin" "$w/off/bin/"; cp -r "$root/data" "$w/off/data"
+sed -i 's/^rule30.enabled = .*/rule30.enabled = 0/' "$w/off/data/limits.txt"; cd "$w/off/run" || exit 1
+"$w/off/bin/diary_sim" --ticks=1000 --every=1000 > /dev/null; "$w/off/bin/diary_sim" --ticks=1000 --every=1000 | grep -q 'replay-verify OK' \
+  && ! cmp -s <(sed 's/"ts":"[^"]*"//' diaries/ada.jsonl) <(sed 's/"ts":"[^"]*"//' "$w/base/diaries/ada.jsonl") && ok "rule30.enabled=0: old fixed table, deterministic, differs from rule 30" || bad "rule30.enabled=0"
+grep -q '^ada acts r' "$w/base/debug.txt" && grep -q '^actions ' "$w/base/run_report.txt" && ok "action counts in debug.txt and run_report.txt" || bad "no action counts"
+
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="
 [ "$fails" = 0 ]

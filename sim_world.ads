@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  The shared world of diary_sim: the four entities, the vocabulary (base
 --  words, who knows what, coined words), the bench kernels and the final votes.
 --  One world per run; Init rebuilds it from scratch, so a replay from tick 1
@@ -40,6 +40,20 @@ package Sim_World is
    function Nth_Known (E : Entity_Id; N : Positive) return Positive;
    function Teachable_Count (From, To : Entity_Id) return Natural;
    function Nth_Teachable (From, To : Entity_Id; N : Positive) return Positive;
+
+   --  ---- personality: Rule 30 + state-driven action weights -------------------------
+   --  Each entity has a ring of rule30.width bits (Rule 30: new = left xor (centre or
+   --  right)).  Its start row is hashed from (seed, entity); it is stepped once per
+   --  rule30.period ticks, so the row at tick T is a pure function of (seed, entity, T)
+   --  (the cache only saves time; a resume rebuilds it by replay).  Six segments of the
+   --  row lean the six rolled actions up or down: the segments of the start row are the
+   --  entity's constant core personality (rule30.core points), the segments of the current
+   --  row are its slow drift (rule30.strength points).  The
+   --  state leans them too (low energy: rest; high energy: work, bench; low mood: talk,
+   --  explore; few known words: talk).  Choose rolls once with Roll (salt 0) over the
+   --  total weight.  rule30.enabled = 0 gives the old fixed D20 table.
+   --  PROOF-LATER: Importance 4/10, Urgency 3/10, SPARK2 (bit arithmetic, weight sums > 0)
+   function Choose (Seed : Int; E : Entity_Id; Tick : Int; Energy, Mood : Integer) return Action;
 
    --  ---- bench ------------------------------------------------------------
    --  A built-in integer kernel with a fixed step budget.  Steps, result and

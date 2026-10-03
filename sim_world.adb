@@ -1,7 +1,7 @@
---  Version: 0.001
+--  Version: 0.002
 pragma Ada_2022;
 
-with Ada.Containers.Vectors, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
+with Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
 use Ada.Strings.Unbounded;
 use Sim_Util;
 
@@ -26,8 +26,33 @@ package body Sim_World is
    Known : array (Entity_Id) of Bool_Vectors.Vector;
    Base  : Natural := 0;
 
+   --  Tunables of the personality (data/limits.txt), read by Init.
+   type Weight_Array is array (Rest .. Bench) of Integer;
+   R30_On : Boolean := True;
+   R30_Width : Integer := 32;
+   R30_Period, R30_Strength, R30_Core : Integer := 1;
+   Base_W : Weight_Array := [30, 20, 15, 15, 15, 5];
+   Lean_Low_Energy, Lean_High_Energy, Lean_Low_Mood, Lean_High_Mood, Lean_Few_Words, Few_Words_N : Integer := 0;
+   Cache_Steps : array (Entity_Id) of Int := [others => -1];
+   Cache_Row   : array (Entity_Id) of Interfaces.Unsigned_64 := [others => 0];
+
    procedure Init (Base_Words : Str_Vectors.Vector; Seed, Start_Percent : Int) is
    begin
+      R30_On := Limit ("rule30.enabled", 1) /= 0;
+      R30_Width := Clamp (Integer (Limit ("rule30.width", 60)), 12, 60);
+      R30_Period := Clamp (Integer (Limit ("rule30.period", 50)), 1, 100_000);
+      R30_Strength := Clamp (Integer (Limit ("rule30.strength", 15)), 0, 100);
+      R30_Core := Clamp (Integer (Limit ("rule30.core", 40)), 0, 100);
+      Base_W := [Integer (Limit ("weight.rest", 30)), Integer (Limit ("weight.work", 20)),
+                 Integer (Limit ("weight.explore", 15)), Integer (Limit ("weight.talk", 15)),
+                 Integer (Limit ("weight.wander", 15)), Integer (Limit ("weight.bench", 5))];
+      Lean_Low_Energy := Clamp (Integer (Limit ("lean.low_energy", 60)), 0, 1000);
+      Lean_High_Energy := Clamp (Integer (Limit ("lean.high_energy", 20)), 0, 1000);
+      Lean_Low_Mood := Clamp (Integer (Limit ("lean.low_mood", 30)), 0, 1000);
+      Lean_High_Mood := Clamp (Integer (Limit ("lean.high_mood", 30)), 0, 1000);
+      Lean_Few_Words := Clamp (Integer (Limit ("lean.few_words", 20)), 0, 1000);
+      Few_Words_N := Clamp (Integer (Limit ("lean.few_words_n", 100)), 1, 100_000);
+      Cache_Steps := [others => -1];
       Table.Clear;
       for W of Base_Words loop
          Table.Append (Word_Rec'(Text => To_Unbounded_String (W), P1 => 0, P2 => 0));
@@ -113,6 +138,99 @@ package body Sim_World is
       end loop;
       return 1;
    end Nth_Teachable;
+
+   --  ---- personality -------------------------------------------------------------------
+
+   use type Interfaces.Unsigned_64;
+   subtype U64 is Interfaces.Unsigned_64;
+
+   function Ring_Mask return U64 is (Interfaces.Shift_Left (1, R30_Width) - 1);
+
+   --  One Rule 30 step on the ring.
+   function Step_Row (R : U64) return U64 is
+      Left  : constant U64 := (Interfaces.Shift_Left (R, 1) or Interfaces.Shift_Right (R, R30_Width - 1)) and Ring_Mask;
+      Right : constant U64 := Interfaces.Shift_Right (R, 1) or Interfaces.Shift_Left (R and 1, R30_Width - 1);
+   begin
+      return (Left xor (R or Right)) and Ring_Mask;
+   end Step_Row;
+
+   --  Start row: one hashed bit per cell (never all zero, which Rule 30 would keep).
+   function Start_Row (Seed : Int; E : Entity_Id) return U64 is
+      R : U64 := 0;
+   begin
+      for I in 0 .. R30_Width - 1 loop
+         if Roll (Seed, Positive (E), 0, 3000 + I, 2) = 2 then R := R or Interfaces.Shift_Left (1, I); end if;
+      end loop;
+      return (if R = 0 then 1 else R);
+   end Start_Row;
+
+   function Row_At (Seed : Int; E : Entity_Id; Tick : Int) return U64 is
+      Steps : constant Int := Tick / Int (R30_Period);
+   begin
+      if Cache_Steps (E) = Steps then
+         null;
+      elsif Cache_Steps (E) >= 0 and then Cache_Steps (E) = Steps - 1 then
+         Cache_Row (E) := Step_Row (Cache_Row (E));
+         Cache_Steps (E) := Steps;
+      else   --  not the next step: rebuild from the start row (same result, only slower)
+         Cache_Row (E) := Start_Row (Seed, E);
+         for I in 1 .. Steps loop Cache_Row (E) := Step_Row (Cache_Row (E)); end loop;
+         Cache_Steps (E) := Steps;
+      end if;
+      return Cache_Row (E);
+   end Row_At;
+
+   function Choose (Seed : Int; E : Entity_Id; Tick : Int; Energy, Mood : Integer) return Action is
+      Die : constant Positive := Roll (Seed, Positive (E), Tick, 0, 20);
+      W : Weight_Array := Base_W;
+      Total : Integer := 0;
+      Pick : Positive;
+   begin
+      if not R30_On then   --  the old fixed D20 table
+         return (case Die is when 1 .. 6 => Rest, when 7 .. 10 => Work, when 11 .. 13 => Explore,
+                             when 14 .. 16 => Talk, when 17 .. 19 => Wander, when others => Bench);
+      end if;
+      declare
+         Row : constant U64 := Row_At (Seed, E, Tick);
+         Core : constant U64 := Start_Row (Seed, E);   --  the birth personality (constant)
+         Seg : constant Integer := R30_Width / 6;
+         Low_En   : constant Integer := Integer'Max (0, 50 - Energy);        --  0 .. 50
+         High_En  : constant Integer := Integer'Max (0, Energy - 60);        --  0 .. 40
+         Low_Mood : constant Integer := Integer'Max (0, -Mood);              --  0 .. 100
+         High_Mood : constant Integer := Integer'Max (0, Mood - 50);         --  0 .. 50
+         Few      : constant Integer := Integer'Max (0, Few_Words_N - Known_Count (E));
+      begin
+         for A in W'Range loop   --  personality: the bits of this action's segment
+            declare
+               Pop, Pop0 : Integer := 0;
+               Off : constant Integer := Action'Pos (A) * Seg;
+            begin
+               for I in Off .. Off + Seg - 1 loop
+                  if (Interfaces.Shift_Right (Row, I) and 1) = 1 then Pop := Pop + 1; end if;
+                  if (Interfaces.Shift_Right (Core, I) and 1) = 1 then Pop0 := Pop0 + 1; end if;
+               end loop;
+               W (A) := W (A) + (2 * Pop - Seg) * R30_Strength / Seg + (2 * Pop0 - Seg) * R30_Core / Seg;
+            end;
+         end loop;
+         W (Rest) := W (Rest) + Low_En * Lean_Low_Energy / 50 - High_En * Lean_High_Energy / 20;
+         W (Work) := W (Work) - Low_En * Lean_Low_Energy / 100 + High_En * Lean_High_Energy / 40;
+         W (Bench) := W (Bench) + High_En * Lean_High_Energy / 80;
+         W (Talk) := W (Talk) + Low_Mood * Lean_Low_Mood / 100 + Few * Lean_Few_Words / Few_Words_N;
+         W (Explore) := W (Explore) + Low_Mood * Lean_Low_Mood / 200 - High_Mood * Lean_High_Mood / 100;
+         W (Work) := W (Work) + High_Mood * Lean_High_Mood / 50;
+         W (Talk) := W (Talk) - High_Mood * Lean_High_Mood / 100;
+      end;
+      for A in W'Range loop
+         W (A) := Integer'Max (1, W (A));
+         Total := Total + W (A);
+      end loop;
+      Pick := Roll (Seed, Positive (E), Tick, 0, Total);
+      for A in W'Range loop
+         if Pick <= W (A) then return A; end if;
+         Pick := Pick - W (A);
+      end loop;
+      return Rest;
+   end Choose;
 
    --  ---- bench --------------------------------------------------------------------
 
