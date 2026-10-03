@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 --  The shared world of diary_sim: the four entities, the vocabulary (base
 --  words, who knows what, coined words), the bench kernels and the final votes.
 --  One world per run; Init rebuilds it from scratch, so a replay from tick 1
@@ -71,6 +71,19 @@ package Sim_World is
    function Petition_Topic (N : Positive) return String;
    function Petition_Line (N : Positive) return String;   --  P<n> tick=<t> from=<id> topic=<topic> [repeat=<k>] wish=<text>
    function Top_Topics (N : Positive) return String;      --  "more_rest 5, quieter_mood 4"
+
+   --  ---- kalpas: the session length vote --------------------------------------------
+   --  Every entity votes for the number of NEW ticks of a session: a base-60 pick
+   --  (block of 20 = short / medium / long, then the entry) from hash (seed, entity, session
+   --  start tick) in the table of data/kalpas.txt, the block leaned by the entity's state at
+   --  the session start.  The decided length is the median of the four votes.
+   --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (index arithmetic, clamps)
+   type Kalpa_Votes is array (1 .. 4) of Int;
+   procedure Load_Kalpas (Lines : Sim_Util.Str_Vectors.Vector);   --  call before the first vote
+   function Kalpa_Count return Natural;
+   function Kalpa_Vote (Seed : Int; E : Entity_Id; Start : Int; Energy, Mood : Integer) return Int;
+   --  Sorted v1 <= v2 <= v3 <= v4: (v2 + v3) / 2, rounded down (duplicates are fine).
+   function Kalpa_Median (V : Kalpa_Votes) return Int;
 
    --  ---- bench ------------------------------------------------------------
    --  A built-in integer kernel with a fixed step budget.  Steps, result and

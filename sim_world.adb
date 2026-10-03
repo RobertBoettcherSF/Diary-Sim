@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 pragma Ada_2022;
 
 with Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
@@ -401,6 +401,68 @@ package body Sim_World is
       end loop;
       return (if Length (Res) = 0 then "none" else To_String (Res));
    end Top_Topics;
+
+   --  ---- kalpas ------------------------------------------------------------------------
+
+   package Int_Vectors is new Ada.Containers.Vectors (Positive, Int);
+   Kalpas : Int_Vectors.Vector;
+
+   procedure Load_Kalpas (Lines : Str_Vectors.Vector) is
+   begin
+      Kalpas.Clear;
+      for L of Lines loop
+         declare
+            T : constant String := Ada.Strings.Fixed.Trim (L, Ada.Strings.Both);
+         begin
+            if T'Length in 1 .. 9 and then (for all C of T => C in '0' .. '9') then
+               Kalpas.Append (Int'Value (T));
+            end if;
+         end;
+      end loop;
+      if Kalpas.Is_Empty then   --  built-in: the same three ranges as data/kalpas.txt
+         for B in 0 .. 2 loop
+            declare
+               Lo : constant Int := (case B is when 0 => 20, when 1 => 100, when others => 400);
+               Hi : constant Int := (case B is when 0 => 100, when 1 => 400, when others => 1500);
+            begin
+               for I in 0 .. 19 loop Kalpas.Append (Lo + (Hi - Lo) * Int (I) / 19); end loop;
+            end;
+         end loop;
+      end if;
+   end Load_Kalpas;
+
+   function Kalpa_Count return Natural is (Natural (Kalpas.Length));
+
+   function Kalpa_Vote (Seed : Int; E : Entity_Id; Start : Int; Energy, Mood : Integer) return Int is
+      P      : constant Natural := Pick60 (Seed, Positive (E), Start, 900);   --  0 .. 59
+      Unknown : constant Integer := Count - Known_Count (E);
+      Lean   : Integer := 0;
+      Block  : Integer;
+   begin
+      if Energy < Integer (Limit ("kalpa.energy_low", 30)) then Lean := Lean - 1; end if;
+      if Energy > Integer (Limit ("kalpa.energy_high", 70)) then Lean := Lean + 1; end if;
+      if Mood < Integer (Limit ("kalpa.mood_low", -40)) then Lean := Lean - 1; end if;
+      if Mood > Integer (Limit ("kalpa.mood_high", 40)) then Lean := Lean + 1; end if;
+      if Unknown * 2 > Count then Lean := Lean + 1; end if;
+      Block := Clamp (P / 20 + Clamp (Lean, -2, 2), 0, 2);
+      return Kalpas (Kalpas.First_Index + (Block * 20 + P mod 20) mod Natural (Kalpas.Length));
+   end Kalpa_Vote;
+
+   function Kalpa_Median (V : Kalpa_Votes) return Int is
+      S : Kalpa_Votes := V;
+      T : Int;
+   begin
+      for I in 1 .. 3 loop   --  sort four numbers (bubble)
+         for J in 1 .. 4 - I loop
+            if S (J) > S (J + 1) then
+               T := S (J);
+               S (J) := S (J + 1);
+               S (J + 1) := T;
+            end if;
+         end loop;
+      end loop;
+      return (S (2) + S (3)) / 2;
+   end Kalpa_Median;
 
    --  ---- bench --------------------------------------------------------------------
 

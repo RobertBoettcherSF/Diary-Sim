@@ -1,0 +1,68 @@
+# Kalpas: how many NEW ticks one session may run, as voted by the four entities.
+# 60 whole numbers, one per line, in three blocks of 20 by 'age' (the base-60 rule picks
+# the block, then the entry): lines 1-20 short, 21-40 medium, 41-60 long.  Edit freely, but
+# a changed list changes the votes recorded in diaries/sessions.txt: then use --fresh.
+# The decided length is the median of the four votes (limits.txt kalpa.min / kalpa.max).
+# short
+20
+24
+28
+32
+36
+41
+45
+49
+53
+57
+62
+66
+70
+74
+78
+83
+87
+91
+95
+100
+# medium
+100
+115
+131
+147
+163
+178
+194
+210
+226
+242
+257
+273
+289
+305
+321
+336
+352
+368
+384
+400
+# long
+400
+457
+515
+573
+631
+689
+747
+805
+863
+921
+978
+1036
+1094
+1152
+1210
+1268
+1326
+1384
+1442
+1500

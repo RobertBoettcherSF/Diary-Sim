@@ -1,10 +1,13 @@
---  Version: 0.008
+--  Version: 0.009
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
 --  replays ticks 1 .. N from scratch (words, lessons and coined words cannot be
 --  read back from a diary line): a tick already on disk is compared with the
 --  regenerated line instead of written, a tick beyond the disk is appended.
+--  Session length: without --ticks / --more the four entities vote (Kalpas, data/kalpas.txt)
+--  and the median is the number of new ticks; diaries/sessions.txt records every session
+--  and is verified on import (see README).
 --  entities/<id>/words.txt and bench.txt are append-only working files (NOT a VM):
 --  a line the replay produces and the file lacks is appended, so they can be
 --  rebuilt from nothing.  Bench hook for later: see README (PROOF-LATER).
@@ -13,7 +16,7 @@ pragma Interrupt_State (SIGINT, USER);
 pragma Interrupt_State (SIGTERM, USER);
 pragma Ada_2022;
 
-with Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Directories,
+with Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories,
      Ada.Exceptions, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
      GNAT.Traceback.Symbolic, Sim_Quit, Sim_Util, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
@@ -31,10 +34,11 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.008";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.009";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
    Fresh, Seed_Shown : Boolean := False;
+   Explicit : Boolean := False;        --  --ticks or --more given: no vote
    --  Limits, built-in values; data/limits.txt overrides them.
    E_Min, E_Max, M_Min, M_Max, L_Max, Tone_Low, Tone_High : Integer := 0;
    Start_Pct, Teach_Pct, Coin_Pct, Coin_Cap, Bench_Steps : Int := 0;
@@ -134,6 +138,14 @@ procedure Diary_Sim is
       Read_Lines (Data_Path ("topics.txt"), Lines, Found);
       Load_Topics (Lines);
       if Topic_Count = 1 and then (not Found or else Lines.Is_Empty) then Warn (Msg ("warn.topics_file")); end if;
+      Lines.Clear;
+      Read_Lines (Data_Path ("kalpas.txt"), Lines, Found);
+      Load_Kalpas (Lines);
+      if not Found then
+         Warn (Msg ("warn.kalpas_file"));
+      elsif Kalpa_Count /= 60 then
+         Warn (Msg ("warn.kalpas_count", Img (Kalpa_Count)));
+      end if;
       --  Vocabulary: one English word per line, id = line order; '#' and blank lines ignored.
       Lines.Clear;
       Read_Lines (Data_Path ("vocab.txt"), Lines, Found);
@@ -424,7 +436,7 @@ procedure Diary_Sim is
    Disk_Seed : Int := -1;
    Common, Longest : Natural := 0;
    Names : Unbounded_String;
-   Import_Block : Unbounded_String;
+   Import_Block, Kalpa_Line : Unbounded_String;
    I : Positive := 1;
    Verify_To : Natural := 0;           --  ticks replayed (verify only) before the import line
    Import_Done : Boolean := False;
@@ -443,9 +455,9 @@ procedure Diary_Sim is
    --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (length cap, text assembly)
    procedure Write_Debug (Status, Err : String) is
       Cap : constant := 1500;
-      type Part_Id is (Head, Ticks_P, Import_P, Export_P, Ents, Mix_P, Topics_P, Votes, Error_P);
+      type Part_Id is (Head, Ticks_P, Kalpa_P, Import_P, Export_P, Ents, Mix_P, Topics_P, Votes, Error_P);
       Part : array (Part_Id) of Unbounded_String;
-      Order : constant array (1 .. 9) of Part_Id := [Head, Ticks_P, Error_P, Ents, Mix_P, Topics_P, Votes, Import_P, Export_P];
+      Order : constant array (1 .. 10) of Part_Id := [Head, Ticks_P, Kalpa_P, Error_P, Ents, Mix_P, Topics_P, Votes, Import_P, Export_P];
       Used : Natural := 0;
       Out_Text : Unbounded_String;
       F : TIO.File_Type;
@@ -455,6 +467,7 @@ procedure Diary_Sim is
         ((if Last_Done > Int (Common)
           then Msg ("debug.ticks", Img (Int (Common) + 1), Img (Last_Done), Img (Last_Done - Int (Common)), Img (Common))
           else Msg ("debug.ticks_v", Img (Last_Done), Img (Common))) & ASCII.LF);
+      if Length (Kalpa_Line) > 0 then Part (Kalpa_P) := Kalpa_Line & ASCII.LF; end if;
       Part (Import_P) := To_Unbounded_String ((if Length (Import_Block) > 0 then To_String (Import_Block) else Msg ("debug.pending", "import"))
                                               & ASCII.LF);
       Part (Export_P) := To_Unbounded_String ((if Length (Export_Line) > 0 then To_String (Export_Line) else Msg ("debug.pending", "export"))
@@ -604,6 +617,178 @@ procedure Diary_Sim is
                (if Ent_Missing = 0 then Msg ("ent.present", "4") else Msg ("ent.rebuilt", Img (Ent_Missing))),
                Img (Verify_To), To_String (Know));
    end Import_Text;
+
+   --  ---- sessions (kalpas) -----------------------------------------------------------------
+   type Session_Rec is record
+      N : Positive := 1;
+      Start, Len : Int := 0;
+      Votes : Kalpa_Votes := [others => 0];
+      By_Vote : Boolean := False;       --  src=vote (else explicit)
+   end record;
+   package Session_Vectors is new Ada.Containers.Vectors (Positive, Session_Rec);
+   Sessions : Session_Vectors.Vector;
+   Sessions_Path : constant String := "diaries/sessions.txt";
+
+   function Votes_Text (V : Kalpa_Votes) return String is
+     (Img (V (1)) & "/" & Img (V (2)) & "/" & Img (V (3)) & "/" & Img (V (4)));
+   function Session_Line (R : Session_Rec) return String is
+     ("S" & Img (R.N) & " start=" & Img (R.Start) & " votes=" & Votes_Text (R.Votes) & " len=" & Img (R.Len)
+      & " src=" & (if R.By_Vote then "vote" else "explicit"));
+   function Yuga (N : Positive) return String is (Msg ("yuga." & Img ((N - 1) mod 4)));
+   --  The four votes of a session that starts after tick Start (state: St, known words).
+   function Votes_At (Start : Int) return Kalpa_Votes is
+      V : Kalpa_Votes;
+   begin
+      for E in Entity_Id loop
+         V (Integer (E)) := Kalpa_Vote (Seed, E, Start, St (E).Energy, St (E).Mood);
+      end loop;
+      return V;
+   end Votes_At;
+   function Decided (V : Kalpa_Votes) return Int is
+     (Int'Max (Limit ("kalpa.min", 20), Int'Min (Limit ("kalpa.max", 1500), Kalpa_Median (V))));
+
+   --  "key=value" token of a session line; "" if missing.  PROOF-LATER: Importance 3/10, Urgency 2/10,
+   --  SPARK2 (parsing of the sessions.txt record)
+   function Token (L, Key : String) return String is
+      P : constant Natural := Fx.Index (L, " " & Key & "=");
+   begin
+      if P = 0 then return ""; end if;
+      declare
+         First : constant Positive := P + Key'Length + 2;
+         Stop  : constant Natural := Fx.Index (L, " ", First);
+      begin
+         return L (First .. (if Stop = 0 then L'Last else Stop - 1));
+      end;
+   end Token;
+   function To_Num (T : String) return Int is
+     (if T'Length in 1 .. 15 and then (for all C of T => C in '0' .. '9') then Int'Value (T) else -1);
+
+   procedure Parse_Session (L : String; R : out Session_Rec; OK : out Boolean) is
+      Sp : constant Natural := Fx.Index (L, " ");
+      V  : constant String := Token (L, "votes");
+      Pos : Positive := V'First;
+      K  : Natural := 0;
+   begin
+      R := (others => <>);
+      OK := L'Length > 2 and then L (L'First) = 'S' and then Sp > 2;
+      if not OK then return; end if;
+      R.N := Positive (Int'Max (1, To_Num (L (L'First + 1 .. Sp - 1))));
+      R.Start := To_Num (Token (L, "start"));
+      R.Len := To_Num (Token (L, "len"));
+      R.By_Vote := Token (L, "src") = "vote";
+      OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
+        and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0;
+      while OK and then K < 4 loop
+         declare
+            Stop : constant Natural := Fx.Index (V, "/", Pos);
+            Last : constant Natural := (if Stop = 0 then V'Last else Stop - 1);
+         begin
+            K := K + 1;
+            R.Votes (K) := (if Last >= Pos then To_Num (V (Pos .. Last)) else -1);
+            OK := R.Votes (K) >= 0 and then (K = 4 or else Stop > 0);
+            Pos := Last + 2;
+         end;
+      end loop;
+   end Parse_Session;
+
+   procedure Load_Sessions is
+      Lines : Str_Vectors.Vector;
+      Found : Boolean;
+      Mark  : constant String := "# seed ";
+      R     : Session_Rec;
+      OK    : Boolean;
+   begin
+      Sessions.Clear;
+      if not Ada.Directories.Exists (Sessions_Path) then return; end if;
+      Read_Lines (Sessions_Path, Lines, Found);
+      for I in 1 .. Natural (Lines.Length) loop
+         declare
+            L : constant String := Lines (I);
+         begin
+            if L'Length >= Mark'Length and then L (L'First .. L'First + Mark'Length - 1) = Mark then
+               if L /= Mark & Img (Seed) then
+                  raise Diary_Error with Msg ("err.session_seed", L (L'First + Mark'Length .. L'Last));
+               end if;
+            elsif L'Length > 0 and then L (L'First) = 'S' then
+               Parse_Session (L, R, OK);
+               if OK then Sessions.Append (R); else Warn (Msg ("warn.session_bad", Img (I))); end if;
+            elsif L'Length > 0 and then L (L'First) /= '#' then
+               Warn (Msg ("warn.session_bad", Img (I)));
+            end if;
+         end;
+      end loop;
+   end Load_Sessions;
+
+   --  A stored session must reproduce its votes when the replay reaches its start tick.
+   procedure Check_Sessions_At (T : Int) is
+   begin
+      for R of Sessions loop
+         if R.Start = T then
+            declare
+               V : constant Kalpa_Votes := Votes_At (T);
+            begin
+               if V /= R.Votes then
+                  raise Diary_Error with Msg ("err.session", Img (R.N), Img (R.Start), "votes " & Votes_Text (R.Votes),
+                                              "votes " & Votes_Text (V));
+               end if;
+            end;
+         end if;
+      end loop;
+   end Check_Sessions_At;
+
+   procedure Append_Session (R : Session_Rec) is
+      F : TIO.File_Type;
+   begin
+      if Ada.Directories.Exists (Sessions_Path) and then Ada.Directories.Size (Sessions_Path) > 0 then
+         declare
+            Needs_Lf : constant Boolean := not Ends_With_Lf (Sessions_Path);
+         begin
+            TIO.Open (F, TIO.Append_File, Sessions_Path);
+            if Needs_Lf then TIO.New_Line (F); end if;
+         end;
+      else
+         TIO.Create (F, TIO.Out_File, Sessions_Path);
+         TIO.Put_Line (F, "# seed " & Img (Seed));
+         TIO.Put_Line (F, Msg ("hdr.sessions"));
+      end if;
+      TIO.Put_Line (F, Session_Line (R));
+      TIO.Flush (F);
+      TIO.Close (F);
+      Sessions.Append (R);
+   end Append_Session;
+
+   --  After the replay of 1 .. Common: resume the unfinished session, or start one
+   --  (explicit length, else the vote).  Sets Ticks and Kalpa_Line.
+   procedure Decide_Session is
+      Last_Ok : Natural := 0;     --  newest session that starts at or before Common
+      V       : constant Kalpa_Votes := Votes_At (Int (Common));
+      Next_N  : constant Positive := (if Sessions.Is_Empty then 1 else Sessions.Last_Element.N + 1);
+      R       : Session_Rec;
+   begin
+      for I in 1 .. Natural (Sessions.Length) loop
+         if Sessions (I).Start <= Int (Common) then
+            Last_Ok := I;
+         else
+            Warn (Msg ("warn.session_ahead", Img (Sessions (I).N), Img (Sessions (I).Start), Img (Common)));
+         end if;
+      end loop;
+      if Explicit then
+         R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False);
+         if R.Len > 0 then Append_Session (R); end if;
+         Kalpa_Line := To_Unbounded_String
+           ((if R.Len > 0 then Msg ("kalpa.explicit", Img (Next_N), Yuga (Next_N), Img (R.Len), Votes_Text (V))
+             else Msg ("kalpa.none", Votes_Text (V))));
+      elsif Last_Ok > 0 and then Sessions (Last_Ok).Start + Sessions (Last_Ok).Len > Int (Common) then
+         R := Sessions (Last_Ok);   --  an unfinished session (crash, quit): same target as decided
+         Ticks := R.Start + R.Len;
+         Kalpa_Line := To_Unbounded_String (Msg ("kalpa.resume", Img (R.N), Yuga (R.N), Votes_Text (R.Votes), Img (R.Len), Img (Ticks)));
+      else
+         R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True);
+         Ticks := Int (Common) + R.Len;
+         Append_Session (R);
+         Kalpa_Line := To_Unbounded_String (Msg ("kalpa.vote", Img (Next_N), Yuga (Next_N), Votes_Text (V), Img (R.Len)));
+      end if;
+   end Decide_Session;
 begin
    Load_Data;
    while I <= Ada.Command_Line.Argument_Count loop
@@ -634,7 +819,7 @@ begin
       end;
       I := I + 1;
    end loop;
-   Ticks := (if Ticks < 0 then 1000 else Ticks);
+   Explicit := Ticks >= 0 or else More >= 0;   --  otherwise the entities vote on the session length
    Every := (if Every < 0 then 100 else Int'Max (1, Every));
 
    if Fresh and then (Ada.Directories.Exists ("diaries") or else Ada.Directories.Exists ("entities")) then
@@ -706,12 +891,15 @@ begin
       end if;
    end loop;
 
+   Load_Sessions;
    Write_Debug ("RUN", "");   --  stub: a kill -9 still leaves a file
 
    --  Phase 1: replay what every diary has (verify only), then confirm the import.
-   Verify_To := Natural'Min (Common, Natural (Ticks));
+   Verify_To := (if Explicit then Natural'Min (Common, Natural (Ticks)) else Common);
+   Check_Sessions_At (0);
    for Tick in Int range 1 .. Int (Verify_To) loop
       Do_Tick (Tick);
+      Check_Sessions_At (Tick);
       Quit_Seen := Sim_Quit.Requested;
       exit when Quit_Seen;
    end loop;
@@ -725,6 +913,8 @@ begin
          TIO.Put_Line (To_String (Import_Block));
       end;
       for E in Entity_Id loop Start_Known (E) := Known_Count (E); end loop;
+      Decide_Session;
+      TIO.Put_Line (To_String (Kalpa_Line));
    end if;
 
    --  Phase 2: the rest of the run (ticks beyond the common tick are appended where missing).
@@ -775,6 +965,7 @@ begin
             E_Files := E_Files + 1;
          end loop;
       end loop;
+      if not Sessions.Is_Empty then Check_File (Sessions_Path, 0, 's', N, Fails); end if;
       Check_File ("summary.txt", 0, 't', N, Fails);
       Check_File ("summary.jsonl", 5, 't', Js_Lines, Fails);
       Rep := To_Unbounded_String (Msg ("report.head", Img (Int'Max (0, Ticks - Int (Common))), Img (Int'Min (Int (Common) + 1, Ticks)),
@@ -827,7 +1018,7 @@ begin
             end loop;
          end if;
       end;
-      Save ("run_report.txt", Import_Block & ASCII.LF & Rep & Console);
+      Save ("run_report.txt", Import_Block & ASCII.LF & Kalpa_Line & ASCII.LF & Rep & Console);
       if not Ada.Directories.Exists ("run_report.txt") or else Ada.Directories.Size ("run_report.txt") = 0 then
          Append (Rep, Msg ("export.failed", "run_report.txt not written") & ASCII.LF);
          Ada.Command_Line.Set_Exit_Status (1);

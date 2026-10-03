@@ -1,7 +1,8 @@
 #!/bin/bash
 # Scenario checks for diary_sim (no test suite): run, rerun, resume, behind
 # diary, half-written line, drift, forced crash, --fresh, missing data, working
-# folders (words, bench), summary, crash then resume, start_percent.
+# folders (words, bench), summary, crash then resume, start_percent, petitions,
+# make run, kalpa sessions (vote, median, resume, explicit, drift).
 # Usage: scripts/checks.sh [BIN]     (works in a scratch directory)
 root=$(cd "$(dirname "$0")/.." && pwd)
 bin=$(readlink -f "${1:-$root/bin/diary_sim}")
@@ -197,6 +198,37 @@ rm -rf diaries; mkdir diaries; cp -r "$w/bk" diaries/diaries; make run > out.txt
 grep -q 'found diaries/diaries but no diaries/\*.jsonl' out.txt && ok "diaries/diaries: clear hint, stop" || bad "nested hint"
 rm -rf diaries; cp -r "$w/bk" Diaries; make run > out.txt 2>&1
 grep -q 'found Diaries/' out.txt && ok "wrong case Diaries/: clear hint, stop" || bad "case hint"
+
+echo "== 19. kalpa sessions: the entities vote the session length =="
+rm -rf "$w/kal"; mkdir -p "$w/kal/bin" "$w/kal/a" "$w/kal/b"; cp "$bin" "$w/kal/bin/"; cp -r "$root/data" "$w/kal/data"
+kb="$w/kal/bin/diary_sim"; cd "$w/kal/a" || exit 1; "$kb" --every 1000 > out.txt 2>&1
+cd "$w/kal/b" || exit 1; "$kb" --every 1000 > out.txt 2>&1
+cmp -s "$w/kal/a/diaries/sessions.txt" "$w/kal/b/diaries/sessions.txt" && cmp -s <(sed 's/"ts":"[^"]*"//' "$w/kal/a/diaries/ada.jsonl") <(sed 's/"ts":"[^"]*"//' diaries/ada.jsonl) \
+  && ok "two fresh bare runs vote the same and write identical diaries and sessions.txt" || bad "vote not deterministic"
+rec=$(grep '^S1 ' diaries/sessions.txt); echo "   $rec"
+echo "$rec" | grep -Eq '^S1 start=0 votes=[0-9]+/[0-9]+/[0-9]+/[0-9]+ len=[0-9]+ src=vote$' && ok "sessions.txt record format" || bad "session record format"
+mapfile -t v < <(echo "$rec" | sed 's/.*votes=\([^ ]*\).*/\1/' | tr '/' '\n' | sort -n); len=$(echo "$rec" | sed 's/.*len=\([0-9]*\).*/\1/')
+med=$(( (v[1] + v[2]) / 2 )); [ "$med" -lt 20 ] && med=20; [ "$med" -gt 1500 ] && med=1500
+[ "$len" = "$med" ] && [ "$(wc -l < diaries/ada.jsonl)" = "$len" ] && ok "decided length = median of the four votes (clamped), and that many ticks ran" || bad "median ($len vs $med)"
+grep -Eq '^kalpa 1 \((Satya)\): votes [0-9/]+ -> [0-9]+ ticks \(median\)$' out.txt && grep -q '^kalpa 1 ' debug.txt && grep -q '^kalpa 1 ' run_report.txt && [ "$(wc -c < debug.txt)" -le 1500 ] && ok "kalpa line in console, debug.txt (<= 1500 B) and run_report.txt" || bad "kalpa line"
+cp diaries/sessions.txt s_full.txt; "$kb" --every 1000 > out.txt 2>&1
+cmp -s s_full.txt diaries/sessions.txt || true
+grep -q '^S2 ' diaries/sessions.txt && grep -q '^kalpa 2 (Treta)' out.txt && ok "a finished session is followed by a new vote (S2, Treta) at the common tick" || bad "second session"
+rm -rf "$w/kal/c"; mkdir "$w/kal/c"; cd "$w/kal/c" || exit 1
+"$kb" --every 1000 --crash-at 120 > out.txt 2>&1; [ $? = 1 ] && grep -q "^$(echo "$rec" | cut -d' ' -f1-4)" diaries/sessions.txt && [ "$(wc -l < diaries/sessions.txt)" = 3 ] && ok "crash mid-session: the S1 record is already on disk" || bad "crash record"
+"$kb" --every 1000 > out.txt 2>&1
+grep -q '^kalpa 1 (Satya) resumes: votes' out.txt && grep -q "target tick $len" out.txt && [ "$(wc -l < diaries/sessions.txt)" = 3 ] && cmp -s "$w/kal/a/diaries/sessions.txt" <(cat diaries/sessions.txt) && [ "$(wc -l < diaries/gemini.jsonl)" = "$len" ] \
+  && ok "crash then bare rerun: same target, no second vote, sessions.txt identical to the clean run" || bad "resume of a crashed session"
+cmp -s <(sed 's/"ts":"[^"]*"//' diaries/robert.jsonl) <(sed 's/"ts":"[^"]*"//' "$w/kal/a/diaries/robert.jsonl") && ok "resumed diaries identical to the uninterrupted run" || bad "resumed diaries differ"
+"$kb" --ticks $((len + 30)) --every 1000 > out.txt 2>&1
+tail -1 diaries/sessions.txt | grep -Eq "^S2 start=$len votes=[0-9/]+ len=30 src=explicit$" && grep -q '^kalpa 2 (Treta): explicit, 30 ticks' out.txt && ok "--ticks overrides the vote: recorded as src=explicit with the would-be votes" || bad "explicit session"
+"$kb" --more 5 --every 1000 > out.txt 2>&1; tail -1 diaries/sessions.txt | grep -Eq "^S3 start=$((len + 30)) .* len=5 src=explicit$" && ok "--more overrides the vote too (S3, Dvapara)" || bad "--more session"
+cp -r diaries ../d_ok; sed -i '3s/votes=[0-9]*/votes=7/' diaries/sessions.txt; "$kb" --more 0 > out.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && grep -q 'import FAILED.*sessions.txt S1' out.txt && ok "tampered votes in sessions.txt: import FAILED, DRIFT" || bad "tampered sessions.txt"
+rm -rf diaries; cp -r ../d_ok diaries; head -n 3 diaries/sessions.txt > s.cut; printf 'S9 start=99999 votes=1/2/3/4 len=5 src=vote\nS10 sta' >> s.cut; cp s.cut diaries/sessions.txt; "$kb" --more 0 > out.txt 2>&1
+grep -q 'warning: sessions.txt line .* is not a complete session record' out.txt && grep -q 'session 9 starting at tick 99999' out.txt && grep -q '^import OK' out.txt && ok "half-written / ahead records only warn" || bad "sessions.txt warnings"
+rm -rf diaries; cp -r ../d_ok diaries; sed -i '1s/42/7/' diaries/sessions.txt; "$kb" --more 0 > out.txt 2>&1
+grep -q 'sessions.txt is from seed 7' out.txt && ok "sessions.txt of another seed: clear error" || bad "sessions.txt seed"
 
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="

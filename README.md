@@ -11,7 +11,8 @@ Plain Ada, standard library only. Not pushed anywhere yet (local git repo).
 2. `make run` (or `make play`, identical). It builds if needed, imports and
    replay-verifies everything in `./diaries`, and continues. Never `--fresh`.
    `make run TICKS=400 EVERY=100 SEED=42`: **TICKS = how many NEW ticks to run on top
-   of the lowest common tick on disk** (default 200; it passes `--more TICKS`);
+   of the lowest common tick on disk** (it passes `--more TICKS`). **Without TICKS the
+   four entities vote on the session length** (see Kalpa sessions below);
    `SEED` only matters when there are no diaries yet (default 42, announced as
    `import OK: none (fresh start, seed 42)`); stored diaries always win.
 3. The import line says what was loaded: `import OK: 4 entities, 200 ticks verified,
@@ -23,21 +24,62 @@ Plain Ada, standard library only. Not pushed anywhere yet (local git repo).
    (with real diaries present it only warns).
 
 `--more N` is the program option behind `TICKS`; `--ticks=N` keeps its meaning (absolute
-target tick); if both are given, `--more` wins. `make demo` stays isolated in `demo_run/`.
+target tick); if both are given, `--more` wins. Both are explicit: they override the vote.
+`make demo` stays isolated in `demo_run/`.
+
+## Kalpa sessions: the entities vote on how long a session runs
+
+Started without `TICKS` / `--ticks` / `--more` (`make run`, `make play`, or the program
+alone) a session does not have a fixed length: each of the four entities casts a vote
+for the number of NEW ticks (think kalpas in Hinduism: ages of different length).
+
+- **The list:** `data/kalpas.txt`, 60 tick counts in three blocks of 20 by age: lines
+  1-20 short (20..100), 21-40 medium (100..400), 41-60 long (400..1500). Edit it freely;
+  `#` lines and blank lines are ignored (a count other than 60 gives a warning; a missing
+  file falls back to the same built-in table).
+- **A vote:** the base-60 rule picks from `hash(seed, entity, session start tick)`: block
+  = pick / 20, entry = pick mod 20. The entity's state at the session start **leans the
+  block**: energy below `kalpa.energy_low` (30) or mood below `kalpa.mood_low` (-40) one
+  block shorter; energy above `kalpa.energy_high` (70) or mood above `kalpa.mood_high`
+  (40) one block longer; more than half of the words still unknown one block longer. The
+  lean is clamped to +-2 and the block to short..long (`data/limits.txt`).
+- **The decision:** the **median** of the four votes: sort them, take the mean of the two
+  in the middle, rounded down (so ties and even counts are no problem), then clamp to
+  `kalpa.min` (20) .. `kalpa.max` (1500) in `data/limits.txt`.
+- **Flavour only:** the session number n is named after the yuga cycle in the text
+  (Satya, Treta, Dvapara, Kali for n = 1, 2, 3, 4, then again); it changes nothing.
+- **Explicit wins:** `TICKS=N`, `--more N` or `--ticks N` run that length; the session is
+  still recorded (`src=explicit`) together with the votes the entities would have cast.
+- **The record:** `diaries/sessions.txt` (inside `diaries/`, so your backup has it),
+  append-only and flushed: `S3 start=630 votes=120/340/80/410 len=230 src=vote`, after a
+  `# seed N` header. A session of 0 new ticks (a pure verification) is not recorded.
+- **Verified on import:** while the replay passes the start tick of a stored session the
+  votes are recomputed from the replayed state; a difference stops the run as DRIFT
+  (`import FAILED`, nothing truncated). So **changing `data/kalpas.txt` (or the
+  thresholds) after sessions exist needs `--fresh`**, like any other change of the
+  rules. Unreadable lines are skipped with a warning; a record that starts beyond the
+  diaries (diaries cut shorter) is ignored with a warning.
+- **Crash or Ctrl-C:** the record is written before the first tick. A rerun without
+  explicit length finds the unfinished session and resumes toward the SAME target
+  (`kalpa 3 (Dvapara) resumes: ... target tick 860`); it does not vote again. When the
+  last session is complete the next run starts a new one.
+- **Console, `run_report.txt`, `debug.txt`:** one line, e.g. `kalpa 3 (Dvapara): votes
+  120/340/80/410 -> 230 ticks (median)`. The first session of a fresh run is often long
+  (up to 1500 ticks); use `TICKS=200` for a short run.
 
 ## Build and run
 
 ```
 make                         # bin/diary_sim  (GNAT 14; make GNATMAKE=gnatmake-12 for GNAT 12)
 make portable                # 0-warning build with GNAT 14 and 12 in a copy without .git
-make run                     # = make play: continue ./diaries with TICKS=200 new ticks (see Resume)
+make run                     # = make play: continue ./diaries; the entities vote how many ticks (TICKS=N: explicit)
 make demo                    # build + --fresh --ticks 200 --every 50 in demo_run/ (prints seed and the final summary)
 make check                   # version headers + scripts/checks.sh (the scenarios: run, resume, behind, half line, drift, crash, fresh, data limits)
 bin/diary_sim --help
 bin/diary_sim --ticks=1000 --every=100     # --ticks 1000 works too
 ```
 
-Options: `--ticks=N` (default 1000), `--seed=N` (default 42; existing diaries win),
+Options: `--ticks=N` (absolute target; without `--ticks`/`--more` the entities vote the session length), `--seed=N` (default 42; existing diaries win),
 `--every=N` (progress line, default 100), `--fresh` (move old diaries to
 `diaries_old_<time>/` first, together with `entities/`), `--crash-at=T` (force a failure), `--help`.
 Exit: 0 ok, 1 error, 2 usage. Run it from the project directory (or from any
@@ -270,7 +312,7 @@ paste it` and `back up diaries/ before the next run`.
 `diary_sim.adb` (main: CLI, loop, side files, debug.txt), `sim_quit.ads/.adb` (Ctrl-C and SIGTERM flag), `sim_world.ads/.adb` (entities,
 vocabulary, Rule 30 personality, bench kernels, votes and summary text), `sim_util.ads/.adb` (hash rolls,
 line parsing, data-file helpers), `data/words.txt`, `data/topics.txt` (petition topics), `data/limits.txt`,
-`data/messages.txt` (all console wording), `data/vocab.txt`, `data/help.txt`,
+`data/messages.txt` (all console wording), `data/kalpas.txt` (session length votes), `data/vocab.txt`, `data/help.txt`,
 `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
 `Version:` header (`make version-check`); a touched file goes up by 0.001. V&V is
 suspended: no new test suites, `scripts/checks.sh` must keep passing.
