@@ -15,6 +15,8 @@ bad() { echo "  FAIL -- $*"; fails=$((fails + 1)); }
 # data/names.txt maps every id to itself.  The display names have their own scenario (27).
 idn() { sed 's/^\([a-z]*\) *=.*/\1 = \1/' "$root/data/names.txt" > "$1/names.txt"; }
 idata="$w/idata"; mkdir -p "$idata"; cp -r "$root/data/." "$idata/"; idn "$idata"
+# screens (and later chess) change the dice of the words: the older scenarios run with them off; their own scenarios switch them on
+sed -i 's/^screen.enabled = .*/screen.enabled = 0/' "$idata/limits.txt"
 mkdir -p "$w/ib/bin"; cp "$bin" "$w/ib/bin/"; cp -r "$idata" "$w/ib/data"; bin="$w/ib/bin/diary_sim"   # the binary beside its identity-names data
 lines() { cat "$1"/*.jsonl | wc -l; }
 dups()  { for f in "$1"/*.jsonl; do grep '}}$' "$f" | grep -o '"tick":[0-9]*' | sort | uniq -d; done | wc -l; }
@@ -453,7 +455,7 @@ menu '1\n,y\n' > m5.txt 2>&1
 rm -rf home; mkdir home
 menu '4\n,1\n,9\n,\n,1\n' > m6.txt 2>&1
 grep -q 'seed (a new world only' m6.txt && grep -q '^New value for seed' m6.txt && grep -q 'seed 9 (from --seed)' m6.txt && ok "Settings: seed edited for this session only, used by New Game (data/limits.txt untouched)" || bad "settings"
-cmp -s "$root/data/limits.txt" "$w/mn/data/limits.txt" && ok "limits.txt not changed by Settings" || bad "limits.txt changed"
+cmp -s "$idata/limits.txt" "$w/mn/data/limits.txt" && ok "limits.txt not changed by Settings" || bad "limits.txt changed"
 rm -rf home; mkdir home; menu 'x\n,5\n' > m7.txt 2>&1; grep -q 'Please type 1, 2, 3, 4 or 5' m7.txt && ok "a bad answer asks again" || bad "bad menu answer"
 python3 "$w/pty_multi.py" "$w/mn/home" "$mb" 'n\n' --more 5 > m8.txt 2>&1; ! grep -q 'New Game' m8.txt && ok "explicit --more on a terminal: no menu" || bad "menu with explicit args"
 # make run / make play: AUTO-LOAD, no menu; the first two lines say where and what
@@ -742,6 +744,38 @@ cp ../grants.keep diaries/grants.txt; "$gb" --more 0 --every 5000 > g10.txt 2>&1
 DIARY_HOME="$w/gr/o" "$gb" --seed 42 --ticks 600 --yes --every 5000 > /dev/null 2>&1; mkdir -p "$w/gr/o2"; DIARY_HOME="$w/gr/o2" "$gfb" --seed 42 --ticks 600 --yes --every 5000 > /dev/null 2>&1
 a=$(cat "$w/gr/o"/diaries/*.jsonl | sed 's/"ts":"[^"]*"//' | cksum); b=$(cat "$w/gr/o2"/diaries/*.jsonl | sed 's/"ts":"[^"]*"//' | cksum)
 [ "$a" = "$b" ] && ! grep -q 'grant=1' "$w/gr/o2/diaries/sessions.txt" && ok "without a grant, grant=1 changes no diary byte (identical to grant.enabled = 0, whose S lines have no marker)" || bad "grant marker changed the diaries"
+unset DIARY_HOME
+
+echo "== 31. screens (screen=1): taught / coined from a screen, K lines replay-verified, --screens view, off = identical =="
+rm -rf "$w/sc"; mkdir -p "$w/sc/bin" "$w/sc/off/bin" "$w/sc/h" "$w/sc/o"; cp "$bin" "$w/sc/bin/"; cp -r "$idata" "$w/sc/data"; cp "$bin" "$w/sc/off/bin/"; cp -r "$idata" "$w/sc/off/data"
+sed -i 's/^screen.enabled = .*/screen.enabled = 1/' "$w/sc/data/limits.txt"; sb="$w/sc/bin/diary_sim"; sfb="$w/sc/off/bin/diary_sim"
+cd "$w/sc/h" || exit 1; export DIARY_HOME="$w/sc/h"
+"$sb" --seed 42 --ticks 300 --yes --every 5000 > c1.txt 2>&1; "$sb" --more 300 --every 5000 > c2.txt 2>&1
+n_k=$(grep -c '^K[0-9]' diaries/screens.txt)
+grep -q '^S1 .* screen=1$' diaries/sessions.txt && grep -q '^S2 .* screen=1$' diaries/sessions.txt && head -1 diaries/screens.txt | grep -q '^# seed 42$' && [ "$n_k" -gt 500 ] && grep -q '^K1 t=1 ada add w=[0-9]* src=' diaries/screens.txt \
+  && ok "new sessions carry screen=1; every change of a screen is a K line in diaries/screens.txt ($n_k lines)" || bad "screens.txt ($n_k)"
+t_sum=$(sed -n 's/.*taught from a screen \([0-9]*\), coined.*/\1/p' run_report.txt | awk '{ s += $1 } END { print s + 0 }'); c_sum=$(sed -n 's/.*coined from a screen \([0-9]*\)$/\1/p' run_report.txt | awk '{ s += $1 } END { print s + 0 }')
+t_k=$(grep ' l=' diaries/screens.txt | sed 's/.* l=\([^ ]*\) .*/\1/' | grep -v '^-$' | tr ',' '\n' | wc -l); c_k=$(grep -c ' blend a=' diaries/screens.txt)
+echo "   taught from a screen: report $t_sum, K lines $t_k | coined from a screen: report $c_sum, K lines $c_k"
+[ "$t_sum" -gt 0 ] && [ "$c_sum" -gt 0 ] && [ "$t_sum" = "$t_k" ] && [ "$c_sum" = "$c_k" ] && grep -q '^screens (' run_report.txt \
+  && ok "'taught from a screen' and 'coined from a screen' are reported separately and equal what the K lines record" || bad "screen word counts"
+grep -q 'showed its screen to' diaries/ada.jsonl && grep -q ' screen ' entities/gemini/words.txt && grep -q 'side by side on a screen' diaries/*.jsonl && ok "the diaries tell about showing a screen and a blend; words.txt files carry the 'screen' origin" || bad "screen diary text"
+"$sb" --screens > c3.txt 2>&1; rc=$?
+[ $rc = 0 ] && [ "$(grep -c '^+-*+$' c3.txt)" = 8 ] && [ "$(grep -c '^|.*|$' c3.txt)" = 24 ] && [ "$(awk '/^\|/ && length != 22' c3.txt | wc -l)" = 0 ] && [ "$(awk 'length > 79' c3.txt | wc -l)" = 0 ] && grep -q '^screens after tick 600' c3.txt && grep -q '^notes lying on things: ' c3.txt \
+  && ok "--screens replays and prints four 20x6 screens (24 rows, framed, no line over 79 columns)" || bad "--screens view ($rc)"
+"$sb" --more 0 --every 5000 > c4.txt 2>&1; grep -q '^import OK: 4 entities, 600 ticks verified' c4.txt && ok "a rerun replays the screens and verifies them (import OK)" || bad "screens replay"
+cp diaries/screens.txt ../screens.keep; sed -i '100s/$/x/' diaries/screens.txt; "$sb" --more 0 --every 5000 > c5.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && grep -q 'screens.txt K99 differs' c5.txt && ok "tampered K line: import FAILED, DRIFT" || bad "tampered K line"
+cp ../screens.keep diaries/screens.txt; echo "K99999 t=5 ada add w=3 src=x s=3" >> diaries/screens.txt; "$sb" --more 0 --every 5000 > c6.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "an invented K line (not in the replay): DRIFT" || bad "invented K line"
+cp ../screens.keep diaries/screens.txt; sed -i '/^S1 /s/ screen=1//' diaries/sessions.txt; "$sb" --more 0 --every 5000 > c7.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "S line with its screen=1 marker removed: DRIFT" || bad "tampered screen marker"
+sed -i '/^S1 /s/$/ screen=1/' diaries/sessions.txt; "$sb" --more 0 --every 5000 > c8.txt 2>&1; grep -q '^import OK: 4 entities, 600 ticks verified' c8.txt && ok "restored: replays again" || bad "screens restore"
+# off: no marker, no file, no screen text, and the diaries are what the build without screens writes (golden of scenario 28 holds with screens off)
+DIARY_HOME="$w/sc/o" "$sfb" --seed 42 --ticks 300 --yes --every 5000 > /dev/null 2>&1; DIARY_HOME="$w/sc/o" "$sfb" --screens > c9.txt 2>&1
+[ ! -e "$w/sc/o/diaries/screens.txt" ] && ! grep -q 'screen=1' "$w/sc/o/diaries/sessions.txt" && ! grep -q 'screen' "$w/sc/o"/diaries/*.jsonl && ! grep -q ' screen ' "$w/sc/o"/entities/*/words.txt && grep -q 'no screens in this save' c9.txt \
+  && ok "screen.enabled = 0: no marker, no screens.txt, no screen text anywhere; --screens says so" || bad "screens off"
+grep -q -- '--screens' "$root/data/help.txt" && grep -q 'make screens' "$root/README.md" && grep -q 'screen.width' "$root/data/limits.txt" && grep -q 'condensed' "$root/README.md" && ok "--help, README and limits.txt cover screens (and name the condensed-vocabulary hook)" || bad "docs screens"
 unset DIARY_HOME
 
 rm -rf "$w"

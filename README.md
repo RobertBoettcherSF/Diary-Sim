@@ -229,6 +229,30 @@ at the lowest common tick (no replay, like `make say`). The next run applies it 
   the effects ("granted petitions"). A grant is refused when the petition is unknown, not yet filed at the common tick, or
   already granted (exit 2).
 
+## Screens (`make screens`, `--screens`, `screen=1` sessions)
+
+Every wesen owns a small text screen (`screen.width` x `screen.height`, default 20 x 6 characters, `data/limits.txt`). It shows
+words the wesen knows, the names of things it examined, and words it saw on other screens (`*` = pinned, `?` = a word the
+wesen does not know yet). New sessions of a save with the world carry `screen=1` (`screen.enabled = 0`: nothing changes, the
+diaries stay byte-identical to the build before). Per tick, by hash dice (own salts 9100..9199, every number in `limits.txt`
+`screen.*`; wording `data/screens.txt`), a wesen may:
+
+* **pin** a word (up to `screen.pins`) or **drop** one; the oldest unpinned word makes room when the screen is full;
+* **show** its screen to a wesen in the same or a neighbouring cell: the viewer reads `screen.read` consecutive words; a word it
+  does not know is learned with chance `screen.learn_pct` ("taught from a screen", origin "taught by" the owner in `words.txt`, kind
+  `screen`); every word read lands on the viewer's own screen;
+* **leave** the first words of its screen on a thing in reach; others who come near read it with `screen.note_pct` per tick;
+* **blend**: two words side by side on a screen may be coined into a new word (head of one, tail of the other, sometimes a syllable
+  of the name table in `data/things.txt`): "coined from a screen", counted apart from ordinary coining.
+
+Every change of a screen is a line `K<n> t=<tick> <id> add|pin|drop|show|read|leave|blend ... s=<screen>` in `diaries/screens.txt`
+(`s=` = the word ids on that screen after the change); the diaries tell about showing, reading, leaving and blending. The replay
+recomputes every line: a changed or invented `K` line, or a removed `screen=1` marker, is DRIFT. `make screens` replays and prints the
+four framed screens and the notes lying on things (read-only); the end report lists, per wesen, words / pinned / shown / left / read and
+separately "taught from a screen" and "coined from a screen". The unit is `sim_screen.ads/.adb` (records: `sim_store.ads/.adb`).
+**Hook for a later condensed-vocabulary step (not built):** `Sim_Screen.Words_Of` / `Count` give the words on a screen in order, and
+`screen.condense = 0` in `limits.txt` is reserved for it. Changing the `screen.*` numbers of a running save needs `--fresh`.
+
 ## The debug digest (`DEBUG=1`, `--debug`)
 
 `debug.txt` (always written, <= 1500 bytes) is unchanged. For a compact file to attach to chat:

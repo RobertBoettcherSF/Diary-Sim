@@ -1,4 +1,4 @@
---  Version: 0.021
+--  Version: 0.022
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -28,7 +28,7 @@ pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
-     GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Ledger, Sim_Menu, Sim_Quit, Sim_Things, Sim_Util, Sim_World;
+     GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Ledger, Sim_Menu, Sim_Quit, Sim_Screen, Sim_Store, Sim_Things, Sim_Util, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
 
 procedure Diary_Sim is
@@ -55,7 +55,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.021";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.022";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -108,6 +108,13 @@ procedure Diary_Sim is
    --  ---- rest and cool-down (rest=1 sessions): a recovery rate per wesen, a trade-off for rests, a refractory
    --  period after a work burst (data/limits.txt rest.*).  All of it is a function of the replayed actions. ------
    Rest_Active, Grant_Active : Boolean := False;
+   --  screen=1 sessions (Sim_Screen): record lines of every screen change go to diaries/screens.txt (Sim_Store), replay-verified.
+   Screen_Active : Boolean := False;
+   Screens_Path : constant String := "diaries/screens.txt";
+   Screen_Store : Sim_Store.Store;
+   Screen_N : Natural := 0;                      --  the key number of the next K line
+   Scr_Lines : Str_Vectors.Vector;               --  record lines of the last Step (text without key and tick)
+   Screens_View : Boolean := False;              --  --screens: replay, then show the screens (a view like --ledger)
    Rate_Pct, Load, Hist, Cool, Streak, Since_Work, Cool_N, Cut_N, Quick_N : array (Entity_Id) of Natural := [others => 0];
    function RL (Key : String; Default : Integer) return Integer is (Integer (Limit (Key, Int (Default))));
    function Cool_Len (E : Entity_Id) return Positive is
@@ -248,7 +255,7 @@ procedure Diary_Sim is
       Read_Lines (Data_Path ("limits.txt"), Lines, Found);
       if not Found then Warn (Msg ("warn.limits_file")); end if;
       Read_Lines (Data_Path ("menu.txt"), Lines, Found);   --  menu text: keys only, a missing file shows the keys
-      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt"]) loop   --  the Buddhism layer: numbers, wording, players
+      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt", "screens.txt"]) loop   --  the Buddhism layer: numbers, wording, players
          Read_Lines (Data_Path (F), Lines, Found);
          if not Found then Warn (Msg ("warn.dharma_file", F)); end if;
       end loop;
@@ -423,6 +430,7 @@ procedure Diary_Sim is
          Pick_Thing (It, Found);
          if not Found then Add (Msg ("detail.nothing")); return; end if;
          Meet (Sim_Things.Name_Word (It.T));
+         if Screen_Active then Sim_Screen.Note (E, Sim_Things.Name_Word (It.T), "thing"); end if;
          Meet (Sim_Things.Prop_Word (Sim_Things.Quality_Text (It.T), "quality"));
          Add (Msg ("detail.examine", Sim_Things.Description (It.T), Sim_Things.Name_Text (It.T)));
          Report_New;
@@ -574,6 +582,7 @@ procedure Diary_Sim is
                      Use_Word (E, Pa);
                      Use_Word (E, Pb);
                      Learn_Word (E, W);
+                     if Screen_Active then Sim_Screen.Note (E, W, "coined"); end if;
                      Ensure (E, Words_File, Words_Line (W, "coined", Tick, Parents (W)));
                      Add (Msg ("detail.coined", Text, Word (Pa), Word (Pb)));
                      Did_Coin := True;
@@ -634,6 +643,7 @@ procedure Diary_Sim is
                Add (Msg ("detail.learned", Word (W), Name (Pending_From (E))));
                Pending_Word (E) := 0;
                Did_Learn := True;
+               if Screen_Active then Sim_Screen.Note (E, W, "taught"); end if;
             end;
          when Bench =>
             declare
@@ -653,6 +663,19 @@ procedure Diary_Sim is
          when others => null;
       end case;
       if Rest_Active then Rest_After (E, A, S.Mood); end if;
+      if Screen_Active and then World_Mode then   --  the screen: pin, drop, show, read, leave, blend (no effect on mood)
+         declare
+            Learned_Now : Sim_Screen.Learn_Vectors.Vector;
+            Said : Unbounded_String;
+         begin
+            Sim_Screen.Step (E, Tick, Scr_Lines, Learned_Now, Said);
+            for X of Learned_Now loop
+               Ensure (X.Who, Words_File, (if X.Coined then Words_Line (X.W, "coined", Tick, Parents (X.W))
+                                           else Words_Line (X.W, "screen", Tick, Name (Entity_Id (X.From)))));
+            end loop;
+            if Length (Said) > 0 then Add (To_String (Said)); end if;
+         end;
+      end if;
       Sim_Ledger.Add (E, Tick, A, Verb, S.Location, M_Base, M_After_Base - Pre_Mo - M_Base, S.Mood - M_After_Base,
                       Eff_Mo + Push_Nom, Led_Phase, Was_Cool, Push_Feel);
       declare
@@ -1599,6 +1622,35 @@ procedure Diary_Sim is
       end loop;
    end Verify_Grants;
 
+   --  Every change of a screen is a K line in diaries/screens.txt: "K12 t=300 ada add w=7 src=taught s=3,*7".  The replay
+   --  compares each one with the stored line (DRIFT if different) and appends a missing one.
+   procedure Emit_Screen_Lines (Tick : Int) is
+      Result : Sim_Store.Status;
+      Old : Unbounded_String;
+   begin
+      for T of Scr_Lines loop
+         Screen_N := Screen_N + 1;
+         declare
+            Line : constant String := "K" & Img (Screen_N) & " t=" & Img (Tick) & " " & T;
+         begin
+            Sim_Store.Emit (Screen_Store, Line, not Preview and then not Ledger_Mode, Result, Old);
+            if Sim_Store."=" (Result, Sim_Store.Differs) then
+               raise Drift_Error with Msg ("err.screens", "K" & Img (Screen_N), Diff_At (To_String (Old), Line));
+            end if;
+         end;
+      end loop;
+      Scr_Lines.Clear;
+   end Emit_Screen_Lines;
+
+   --  After the replay: a stored K line the replay did not produce is DRIFT.
+   procedure Verify_Screens (Upto : Int) is
+      Orphan : constant String := Sim_Store.Orphan (Screen_Store, Upto);
+   begin
+      if Orphan /= "" then
+         raise Drift_Error with Msg ("err.screens", Sim_Store.Key_Of (Orphan), Diff_At (Orphan, "(not in the replay)"));
+      end if;
+   end Verify_Screens;
+
    procedure Do_Tick (Tick : Int) is
    begin
       Cur_Tick := Tick;
@@ -1610,6 +1662,7 @@ procedure Diary_Sim is
          declare
             Line : constant String := Step (E, Tick);
          begin
+            Emit_Screen_Lines (Tick);
             if Tick <= Int (Disk (E).Length) then   --  already on disk: compare, do not write
                if No_Ts (Line) /= No_Ts (Disk (E) (Positive (Tick))) then
                   raise Drift_Error with Msg ("err.drift", Name (E), Img (Tick),
@@ -1642,6 +1695,20 @@ procedure Diary_Sim is
       Sim_Dharma.Tick_End (Tick);
       Last_Done := Tick;
    end Do_Tick;
+
+   --  The screens of every wesen after the replay (--screens / make screens) and the notes lying on things.
+   function Screens_Text return String is
+      R : Unbounded_String;
+   begin
+      if not Screen_Active then return Msg ("screen.none") & ASCII.LF; end if;
+      Append (R, Msg ("screen.head", Img (Last_Done)) & ASCII.LF);
+      for E in Entity_Id loop
+         Append (R, Sim_Screen.Summary (E) & ASCII.LF);
+         for L of Sim_Screen.Box (E) loop Append (R, L & ASCII.LF); end loop;
+      end loop;
+      Append (R, Msg ("screen.notes", Img (Sim_Screen.Notes_Now)) & ASCII.LF);
+      return To_String (R);
+   end Screens_Text;
 
    --  diaries/inbox.txt: the newest inbox.view lines of the players' reports to Robert (a view; the
    --  replay regenerates all of them and import compares the stored lines).  Rewritten atomically.
@@ -1745,6 +1812,7 @@ procedure Diary_Sim is
       World : Boolean := False;         --  world=1: the treadmill world (Sim_Things) runs in this session
       Rest : Boolean := False;          --  rest=1: recovery rates, rest trade-off and cool-downs
       Grant : Boolean := False;         --  grant=1: grants of petitions (diaries/grants.txt) change recovery rates
+      Screen : Boolean := False;        --  screen=1: the wesen own small text screens (Sim_Screen, diaries/screens.txt)
    end record;
    package Session_Vectors is new Ada.Containers.Vectors (Positive, Session_Rec);
    Sessions : Session_Vectors.Vector;
@@ -1763,7 +1831,8 @@ procedure Diary_Sim is
    function Session_Line (R : Session_Rec) return String is
      ("S" & Img (R.N) & " start=" & Img (R.Start) & " votes=" & Votes_Text (R.Votes) & " len=" & Img (R.Len)
       & " src=" & (if R.By_Vote then "vote" else "explicit") & (if R.Dharma then " dharma=1" else "")
-      & (if R.World then " world=1" else "") & (if R.Rest then " rest=1" else "") & (if R.Grant then " grant=1" else ""));
+      & (if R.World then " world=1" else "") & (if R.Rest then " rest=1" else "") & (if R.Grant then " grant=1" else "")
+      & (if R.Screen then " screen=1" else ""));
    function Yuga (N : Positive) return String is (Msg ("yuga." & Img ((N - 1) mod 4)));
    --  The four votes of a session that starts after tick Start (state: St, known words).
    function Votes_At (Start : Int) return Kalpa_Votes is
@@ -1797,6 +1866,7 @@ procedure Diary_Sim is
       R.World := Token (L, "world") = "1";
       R.Rest := Token (L, "rest") = "1";
       R.Grant := Token (L, "grant") = "1";
+      R.Screen := Token (L, "screen") = "1";
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
         and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0;
       while OK and then K < 4 loop
@@ -1896,6 +1966,7 @@ procedure Diary_Sim is
       World_Active := False;
       Rest_Active := False;
       Grant_Active := False;
+      Screen_Active := False;
       if not Ada.Directories.Exists (Sessions_Path) then return; end if;
       Read_Lines (Sessions_Path, Lines, Found);
       for I in 1 .. Natural (Lines.Length) loop
@@ -1935,6 +2006,7 @@ procedure Diary_Sim is
       if R.Rest and then not Rest_Active then Rest_Begin (Seed); end if;   --  the state runs on from session to session
       Rest_Active := R.Rest;
       Grant_Active := R.Grant;
+      Screen_Active := R.Screen;
       for E in Entity_Id loop
          if Sim_Dharma.Rebirth_Location (E) >= 0 then St (E).Location := Clamp (Sim_Dharma.Rebirth_Location (E), 0, L_Max); end if;
       end loop;
@@ -2102,6 +2174,7 @@ procedure Diary_Sim is
    function World_Wanted return Boolean is (Limit ("world.enabled", 1) /= 0 and then Sim_Things.Loaded);
    function Rest_Wanted return Boolean is (World_Wanted and then Limit ("rest.enabled", 1) /= 0);   --  rest=1 needs the world
    function Grant_Wanted return Boolean is (Rest_Wanted and then Limit ("grant.enabled", 1) /= 0);   --  grant=1 needs rest=1
+   function Screen_Wanted return Boolean is (World_Wanted and then Limit ("screen.enabled", 1) /= 0);   --  screen=1 needs the world
 
    --  After the replay of 1 .. Common: resume the unfinished session, or start one
    --  (explicit length, else the vote).  Sets Ticks and Kalpa_Line.
@@ -2121,7 +2194,7 @@ procedure Diary_Sim is
       Session_N := (if Sessions.Is_Empty then 0 else Sessions.Last_Element.N);
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
-               Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted);
+               Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -2137,7 +2210,7 @@ procedure Diary_Sim is
          Kalpa_Line := To_Unbounded_String (Msg ("kalpa.resume", Img (R.N), Yuga (R.N), Votes_Text (R.Votes), Img (R.Len), Img (Ticks)));
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
-               World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted);
+               World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);
@@ -2536,9 +2609,11 @@ procedure Diary_Sim is
       Sim_World.Init (Vocab, Seed, Start_Pct);
       Sim_Dharma.Init (Seed);
       Sim_Things.Init (Seed);
+      Sim_Screen.Init (Seed, Coin_Cap);
       World_Active := World_Wanted;
       Rest_Active := Rest_Wanted;
       Grant_Active := Grant_Wanted;
+      Screen_Active := Screen_Wanted;
       if Rest_Active then Rest_Begin (Seed); end if;
       Con.Put (To_String (Pending));
       Con.Put_Line (Msg ("preview.head", Img (Seed), Img (Total)));
@@ -2864,6 +2939,7 @@ begin
          elsif Opt = "--inbox" then Inbox_Mode := True;
          elsif Opt = "--map" then Map_Mode := True;
          elsif Opt = "--grant" then Grant_Mode := True; Grant_Opt := To_Unbounded_String (Val);
+         elsif Opt = "--screens" then Ledger_Mode := True; Screens_View := True;
          elsif Opt = "--ledger" then
             Ledger_Mode := True;
             Ledger_Full := Val = "full";
@@ -2996,6 +3072,7 @@ begin
    Sim_World.Init (Vocab, Seed, Start_Pct);
    Sim_Dharma.Init (Seed);
    Sim_Things.Init (Seed);
+   Sim_Screen.Init (Seed, Coin_Cap);
    for E in Entity_Id loop
       Cur_Name := To_Unbounded_String (Name (E));
       Ada.Directories.Create_Path ("entities/" & Name (E));
@@ -3027,6 +3104,8 @@ begin
    Load_Says;
    Load_World_File;
    Load_Grants;
+   Sim_Store.Open (Screen_Store, Screens_Path, "# seed " & Img (Seed));
+   Screen_N := 0;
    Set_Ledger_From;
    if not Ledger_Mode then Write_Debug ("RUN", ""); end if;   --  stub: a kill -9 still leaves a file
 
@@ -3051,7 +3130,7 @@ begin
       if Ledger_Mode then   --  replayed and verified, nothing decided, nothing written: print the ledger
          for F of Out_File loop TIO.Close (F); end loop;
          for F of Side_Out loop TIO.Close (F); end loop;
-         Con.Put_Line (Sim_Ledger.Report (Seed, Ledger_From, Ledger_Full));
+         if Screens_View then Con.Put (Screens_Text); else Con.Put_Line (Sim_Ledger.Report (Seed, Ledger_From, Ledger_Full)); end if;
          return;
       end if;
       for E in Entity_Id loop
@@ -3094,6 +3173,7 @@ begin
       Verify_Inbox (Last_Done);
       Verify_Edits (Last_Done);
       Verify_Grants (Last_Done);
+      Verify_Screens (Last_Done);
    end if;
    if Quit_Seen then   --  Ctrl-C / SIGTERM: everything written so far is flushed; a rerun resumes
       Con.Put_Line (Msg ("quit", Sim_Quit.Which, Img (Last_Done)));
@@ -3165,6 +3245,10 @@ begin
       if Rest_Active then   --  recovery: rate, cool-downs taken, rests cut short
          Append (Rep, Msg ("rest.head") & ASCII.LF);
          for E in Entity_Id loop Append (Rep, Rest_Text (E) & ASCII.LF); end loop;
+      end if;
+      if Screen_Active then   --  the screens: shown / left / read, and the words they taught and coined
+         Append (Rep, Msg ("screen.rep") & ASCII.LF);
+         for E in Entity_Id loop Append (Rep, Sim_Screen.Summary (E) & ASCII.LF); end loop;
       end if;
       if not Grant_Report.Is_Empty then   --  granted petitions and the recovery rates they changed
          Append (Rep, Msg ("grant.head") & ASCII.LF);

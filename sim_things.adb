@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 pragma Ada_2022;
 
 with Ada.Containers.Ordered_Maps, Ada.Strings.Fixed, Ada.Strings.Unbounded;
@@ -161,6 +161,10 @@ package body Sim_Things is
 
    function Syllable (T : Thing; I : Natural) return String is
      (Entry_Of (L_Syllable, Pick (L_Syllable, T.Ent, T.Sub, 7300 + 50 * (I mod 4))));
+   function Thing_Key (X, Y : Integer; T : Thing) return String is
+     (Img (X) & "," & Img (Y) & "/" & Img (T.Ent) & "." & Img (T.Sub));
+   function Blend_Syllable (E : Entity_Id; Tick : Int; Salt : Natural) return String is
+     (Entry_Of (L_Syllable, Pick (L_Syllable, Positive (E), Tick, Salt)));
    function Name_Text (T : Thing) return String is
       N : constant Positive := (if Roll (Seed_V, T.Ent, T.Sub, 7290, 4) = 4 then 3 else 2);
       R : Unbounded_String;

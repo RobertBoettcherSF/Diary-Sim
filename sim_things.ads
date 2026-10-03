@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  The treadmill world of diary_sim (world=1 sessions only): an endless grid that is generated
 --  around the wesen as they walk and is identical whenever they come back.
 --
@@ -63,6 +63,9 @@ package Sim_Things is
    function Taste_Text (T : Thing) return String;
    function Description (T : Thing) return String;   --  "red round stone"
    function Name_Text (T : Thing) return String;     --  the made-up name
+   function Thing_Key (X, Y : Integer; T : Thing) return String;   --  "x,y/ent.sub": where a screen note lies
+   --  A syllable of the name table by the caller's own salt (Sim_Screen: the bridge of a coined blend).
+   function Blend_Syllable (E : Entity_Id; Tick : Int; Salt : Natural) return String;
    function Feel_Class (T : Thing) return Natural;   --  0 pleasant, 1 neutral, 2 unpleasant (block of 20)
    function Taste_Class (T : Thing) return Natural;
    function Social_Text (E : Entity_Id; Tick : Int) return String;

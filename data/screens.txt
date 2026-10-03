@@ -1,0 +1,16 @@
+# Wording of the screens (Sim_Screen, screen=1 sessions).  Numbers: data/limits.txt screen.*
+# {1}.. are filled in by the program.  screen.frame = corner, horizontal and vertical character of the framed screen.
+screen.frame = +-|
+screen.none = no screens in this save (they start with a session marked screen=1: make run).
+screen.head = screens after tick {1} (* pinned, ? a word the wesen does not know yet):
+screen.notes = notes lying on things: {1}
+screen.rep = screens (words on it, pinned, shown, left on things, read from things; words taught and coined from a screen):
+screen.sum = {1}: {2} words, {3} pinned, shown {4}, left on things {5}, read {6}
+screen.sum2 = taught from a screen {1}, coined from a screen {2}
+detail.scr_pin = pinned '{1}' on its screen
+detail.scr_drop = dropped '{1}' from its screen
+detail.scr_show = showed its screen to {1} ({2} words read, {3} learned)
+detail.scr_read = read a note on a thing, left by {1} ({2} words read, {3} learned)
+detail.scr_leave = left {1} words of its screen on a thing
+detail.scr_blend = coined '{1}' from '{2}' and '{3}' side by side on a screen
+err.screens = screens.txt {1} differs from the replay: {2}

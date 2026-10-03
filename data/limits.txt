@@ -145,3 +145,26 @@ rest.petition_ref = 30
 grant.enabled = 1
 grant.step = 6
 grant.cap = 170
+
+# Screens (screen=1 sessions; needs the world): each wesen owns a text screen of width x height characters with words it knows, names of
+# things it examined and words seen on other screens.  Per tick (own hash salts 9100 .. 9199): pin_pct / drop_pct: pin (up to pins words)
+# or drop a word; show_pct: show it to a wesen in the same or a neighbouring cell, who reads up to read consecutive words and learns an
+# unknown one with learn_pct; leave_pct: leave the first leave_words words on a thing in reach, where others read them with note_pct per
+# tick; blend_pct: two words read side by side may be coined into a blend (own_blend_pct: on its own screen).  start: words on the first
+# screen.  condense is RESERVED for a later condensed-vocabulary step (not built).  Changing these numbers needs --fresh (screens.txt drifts).
+screen.enabled = 1
+screen.width = 20
+screen.height = 6
+screen.pins = 3
+screen.start = 5
+screen.pin_pct = 8
+screen.drop_pct = 8
+screen.show_pct = 30
+screen.read = 3
+screen.learn_pct = 35
+screen.leave_pct = 6
+screen.leave_words = 4
+screen.note_pct = 15
+screen.blend_pct = 10
+screen.own_blend_pct = 2
+screen.condense = 0

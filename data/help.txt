@@ -12,6 +12,7 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
   --inbox        print the inbox of Robert
   --grant=P<n>   grant a petition (make grant PETITION=P12): more recovery
   --map          print the treadmill view of the last session end (make map)
+  --screens      the wesen's text screens after the replay (make screens)
   --ledger[=full] where each wesen's mood comes from (make ledger; report only)
   --menu         the main menu (terminal only; make menu)
   --debug        also write debug_digest.txt (make run|demo DEBUG=1)
