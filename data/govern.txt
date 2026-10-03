@@ -1,0 +1,63 @@
+# Governance (govern=1 sessions): the rule levers a petition may move, and the wording of decisions and reports.
+# Numbers (dice weights, delays, steps of trust) are in data/limits.txt govern.*.  Changing anything here needs --fresh.
+# lever.<name> = min max step   (the governed OFFSET: a petition moves it by one step, never past min / max)
+lever.rate = -30 40 4
+lever.cool = -8 8 2
+lever.work = 0 4 2
+lever.quick = -20 40 5
+lever.rate.label = rate
+lever.cool.label = cool-down
+lever.work.label = work cost
+lever.quick.label = quick rest
+# topic.<petition topic> = lever and direction (+ raises the offset, - lowers it); a topic without a line has no lever
+topic.more_rest = rate +
+topic.faster_work_recovery = cool -
+topic.quieter_mood = work +
+topic.other = quick +
+# the answer, by reason code
+why.grant.trust = I trust this wesen with it
+why.grant.generous = I see no harm in it
+why.grant.fair = it is a fair wish
+why.partial.careful = a smaller step for now
+why.partial.trial = half a step as a trial
+why.defer.busy = too busy, ask me again later
+why.defer.think = I want to think about it
+why.refuse.distrust = not yet, trust is too low
+why.refuse.strict = the rules stay as they are
+why.refuse.later = not now
+why.refuse.nolever = there is no rule I may change for this
+why.refuse.bound = the rule is already as far as it may go
+why.refuse.spam = asked too often
+why.veto = Robert reverted the change
+why.approve = Robert approved the decision
+kind.grant = granted
+kind.partial = partial
+kind.defer = deferred
+kind.refuse = refused
+kind.veto = vetoed
+kind.approve = approved
+# reports to Robert (from the D records only): counter line, and one line per change; wording by the tone of the player
+govern.counter = {1} petitions seen, {2} granted, {3} partial, {4} deferred, {5} refused
+govern.counter.veto = , {1} vetoed
+govern.chg.plain = {1} {2}: {3} {4} ({5}); {6}
+govern.chg.calm = {1} {2}: a small step, {3} {4} ({5}); {6}
+govern.chg.alarm = {1} {2}: CHANGED {3} by {4} ({5}); {6}
+govern.head = governance (players decide petitions; decisions D<n>, trust, standing):
+govern.none = no governance in this save (it starts with a session marked govern=1: make run).
+govern.player = {1}: {2}
+govern.wesen = {1}: trust {2} stand {3} | rate {4} cool {5} work {6} quick {7}
+govern.last = last decisions:
+govern.row = {1} t={2} {3}: {4} ({5})
+govern.desc = {1} {2}: {4} {5} {6}, {7}
+govern.rep = governance (petitions seen, granted, partial, deferred, refused per player; Robert may veto):
+govern.digest = govern {1}
+detail.gov = a decision on a petition arrived: {1}
+vetoes.header = # V<n> tick=<T> decision=D<k> act=veto|approve by=<who>  (Robert's input; applied after tick T; the replay writes the D line for it)
+veto.ok = {1}: {2} of {3} ({4}); it takes effect from tick {5}
+veto.nodecision = no decision {1} in this save (see make govern)
+veto.cant = {1} cannot be vetoed ({2}); only a granted or partial decision can
+veto.already = {1} was already vetoed or approved
+err.govern = govern.txt {1} differs from the replay: {2}
+err.govern_in = vetoes.txt {1} cannot be applied: it names no decision that can be vetoed / approved at that tick
+detail.gov.up = heard back on a petition: the answer was yes
+detail.gov.down = heard back on a petition: the answer was no

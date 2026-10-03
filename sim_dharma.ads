@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  The Buddhism layer of diary_sim, RECORD-FIRST: karma, reincarnation values, attachment
 --  (unrest), the commitment ladder with an anchor, awareness ("feels watched"), and the three
 --  in-sim PLAYERS that sit between the wesen and Robert (the real player) and write him summary
@@ -66,6 +66,14 @@ package Sim_Dharma is
    function Inbox_Count return Natural;
    function Inbox_Line (N : Positive) return String;
    function Inbox_Tail (Max : Positive) return Str_Vectors.Vector;   --  the newest Max lines
+   --  govern=1: the personality the governance dice read (Rule 30 core), the workload, the tone variant of a report
+   function Warm_Of (P : Player_Id) return Integer;    --  -50 .. +50: generous (+) or strict (-)
+   function Brev_Of (P : Player_Id) return Integer;    --  0 .. 100: how curt (strict) the player is
+   function Attn_Of (P : Player_Id) return Integer;    --  0 .. 100: workload / awareness of its wesen
+   function Variant_Of (P : Player_Id) return String;  --  "calm" | "plain" | "alarm": the wording of its reports
+   --  The governance lines a player must put into its report at the next End_Life (never omitted, wording may differ):
+   --  the first line of a player is its counter line (shown in the end report), all lines go to the inbox.
+   procedure Set_Govern_Report (P : Player_Id; Lines : Str_Vectors.Vector);
    function Last_Petition return String;   --  "C3 more_rest 3/4", "" before the first
 
 end Sim_Dharma;

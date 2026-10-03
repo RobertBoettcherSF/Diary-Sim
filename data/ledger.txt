@@ -44,3 +44,4 @@ ledger.at.1 = in the lab
 ledger.at.2 = at the cafe
 ledger.at.3 = at home
 ledger.chess = chess results
+ledger.govern = governance decisions

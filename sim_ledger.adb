@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  See sim_ledger.ads.
 pragma Ada_2022;
 
@@ -16,7 +16,7 @@ package body Sim_Ledger is
       A : Action := Rest;
       V : List_Id := Rest;
       Loc : Natural := 0;
-      Base, Rst, Psh, Chs, Nom, Phase : Integer := 0;
+      Base, Rst, Psh, Chs, Gvn, Nom, Phase : Integer := 0;
       Cool : Boolean := False;
       Feel : Integer := -1;
    end record;
@@ -54,6 +54,8 @@ package body Sim_Ledger is
       Quick, Calm, Cool_Sum : Integer := 0;
       Quick_N, Calm_N, Cool_N : Natural := 0;
       Chess : Integer := 0;                            --  mood of finished chess games
+      Gov : Integer := 0;                              --  mood of governance decisions (govern=1)
+      Gov_N : Natural := 0;
       Chess_N : Natural := 0;
    end record;
 
@@ -64,9 +66,10 @@ package body Sim_Ledger is
    end Reset;
 
    procedure Add (E : Entity_Id; Tick : Int; A : Action; V : List_Id; Loc : Natural;
-                  Base, Rest_Fx, Push_Fx, Nominal, Phase : Integer; Cool : Boolean; Feel : Integer; Chess_Fx : Integer := 0) is
+                  Base, Rest_Fx, Push_Fx, Nominal, Phase : Integer; Cool : Boolean; Feel : Integer; Chess_Fx : Integer := 0;
+                  Gov_Fx : Integer := 0) is
    begin
-      Recs.Append (Rec'(E => E, Tick => Tick, A => A, V => V, Loc => Loc, Base => Base, Rst => Rest_Fx, Psh => Push_Fx, Chs => Chess_Fx,
+      Recs.Append (Rec'(E => E, Tick => Tick, A => A, V => V, Loc => Loc, Base => Base, Rst => Rest_Fx, Psh => Push_Fx, Chs => Chess_Fx, Gvn => Gov_Fx,
                         Nom => Nominal, Phase => Phase, Cool => Cool, Feel => Feel));
       if Tick > Last_Tick then Last_Tick := Tick; end if;
    end Add;
@@ -77,7 +80,7 @@ package body Sim_Ledger is
       T : Integer := 0;
    begin
       for R of Recs loop
-         if R.E = E and then R.Tick > From and then (To = 0 or else R.Tick <= To) then T := T + R.Base + R.Rst + R.Psh + R.Chs; end if;
+         if R.E = E and then R.Tick > From and then (To = 0 or else R.Tick <= To) then T := T + R.Base + R.Rst + R.Psh + R.Chs + R.Gvn; end if;
       end loop;
       return T;
    end Net;
@@ -89,7 +92,7 @@ package body Sim_Ledger is
          if R.E = E and then R.Tick > From then
             declare
                L : constant Place := Place'Min (3, R.Loc);
-               D : constant Integer := R.Base + R.Rst + R.Psh + R.Chs;
+               D : constant Integer := R.Base + R.Rst + R.Psh + R.Chs + R.Gvn;
             begin
                G.N := G.N + 1;
                G.Net := G.Net + D;
@@ -107,6 +110,8 @@ package body Sim_Ledger is
                   G.Push_N (R.Feel) := G.Push_N (R.Feel) + 1;
                end if;
                G.Chess := G.Chess + R.Chs;
+               G.Gov := G.Gov + R.Gvn;
+               if R.Gvn /= 0 then G.Gov_N := G.Gov_N + 1; end if;
                if R.Chs /= 0 then G.Chess_N := G.Chess_N + 1; end if;
                if R.Phase < 0 then
                   G.Quick := G.Quick + R.Rst;
@@ -126,7 +131,7 @@ package body Sim_Ledger is
    end Sum;
 
    --  ---- the candidates of the top lists: a partition of the whole mood change ----------------------
-   type Kind_T is (Cell_K, Quick_K, Calm_K, Push_K, Chess_K);
+   type Kind_T is (Cell_K, Quick_K, Calm_K, Push_K, Chess_K, Gov_K);
    type Cand is record
       Kind : Kind_T := Cell_K;
       A : Action := Rest;
@@ -147,7 +152,8 @@ package body Sim_Ledger is
          when Quick_K => Msg ("ledger.quick"),
          when Calm_K => Msg ("ledger.calm"),
          when Push_K => Msg ("ledger.push." & Img (C.Class)),
-         when Chess_K => Msg ("ledger.chess"));
+         when Chess_K => Msg ("ledger.chess"),
+         when Gov_K => Msg ("ledger.govern"));
 
    function Candidates (G : Agg) return Cand_Array is
       Out_A : Cand_Array (1 .. 64);
@@ -166,6 +172,7 @@ package body Sim_Ledger is
       Put (Cand'(Calm_K, Rest, 0, 0, G.Calm, G.Calm_N));
       for K in 0 .. 2 loop Put (Cand'(Push_K, Rest, 0, K, G.Push (K), G.Push_N (K))); end loop;
       Put (Cand'(Chess_K, Rest, 0, 0, G.Chess, G.Chess_N));
+      Put (Cand'(Gov_K, Rest, 0, 0, G.Gov, G.Gov_N));
       return Out_A (1 .. N);
    end Candidates;
 
@@ -312,6 +319,7 @@ package body Sim_Ledger is
          if G.Push_N (K) > 0 then Items.Append (Item (Msg ("ledger.push." & Img (K)), G.Push (K), G.Push_N (K))); end if;
       end loop;
       if G.Chess_N > 0 then Items.Append (Item (Msg ("ledger.chess"), G.Chess, G.Chess_N)); end if;
+      if G.Gov_N > 0 then Items.Append (Item (Msg ("ledger.govern"), G.Gov, G.Gov_N)); end if;
       Append (Out_S, Wrap ("  " & Pad_R (Msg ("ledger.by.event"), W), Items));
       Items.Clear;
       if G.Quick_N > 0 then Items.Append (Item (Msg ("ledger.quick"), G.Quick, G.Quick_N)); end if;

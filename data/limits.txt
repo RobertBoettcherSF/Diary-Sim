@@ -233,3 +233,41 @@ robot.cost.turn = 1
 robot.cost.look = 1
 robot.cost.pick = 3
 robot.cost.push = 5
+
+# govern (govern=1 sessions, needs rest=1): the player that watches a wesen decides its petitions (data/govern.txt: the levers).
+# score = base + Warm*gen_w/100 - (Brev-50)*strict_w/100 + (trust-50)*trust_w/100 - workload*attn_w/100 + low-mood*mood_w/100,
+# clamped to 5 .. 95, is the chance (percent) of a grant or partial; grant_share percent of it is a full step, the rest half a step.
+# Otherwise: defer (chance defer_base + workload*defer_w/100, back after defer_ticks, at most max_defer times) or refuse.
+# More than spam petitions on one topic without an answer of yes: refused as spam (trust falls by trust_fall).  Mood of a wesen:
+# grant +mood_grant, partial +mood_partial, refusal mood_refuse (deeper when its standing is low); a refusal makes the next petition
+# on that topic likelier (urgency).  Robert's veto lowers standing and trust (veto_*), an approval raises them (approve_*).
+# Changing these numbers or data/govern.txt needs --fresh (govern.txt drifts).
+govern.enabled = 1
+govern.trust_start = 50
+govern.stand_start = 50
+govern.delay = 3
+govern.delay_extra = 3
+govern.base = 45
+govern.gen_w = 60
+govern.strict_w = 40
+govern.trust_w = 50
+govern.attn_w = 30
+govern.mood_w = 10
+govern.grant_share = 55
+govern.defer_base = 25
+govern.defer_w = 30
+govern.defer_ticks = 40
+govern.max_defer = 2
+govern.spam = 3
+govern.trust_rise = 2
+govern.trust_fall = 6
+govern.stand_rise = 1
+govern.stand_fall = 1
+govern.mood_grant = 2
+govern.mood_partial = 1
+govern.mood_refuse = -2
+govern.urgency = 12
+govern.veto_stand = 10
+govern.veto_trust = 8
+govern.approve_stand = 5
+govern.approve_trust = 4

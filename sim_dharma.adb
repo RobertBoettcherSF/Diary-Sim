@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Containers.Vectors, Ada.Strings.Fixed, Ada.Strings.Unbounded, Interfaces;
@@ -100,6 +100,8 @@ package body Sim_Dharma is
    package Fact_Vectors is new Ada.Containers.Vectors (Positive, Fact);
 
    Inbox : Str_Vectors.Vector;
+   type Gov_Reports is array (Player_Id) of Str_Vectors.Vector;
+   Gov_Lines : Gov_Reports;
    Last_Table, Last_Block, Last_Report : Str_Vectors.Vector;
    Last_C : Unbounded_String;
    Last_Win_N : Natural := 0;
@@ -652,6 +654,14 @@ package body Sim_Dharma is
             end loop;
          end;
       end loop;
+      for P in Player_Id loop   --  govern=1: the changes and decisions, from the D records, whatever the tone
+         for K in 1 .. Natural (Gov_Lines (P).Length) loop
+            Inbox.Append ("I" & Img (Integer (Inbox.Length) + 1) & " " & Msg ("sev.2") & " from=" & Player_Name (P)
+                          & " s" & Img (Session) & " t" & Img (Tick) & " | " & Gov_Lines (P) (K) & " | src=s" & Img (Session) & ":govern");
+            if K = 1 then Last_Report.Append (Inbox.Last_Element); end if;
+         end loop;
+         Gov_Lines (P).Clear;
+      end loop;
       Decisions.Clear;
       Prev_Net := [for E in Entity_Id => Net (E)];
       Last_Block := Res;
@@ -723,6 +733,14 @@ package body Sim_Dharma is
    end Address_Counts;
 
    function Latest_Report return Str_Vectors.Vector is (Last_Report);
+   function Warm_Of (P : Player_Id) return Integer is (Warm (P));
+   function Brev_Of (P : Player_Id) return Integer is (Brev (P));
+   function Attn_Of (P : Player_Id) return Integer is (Attn (P));
+   function Variant_Of (P : Player_Id) return String is (if Tone (P) <= -34 then "calm" elsif Tone (P) >= 34 then "alarm" else "plain");
+   procedure Set_Govern_Report (P : Player_Id; Lines : Str_Vectors.Vector) is
+   begin
+      Gov_Lines (P) := Lines;
+   end Set_Govern_Report;
    function Inbox_Count return Natural is (Natural (Inbox.Length));
    function Inbox_Line (N : Positive) return String is (Inbox (N));
    function Inbox_Tail (Max : Positive) return Str_Vectors.Vector is

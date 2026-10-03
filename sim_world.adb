@@ -1,4 +1,4 @@
---  Version: 0.012
+--  Version: 0.013
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
@@ -164,6 +164,7 @@ package body Sim_World is
    Topic_By  : array (Entity_Id, 1 .. Max_Topics) of Natural := [others => [others => 0]];
    Topic_Last : array (Entity_Id) of Natural := [others => 0];
    Done_Topic : array (Entity_Id, 1 .. Max_Topics) of Boolean := [others => [others => False]];   --  granted: not filed again
+   Urgency : array (Entity_Id, 1 .. Max_Topics) of Natural := [others => [others => 0]];   --  govern=1: after a refusal
 
    --  Tunables of the personality (data/limits.txt), read by Init.
    type Weight_Array is array (Rest .. Propose) of Integer;
@@ -196,6 +197,7 @@ package body Sim_World is
       Topic_By := [others => [others => 0]];
       Topic_Last := [others => 0];
       Done_Topic := [others => [others => False]];
+      Urgency := [others => [others => 0]];
       Lean_Low_Energy := Clamp (Integer (Limit ("lean.low_energy", 60)), 0, 1000);
       Lean_High_Energy := Clamp (Integer (Limit ("lean.high_energy", 20)), 0, 1000);
       Lean_Low_Mood := Clamp (Integer (Limit ("lean.low_mood", 30)), 0, 1000);
@@ -539,7 +541,7 @@ package body Sim_World is
          for T in 1 .. N_Topics loop
             W (T) := Integer'Max (1, Topics (T).Base + (Topics (T).Low_En * Low_E + Topics (T).Low_Mood * Low_M
                                                          + Topics (T).Few_Words * Few + Topics (T).Benches * Ben
-                                                         + Topics (T).Cooling * Strain) / 100);
+                                                         + Topics (T).Cooling * Strain) / 100 + Integer (Urgency (E, T)));
             if Done_Topic (E, T) then W (T) := 1; end if;   --  a granted wish is not asked for again
             Total := Total + W (T);
          end loop;
@@ -572,6 +574,7 @@ package body Sim_World is
               (Open_L (Open_L.First_Index + Opening) & " "
                & To_String (Topics (Topic).Phrase) & " "
                & Close_L (Close_L.First_Index + Pick60 (Seed, Eid, Tick, 850) mod Natural (Close_L.Length)))));
+      Urgency (E, Topic) := 0;
       Topic_By (E, Topic) := Rep + 1;
       Topic_Used (Topic) := Topic_Used (Topic) + 1;
       Topic_Last (E) := Topic;
@@ -599,6 +602,10 @@ package body Sim_World is
    begin
       Done_Topic (E, Topic) := True;
    end Grant;
+   procedure Add_Urgency (E : Entity_Id; Topic : Positive; Amount : Natural) is
+   begin
+      Urgency (E, Topic) := Natural'Min (200, Urgency (E, Topic) + Amount);
+   end Add_Urgency;
    procedure Mark_Petition (N : Positive; G : Positive) is
    begin
       Petitions (N).Granted := G;

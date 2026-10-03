@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  The mood ledger of diary_sim: REPORT ONLY.  Every tick the replay hands over how the mood of a wesen
 --  moved and from which source; nothing here is stored in a diary, hashed, or read back by the simulation,
 --  so action weights, dice and every stored byte are what they were without it.  The ledger exists
@@ -9,6 +9,7 @@
 --    rest model quick-rest penalty / calm-rest bonus (rest=1 sessions)
 --    push      the feel of the pushed thing (world=1 sessions: pleasant / plain / rough)
 --    chess     the mood of finished chess games, taken at the wesen's step (chess=1 sessions)
+--    governance  the mood of the decisions on its petitions, taken at the wesen's step (govern=1 sessions)
 --  Per wesen it answers: which action at which place drains or gives mood (top 3 each), per action, place and
 --  verb, events (petitions, pushed things), the rest model (quick penalty, calm bonus, cool-down ticks),
 --  and how much a bound (-100 / +100) swallowed.  Wording: data/ledger.txt.
@@ -30,7 +31,8 @@ package Sim_Ledger is
    --  Phase: -1 quick rest, +1 calm rest, 0 other.  Cool: the tick began inside a cool-down.
    --  Feel: the class (0 pleasant, 1 plain, 2 rough) of a pushed thing, else -1.
    procedure Add (E : Entity_Id; Tick : Int; A : Action; V : List_Id; Loc : Natural;
-                  Base, Rest_Fx, Push_Fx, Nominal, Phase : Integer; Cool : Boolean; Feel : Integer; Chess_Fx : Integer := 0);
+                  Base, Rest_Fx, Push_Fx, Nominal, Phase : Integer; Cool : Boolean; Feel : Integer; Chess_Fx : Integer := 0;
+                  Gov_Fx : Integer := 0);
 
    function Ticks_Seen return Natural;   --  records held (all wesen)
 

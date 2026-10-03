@@ -1,4 +1,4 @@
---  Version: 0.024
+--  Version: 0.025
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -28,7 +28,7 @@ pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
-     GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Ledger, Sim_Chess, Sim_Games, Sim_Menu, Sim_Quit, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Util, Sim_World;
+     GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Chess, Sim_Games, Sim_Menu, Sim_Quit, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Util, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
 
 procedure Diary_Sim is
@@ -55,7 +55,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.024";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.025";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -127,12 +127,24 @@ procedure Diary_Sim is
    Robot_N : Natural := 0;
    Robot_Lines : Str_Vectors.Vector;
    Robot_View : Boolean := False;                --  --robot: replay, then show the robot
+   --  govern=1 sessions (Sim_Govern): the players decide petitions; D lines in diaries/govern.txt (Sim_Store, replay-verified);
+   --  Robert's veto / approval inputs are V lines in diaries/vetoes.txt.
+   Govern_Active : Boolean := False;
+   Govern_Path : constant String := "diaries/govern.txt";
+   Vetoes_Path : constant String := "diaries/vetoes.txt";
+   Govern_Store : Sim_Store.Store;
+   Govern_Lines : Str_Vectors.Vector;
+   Govern_View, Veto_Mode, Veto_Approve : Boolean := False;   --  --govern / --veto D<n> / --approve D<n>
+   Veto_Opt : Unbounded_String;
+   Gov_Since : Int := 0;                                       --  the tick of the previous session end (the report window)
    Elo_View, Perft_Mode : Boolean := False;      --  --elo (replay, then the ranking) / --perft (the move generator checks)
    Screens_View : Boolean := False;              --  --screens: replay, then show the screens (a view like --ledger)
    Rate_Pct, Load, Hist, Cool, Streak, Since_Work, Cool_N, Cut_N, Quick_N : array (Entity_Id) of Natural := [others => 0];
    function RL (Key : String; Default : Integer) return Integer is (Integer (Limit (Key, Int (Default))));
+   function Rate_Now (E : Entity_Id) return Natural is   --  the recovery rate, with the governed offset (govern=1)
+     (Natural'Max (1, Integer (Rate_Pct (E)) + Sim_Govern.Off (E, Sim_Govern.Rate)));
    function Cool_Len (E : Entity_Id) return Positive is
-     (Positive'Max (1, RL ("rest.cool", 16) * 100 / Natural'Max (1, Rate_Pct (E))));   --  slow recoverers cool longer
+     (Positive'Max (1, RL ("rest.cool", 16) * 100 / Rate_Now (E) + Sim_Govern.Off (E, Sim_Govern.Cool)));   --  slow recoverers cool longer
    function Work_Keep (E : Entity_Id) return Natural is   --  percent of the work / bench weights kept
      (if Rest_Active and then Cool (E) > 0 then Natural (Integer'Max (1, RL ("rest.cool.work_pct", 35))) else 100);
    --  0 .. 100: how long this wesen's cool-down is (a long one petitions more often)
@@ -150,7 +162,7 @@ procedure Diary_Sim is
    begin
       Last_Phase := 0;
       if Since_Work (E) < Natural (RL ("rest.quick", 3)) then
-         Phase := RL ("rest.quick.energy_pct", 60);
+         Phase := Integer'Min (100, Integer'Max (1, RL ("rest.quick.energy_pct", 60) + Sim_Govern.Off (E, Sim_Govern.Quick)));
          Mo := Mo + RL ("rest.quick.mood", -1);
          Last_Phase := -1;
          Quick_N (E) := Quick_N (E) + 1;
@@ -159,7 +171,7 @@ procedure Diary_Sim is
          Mo := Mo + RL ("rest.calm.mood", 2);
          Last_Phase := 1;
       end if;
-      En := En * Integer (Rate_Pct (E)) * Phase / 10_000;
+      En := En * Integer (Rate_Now (E)) * Phase / 10_000;
       for K in 1 .. Natural'Min (Streak (E), 12) loop En := En * RL ("rest.repeat_pct", 80) / 100; end loop;
    end Rest_Effect;
 
@@ -194,7 +206,7 @@ procedure Diary_Sim is
    end Rest_After;
 
    function Rest_Text (E : Entity_Id) return String is
-     (Msg ("rest.line", Name (E), Img (Rate_Pct (E)), Img (Cool_Len (E)), Img (Cool_N (E)), Img (Cut_N (E)), Img (Quick_N (E))));
+     (Msg ("rest.line", Name (E), Img (Rate_Now (E)), Img (Cool_Len (E)), Img (Cool_N (E)), Img (Cut_N (E)), Img (Quick_N (E))));
 
    procedure Rest_Begin (Seed : Int) is   --  the first rest=1 session: fresh counters (later sessions continue them)
    begin
@@ -269,7 +281,7 @@ procedure Diary_Sim is
       Read_Lines (Data_Path ("limits.txt"), Lines, Found);
       if not Found then Warn (Msg ("warn.limits_file")); end if;
       Read_Lines (Data_Path ("menu.txt"), Lines, Found);   --  menu text: keys only, a missing file shows the keys
-      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt", "screens.txt", "chess.txt", "robot.txt"]) loop   --  the Buddhism layer: numbers, wording, players
+      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt", "screens.txt", "chess.txt", "robot.txt", "govern.txt"]) loop   --  the Buddhism layer: numbers, wording, players
          Read_Lines (Data_Path (F), Lines, Found);
          if not Found then Warn (Msg ("warn.dharma_file", F)); end if;
       end loop;
@@ -405,6 +417,7 @@ procedure Diary_Sim is
       Led_Phase, Push_Nom : Integer := 0;
       Push_Feel : Integer := -1;
       Chess_Fx, Chess_Nom : Integer := 0;   --  mood of finished chess games, taken at this step
+      Gov_Fx, Gov_Nom : Integer := 0;       --  mood of governance decisions, taken at this step
       M_Base, M_After_Base : Integer;
 
       procedure Add (Text : String) is
@@ -618,6 +631,9 @@ procedure Diary_Sim is
          Sim_Things.Place (E, Tick, Clamp (S.Location, 0, 3));   --  first step in the world, or reborn elsewhere
       end if;
       if Rest_Active and then A = Rest then Rest_Effect (E, Eff_En, Eff_Mo); Led_Phase := Last_Phase; end if;
+      if Govern_Active and then A = Work and then Eff_Mo < 0 then   --  a governed lever: work costs less mood (never turns it positive)
+         Eff_Mo := Integer'Min (0, Eff_Mo + Sim_Govern.Off (E, Sim_Govern.Work));
+      end if;
       M_Base := Clamp (Pre_Mo + Mood_D (A), M_Min, M_Max) - Pre_Mo;   --  ledger: the action's own part, after the bounds
       S.Energy := Clamp (S.Energy + Eff_En, E_Min, E_Max);
       S.Mood := Clamp (S.Mood + Eff_Mo, M_Min, M_Max);
@@ -674,6 +690,7 @@ procedure Diary_Sim is
                N : constant Positive := File_Petition (Seed, E, Tick, Pre_En, Pre_Mo, Act_Count (E, Bench), Rest_Strain (E));
             begin
                Add (Msg ("detail.petition", Img (N), Petition_Topic (N)));
+               if Govern_Active then Sim_Govern.Filed (N, E, Tick, Pre_Mo); end if;
             end;
          when others => null;
       end case;
@@ -754,8 +771,19 @@ procedure Diary_Sim is
             end;
          end if;
       end if;
-      Sim_Ledger.Add (E, Tick, A, Verb, S.Location, M_Base, M_After_Base - Pre_Mo - M_Base, S.Mood - M_After_Base - Chess_Fx,
-                      Eff_Mo + Push_Nom + Chess_Nom, Led_Phase, Was_Cool, Push_Feel, Chess_Fx);
+      if Govern_Active then   --  the answer of the player to a petition: a little mood (granted up, refused down)
+         declare
+            Want : constant Integer := Sim_Govern.Take_Mood (E);
+            Got : constant Integer := Clamp (S.Mood + Want, M_Min, M_Max) - S.Mood;
+         begin
+            if Want /= 0 then Add (Msg (if Want > 0 then "detail.gov.up" else "detail.gov.down")); end if;
+            S.Mood := S.Mood + Got;
+            Gov_Fx := Got;
+            Gov_Nom := Want;
+         end;
+      end if;
+      Sim_Ledger.Add (E, Tick, A, Verb, S.Location, M_Base, M_After_Base - Pre_Mo - M_Base, S.Mood - M_After_Base - Chess_Fx - Gov_Fx,
+                      Eff_Mo + Push_Nom + Chess_Nom + Gov_Nom, Led_Phase, Was_Cool, Push_Feel, Chess_Fx, Gov_Fx);
       declare
          Tone : constant List_Id := (if S.Mood <= Tone_Low then Mood_Low elsif S.Mood >= Tone_High then Mood_High
                                      else Mood_Neutral);
@@ -1160,6 +1188,7 @@ procedure Diary_Sim is
          for E in Entity_Id loop Dg_Add (V, "run", "rest." & Name (E), Rest_Text (E), 7); end loop;
       end if;
       if Chess_Active then Dg_Add (V, "run", "elo", Sim_Games.Digest_Line, 5); end if;
+      if Govern_Active then Dg_Add (V, "run", "govern", Msg ("govern.digest", Sim_Govern.Totals_Line), 5); end if;
       for E in Entity_Id loop   --  the mood ledger: one line each (the first to go when the cap is tight); the rest in the full record
          Dg_Add (V, "ledger", "led." & Name (E), Sim_Ledger.Digest_Line (E, Ledger_From), 9);
          Dg_Add (V, "ledger", "sen." & Name (E), Sim_Ledger.Sentence (E), 9, Full_Only => True);
@@ -1784,6 +1813,55 @@ procedure Diary_Sim is
       end if;
    end Verify_Robot;
 
+   --  Every decision of a player (also a refusal), veto and approval is a D line in diaries/govern.txt: replay-verified.
+   procedure Emit_Govern_Lines is
+      Result : Sim_Store.Status;
+      Old : Unbounded_String;
+   begin
+      for T of Govern_Lines loop
+         Sim_Store.Emit (Govern_Store, T, not Preview and then not Ledger_Mode, Result, Old);
+         if Sim_Store."=" (Result, Sim_Store.Differs) then
+            raise Drift_Error with Msg ("err.govern", Sim_Store.Key_Of (T), Diff_At (To_String (Old), T));
+         end if;
+      end loop;
+      Govern_Lines.Clear;
+   end Emit_Govern_Lines;
+
+   procedure Verify_Govern (Upto : Int) is
+      Orphan : constant String := Sim_Store.Orphan (Govern_Store, Upto);
+   begin
+      if Orphan /= "" then
+         raise Drift_Error with Msg ("err.govern", Sim_Store.Key_Of (Orphan), Diff_At (Orphan, "(not in the replay)"));
+      end if;
+   end Verify_Govern;
+
+   --  Robert's veto / approval inputs: V<n> tick=<T> decision=D<k> act=veto|approve by=<who> (read before the replay).
+   procedure Load_Vetoes is
+      Lines : Str_Vectors.Vector;
+      Found : Boolean;
+   begin
+      if not Ada.Directories.Exists (Vetoes_Path) then return; end if;
+      Read_Lines (Vetoes_Path, Lines, Found);
+      for L of Lines loop
+         if L'Length > 1 and then L (L'First) = 'V' and then Fx.Index (L, " ") > 2 then
+            declare
+               Sp : constant Natural := Fx.Index (L, " ");
+               N : constant Int := To_Num_Safe (L (L'First + 1 .. Sp - 1));
+               Tk : constant Int := To_Num_Safe (Token (L, "tick"));
+               Dc : constant String := Token (L, "decision");
+               Dn : constant Int := (if Dc'Length > 1 and then Dc (Dc'First) = 'D' then To_Num_Safe (Dc (Dc'First + 1 .. Dc'Last)) else -1);
+               Act : constant String := Token (L, "act");
+            begin
+               if N > 0 and then Tk >= 0 and then Dn > 0 and then Act in "veto" | "approve" then
+                  Sim_Govern.Add_Input (Positive (N), Tk, Positive (Dn), Act = "approve");
+               else
+                  Warn (Msg ("warn.grants_bad", L));
+               end if;
+            end;
+         end if;
+      end loop;
+   end Load_Vetoes;
+
    procedure Do_Tick (Tick : Int) is
    begin
       Cur_Tick := Tick;
@@ -1792,6 +1870,15 @@ procedure Diary_Sim is
       if Chess_Active then   --  the clocks of the running games (a timeout ends one)
          Sim_Games.Clock (Tick, Chess_Lines);
          Emit_Chess_Lines (Tick);
+      end if;
+      if Govern_Active then   --  the players decide the petitions that are due; Robert's vetoes and approvals take effect
+         declare
+            Bad : Natural;
+         begin
+            Sim_Govern.Tick_Begin (Tick, Govern_Lines, Bad);
+            if Bad > 0 then raise Drift_Error with Msg ("err.govern_in", "V" & Img (Bad)); end if;
+            Emit_Govern_Lines;
+         end;
       end if;
       if Robot_Active then   --  the robot acts when its delay is over
          Sim_Robot.Tick_Begin (Tick, Robot_Lines);
@@ -1951,6 +2038,15 @@ procedure Diary_Sim is
       if Fails > 0 then Ada.Command_Line.Set_Exit_Status (1); end if;
    end Do_Perft;
 
+   --  The governance after the replay (--govern / make govern).
+   function Govern_Text return String is
+      R : Unbounded_String;
+   begin
+      if not Govern_Active then return Msg ("govern.none") & ASCII.LF; end if;
+      for L of Sim_Govern.View loop Append (R, L & ASCII.LF); end loop;
+      return To_String (R);
+   end Govern_Text;
+
    --  The robot after the replay (--robot / make robot).
    function Robot_Text return String is
       R : Unbounded_String;
@@ -2079,6 +2175,7 @@ procedure Diary_Sim is
       Chess : Boolean := False;         --  chess=1: chess games as a rest activity, Elo ratings (Sim_Games, diaries/chess.txt)
       Screen : Boolean := False;        --  screen=1: the wesen own small text screens (Sim_Screen, diaries/screens.txt)
       Robot : Boolean := False;         --  robot=1: the robot steered through the screens (Sim_Robot, diaries/robot.txt)
+      Govern : Boolean := False;        --  govern=1: the players decide petitions (Sim_Govern, diaries/govern.txt)
    end record;
    package Session_Vectors is new Ada.Containers.Vectors (Positive, Session_Rec);
    Sessions : Session_Vectors.Vector;
@@ -2099,7 +2196,7 @@ procedure Diary_Sim is
       & " src=" & (if R.By_Vote then "vote" else "explicit") & (if R.Dharma then " dharma=1" else "")
       & (if R.World then " world=1" else "") & (if R.Rest then " rest=1" else "") & (if R.Grant then " grant=1" else "")
       & (if R.Screen then " screen=1" else "") & (if R.Chess then " chess=1" else "")
-      & (if R.Robot then " robot=1" else ""));
+      & (if R.Robot then " robot=1" else "") & (if R.Govern then " govern=1" else ""));
    function Yuga (N : Positive) return String is (Msg ("yuga." & Img ((N - 1) mod 4)));
    --  The four votes of a session that starts after tick Start (state: St, known words).
    function Votes_At (Start : Int) return Kalpa_Votes is
@@ -2136,6 +2233,7 @@ procedure Diary_Sim is
       R.Screen := Token (L, "screen") = "1";
       R.Chess := Token (L, "chess") = "1";
       R.Robot := Token (L, "robot") = "1";
+      R.Govern := Token (L, "govern") = "1";
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
         and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0;
       while OK and then K < 4 loop
@@ -2238,6 +2336,7 @@ procedure Diary_Sim is
       Screen_Active := False;
       Chess_Active := False;
       Robot_Active := False;
+      Govern_Active := False;
       if not Ada.Directories.Exists (Sessions_Path) then return; end if;
       Read_Lines (Sessions_Path, Lines, Found);
       for I in 1 .. Natural (Lines.Length) loop
@@ -2280,6 +2379,8 @@ procedure Diary_Sim is
       Screen_Active := R.Screen;
       Chess_Active := R.Chess;
       Robot_Active := R.Robot;
+      Govern_Active := R.Govern;
+      if R.Govern then Sim_Govern.Begin_Life (R.Start); end if;   --  the players take over the petitions with the first govern=1 session
       if R.Robot then Sim_Robot.Begin_Life (R.Start); end if;   --  the robot comes into the world with its first session
       for E in Entity_Id loop
          if Sim_Dharma.Rebirth_Location (E) >= 0 then St (E).Location := Clamp (Sim_Dharma.Rebirth_Location (E), 0, L_Max); end if;
@@ -2305,7 +2406,7 @@ procedure Diary_Sim is
       R : Unbounded_String := To_Unbounded_String ("R" & Img (N) & " tick=" & Img (Tick));
    begin
       for E in Entity_Id loop
-         Append (R, " " & Name (E) & "=" & Img (Rate_Pct (E)) & "/" & Img (Cool_N (E)) & "/" & Img (Cut_N (E)) & "/" & Img (Quick_N (E)));
+         Append (R, " " & Name (E) & "=" & Img (Rate_Now (E)) & "/" & Img (Cool_N (E)) & "/" & Img (Cut_N (E)) & "/" & Img (Quick_N (E)));
       end loop;
       return To_String (R);
    end Rest_Line;
@@ -2324,6 +2425,17 @@ procedure Diary_Sim is
       return L;
    end Key_Of;
 
+   --  govern=1: each player's report to Robert is built from the D records only (counter line first, then every change); the
+   --  window is the time since the previous session end.  The wording follows the player's tone; nothing is left out.
+   procedure Hand_Govern_Report (Tick : Int) is
+   begin
+      if not Govern_Active then return; end if;
+      for P in Sim_Dharma.Player_Id loop
+         Sim_Dharma.Set_Govern_Report (P, Sim_Govern.Report (P, Gov_Since, Sim_Dharma.Variant_Of (P)));
+      end loop;
+      Gov_Since := Tick;
+   end Hand_Govern_Report;
+
    --  The stored D / C / Y lines of a session end must equal what the replay regenerates.
    procedure Check_Dharma_At (T : Int) is
       Stored : Str_Vectors.Vector;
@@ -2340,6 +2452,7 @@ procedure Diary_Sim is
       if Stored.Is_Empty or else N < 1 then return; end if;
       for R of Sessions loop if Int (R.N) = N then Votes := R.Votes; end if; end loop;
       for E in Entity_Id loop En (E) := St (E).Energy; end loop;
+      Hand_Govern_Report (T);
       declare
          Gen : Str_Vectors.Vector := Sim_Dharma.End_Life (Seed, T, Positive (N), Votes, En);
       begin
@@ -2436,6 +2549,7 @@ procedure Diary_Sim is
       Text := To_Unbounded_String ("W" & Img (R.N) & " tick=" & Img (Tick) & " " & Tok_Text (R.Tok));
       for S of Sessions loop if S.N = R.N then Votes := S.Votes; end if; end loop;
       for E in Entity_Id loop En (E) := St (E).Energy; end loop;
+      Hand_Govern_Report (Tick);
       for L of Sim_Dharma.End_Life (Seed, Tick, R.N, Votes, En) loop Append (Text, ASCII.LF & L); end loop;
       if World_Active then Append (Text, ASCII.LF & World_Line (R.N, Tick)); end if;
       if Rest_Active then Append (Text, ASCII.LF & Rest_Line (R.N, Tick)); end if;
@@ -2451,6 +2565,7 @@ procedure Diary_Sim is
    function Chess_Wanted return Boolean is (World_Wanted and then Limit ("chess.enabled", 1) /= 0);   --  chess=1 needs the world
    function Screen_Wanted return Boolean is (World_Wanted and then Limit ("screen.enabled", 1) /= 0);   --  screen=1 needs the world
    function Robot_Wanted return Boolean is (Screen_Wanted and then Limit ("robot.enabled", 1) /= 0);     --  robot=1 needs the screens
+   function Govern_Wanted return Boolean is (Rest_Wanted and then Limit ("govern.enabled", 1) /= 0);     --  govern=1 needs the rest model (the levers)
 
    --  After the replay of 1 .. Common: resume the unfinished session, or start one
    --  (explicit length, else the vote).  Sets Ticks and Kalpa_Line.
@@ -2470,7 +2585,7 @@ procedure Diary_Sim is
       Session_N := (if Sessions.Is_Empty then 0 else Sessions.Last_Element.N);
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
-               Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted);
+               Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -2486,7 +2601,7 @@ procedure Diary_Sim is
          Kalpa_Line := To_Unbounded_String (Msg ("kalpa.resume", Img (R.N), Yuga (R.N), Votes_Text (R.Votes), Img (R.Len), Img (Ticks)));
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
-               World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted);
+               World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);
@@ -2697,6 +2812,89 @@ procedure Diary_Sim is
          Ada.Command_Line.Set_Exit_Status (2);
    end Do_Grant;
 
+   --  make veto / make approve DECISION=D<n>: one V line in diaries/vetoes.txt at the lowest common tick (like make grant).
+   procedure Do_Veto is
+      Lines : Str_Vectors.Vector;
+      Found : Boolean;
+      Want : constant String := Fx.Trim (To_String (Veto_Opt), Ada.Strings.Both);
+      Num : constant Int := (if Want'Length > 1 and then Ada.Characters.Handling.To_Upper (Want (Want'First)) = 'D' then To_Num_Safe (Want (Want'First + 1 .. Want'Last))
+                             elsif Want'Length > 0 then To_Num_Safe (Want) else -1);
+      Dline : Unbounded_String;
+      Common_T : Natural := Natural'Last;
+      Seed_D : Int := -1;
+      N_V : Natural := 0;
+      F : TIO.File_Type;
+      Act : constant String := (if Veto_Approve then "approve" else "veto");
+   begin
+      if not Has_Diaries then raise Usage_Error with Msg ("say.nogame", To_String (Home_Path)); end if;
+      if Num <= 0 then raise Usage_Error with Msg ("veto.nodecision", Want); end if;
+      for E in Entity_Id loop
+         declare
+            Cnt : Natural := 0;
+         begin
+            Lines.Clear;
+            Read_Lines (Path (E), Lines, Found);
+            for L of Lines loop
+               if Complete (L) then
+                  Cnt := Cnt + 1;
+                  if Seed_D < 0 then Seed_D := Field (L, "seed"); end if;
+               end if;
+            end loop;
+            Common_T := Natural'Min (Common_T, Cnt);
+         end;
+      end loop;
+      Seed := Seed_D;
+      Seed_Shown := True;
+      if Ada.Directories.Exists (Govern_Path) then
+         Lines.Clear;
+         Read_Lines (Govern_Path, Lines, Found);
+         for L of Lines loop
+            if L'Length > 1 and then L (L'First) = 'D' and then Fx.Index (L, " ") > 2 then
+               if L (L'First .. Fx.Index (L, " ") - 1) = "D" & Img (Num) then Dline := To_Unbounded_String (L); end if;
+               if Token (L, "of") = "D" & Img (Num) then raise Usage_Error with Msg ("veto.already", "D" & Img (Num)); end if;
+            end if;
+         end loop;
+      end if;
+      if Length (Dline) = 0 then raise Usage_Error with Msg ("veto.nodecision", "D" & Img (Num)); end if;
+      declare
+         K : constant String := Token (To_String (Dline), "kind");
+         T : constant Int := To_Num_Safe (Token (To_String (Dline), "t"));
+      begin
+         if (not Veto_Approve and then K not in "grant" | "partial") or else (Veto_Approve and then K not in "grant" | "partial" | "refuse") then
+            raise Usage_Error with Msg ("veto.cant", "D" & Img (Num), K);
+         end if;
+         if T < 0 or else T > Int (Common_T) then raise Usage_Error with Msg ("veto.nodecision", "D" & Img (Num)); end if;
+      end;
+      if Ada.Directories.Exists (Vetoes_Path) then
+         Lines.Clear;
+         Read_Lines (Vetoes_Path, Lines, Found);
+         for L of Lines loop
+            if L'Length > 1 and then L (L'First) = 'V' then
+               N_V := N_V + 1;
+               if Token (L, "decision") = "D" & Img (Num) then raise Usage_Error with Msg ("veto.already", "D" & Img (Num)); end if;
+            end if;
+         end loop;
+         declare
+            Needs_Lf : constant Boolean := not Ends_With_Lf (Vetoes_Path);
+         begin
+            TIO.Open (F, TIO.Append_File, Vetoes_Path);
+            if Needs_Lf then TIO.New_Line (F); end if;
+         end;
+      else
+         TIO.Create (F, TIO.Out_File, Vetoes_Path);
+         TIO.Put_Line (F, "# seed " & Img (Seed));
+         TIO.Put_Line (F, Msg ("vetoes.header"));
+      end if;
+      TIO.Put_Line (F, "V" & Img (N_V + 1) & " tick=" & Img (Common_T) & " decision=D" & Img (Num) & " act=" & Act & " by=" & By_Name (To_String (Say_By)));
+      TIO.Flush (F);
+      TIO.Close (F);
+      Con.Put_Line (Msg ("veto.ok", "V" & Img (N_V + 1), Act, "D" & Img (Num), Sim_Govern.Describe (To_String (Dline)), Img (Common_T + 1)));
+   exception
+      when E : Usage_Error =>   --  nothing is written
+         TIO.Put_Line (TIO.Standard_Error, Ada.Exceptions.Exception_Message (E));
+         Ada.Command_Line.Set_Exit_Status (2);
+   end Do_Veto;
+
    --  make say / make answer: one A line in diaries/says.txt at the lowest common tick.  No replay,
    --  nothing else is touched; the next run applies it from the following tick.
    procedure Do_Say is
@@ -2888,12 +3086,14 @@ procedure Diary_Sim is
       Sim_Screen.Init (Seed, Coin_Cap);
       Sim_Games.Init (Seed);
       Sim_Robot.Init (Seed);
+      Sim_Govern.Init (Seed);
       World_Active := World_Wanted;
       Rest_Active := Rest_Wanted;
       Grant_Active := Grant_Wanted;
       Screen_Active := Screen_Wanted;
       Chess_Active := Chess_Wanted;
       Robot_Active := Robot_Wanted;
+      Govern_Active := Govern_Wanted;
       if Rest_Active then Rest_Begin (Seed); end if;
       Con.Put (To_String (Pending));
       Con.Put_Line (Msg ("preview.head", Img (Seed), Img (Total)));
@@ -3242,7 +3442,7 @@ begin
          Eq  : constant Natural := Fx.Index (A, "=");
          Opt : constant String := (if Eq > 0 then A (A'First .. Eq - 1) else A);
          Num : constant Boolean := Opt in "--ticks" | "--seed" | "--every" | "--crash-at" | "--more";
-         Sep : constant Boolean := (Num or else Opt in "--home" | "--say" | "--text" | "--as" | "--grant" | "--debug-section") and then Eq = 0 and then I < Ada.Command_Line.Argument_Count;   --  --ticks 200
+         Sep : constant Boolean := (Num or else Opt in "--home" | "--say" | "--text" | "--as" | "--grant" | "--veto" | "--approve" | "--debug-section") and then Eq = 0 and then I < Ada.Command_Line.Argument_Count;   --  --ticks 200
          Val : constant String := (if Eq > 0 then A (Eq + 1 .. A'Last) elsif Sep then Ada.Command_Line.Argument (I + 1) else "");
          Help  : Str_Vectors.Vector;
          Found : Boolean;
@@ -3266,6 +3466,8 @@ begin
          elsif Opt = "--grant" then Grant_Mode := True; Grant_Opt := To_Unbounded_String (Val);
          elsif Opt = "--perft" then Perft_Mode := True;
          elsif Opt = "--elo" then Ledger_Mode := True; Elo_View := True;
+         elsif Opt = "--govern" then Ledger_Mode := True; Govern_View := True;
+         elsif Opt = "--veto" or else Opt = "--approve" then Veto_Mode := True; Veto_Approve := Opt = "--approve"; Veto_Opt := To_Unbounded_String (Val);
          elsif Opt = "--robot" then Ledger_Mode := True; Robot_View := True;
          elsif Opt = "--screens" then Ledger_Mode := True; Screens_View := True;
          elsif Opt = "--ledger" then
@@ -3303,7 +3505,7 @@ begin
    end if;
    Menu_Wanted := Menu_Opt or else (Ada.Command_Line.Argument_Count = 0 and then Is_Tty (0) and then Is_Tty (1));
    if Menu_Opt and then not (Is_Tty (0) and then Is_Tty (1)) then raise Usage_Error with Msg ("err.menu_tty"); end if;
-   Resolve_Home (Header => not (Menu_Wanted or else Inbox_Mode or else Map_Mode or else Ledger_Mode or else Grant_Mode or else Say_Mode or else Answer_Mode or else (Length (Section_Opt) > 0 and then not Preview)));
+   Resolve_Home (Header => not (Menu_Wanted or else Inbox_Mode or else Map_Mode or else Ledger_Mode or else Grant_Mode or else Veto_Mode or else Say_Mode or else Answer_Mode or else (Length (Section_Opt) > 0 and then not Preview)));
    Saved_Line := To_Unbounded_String (Msg ("saved", To_String (Home_Path)));
    if Map_Mode then
       Do_Map;
@@ -3315,6 +3517,10 @@ begin
       return;
    elsif Grant_Mode then
       Do_Grant;
+      Con.Put_Line (To_String (Saved_Line));
+      return;
+   elsif Veto_Mode then
+      Do_Veto;
       Con.Put_Line (To_String (Saved_Line));
       return;
    elsif Say_Mode or else Answer_Mode then
@@ -3407,6 +3613,7 @@ begin
    Sim_Screen.Init (Seed, Coin_Cap);
    Sim_Games.Init (Seed);
    Sim_Robot.Init (Seed);
+   Sim_Govern.Init (Seed);
    for E in Entity_Id loop
       Cur_Name := To_Unbounded_String (Name (E));
       Ada.Directories.Create_Path ("entities/" & Name (E));
@@ -3444,6 +3651,8 @@ begin
    Chess_N := 0;
    Sim_Store.Open (Robot_Store, Robot_Path, "# seed " & Img (Seed));
    Robot_N := 0;
+   Sim_Store.Open (Govern_Store, Govern_Path, "# seed " & Img (Seed));
+   Load_Vetoes;
    Set_Ledger_From;
    if not Ledger_Mode then Write_Debug ("RUN", ""); end if;   --  stub: a kill -9 still leaves a file
 
@@ -3468,7 +3677,7 @@ begin
       if Ledger_Mode then   --  replayed and verified, nothing decided, nothing written: print the ledger
          for F of Out_File loop TIO.Close (F); end loop;
          for F of Side_Out loop TIO.Close (F); end loop;
-         if Elo_View then Con.Put (Elo_Text); elsif Robot_View then Con.Put (Robot_Text); elsif Screens_View then Con.Put (Screens_Text); else Con.Put_Line (Sim_Ledger.Report (Seed, Ledger_From, Ledger_Full)); end if;
+         if Elo_View then Con.Put (Elo_Text); elsif Govern_View then Con.Put (Govern_Text); elsif Robot_View then Con.Put (Robot_Text); elsif Screens_View then Con.Put (Screens_Text); else Con.Put_Line (Sim_Ledger.Report (Seed, Ledger_From, Ledger_Full)); end if;
          return;
       end if;
       for E in Entity_Id loop
@@ -3514,6 +3723,7 @@ begin
       Verify_Screens (Last_Done);
       Verify_Chess (Last_Done);
       Verify_Robot (Last_Done);
+      Verify_Govern (Last_Done);
    end if;
    if Quit_Seen then   --  Ctrl-C / SIGTERM: everything written so far is flushed; a rerun resumes
       Con.Put_Line (Msg ("quit", Sim_Quit.Which, Img (Last_Done)));
@@ -3598,6 +3808,17 @@ begin
       end if;
       if Robot_Active then   --  the robot: state, commands and errors per wesen
          for L of Sim_Robot.Report loop Append (Rep, L & ASCII.LF); end loop;
+      end if;
+      if Govern_Active then   --  the players' decisions: counts per player, trust and standing, the last decisions
+         Append (Rep, Msg ("govern.rep") & ASCII.LF);
+         for P in Sim_Dharma.Player_Id loop
+            Append (Rep, Msg ("govern.player", Sim_Dharma.Player_Name (P), Sim_Govern.Counter_Line (P)) & ASCII.LF);
+         end loop;
+         for E in Entity_Id loop
+            Append (Rep, "  " & Msg ("govern.wesen", Name (E), Img (Sim_Govern.Trust_Of (E)), Img (Sim_Govern.Standing_Of (E)),
+                                    Sgn (Int (Sim_Govern.Off (E, Sim_Govern.Rate))), Sgn (Int (Sim_Govern.Off (E, Sim_Govern.Cool))),
+                                    Sgn (Int (Sim_Govern.Off (E, Sim_Govern.Work))), Sgn (Int (Sim_Govern.Off (E, Sim_Govern.Quick)))) & ASCII.LF);
+         end loop;
       end if;
       if not Grant_Report.Is_Empty then   --  granted petitions and the recovery rates they changed
          Append (Rep, Msg ("grant.head") & ASCII.LF);

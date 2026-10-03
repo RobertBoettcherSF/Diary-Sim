@@ -307,6 +307,42 @@ One robot ("Tinker") lives in the world (`sim_robot.ads/.adb`; numbers `robot.*`
   marker, is DRIFT. `make robot` (`--robot`) replays and prints the state, the 5x5 camera, who steers and the last commands with
   display names; the end report has a robot block. Changing the `robot.*` numbers or the command list of a running save needs `--fresh`.
 
+## Governance (`govern=1` sessions, `make govern`, `make veto`, `make approve`)
+
+A petition (see Petitions) can now change a rule a little: the player who watches that wesen decides (`sim_govern.ads/.adb`; numbers
+`govern.*` in `data/limits.txt`, levers, bounds and ALL wording in `data/govern.txt`). It needs `rest=1`; new sessions carry `govern=1`
+(`govern.enabled = 0`: nothing changes, a save without the marker keeps replaying as before). Changing `govern.*` or `data/govern.txt` of a
+running save needs `--fresh`.
+
+* **Levers (whitelist, `lever.<name> = min max step`):** per-wesen OFFSETS on the Rule-model numbers: `rate` (recovery rate of rest),
+  `cool` (cool-down length), `work` (extra mood cost of work, never makes work pleasant), `quick` (chance of a quick rest). A petition
+  topic maps to a lever (`topic.*`: more_rest -> rate, faster_work_recovery -> cool, quieter_mood -> work, other -> quick); the other topics
+  are always answered "there is no rule I may change for this". A change is ONE step, and never past min / max (`refuse.bound`).
+* **Dice:** a petition is decided `govern.delay` (+ dice) ticks after it is filed. The player rolls `hash(seed, player, tick, salt)`
+  against a score: `govern.base` + warmth (Rule-30 generous, `gen_w`) - brevity (strict, `strict_w`) + (trust - 50) * `trust_w` -
+  workload (`attn_w`) + a small bonus for a low-mood wesen. Roll low: GRANT (full step) or PARTIAL (half a step); else DEFER (comes back
+  after `defer_ticks`, at most `max_defer` times) or REFUSE, each with a reason text (`why.*`).
+* **Trust and standing:** per wesen, for its watcher. Trust rises (`trust_rise`) with every petition the player takes up and falls
+  (`trust_fall`) when the same topic is asked more than `govern.spam` times in a row ("asked too often"). Standing moves with grants and
+  refusals and with Robert's veto / approve. Both start at 50 and weigh in the next dice.
+* **Mood:** a wesen is a little happier after a grant (`mood_grant`, `mood_partial`), a little sadder after a refusal (`mood_refuse`,
+  deeper when the standing is low) and asks the same topic more urgently next time (`urgency`). The mood ledger lists "governance decisions".
+* **Record:** EVERY decision, refusals and deferrals included, is a line `D<n> t=<tick> pet=P<k> player= wesen= topic= lever= kind=
+  why= old= new= trust=a>b stand=a>b` in `diaries/govern.txt`, recomputed by every replay; a changed or invented line or a removed
+  `govern=1` marker is DRIFT.
+* **Reports to Robert:** each player's summary report (inbox lines `src=s<S>:govern`) is generated ONLY from the D records: a counter line
+  ("12 petitions seen, 5 granted, 3 partial, 2 deferred, 2 refused") and one line per change. The wording may be softened (plain / calm /
+  alarm, by personality), but a change is never left out and the inbox limit does not cut these lines.
+* **Robert's say:** `make veto DECISION=D<n>` (`--veto=D<n>`) reverts a grant / partial, `make approve DECISION=D<n>` (`--approve=D<n>`) backs
+  a decision. Both are recorded in `diaries/vetoes.txt` (`V<n> tick= decision= act=`), apply at the next tick of the next run (`make run`
+  / `--more`) as a new D record (`kind=veto|approve of=D<k>`): a veto lowers the player's standing with that wesen (`veto_stand`) and its
+  trust (`veto_trust`), an approval raises both. A refusal can only be approved, nothing is vetoed twice (exit 2). `make grant` stays
+  Robert's direct override.
+* **View:** `make govern` (`--govern`) replays and prints the counter line per player, trust / standing / lever offsets per wesen and the
+  last decisions with display names; the end report has a governance block and the digest a `govern seen/granted/partial/deferred/refused`
+  line (if it fits the cap).
+* The Buddhism layer is not fed by governance (kept simple).
+
 ## The debug digest (`DEBUG=1`, `--debug`)
 
 `debug.txt` (always written, <= 1500 bytes) is unchanged. For a compact file to attach to chat:

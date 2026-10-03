@@ -16,7 +16,7 @@ bad() { echo "  FAIL -- $*"; fails=$((fails + 1)); }
 idn() { sed 's/^\([a-z]*\) *=.*/\1 = \1/' "$root/data/names.txt" > "$1/names.txt"; }
 idata="$w/idata"; mkdir -p "$idata"; cp -r "$root/data/." "$idata/"; idn "$idata"
 # screens (and later chess) change the dice of the words: the older scenarios run with them off; their own scenarios switch them on
-sed -i 's/^screen.enabled = .*/screen.enabled = 0/; s/^chess.enabled = .*/chess.enabled = 0/; s/^robot.enabled = .*/robot.enabled = 0/' "$idata/limits.txt"
+sed -i 's/^screen.enabled = .*/screen.enabled = 0/; s/^chess.enabled = .*/chess.enabled = 0/; s/^robot.enabled = .*/robot.enabled = 0/; s/^govern.enabled = .*/govern.enabled = 0/' "$idata/limits.txt"
 mkdir -p "$w/ib/bin"; cp "$bin" "$w/ib/bin/"; cp -r "$idata" "$w/ib/data"; bin="$w/ib/bin/diary_sim"   # the binary beside its identity-names data
 lines() { cat "$1"/*.jsonl | wc -l; }
 dups()  { for f in "$1"/*.jsonl; do grep '}}$' "$f" | grep -o '"tick":[0-9]*' | sort | uniq -d; done | wc -l; }
@@ -893,6 +893,85 @@ grep -q '^  ERR unknown command' s2.txt && ok "an unknown command puts an ERR li
 cp "$bin" "$w/rb/off/bin/"; cp -r "$w/rb/data" "$w/rb/off/data"; sed -i 's/^robot.enabled = .*/robot.enabled = 0/' "$w/rb/off/data/limits.txt"; DIARY_HOME="$w/rb/o" "$w/rb/off/bin/diary_sim" --seed 42 --ticks 300 --yes --every 5000 > /dev/null 2>&1; DIARY_HOME="$w/rb/o" "$w/rb/off/bin/diary_sim" --robot > rn.txt 2>&1
 [ ! -e "$w/rb/o/diaries/robot.txt" ] && ! grep -q 'robot=1' "$w/rb/o/diaries/sessions.txt" && ! grep -qi 'robot' "$w/rb/o"/diaries/*.jsonl && grep -q 'no robot' rn.txt && ok "robot.enabled = 0: no marker, no robot.txt, no robot text; --robot says so" || bad "robot off"
 grep -q -- '--robot' "$root/data/help.txt" && grep -q 'make robot' "$root/README.md" && grep -q 'robot.battery.max' "$root/data/limits.txt" && grep -q 'robot.verbs' "$root/data/robot.txt" && ok "--help, README, limits and data/robot.txt describe the robot" || bad "robot docs"
+unset DIARY_HOME
+
+echo "== 34. govern (govern=1): players decide petitions, D records replay-verified, veto / approve, bounds, trust, reports from the D lines =="
+rm -rf "$w/gv"; mkdir -p "$w/gv/bin" "$w/gv/h" "$w/gv/o" "$w/gv/off/bin" "$w/gv/b/bin" "$w/gv/b/h" "$w/gv/s/bin" "$w/gv/s/h"
+cp "$bin" "$w/gv/bin/"; cp -r "$idata" "$w/gv/data"; sed -i 's/^govern.enabled = .*/govern.enabled = 1/' "$w/gv/data/limits.txt"; gvb="$w/gv/bin/diary_sim"
+cd "$w/gv/h" || exit 1; export DIARY_HOME="$w/gv/h"
+"$gvb" --seed 42 --ticks 300 --yes --every 5000 > g1.txt 2>&1; "$gvb" --more 300 --every 5000 > g2.txt 2>&1
+n_d=$(grep -c '^D[0-9]' diaries/govern.txt); n_k=$(grep '^D[0-9]' diaries/govern.txt | sed -E 's/.* kind=([a-z]*) .*/\1/' | sort -u | wc -l)
+grep -q '^S1 .* govern=1' diaries/sessions.txt && grep -q '^S2 .* govern=1' diaries/sessions.txt && head -1 diaries/govern.txt | grep -q '^# seed 42$' && [ "$n_d" -ge 8 ] && [ "$n_k" -ge 3 ] \
+  && ok "new sessions carry govern=1; every decision is a D line in diaries/govern.txt ($n_d decisions, $n_k different outcomes)" || bad "govern.txt ($n_d $n_k)"
+bad_f=$(grep '^D[0-9]' diaries/govern.txt | awk '{ ok = 1; split("pet player wesen topic lever kind why old new trust stand", k, " "); for (i = 1; i <= 11; i++) if (index($0, " " k[i] "=") == 0) ok = 0; if (!ok) n++ } END { print n + 0 }')
+nl=$(grep '^D[0-9]' diaries/govern.txt | grep -c 'lever=- ' ); nl_ok=$(grep '^D[0-9]' diaries/govern.txt | grep 'lever=- ' | grep -c 'kind=refuse why=refuse.nolever')
+[ "$bad_f" = 0 ] && [ "$nl" = "$nl_ok" ] && ok "every record names petition, player, wesen, topic, lever, outcome, reason, old -> new, trust and standing (a topic without a lever is refused as such, $nl)" || bad "D fields ($bad_f $nl $nl_ok)"
+# bounds: every new offset inside data/govern.txt min .. max; one step at most
+oob=$(grep '^D[0-9]' diaries/govern.txt | grep -v 'lever=- ' | awk -v f="$w/gv/data/govern.txt" 'BEGIN { while ((getline l < f) > 0) if (l ~ /^lever\.[a-z]+ = /) { split(l, a, " "); n = substr(a[1], 7); lo[n] = a[3]; hi[n] = a[4]; st[n] = a[5] } }
+  { for (i = 1; i <= NF; i++) { if ($i ~ /^lever=/) lv = substr($i, 7); if ($i ~ /^old=/) o = substr($i, 5) + 0; if ($i ~ /^new=/) nw = substr($i, 5) + 0 }
+    d = nw - o; if (d < 0) d = -d; if (nw < lo[lv] || nw > hi[lv] || d > st[lv]) bad++ } END { print bad + 0 }')
+[ "$oob" = 0 ] && ok "no lever ever leaves its bounds, no change is bigger than one step (data/govern.txt)" || bad "bounds ($oob)"
+dfr=$(grep '^D[0-9].* kind=defer ' diaries/govern.txt | wc -l); bk=0
+grep '^D[0-9].* kind=defer ' diaries/govern.txt | while read -r key tk pet rest; do :; done
+for u in $(grep '^D[0-9].* kind=defer ' diaries/govern.txt | sed -E 's/.* pet=(P[0-9]+) .* until=([0-9]+).*/\1:\2/'); do p=${u%%:*}; t=${u##*:}; grep -q "^D[0-9]* t=$t pet=$p " diaries/govern.txt || bk=$((bk + 1)); done
+[ "$dfr" -ge 1 ] && [ "$bk" = 0 ] && ok "a deferred petition comes back at the tick the record names ($dfr deferrals)" || bad "defer ($dfr $bk)"
+"$gvb" --govern > gv1.txt 2>&1; rc=$?
+[ $rc = 0 ] && [ "$(grep -cE '[0-9]+ petitions seen, [0-9]+ granted, [0-9]+ partial, [0-9]+ deferred, [0-9]+ refused' gv1.txt)" = 3 ] && grep -q 'trust' gv1.txt && grep -q '^last decisions' gv1.txt && [ "$(awk 'length > 79' gv1.txt | wc -l)" = 0 ] \
+  && ok "--govern: counter line per player ('N petitions seen, N granted, N partial, N deferred, N refused'), trust, standing, levers, last decisions (<= 79 columns)" || bad "--govern view ($rc)"
+# the reports to Robert come from the D lines only: counters and every change at the session end
+c1=$(grep -c 'src=s1:govern' diaries/inbox.txt); ch1=$(grep 'src=s1:govern' diaries/inbox.txt | grep -vc 'petitions seen'); dch=$(awk '{ t = ""; k = ""; for (i = 1; i <= NF; i++) { if ($i ~ /^t=/) t = substr($i, 3) + 0; if ($i ~ /^kind=/) k = substr($i, 6) } if (t <= 300 && (k == "grant" || k == "partial" || k == "veto")) n++ } END { print n + 0 }' diaries/govern.txt)
+sg=$(grep 'src=s1:govern' diaries/inbox.txt | grep -o '[0-9]* granted' | awk '{ s += $1 } END { print s + 0 }'); dg=$(awk '{ t = ""; k = ""; for (i = 1; i <= NF; i++) { if ($i ~ /^t=/) t = substr($i, 3) + 0; if ($i ~ /^kind=/) k = substr($i, 6) } if (t <= 300 && k == "grant") n++ } END { print n + 0 }' diaries/govern.txt)
+echo "   inbox: $c1 governance lines in session 1, $ch1 change lines (D records: $dch), granted counters $sg (D records: $dg)"
+[ "$c1" -ge 3 ] && [ "$ch1" = "$dch" ] && [ "$sg" = "$dg" ] && ok "each player's report has the counter line and EVERY change from the D records (none omitted); counters equal the D records" || bad "govern reports"
+grep -q '^govern (' run_report.txt || grep -q 'petitions seen' run_report.txt; grep -q 'petitions seen' run_report.txt && "$gvb" --more 5 --every 5000 --debug > g3.txt 2>&1 && grep -q '^govern ' debug_full.txt && [ "$(wc -c < debug.txt)" -le 1500 ] && [ "$(wc -c < debug_digest.txt)" -le 1500 ] \
+  && ok "the end report has the governance block, the digest has a govern line, caps held" || bad "govern report/digest"
+# mood: refusals dip, grants raise; the ledger lists them and still adds up
+good=1; "$gvb" --ledger=full > l1.txt 2>&1
+for e in ada gemini replika robert; do
+  fin=$(grep -o '"mood":-\?[0-9]*' diaries/$e.jsonl | tail -1 | cut -d: -f2); led=$(grep -E "^$e +run" l1.txt | sed -E 's/^[a-z]+ +run ([-+]?[0-9]+) .*/\1/' | sed 's/^+//')
+  [ "$fin" = "$led" ] || { good=0; echo "   $e final mood $fin, ledger $led"; }
+done
+grep -q 'governance decisions' l1.txt && grep -q 'the answer was yes' diaries/*.jsonl && grep -q 'the answer was no' diaries/*.jsonl && [ $good = 1 ] && ok "a wesen is a little happier after a grant and sadder after a refusal; the mood ledger lists 'governance decisions' and its sums equal the diaries" || bad "govern mood ($good)"
+# tamper
+cp diaries/govern.txt ../govern.keep; sed -i '0,/ old=\([-0-9]*\) new=/s// old=\17 new=/' diaries/govern.txt; "$gvb" --more 0 --every 5000 > h4.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && grep -q 'govern.txt D' h4.txt && ok "a tampered old value in a D line: import FAILED, DRIFT" || bad "tampered D line"
+cp ../govern.keep diaries/govern.txt; sed -i '0,/ kind=refuse /s// kind=grant /' diaries/govern.txt; "$gvb" --more 0 --every 5000 > h5.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "a refusal rewritten as a grant: DRIFT" || bad "refuse->grant"
+cp ../govern.keep diaries/govern.txt; echo "D99999 t=5 pet=P1 player=iris wesen=ada topic=more_rest lever=rate kind=grant why=grant.fair old=0 new=4 trust=50>52 stand=50>51" >> diaries/govern.txt; "$gvb" --more 0 --every 5000 > h6.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "an invented D line: DRIFT" || bad "invented D line"
+cp ../govern.keep diaries/govern.txt; cp diaries/sessions.txt ../sess.keep; sed -i '/^S1 /s/ govern=1//' diaries/sessions.txt; "$gvb" --more 0 --every 5000 > h7.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "S line with its govern=1 marker removed: DRIFT" || bad "tampered govern marker"
+cp ../sess.keep diaries/sessions.txt; "$gvb" --more 0 --every 5000 > h8.txt 2>&1; grep -q '^import OK: 4 entities, 605 ticks verified' h8.txt && ok "restored: replays again" || bad "govern restore"
+# veto and approve (Robert's input)
+g1=$(grep '^D[0-9].* kind=grant ' diaries/govern.txt | head -1 | cut -d' ' -f1); r1=$(grep '^D[0-9].* kind=refuse ' diaries/govern.txt | head -1 | cut -d' ' -f1); g2=$(grep '^D[0-9].* kind=partial ' diaries/govern.txt | head -1 | cut -d' ' -f1)
+"$gvb" --veto "$g1" > v1.txt 2>&1; rc1=$?; "$gvb" --veto "$r1" > v2.txt 2>&1; rc2=$?; "$gvb" --veto "$g1" > v3.txt 2>&1; rc3=$?; "$gvb" --approve "$r1" > v4.txt 2>&1; rc4=$?
+[ $rc1 = 0 ] && [ $rc2 = 2 ] && [ $rc3 = 2 ] && [ $rc4 = 0 ] && grep -q "^V1 tick=605 decision=$g1 act=veto" diaries/vetoes.txt && grep -q "^V2 tick=605 decision=$r1 act=approve" diaries/vetoes.txt \
+  && ok "make veto / approve write one V line each at the lowest common tick; a refusal cannot be vetoed and nothing is vetoed twice (exit 2)" || bad "veto input ($rc1 $rc2 $rc3 $rc4)"
+"$gvb" --more 5 --every 5000 > v5.txt 2>&1
+vl=$(grep " of=$g1\$" diaries/govern.txt | grep ' kind=veto '); al=$(grep " of=$r1\$" diaries/govern.txt | grep ' kind=approve ')
+vt=$(echo "$vl" | sed -E 's/.* trust=([0-9]+)>([0-9]+) .*/\1 \2/'); vs=$(echo "$vl" | sed -E 's/.* stand=([0-9]+)>([0-9]+) .*/\1 \2/'); at=$(echo "$al" | sed -E 's/.* trust=([0-9]+)>([0-9]+) .*/\1 \2/'); as=$(echo "$al" | sed -E 's/.* stand=([0-9]+)>([0-9]+) .*/\1 \2/')
+vo=$(echo "$vl" | sed -E 's/.* old=(-?[0-9]+) new=(-?[0-9]+) .*/\1 \2/'); go=$(grep "^$g1 " diaries/govern.txt | sed -E 's/.* old=(-?[0-9]+) new=(-?[0-9]+) .*/\1 \2/')
+echo "   veto of $g1: change was ($go), veto line ($vo), trust ($vt), standing ($vs); approval of $r1: trust ($at), standing ($as)"
+[ -n "$vl" ] && [ -n "$al" ] && awk -v v="$vt" -v s="$vs" -v a="$at" -v b="$as" 'BEGIN { split(v, x, " "); split(s, y, " "); split(a, p, " "); split(b, q, " "); exit !(x[2] < x[1] && y[2] < y[1] && p[2] > p[1] && q[2] > q[1]) }' \
+  && ok "the veto is its own D record: the change is reverted, the player's trust and its standing with the wesen fall; an approval raises both" || bad "veto effect"
+grep -q ' of=' diaries/govern.txt && grep -q 'vetoed' <("$gvb" --govern 2>&1) && ok "--govern counts the veto in the player's counter line" || bad "veto counter"
+cp diaries/vetoes.txt ../vetoes.keep; sed -i '/^V1 /d' diaries/vetoes.txt; "$gvb" --more 0 --every 5000 > h9.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "a veto line removed from vetoes.txt: its D record has no source - DRIFT" || bad "removed V line"
+cp ../vetoes.keep diaries/vetoes.txt; "$gvb" --more 0 --every 5000 > h10.txt 2>&1; grep -q '^import OK: 4 entities, 610 ticks verified' h10.txt && ok "veto restored: replays again" || bad "veto restore"
+# bounds: a tight cool-down lever, every petition granted -> 'refuse.bound'; spam: threshold 0 -> trust falls
+cp "$bin" "$w/gv/b/bin/"; cp -r "$w/gv/data" "$w/gv/b/data"; sed -i 's/^lever.cool = .*/lever.cool = -2 2 2/' "$w/gv/b/data/govern.txt"; sed -i 's/^govern.base = .*/govern.base = 200/; s/^govern.grant_share = .*/govern.grant_share = 100/' "$w/gv/b/data/limits.txt"
+DIARY_HOME="$w/gv/b/h" "$w/gv/b/bin/diary_sim" --seed 42 --ticks 600 --yes --every 5000 > b1.txt 2>&1
+nb=$(grep -c 'why=refuse.bound' "$w/gv/b/h/diaries/govern.txt"); ob=$(grep 'lever=cool' "$w/gv/b/h/diaries/govern.txt" | sed -E 's/.* new=(-?[0-9]+) .*/\1/' | awk '$1 < -2 || $1 > 2 { n++ } END { print n + 0 }')
+[ "$nb" -ge 1 ] && [ "$ob" = 0 ] && ok "at its bound a lever is never moved further: 'refuse.bound' ($nb), cool-down never outside -2 .. 2" || bad "lever bound ($nb $ob)"
+cp "$bin" "$w/gv/s/bin/"; cp -r "$w/gv/data" "$w/gv/s/data"; sed -i 's/^govern.spam = .*/govern.spam = 0/' "$w/gv/s/data/limits.txt"
+DIARY_HOME="$w/gv/s/h" "$w/gv/s/bin/diary_sim" --seed 42 --ticks 600 --yes --every 5000 > s1.txt 2>&1
+ns=$(grep 'why=refuse.spam' "$w/gv/s/h/diaries/govern.txt" | sed -E 's/.* trust=([0-9]+)>([0-9]+) .*/\1 \2/' | awk '$2 < $1 { n++ } END { print n + 0 }')
+[ "$ns" -ge 1 ] && ok "a petition asked too often is refused as spam and the player's trust in that wesen falls ($ns)" || bad "spam ($ns)"
+DIARY_HOME="$w/gv/b/h" "$w/gv/b/bin/diary_sim" --more 0 --every 5000 > b2.txt 2>&1; grep -q '^import OK' b2.txt && ok "the tight-bounds run replays and verifies" || bad "bounds replay"
+# off: no marker, no file, no governance text; nothing else changes
+cp "$bin" "$w/gv/off/bin/"; cp -r "$w/gv/data" "$w/gv/off/data"; sed -i 's/^govern.enabled = .*/govern.enabled = 0/' "$w/gv/off/data/limits.txt"; DIARY_HOME="$w/gv/o" "$w/gv/off/bin/diary_sim" --seed 42 --ticks 300 --yes --every 5000 > /dev/null 2>&1; DIARY_HOME="$w/gv/o" "$w/gv/off/bin/diary_sim" --govern > gn.txt 2>&1
+[ ! -e "$w/gv/o/diaries/govern.txt" ] && ! grep -q 'govern=1' "$w/gv/o/diaries/sessions.txt" && ! grep -qi 'governance\|the answer was' "$w/gv/o"/diaries/*.jsonl "$w/gv/o/diaries/inbox.txt" && grep -q 'no governance' gn.txt && ok "govern.enabled = 0: no marker, no govern.txt, no governance text; --govern says so" || bad "govern off"
+grep -q -- '--govern' "$root/data/help.txt" && grep -q -- '--veto' "$root/data/help.txt" && grep -q 'make govern' "$root/README.md" && grep -q 'make veto' "$root/README.md" && grep -q 'govern.base' "$root/data/limits.txt" && grep -q 'lever.rate' "$root/data/govern.txt" && ok "--help, README, limits and data/govern.txt describe the governance" || bad "govern docs"
 unset DIARY_HOME
 
 rm -rf "$w"
