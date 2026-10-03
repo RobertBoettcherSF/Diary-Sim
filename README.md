@@ -793,6 +793,66 @@ by `Learn_Word`), the rest is spread (chess move generation ~10 %, screens, reco
 **Old diaries are incompatible** with this version (new actions, longer texts, a
 vocabulary): start with `--fresh`.
 
+## Footprint: where the kilobytes are (`make footprint`, `make small`)
+
+Measured on GNAT 14 (x86-64 Linux) at the trial commit; `make footprint` prints the same kind of numbers for your files. The
+**source** is 655,188 bytes of Ada in 35 files (README 85,653, `scripts/` 193,238); `data/` is 161,912 bytes in 23 files and is read at
+run time, never linked in: `words.txt` 55,186, `limits.txt` 18,198, `messages.txt` 12,142, `help.txt` 10,371, `visit.txt` 8,437,
+`fonts.txt` 8,374, `dharma.txt` 6,272, `preport.txt` 5,964, the other 14 files together 36,968. The zip of the project is ~280 KB.
+
+**The binary** (all numbers in bytes; one build each, so a few percent of noise between rows):
+
+| build | unstripped | stripped | what it is |
+|---|---:|---:|---|
+| `make` (dev: `-g -O0`) | 9,464,824 | 5,505,736 | the default, fast to build, symbolic tracebacks |
+| `-g -O1 -fno-inline` (strict, `make portable`) | 9,882,960 | 3,752,552 | |
+| `-O1`, no `-g` | 4,825,168 | 3,875,368 | symbol table only |
+| `-O0`, no `-g` | 6,935,512 | 5,669,576 | |
+| `-O1 -ffunction-sections -fdata-sections --gc-sections -s` | 3,596,848 | 3,596,848 | |
+| the same with `-no-pie` | 3,441,136 | 3,441,136 | PIE relocations (`.rela.dyn`) are ~180 KB |
+| **`make small`** (`-Os` and the rest, `-s`) | **2,880,016** | 2,880,016 | **-70 % against the dev binary** |
+| `make small` + `-static-libgcc` | 2,912,848 | 2,912,848 | libgnat stays a shared library: no gain |
+
+The dev binary: **2,693,114 bytes of `.debug_*`** (`.debug_line` 1,029,974, `.debug_info` 924,459, `.debug_str` 500,648, the rest 238,033)
+and **1,265,196 of `.symtab` / `.strtab`**: 3.96 MB = 42 % of the file is for debuggers only. The code is `.text` 4,108,277,
+`.eh_frame` + `.eh_frame_hdr` 586,644 (exception tables), `.rodata` 289,523, `.gcc_except_table` 166,548, `.rela.dyn` 199,824,
+`.data.rel.ro` 92,504, `.bss` 46,400. **The Ada runtime is not in the file**: `libgnat-14.so` (4,614,512 bytes) and `libgnarl` are shared
+libraries (`ldd bin/diary_sim`); what *is* in the file is the project's own code, including the instantiations of
+`Ada.Containers.Vectors` / `Hashed_Maps` (they are generics: every element type is compiled into the unit that instantiates it,
+which is why `sim_store` and `sim_util` do not shrink at `-O1`).
+
+**Per unit** (`size`, text + data of `obj/*.o`, bytes; the `.o` files of the dev build also carry the debug sections, not counted):
+
+| unit | `-O0 -g` | `-O1` | `-Os` |
+|---|---:|---:|---:|
+| diary_sim | 1,556,771 | 975,583 | 796,543 |
+| sim_world | 653,871 | 444,896 | 362,638 |
+| sim_screen | 457,882 | 319,110 | 262,274 |
+| sim_things | 446,328 | 318,743 | 255,716 |
+| sim_dharma | 437,752 | 282,609 | 237,259 |
+| sim_govern | 311,765 | 220,714 | 171,158 |
+| sim_games | 247,885 | 170,025 | 139,528 |
+| sim_preport | 222,774 | 145,230 | 118,084 |
+| sim_visit | 178,308 | 121,006 | 98,776 |
+| sim_store | 169,065 | 176,335 | 143,800 |
+| sim_ledger | 131,590 | 97,899 | 71,233 |
+| sim_util | 125,368 | 131,167 | 105,790 |
+| sim_robot | 79,310 | 51,813 | 41,647 |
+| sim_trial | 39,037 | 25,879 | 21,032 |
+| sim_menu | 30,944 | 33,240 | 26,101 |
+| sim_chess | 30,386 | 15,332 | 11,214 |
+| sim_next | 26,695 | 20,592 | 13,182 |
+| sim_quit | 1,732 | 1,580 | 1,485 |
+| **sum** | **5,147,463** | **3,551,753** | **2,877,460** |
+
+**`make small`** builds `bin/diary_sim_small` in its own folder `obj_small`: `-Os` (`make small SMALL=-O1` is ~15 % faster and ~20 %
+larger; the dev build is slower than either), `-ffunction-sections -fdata-sections`, `-no-pie`, `-Wl,--gc-sections`, stripped (`-s`), no
+`-g`. It is the same program: a 1,500-tick run takes 0.77 s against 1.17 s for the dev build, and the console output and every file
+of the save folder are byte for byte the same (`scripts/checks.sh`, scenario 45). The only difference is a crash report
+(`last_error.txt`): without symbols it shows addresses, not names; for debugging use the dev build. The default build is unchanged.
+What would shrink the file further would change the program (dropping `-gnata` assertions or the range checks, `-gnatp`, or cutting
+features); it is not done.
+
 ## Model
 
 State per entity: energy 0..100, mood -100..100 (signed in the JSON), location

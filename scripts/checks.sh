@@ -1424,6 +1424,26 @@ else bad "trial off lines"; fi
 grep -q 'trial' "$root/README.md" && grep -q 'trial.enabled' "$root/data/help.txt" && grep -q 'trial.first' "$root/data/limits.txt" && grep -q '^trial.clash.1' "$root/data/trial.txt" && ok "README, --help, limits.txt and data/trial.txt describe the trial" || bad "trial docs"
 unset DIARY_HOME
 
+echo "== 45. make small: the small binary (-Os, no -g, gc-sections, stripped) is smaller and gives the same output; make footprint =="
+rm -rf "$w/sm"; mkdir -p "$w/sm/src/scripts" "$w/sm/a/bin" "$w/sm/b/bin"
+cp "$root"/Makefile "$root"/*.ads "$root"/*.adb "$w/sm/src/"; cp -r "$root/data" "$w/sm/src/data"; cp "$root/scripts/footprint.sh" "$w/sm/src/scripts/"
+( cd "$w/sm/src" && make small > "$w/sm/build.txt" 2>&1 ); rc=$?
+sm="$w/sm/src/bin/diary_sim_small"
+[ $rc = 0 ] && [ -x "$sm" ] && ! grep -qi 'warning' "$w/sm/build.txt" && ok "make small builds bin/diary_sim_small (no warnings)" || bad "make small ($rc)"
+ssz=$(stat -c %s "$sm" 2>/dev/null || echo 0); dsz=$(stat -c %s "$bin")
+dbg=$(readelf -S "$sm" 2>/dev/null | grep -c '\.debug_'); nsym=$(nm "$sm" 2>&1 | grep -c 'no symbols')
+[ "$ssz" -gt 0 ] && [ "$ssz" -lt $((dsz / 2)) ] && [ "$dbg" = 0 ] && [ "$nsym" = 1 ] && ok "the small binary is $((ssz / 1024)) KB against $((dsz / 1024)) KB of the dev build (no debug sections, no symbols)" || bad "small size ($ssz / $dsz, debug $dbg, nosym $nsym)"
+cp "$bin" "$w/sm/a/bin/diary_sim"; cp "$sm" "$w/sm/b/bin/diary_sim_small"
+for d in a b; do
+  cp -r "$idata" "$w/sm/$d/data"; sed -i 's/^chess.enabled = .*/chess.enabled = 1/; s/^govern.enabled = .*/govern.enabled = 1/; s/^trial.enabled = .*/trial.enabled = 1/; s/^screen.enabled = .*/screen.enabled = 1/; s/^robot.enabled = .*/robot.enabled = 1/' "$w/sm/$d/data/limits.txt"
+  x="$w/sm/$d/bin/diary_sim"; [ $d = b ] && x="$w/sm/$d/bin/diary_sim_small"
+  mkdir -p "$w/sm/$d/h"; ( cd "$w/sm/$d" && export DIARY_HOME="$w/sm/$d/h" && { "$x" --seed 42 --ticks 400 --yes --every 5000; "$x" --more 200 --every 5000; "$x" --trials; "$x" --elo; "$x" --govern; "$x" --more 0 --every 5000 --debug-section run; } 2>&1 | sed "s#$w/sm/$d/h#H#g" > "$w/sm/$d/out.txt" )
+  ( cd "$w/sm/$d/h" && find . -type f | sort | while read -r f; do case $f in ./debug*|./last*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done > "$w/sm/$d/files.txt" )
+done
+[ -s "$w/sm/a/out.txt" ] && cmp -s "$w/sm/a/out.txt" "$w/sm/b/out.txt" && cmp -s "$w/sm/a/files.txt" "$w/sm/b/files.txt" && grep -q '^T[0-9]' "$w/sm/a/out.txt" && ok "the small binary gives the same console output and byte-identical diaries / entities / reports as the dev build ($(wc -l < "$w/sm/a/files.txt") files compared; trials, Elo, governance included)" || bad "small vs dev output"
+( cd "$w/sm/src" && make footprint > "$w/sm/fp.txt" 2>&1 ); grep -q '^source  : ' "$w/sm/fp.txt" && grep -q '^data    : ' "$w/sm/fp.txt" && grep -q '^binary  : bin/diary_sim_small ' "$w/sm/fp.txt" && grep -q '^units   : ' "$w/sm/fp.txt" && grep -q '^runtime : ' "$w/sm/fp.txt" && ok "make footprint prints source, data, binary (stripped / debug share), per-unit and runtime sizes" || bad "footprint"
+grep -q '^## Footprint' "$root/README.md" && grep -q 'make small' "$root/README.md" && grep -q 'make small' "$root/Makefile" && ok "README has a Footprint section with the size table and make small" || bad "footprint docs"
+
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="
 [ "$fails" = 0 ]

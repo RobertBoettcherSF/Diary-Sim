@@ -1,4 +1,4 @@
-# Version: 0.026
+# Version: 0.027
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -58,6 +58,10 @@
 #                 to attach to chat: in the save folder for run, in the current folder for demo (the only
 #                 file a demo ever writes); the full record is debug_full.txt (run).
 #                 make run SECTION=drift|trace|players|inbox|run|status prints one block of it (nothing runs)
+# make small      (always a full rebuild) the SMALL binary bin/diary_sim_small: no -g, -Os (SMALL=-O1: ~20 % faster, ~20 % larger), -ffunction-sections
+#                 -fdata-sections, -no-pie, --gc-sections, stripped (-s); own object folder obj_small.  Same program, same output (the dev build bin/diary_sim stays
+#                 as it is); the only difference: no symbols, so a crash report shows addresses instead of names.  make footprint: the
+#                 sizes (source, data, per unit, stripped / unstripped, debug share) of the files that exist
 # make check      version headers + the resume/replay/drift/crash checks
 GNATMAKE ?= gnatmake
 # Build speed: units compile in parallel (-j0 = all cores) and at -O0 (a clean build took ~60 s serial at -O1; ~12 s now; the run
@@ -67,10 +71,14 @@ OPT ?= -O0
 JOBS ?= -j0
 FLAGS = -g $(OPT) -gnatwa -gnat2022 -gnata $(JOBS)
 
-.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials
+.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials small footprint
 export WESEN PLAYER TEXT AS
 
 EVERY ?= 100
+
+SMALL ?= -Os
+SMALL_LINK ?= -no-pie -Wl,--gc-sections -s
+SMALL_FLAGS = $(SMALL) -ffunction-sections -fdata-sections -gnatwa -gnat2022 -gnata $(JOBS)
 
 all:
 	mkdir -p obj bin
@@ -155,5 +163,14 @@ ledger: all
 check: version-check all
 	scripts/checks.sh
 
+small:
+	mkdir -p obj_small bin
+	$(GNATMAKE) -f $(SMALL_FLAGS) -D obj_small diary_sim.adb -o bin/diary_sim_small -bargs -E -largs $(SMALL_LINK)
+	@rm -f b~*
+	@ls -l bin/diary_sim_small | awk '{ printf "bin/diary_sim_small: %d bytes (%d KB)\n", $$5, $$5 / 1024 }'
+
+footprint:
+	@scripts/footprint.sh
+
 clean:
-	rm -rf obj bin diaries diaries_old_* entities summary.txt summary.jsonl run_report.txt debug.txt debug.tmp debug_digest.txt debug_digest.prev debug_full.txt last_error.txt
+	rm -rf obj obj_small bin diaries diaries_old_* entities summary.txt summary.jsonl run_report.txt debug.txt debug.tmp debug_digest.txt debug_digest.prev debug_full.txt last_error.txt

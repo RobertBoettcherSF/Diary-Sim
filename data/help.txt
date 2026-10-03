@@ -144,3 +144,6 @@ a further match of 3, then 5, ... (odd) until decided; past trial.max_games a
 Rule 30 coin. A losing wesen adheres with trial.adhere_pct (less unrest, more
 standing), else "refused the trial" and pays standing. Small effects. T lines
 of diaries/trials.txt, replay-verified. trial.enabled = 0: no trials.
+Size (make footprint, make small): bin/diary_sim (-g -O0) is ~9 MB, of which
+~4 MB is debug info and symbols. make small builds bin/diary_sim_small (-Os,
+no -g, gc-sections, stripped): ~2.9 MB, same output. See README, Footprint.
