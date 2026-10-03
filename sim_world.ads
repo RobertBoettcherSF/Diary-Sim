@@ -1,4 +1,4 @@
---  Version: 0.004
+--  Version: 0.005
 --  The shared world of diary_sim: the four entities, the vocabulary (base
 --  words, who knows what, coined words), the bench kernels and the final votes.
 --  One world per run; Init rebuilds it from scratch, so a replay from tick 1
@@ -32,10 +32,14 @@ package Sim_World is
    function Count return Natural;
    function Word (W : Positive) return String;
    function Knows (E : Entity_Id; W : Positive) return Boolean;
-   procedure Learn_Word (E : Entity_Id; W : Positive);
+   --  From: the entity that taught the word (0: nobody, e.g. a start word).
+   procedure Learn_Word (E : Entity_Id; W : Positive; From : Natural := 0);
    function Find (Text : String) return Natural;   --  0: no such word
-   function Add_Coined (Text : String; P1, P2 : Natural) return Positive;
+   function Add_Coined (Text : String; P1, P2 : Natural; By : Entity_Id) return Positive;
    function Parents (W : Positive) return String;   --  "hand+phone" or "" for a base word
+   --  Where E's word W came from: "start" (start slice), "taught by <id>" or "coined by <id>".
+   function Origin (E : Entity_Id; W : Positive) return String;
+   function Coined_By (W : Positive) return String;   --  entity name, "" for a base word
    --  Words E knows / words From knows and To lacks, and the N-th of each.
    function Known_Count (E : Entity_Id) return Natural;
    function Nth_Known (E : Entity_Id; N : Positive) return Positive;

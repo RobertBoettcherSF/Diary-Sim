@@ -22,7 +22,7 @@ Plain Ada, standard library only. Not pushed anywhere yet (local git repo).
    anything else (Enter, EOF) prints `copy a backed-up diaries/ here, then make run` and
    `cancelled, nothing written` and exits 0 without creating any file. `make run YES=1`
    (`--yes`) answers yes without asking; `--fresh` never asks. Without a terminal
-   (scripts, pipes, `checks.sh`, `make demo`) nothing is asked: with an explicit
+   (scripts, pipes, `checks.sh`) nothing is asked: with an explicit
    `TICKS` / `--ticks` / `--more` it starts fresh as before; without a length it stops with
    the same hint and exit 2 (use `--yes`). A misplaced `diaries/diaries` still gets its own hint.
 3. The import line says what was loaded: `import OK: 4 entities, 200 ticks verified,
@@ -42,7 +42,21 @@ Plain Ada, standard library only. Not pushed anywhere yet (local git repo).
 
 `--more N` is the program option behind `TICKS`; `--ticks=N` keeps its meaning (absolute
 target tick); if both are given, `--more` wins. Both are explicit: they override the vote.
-`make demo` stays isolated in `demo_run/`.
+`make demo` is a preview (below).
+
+**`make run` / `make play` keep one persistent world:** each run loads `./diaries`,
+replay-verifies it and continues it; the world only ever grows. Back it up and copy it
+back whenever you like. Nothing else writes the world.
+
+## make demo: preview only (writes nothing)
+
+`make demo` (= `bin/diary_sim --preview --ticks 200`) simulates 200 ticks of a NEW world
+(seed 42, or `--seed N`) in memory and prints one screen of excerpts: two diary lines per
+wesen, two petitions, known / coined / taught words, the vote a first bare `make run`
+would hold, and the vote table. It creates no `diaries/`, `entities/`, `debug.txt`,
+`run_report.txt`, `petitions.txt` or other file, and does not read `./diaries` (the old
+`demo_run/` is gone). `--preview` takes `--ticks` and `--seed`; with `--fresh`, `--yes`,
+`--more` or `--crash-at` it stops with a usage error (exit 2), since those write.
 
 ## Kalpa sessions: the entities vote on how long a session runs
 
@@ -90,14 +104,14 @@ for the number of NEW ticks (think kalpas in Hinduism: ages of different length)
 make                         # bin/diary_sim  (GNAT 14; make GNATMAKE=gnatmake-12 for GNAT 12)
 make portable                # 0-warning build with GNAT 14 and 12 in a copy without .git
 make run                     # = make play: continue ./diaries; the entities vote how many ticks (TICKS=N: explicit)
-make demo                    # build + --fresh --ticks 200 --every 50 in demo_run/ (prints seed and the final summary)
+make demo                    # PREVIEW: 200 ticks in memory, a screen of excerpts, nothing written to disk
 make check                   # version headers + scripts/checks.sh (the scenarios: run, resume, behind, half line, drift, crash, fresh, data limits)
 bin/diary_sim --help
 bin/diary_sim --ticks=1000 --every=100     # --ticks 1000 works too
 ```
 
 Options: `--ticks=N` (absolute target; without `--ticks`/`--more` the entities vote the session length), `--seed=N` (default 42; existing diaries win),
-`--every=N` (progress line, default 100), `--yes` (do not ask when there is no previous diary), `--fresh` (move old diaries to
+`--every=N` (progress line, default 100), `--yes` (do not ask when there is no previous diary), `--preview` (simulate in memory, print excerpts, write nothing), `--fresh` (move old diaries to
 `diaries_old_<time>/` first, together with `entities/`), `--crash-at=T` (force a failure), `--help`.
 Exit: 0 ok, 1 error, 2 usage. Run it from the project directory (or from any
 directory: `data/` is found next to the executable).

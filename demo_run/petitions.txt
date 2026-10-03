@@ -1,0 +1,5 @@
+# seed 42 | petitions: showing the last 4 of 4 (propose.file_cap in data/limits.txt)
+P1 tick=69 from=ada topic=different_locations wish=I request kindly, different places to be in because it matters to me. Please answer soon.
+P2 tick=76 from=gemini topic=more_words wish=May I have honestly, more words to learn and share because it would help us all. It is a small thing.
+P3 tick=179 from=replika topic=other wish=I request politely, something small changed in my world because I have thought about it. Please think it over.
+P4 tick=200 from=robert topic=more_rest wish=We could use again, more time to rest because it matters to me. I will wait.

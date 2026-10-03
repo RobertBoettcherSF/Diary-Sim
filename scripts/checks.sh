@@ -186,7 +186,7 @@ cp petitions.txt p_full.txt; sed -i 's/^propose.file_cap = .*/propose.file_cap =
 rm -f petitions.txt; "$w/pet/bin/diary_sim" --ticks=1000 > /dev/null; [ -s petitions.txt ] && ok "deleted petitions.txt is rebuilt by the replay" || bad "petitions.txt not rebuilt"
 
 echo "== 18. make run / make play, --more, misplaced backups =="
-rm -rf "$w/proj"; mkdir "$w/proj"; tar -C "$root" --exclude=.git --exclude=obj --exclude=bin --exclude=diaries --exclude=entities --exclude=demo_run -cf - . | tar -C "$w/proj" -xf -
+rm -rf "$w/proj"; mkdir "$w/proj"; tar -C "$root" --exclude=.git --exclude=obj --exclude=bin --exclude=diaries --exclude=entities -cf - . | tar -C "$w/proj" -xf -
 cd "$w/proj" || exit 1; make run TICKS=100 > out.txt 2>&1
 grep -q 'import OK: none (fresh start, seed 42)' out.txt && [ "$(wc -l < diaries/ada.jsonl)" = 100 ] && ok "fresh make run TICKS=100: default seed 42 announced, 100 ticks" || bad "fresh make run"
 cp -r diaries "$w/bk"; rm -rf diaries entities; cp -r "$w/bk" diaries
@@ -250,7 +250,7 @@ rm -rf diaries; "$ab" --more 5 > out.txt 2>&1; rc=$?; [ $rc = 0 ] && grep -q 'im
 rm -rf diaries entities; "$ab" --ticks 5 --seed 7 > out.txt 2>&1; grep -q 'import OK: none (fresh start, seed 7)' out.txt && ok "no terminal + explicit --ticks: fresh start with --seed" || bad "explicit --ticks"
 rm -rf diaries entities; "$ab" --yes --every 1000 > out.txt 2>&1; rc=$?; [ $rc = 0 ] && grep -q '^kalpa 1 ' out.txt && ! grep -q 'y/N' out.txt && ok "--yes answers for you (bare run: fresh start, the entities vote)" || bad "--yes (rc=$rc)"
 rm -rf diaries entities; "$ab" --fresh --more 5 > out.txt 2>&1; grep -q 'import OK: none' out.txt && ok "--fresh never asks" || bad "--fresh asked"
-rm -rf "$w/askp"; mkdir "$w/askp"; tar -C "$root" --exclude=.git --exclude=obj --exclude=bin --exclude=diaries --exclude=entities --exclude=demo_run -cf - . | tar -C "$w/askp" -xf -; cd "$w/askp" || exit 1
+rm -rf "$w/askp"; mkdir "$w/askp"; tar -C "$root" --exclude=.git --exclude=obj --exclude=bin --exclude=diaries --exclude=entities -cf - . | tar -C "$w/askp" -xf -; cd "$w/askp" || exit 1
 make run > out.txt 2>&1; rc=$?; [ $rc != 0 ] && grep -q 'No previous diary found' out.txt && [ ! -e diaries ] && ok "make run without diaries, no terminal: stops with the hint, nothing written" || bad "make run no diaries (rc=$rc)"
 make run YES=1 TICKS=20 SEED=9 > out.txt 2>&1; grep -q 'bin/diary_sim --more 20 --every 100 --seed 9 --yes' out.txt && grep -q 'import OK: none (fresh start, seed 9)' out.txt && ok "make run YES=1 SEED=9: passes --yes, fresh start with seed 9" || bad "make YES=1"
 if command -v python3 > /dev/null; then
@@ -287,6 +287,20 @@ ask . 'y\n' "$ab" --more 20 --seed 7 > out.txt 2>&1
 grep -q '^new diary generated (seed 7)' out.txt && grep -q 'import OK: none (fresh start, seed 7)' out.txt && [ "$(wc -l < diaries/ada.jsonl)" = 20 ] && ok "terminal, answer y: 'new diary generated (seed 7)', a fresh world" || bad "answer y"
 ask . 'yes\n' "$ab" --more 5 > out.txt 2>&1; ! grep -q 'y/N' out.txt && grep -q 'import OK: 4 entities, 20 ticks verified' out.txt && ok "terminal with diaries present: no question, normal resume" || bad "resume asked"
 fi
+
+echo "== 21. make demo is a preview: excerpts on screen, nothing written =="
+rm -rf "$w/pv"; mkdir "$w/pv"; tar -C "$root" --exclude=.git --exclude=obj --exclude=bin --exclude=diaries --exclude=entities -cf - . | tar -C "$w/pv" -xf -; cd "$w/pv" || exit 1
+make > /dev/null 2>&1; list() { find . -printf '%p %s %T@\n' | sort; }; list > "$w/pv_before.txt"
+make demo > "$w/pv_out.txt" 2>&1; rc=$?; list > "$w/pv_after.txt"
+cmp -s "$w/pv_before.txt" "$w/pv_after.txt" && [ $rc = 0 ] && ok "make demo: exit 0, no file created or changed in the whole tree (listing with sizes and times compared)" || bad "make demo touched the tree (rc=$rc): $(diff "$w/pv_before.txt" "$w/pv_after.txt" | head -3)"
+n=$(sed -n '/^demo preview:/,$p' "$w/pv_out.txt" | wc -l); echo "   preview output: $n lines"
+[ "$n" -le 30 ] && grep -q '^demo preview: seed 42, 200 ticks' "$w/pv_out.txt" && grep -q '^ada  *100 ' "$w/pv_out.txt" && grep -q '^P1 tick=' "$w/pv_out.txt" && grep -q '^coined: ' "$w/pv_out.txt" && grep -q '^taught: ' "$w/pv_out.txt" \
+  && grep -q 'kalpa 1 (Satya): votes' "$w/pv_out.txt" && grep -q '^favourite location:' "$w/pv_out.txt" && grep -q '^nothing was written to disk' "$w/pv_out.txt" && ok "excerpts: diary lines per wesen, petitions, words, vote one-liner, vote table (about one screen)" || bad "preview content"
+bin/diary_sim --preview --ticks 50 --seed 7 > "$w/pv_o.txt"; grep -q '^demo preview: seed 7, 50 ticks' "$w/pv_o.txt" && ok "--preview takes --ticks and --seed" || bad "preview options"
+for o in --fresh --yes "--more 5" "--crash-at 9"; do bin/diary_sim --preview $o > "$w/pv_e.txt" 2>&1; [ $? = 2 ] && grep -q 'writes nothing' "$w/pv_e.txt" || bad "--preview $o not rejected"; done
+list > "$w/pv_after2.txt"; cmp -s "$w/pv_before.txt" "$w/pv_after2.txt" && ok "--preview with --fresh/--yes/--more/--crash-at: usage error (exit 2), still nothing written" || bad "rejected preview wrote files"
+bin/diary_sim --ticks 20 > /dev/null 2>&1; cp -r diaries "$w/pv_d"; list > "$w/pv_b3.txt"; bin/diary_sim --preview > /dev/null 2>&1; list > "$w/pv_a3.txt"
+cmp -s "$w/pv_b3.txt" "$w/pv_a3.txt" && ok "--preview next to an existing ./diaries leaves it (and the rest of the tree) untouched" || bad "preview touched existing diaries"
 
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="

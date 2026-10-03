@@ -1,4 +1,4 @@
-# Version: 0.007
+# Version: 0.008
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then continue the simulation in this folder: loads (imports and
@@ -9,7 +9,8 @@
 #                 are no diaries yet, default 42; without diaries a terminal is asked first, YES=1 answers
 #                 yes, see README)
 # make play       the same as make run
-# make demo       build + 200-tick run in demo_run/ (seed and final summary printed)
+# make demo       PREVIEW ONLY: build, then 200 ticks of a new world in memory, a screen of
+#                 excerpts, nothing written to disk (make run is what writes ./diaries)
 # make check      version headers + the resume/replay/drift/crash checks
 GNATMAKE ?= gnatmake
 FLAGS = -g -O1 -fno-inline -gnatwa -gnat2022 -gnata
@@ -39,11 +40,10 @@ run: all
 play: run
 
 demo: all
-	rm -rf demo_run && mkdir demo_run
-	cd demo_run && ../bin/diary_sim --fresh --ticks 200 --every 50
+	bin/diary_sim --preview --ticks 200
 
 check: version-check all
 	scripts/checks.sh
 
 clean:
-	rm -rf obj bin diaries diaries_old_* entities demo_run summary.txt summary.jsonl run_report.txt debug.txt debug.tmp last_error.txt
+	rm -rf obj bin diaries diaries_old_* entities summary.txt summary.jsonl run_report.txt debug.txt debug.tmp last_error.txt

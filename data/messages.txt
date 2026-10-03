@@ -100,3 +100,8 @@ ask.yes = new diary generated (seed {1})
 ask.hint = copy a backed-up diaries/ here, then make run
 ask.cancelled = cancelled, nothing written
 ask.noterminal = No previous diary found in ./diaries and no terminal to ask: copy a backed-up diaries/ here, then make run (or YES=1 / --yes to start a new one, or give TICKS)
+err.preview = --preview writes nothing: it cannot be combined with --fresh, --yes, --more or --crash-at (--ticks and --seed are fine)
+preview.head = demo preview: seed {1}, {2} ticks of a new world, simulated in memory (excerpts only)
+preview.kalpa = a first bare "make run" of this world would be: {1}
+preview.words = words known: {1}\ncoined: {2}\ntaught: {3}
+preview.foot = nothing was written to disk. make run / make play write ./diaries and continue that world each time.

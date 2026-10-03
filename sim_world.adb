@@ -1,4 +1,4 @@
---  Version: 0.004
+--  Version: 0.005
 pragma Ada_2022;
 
 with Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
@@ -19,11 +19,14 @@ package body Sim_World is
    type Word_Rec is record
       Text   : Unbounded_String;
       P1, P2 : Natural := 0;   --  parent word ids of a coined word
+      Coiner : Natural := 0;   --  entity id that coined it (0: base word)
    end record;
    package Word_Vectors is new Ada.Containers.Vectors (Positive, Word_Rec);
    package Bool_Vectors is new Ada.Containers.Vectors (Positive, Boolean);
    Table : Word_Vectors.Vector;
    Known : array (Entity_Id) of Bool_Vectors.Vector;
+   package Nat_Vectors is new Ada.Containers.Vectors (Positive, Natural);
+   Taught : array (Entity_Id) of Nat_Vectors.Vector;   --  per word: the teacher's entity id, else 0
    Base  : Natural := 0;
 
    --  Petitions (see the spec): topic table, filed petitions, per-entity bookkeeping.
@@ -88,11 +91,12 @@ package body Sim_World is
       Cache_Steps := [others => -1];
       Table.Clear;
       for W of Base_Words loop
-         Table.Append (Word_Rec'(Text => To_Unbounded_String (W), P1 => 0, P2 => 0));
+         Table.Append (Word_Rec'(Text => To_Unbounded_String (W), P1 => 0, P2 => 0, Coiner => 0));
       end loop;
       Base := Natural (Table.Length);
       for E in Entity_Id loop
          Known (E).Clear;
+         Taught (E).Clear;
          for W in 1 .. Base loop
             Known (E).Append (Int (Roll (Seed, Positive (E), 0, 1000 + W, 100)) <= Start_Percent);
          end loop;
@@ -105,13 +109,26 @@ package body Sim_World is
    function Knows (E : Entity_Id; W : Positive) return Boolean is
      (W <= Natural (Known (E).Length) and then Known (E) (W));
 
-   procedure Learn_Word (E : Entity_Id; W : Positive) is
+   procedure Learn_Word (E : Entity_Id; W : Positive; From : Natural := 0) is
    begin
       while Natural (Known (E).Length) < W loop
          Known (E).Append (False);
       end loop;
       Known (E) (W) := True;
+      while Natural (Taught (E).Length) < W loop
+         Taught (E).Append (0);
+      end loop;
+      if From /= 0 then Taught (E) (W) := From; end if;
    end Learn_Word;
+
+   function Coined_By (W : Positive) return String is
+     (if Table (W).Coiner = 0 then "" else Name (Entity_Id (Table (W).Coiner)));
+
+   function Origin (E : Entity_Id; W : Positive) return String is
+     (if Table (W).Coiner = Positive (E) then "coined by " & Name (E)
+      elsif W <= Natural (Taught (E).Length) and then Taught (E).Element (W) /= 0
+      then "taught by " & Name (Entity_Id (Taught (E).Element (W)))
+      else "start");
 
    function Find (Text : String) return Natural is
    begin
@@ -121,9 +138,9 @@ package body Sim_World is
       return 0;
    end Find;
 
-   function Add_Coined (Text : String; P1, P2 : Natural) return Positive is
+   function Add_Coined (Text : String; P1, P2 : Natural; By : Entity_Id) return Positive is
    begin
-      Table.Append (Word_Rec'(To_Unbounded_String (Text), P1, P2));
+      Table.Append (Word_Rec'(To_Unbounded_String (Text), P1, P2, Positive (By)));
       return Count;
    end Add_Coined;
 

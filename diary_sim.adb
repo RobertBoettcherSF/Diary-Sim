@@ -1,4 +1,4 @@
---  Version: 0.011
+--  Version: 0.012
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -34,11 +34,13 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.011";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.012";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
    Fresh, Seed_Shown : Boolean := False;
+   Preview : Boolean := False;         --  --preview: simulate in memory, write nothing, show excerpts
+   Sample : array (Entity_Id) of Str_Vectors.Vector;   --  preview: every diary line
    Yes : Boolean := False;             --  --yes: no question when there is no previous diary
    Explicit : Boolean := False;        --  --ticks or --more given: no vote
    --  Limits, built-in values; data/limits.txt overrides them.
@@ -201,6 +203,7 @@ procedure Diary_Sim is
    --  Append Line unless the file already has it; flushed at once.
    procedure Ensure (E : Entity_Id; K : Side_Kind; Line : String) is
    begin
+      if Preview then return; end if;
       if not Side_Have (E, K).Contains (Line) then
          TIO.Put_Line (Side_Out (E, K), Line);
          TIO.Flush (Side_Out (E, K));
@@ -250,7 +253,7 @@ procedure Diary_Sim is
             begin
                if Text'Length <= 24 and then Find (Text) = 0 then
                   declare
-                     W : constant Positive := Add_Coined (Text, Pa, Pb);
+                     W : constant Positive := Add_Coined (Text, Pa, Pb, E);
                   begin
                      Learn_Word (E, W);
                      Ensure (E, Words_File, Words_Line (W, "coined", Tick, Parents (W)));
@@ -282,7 +285,7 @@ procedure Diary_Sim is
             declare
                W : constant Positive := Pending_Word (E);
             begin
-               Learn_Word (E, W);
+               Learn_Word (E, W, Natural (Pending_From (E)));
                Ensure (E, Words_File, Words_Line (W, "taught", Tick, Name (Pending_From (E))));
                Detail := To_Unbounded_String (Msg ("detail.learned", Word (W), Name (Pending_From (E))));
                Pending_Word (E) := 0;
@@ -357,9 +360,11 @@ procedure Diary_Sim is
       Count : Natural := 0;
       From  : Positive := Text'First;
    begin
-      TIO.Create (F, TIO.Out_File, "last_error.txt");
-      TIO.Put (F, Text & Msg ("err.raw") & ASCII.LF & Raw);
-      TIO.Close (F);
+      if not Preview then
+         TIO.Create (F, TIO.Out_File, "last_error.txt");
+         TIO.Put (F, Text & Msg ("err.raw") & ASCII.LF & Raw);
+         TIO.Close (F);
+      end if;
       for I in Text'Range loop
          if Text (I) = ASCII.LF then
             Count := Count + 1;
@@ -497,6 +502,7 @@ procedure Diary_Sim is
       Out_Text : Unbounded_String;
       F : TIO.File_Type;
    begin
+      if Preview then return; end if;   --  preview writes nothing
       Part (Head) := To_Unbounded_String (Status & " v" & Build & " seed " & (if Seed < 0 then "?" else Img (Seed)) & ASCII.LF);
       Part (Ticks_P) := To_Unbounded_String
         ((if Last_Done > Int (Common)
@@ -569,8 +575,12 @@ procedure Diary_Sim is
                end if;
                Verified := Verified + 1;
             else
-               TIO.Put_Line (Out_File (E), Line);
-               TIO.Flush (Out_File (E));
+               if Preview then
+                  Sample (E).Append (Line);
+               else
+                  TIO.Put_Line (Out_File (E), Line);
+                  TIO.Flush (Out_File (E));
+               end if;
                Written := Written + 1;
             end if;
             Events := Written + Verified;
@@ -594,6 +604,7 @@ procedure Diary_Sim is
       First : constant Natural := (if Total > Cap then Total - Cap + 1 else 1);
       F : TIO.File_Type;
    begin
+      if Preview then return; end if;
       TIO.Create (F, TIO.Out_File, "petitions.tmp");
       TIO.Put_Line (F, Msg ("pet.head", Img (Seed), Img (Integer (Total) - First + 1), Img (Total)));
       for N in First .. Total loop TIO.Put_Line (F, Petition_Line (N)); end loop;
@@ -847,6 +858,83 @@ procedure Diary_Sim is
       Ada.Command_Line.Set_Exit_Status (1);
    end Validation_Stop;
 
+
+   --  --preview (make demo): 200 ticks of a new world in memory, a few excerpts on screen,
+   --  nothing on disk (no diaries/, entities/, debug.txt, reports, petitions.txt).
+   procedure Run_Preview is
+      Total : constant Int := (if Ticks >= 0 then Ticks else 200);
+      Console, Text, Json : Unbounded_String;
+      Shown : Natural;
+      function Teacher (E : Entity_Id; W : Positive) return String is
+         O : constant String := Origin (E, W);
+      begin
+         return (if O'Length > 10 and then O (O'First .. O'First + 9) = "taught by " then O (O'First + 10 .. O'Last) else "");
+      end Teacher;
+      function Cut (S : String; N : Positive) return String is
+        (if S'Length > N then S (S'First .. S'First + N - 4) & "..." else S);
+      --  "t":"talk","text":"..." of a diary line, as: tick action: text
+      function Brief (E : Entity_Id; T : Int) return String is
+         L : constant String := Sample (E).Element (Positive (T));
+         Ta : constant Natural := Fx.Index (L, """t"":""");
+         Tx : constant Natural := Fx.Index (L, """text"":""");
+         Te : constant Natural := Fx.Index (L, """,""state""");
+      begin
+         if Ta = 0 or else Tx = 0 or else Te < Tx + 8 then return Cut (L, 90); end if;
+         return Fx.Head (Name (E), 8) & Fx.Tail (Img (T), 4) & " "
+           & L (Ta + 5 .. Fx.Index (L, """", Ta + 5) - 1) & ": " & Cut (L (Tx + 8 .. Te - 1), 80);
+      end Brief;
+   begin
+      Ticks := Total;
+      Seed := (if Seed_Opt >= 0 then Seed_Opt else 42);
+      Seed_Shown := True;
+      Sim_World.Init (Vocab, Seed, Start_Pct);
+      TIO.Put (To_String (Pending));
+      TIO.Put_Line (Msg ("preview.head", Img (Seed), Img (Total)));
+      declare
+         V : constant Kalpa_Votes := Votes_At (0);   --  what a bare first session would be
+      begin
+         TIO.Put_Line (Msg ("preview.kalpa", Msg ("kalpa.vote", "1", Yuga (1), Votes_Text (V), Img (Decided (V)))));
+      end;
+      for Tick in Int range 1 .. Total loop Do_Tick (Tick); end loop;
+      for E in Entity_Id loop
+         for K in 1 .. 2 loop
+            declare
+               T : constant Int := (if K = 1 then Int'Max (1, Total / 2) else Total);
+            begin
+               if T >= 1 and then T <= Total and then (K = 2 or else T < Total) then TIO.Put_Line (Brief (E, T)); end if;
+            end;
+         end loop;
+      end loop;
+      for N in 1 .. Integer'Min (2, Petition_Total) loop TIO.Put_Line (Cut (Petition_Line (N), 110)); end loop;
+      declare
+         Known_Text, Coined_Text, Taught_Text : Unbounded_String;
+      begin
+         for E in Entity_Id loop
+            Append (Known_Text, (if E = 1 then "" else " | ") & Name (E) & " " & Img (Known_Count (E)));
+         end loop;
+         Shown := 0;
+         for W in Base_Count + 1 .. Count loop
+            exit when Shown = 3;
+            Append (Coined_Text, (if Shown = 0 then "" else " | ") & Word (W) & " (" & Parents (W) & ", " & Coined_By (W) & ")");
+            Shown := Shown + 1;
+         end loop;
+         Shown := 0;
+         for E in Entity_Id loop
+            for W in 1 .. Count loop
+               if Knows (E, W) and then Teacher (E, W) /= "" and then Shown < 3 then
+                  Append (Taught_Text, (if Shown = 0 then "" else " | ") & Word (W) & " " & Teacher (E, W) & ">" & Name (E));
+                  Shown := Shown + 1;
+                  exit;
+               end if;
+            end loop;
+         end loop;
+         TIO.Put_Line (Msg ("preview.words", To_String (Known_Text), To_String (Coined_Text), To_String (Taught_Text)));
+      end;
+      Summarize (Seed, Total, Votes_Of, Console, Text, Json);
+      TIO.Put (To_String (Console));
+      TIO.Put_Line (Msg ("preview.foot"));
+   end Run_Preview;
+
 begin
    Load_Data;
    while I <= Ada.Command_Line.Argument_Count loop
@@ -868,6 +956,7 @@ begin
             return;
          elsif Opt = "--fresh" then Fresh := True;
          elsif Opt = "--yes" then Yes := True;
+         elsif Opt = "--preview" then Preview := True;
          elsif Opt = "--ticks" then Ticks := Number (Opt, Val);
          elsif Opt = "--seed" then Seed_Opt := Number (Opt, Val);
          elsif Opt = "--every" then Every := Number (Opt, Val);
@@ -880,6 +969,13 @@ begin
    end loop;
    Explicit := Ticks >= 0 or else More >= 0;   --  otherwise the entities vote on the session length
    Every := (if Every < 0 then 100 else Int'Max (1, Every));
+   if Preview and then (Fresh or else Yes or else More >= 0 or else Crash_At >= 0) then
+      raise Usage_Error with Msg ("err.preview");
+   end if;
+   if Preview then
+      Run_Preview;
+      return;
+   end if;
 
    if Fresh and then (Ada.Directories.Exists ("diaries") or else Ada.Directories.Exists ("entities")) then
       declare

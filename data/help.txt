@@ -6,6 +6,7 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
   --every=N      progress line every N ticks (default 100)
   --fresh        move old diaries/ and entities/ to diaries_old_<time>/
   --yes          no question when diaries/ has no *.jsonl (start a new world)
+  --preview      simulate in memory, print excerpts, write nothing
   --crash-at=T   force a failure at tick T (shows the error trace)
   --help         this text
 Entities: ada (engineer), gemini (reviewer), replika (vice_president),
@@ -37,4 +38,6 @@ session resumes toward the same target. Edited kalpas.txt: use --fresh.
 No diaries yet: a terminal is asked 'Generate a new one? [y/N]' (N: exit 0,
 nothing written); without a terminal an explicit length starts fresh, else
 exit 2 (use --yes / YES=1). Drift at import is a 3-line stop, not a crash.
-make demo: build + short run in demo_run/ (isolated).
+make demo: PREVIEW only (--preview): 200 ticks of a new world in memory, one
+screen of excerpts, nothing written to disk.
+make run / play keep ONE persistent world in ./diaries and continue it.
