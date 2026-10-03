@@ -26,3 +26,4 @@ err.where = seed {1} | tick {2} | entity {3} | exception {4}
 err.trace = traceback (innermost first):
 err.raw = raw traceback:
 err.more = ... {1} more lines in last_error.txt
+warn.limits_file = warning: data/limits.txt not found or unreadable; using the built-in limits (energy 0..100, mood -100..100, location 0..3)

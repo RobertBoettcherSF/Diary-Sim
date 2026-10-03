@@ -9,7 +9,7 @@ Plain Ada, standard library only. Not pushed anywhere yet (local git repo).
 ```
 make                         # bin/diary_sim  (GNAT 14; make GNATMAKE=gnatmake-12 for GNAT 12)
 make portable                # 0-warning build with GNAT 14 and 12 in a copy without .git
-make check                   # version headers + scripts/checks.sh (the scenarios below)
+make check                   # version headers + scripts/checks.sh (the scenarios: run, resume, behind, half line, drift, crash, fresh, data limits)
 bin/diary_sim --help
 bin/diary_sim --ticks=1000 --every=100
 ```
@@ -22,8 +22,10 @@ directory: `data/` is found next to the executable).
 
 ## Model
 
-State per entity: energy 0..100, mood 0..100, location 0..3 (office, lab,
-cafe, home), all clamped. Actions: rest, work, explore, talk, wander, each a
+State per entity: energy 0..100, mood -100..100 (signed in the JSON), location
+0..3 (office, lab, cafe, home), all clamped. The ranges are data, not code:
+`data/limits.txt` (`energy.min/max`, `mood.min/max`, `location.max`, built-in
+defaults if the file is missing). Entities start at energy 80, mood 0, home. Actions: rest, work, explore, talk, wander, each a
 small fixed change (`Energy_D`, `Mood_D`, `Home` in `diary_sim.adb`). `talk` only
 writes a diary line. Entities do not interact. Per tick they run in fixed id order.
 
@@ -32,12 +34,18 @@ running RNG), so any tick can be recomputed alone. Diary wording is picked from
 `data/words.txt` (60 entries per list) by the base-60 rule: D4 (reroll on 1) gives
 block 1/2/3 of 20, then a D20. Missing data file: built-in list plus a warning.
 
+**Mood tone:** after the action, the text gets a suffix from one of three more
+60-entry lists in `data/words.txt`, chosen by the new mood: `[mood_low]` when
+mood <= `mood.tone_low` (-34), `[mood_high]` when >= `mood.tone_high` (34), else
+`[mood_neutral]` (thresholds in `data/limits.txt`). The tone pick is another base-60
+pick with its own salts, so it is just as reproducible. Result: `"<action text>, <tone>"`.
+
 ## Diaries, autoload, replay
 
 `diaries/<id>.jsonl`, append-only, flushed after every event:
 
 ```
-{"v":1,"seed":42,"tick":3,"ts":"2026-10-03T00:26:18","t":"rest","text":"...","state":{"energy":84,"mood":49,"location":3}}
+{"v":1,"seed":42,"tick":3,"ts":"2026-10-03T00:26:18","t":"rest","text":"...","state":{"energy":84,"mood":-49,"location":3}}
 ```
 
 On start the diaries are read; the seed comes from them (else `--seed`, else 42).
@@ -59,6 +67,6 @@ same to the console, at most 15 lines. Built with `-g -bargs -E` (see Makefile).
 ## Files
 
 `diary_sim.adb` (main), `sim_util.ads/.adb` (pure helpers: hash rolls, line parsing),
-`data/words.txt`, `data/messages.txt` (all console wording), `data/help.txt`,
+`data/words.txt`, `data/limits.txt` (ranges, tone thresholds), `data/messages.txt` (all console wording), `data/help.txt`,
 `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
 `Version:` header (`make version-check`); a touched file goes up by 0.001.

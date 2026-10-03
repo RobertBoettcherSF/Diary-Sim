@@ -1,6 +1,8 @@
 # diary_sim word lists: 60 entries per list = 6 openings x 10 endings.
 # Section names are the action names. Lines starting with # are comments.
 # A pick uses the base-60 rule: D4 (reroll on 1) -> block 1/2/3 of 20, then D20.
+# [mood_low] [mood_neutral] [mood_high] are tone suffixes, added after the action text
+# ("<action text>, <tone>") by the mood after the action; thresholds in limits.txt.
 
 [rest]
 took a short nap by the window
@@ -311,3 +313,189 @@ followed the afternoon light and ended up somewhere new
 followed the afternoon light and enjoyed the change of air
 followed the afternoon light and lost track of time
 followed the afternoon light and came back refreshed
+
+[mood_low]
+though I felt heavy inside today
+though I felt heavy inside right now
+though I felt heavy inside all the same
+though I felt heavy inside for a while
+though I felt heavy inside once more
+though I felt heavy inside as the hours dragged
+though I felt heavy inside and I kept quiet about it
+though I felt heavy inside and the diary got the truth
+though I felt heavy inside and the room felt cold
+though I felt heavy inside and I wished for a better turn
+but my mood was low today
+but my mood was low right now
+but my mood was low all the same
+but my mood was low for a while
+but my mood was low once more
+but my mood was low as the hours dragged
+but my mood was low and I kept quiet about it
+but my mood was low and the diary got the truth
+but my mood was low and the room felt cold
+but my mood was low and I wished for a better turn
+while a grey feeling stayed with me today
+while a grey feeling stayed with me right now
+while a grey feeling stayed with me all the same
+while a grey feeling stayed with me for a while
+while a grey feeling stayed with me once more
+while a grey feeling stayed with me as the hours dragged
+while a grey feeling stayed with me and I kept quiet about it
+while a grey feeling stayed with me and the diary got the truth
+while a grey feeling stayed with me and the room felt cold
+while a grey feeling stayed with me and I wished for a better turn
+and it all felt like too much today
+and it all felt like too much right now
+and it all felt like too much all the same
+and it all felt like too much for a while
+and it all felt like too much once more
+and it all felt like too much as the hours dragged
+and it all felt like too much and I kept quiet about it
+and it all felt like too much and the diary got the truth
+and it all felt like too much and the room felt cold
+and it all felt like too much and I wished for a better turn
+with a tired sort of sadness today
+with a tired sort of sadness right now
+with a tired sort of sadness all the same
+with a tired sort of sadness for a while
+with a tired sort of sadness once more
+with a tired sort of sadness as the hours dragged
+with a tired sort of sadness and I kept quiet about it
+with a tired sort of sadness and the diary got the truth
+with a tired sort of sadness and the room felt cold
+with a tired sort of sadness and I wished for a better turn
+and nothing quite helped today
+and nothing quite helped right now
+and nothing quite helped all the same
+and nothing quite helped for a while
+and nothing quite helped once more
+and nothing quite helped as the hours dragged
+and nothing quite helped and I kept quiet about it
+and nothing quite helped and the diary got the truth
+and nothing quite helped and the room felt cold
+and nothing quite helped and I wished for a better turn
+
+[mood_neutral]
+and it was an ordinary moment as usual
+and it was an ordinary moment for now
+and it was an ordinary moment without fuss
+and it was an ordinary moment at an easy pace
+and it was an ordinary moment and that was fine
+and it was an ordinary moment and I noted it down
+and it was an ordinary moment and the light stayed the same
+and it was an ordinary moment and my thoughts stayed level
+and it was an ordinary moment and I carried on
+and it was an ordinary moment and it passed quietly
+and I felt neither high nor low as usual
+and I felt neither high nor low for now
+and I felt neither high nor low without fuss
+and I felt neither high nor low at an easy pace
+and I felt neither high nor low and that was fine
+and I felt neither high nor low and I noted it down
+and I felt neither high nor low and the light stayed the same
+and I felt neither high nor low and my thoughts stayed level
+and I felt neither high nor low and I carried on
+and I felt neither high nor low and it passed quietly
+with a calm, even mood as usual
+with a calm, even mood for now
+with a calm, even mood without fuss
+with a calm, even mood at an easy pace
+with a calm, even mood and that was fine
+with a calm, even mood and I noted it down
+with a calm, even mood and the light stayed the same
+with a calm, even mood and my thoughts stayed level
+with a calm, even mood and I carried on
+with a calm, even mood and it passed quietly
+and nothing special followed as usual
+and nothing special followed for now
+and nothing special followed without fuss
+and nothing special followed at an easy pace
+and nothing special followed and that was fine
+and nothing special followed and I noted it down
+and nothing special followed and the light stayed the same
+and nothing special followed and my thoughts stayed level
+and nothing special followed and I carried on
+and nothing special followed and it passed quietly
+feeling quite steady as usual
+feeling quite steady for now
+feeling quite steady without fuss
+feeling quite steady at an easy pace
+feeling quite steady and that was fine
+feeling quite steady and I noted it down
+feeling quite steady and the light stayed the same
+feeling quite steady and my thoughts stayed level
+feeling quite steady and I carried on
+feeling quite steady and it passed quietly
+and the day went on as usual
+and the day went on for now
+and the day went on without fuss
+and the day went on at an easy pace
+and the day went on and that was fine
+and the day went on and I noted it down
+and the day went on and the light stayed the same
+and the day went on and my thoughts stayed level
+and the day went on and I carried on
+and the day went on and it passed quietly
+
+[mood_high]
+and I felt wonderful today
+and I felt wonderful right now
+and I felt wonderful for a good while
+and I felt wonderful all through the moment
+and I felt wonderful and I wanted to tell everyone
+and I felt wonderful and the diary got a cheerful line
+and I felt wonderful and the room felt warm
+and I felt wonderful and I hummed along
+and I felt wonderful and I hoped it would last
+and I felt wonderful and the day looked great
+with a bright, happy mood today
+with a bright, happy mood right now
+with a bright, happy mood for a good while
+with a bright, happy mood all through the moment
+with a bright, happy mood and I wanted to tell everyone
+with a bright, happy mood and the diary got a cheerful line
+with a bright, happy mood and the room felt warm
+with a bright, happy mood and I hummed along
+with a bright, happy mood and I hoped it would last
+with a bright, happy mood and the day looked great
+and a smile came easily today
+and a smile came easily right now
+and a smile came easily for a good while
+and a smile came easily all through the moment
+and a smile came easily and I wanted to tell everyone
+and a smile came easily and the diary got a cheerful line
+and a smile came easily and the room felt warm
+and a smile came easily and I hummed along
+and a smile came easily and I hoped it would last
+and a smile came easily and the day looked great
+feeling light and glad today
+feeling light and glad right now
+feeling light and glad for a good while
+feeling light and glad all through the moment
+feeling light and glad and I wanted to tell everyone
+feeling light and glad and the diary got a cheerful line
+feeling light and glad and the room felt warm
+feeling light and glad and I hummed along
+feeling light and glad and I hoped it would last
+feeling light and glad and the day looked great
+and everything seemed to click today
+and everything seemed to click right now
+and everything seemed to click for a good while
+and everything seemed to click all through the moment
+and everything seemed to click and I wanted to tell everyone
+and everything seemed to click and the diary got a cheerful line
+and everything seemed to click and the room felt warm
+and everything seemed to click and I hummed along
+and everything seemed to click and I hoped it would last
+and everything seemed to click and the day looked great
+with real joy today
+with real joy right now
+with real joy for a good while
+with real joy all through the moment
+with real joy and I wanted to tell everyone
+with real joy and the diary got a cheerful line
+with real joy and the room felt warm
+with real joy and I hummed along
+with real joy and I hoped it would last
+with real joy and the day looked great

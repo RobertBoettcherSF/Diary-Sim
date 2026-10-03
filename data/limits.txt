@@ -1,0 +1,10 @@
+# Ranges of the state (Robert, v1). Values are clamped to them; all whole numbers.
+energy.min = 0
+energy.max = 100
+mood.min = -100
+mood.max = 100
+location.max = 3
+# Mood tone: a suffix list is picked by the mood after the action.
+# mood <= tone_low: [mood_low];  mood >= tone_high: [mood_high];  else [mood_neutral].
+mood.tone_low = -34
+mood.tone_high = 34

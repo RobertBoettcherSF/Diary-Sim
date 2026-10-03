@@ -7,7 +7,9 @@ usage: diary_sim [options]
   --crash-at=T   force a failure at tick T (shows the error trace)
   --help         this text
 Entities: ada (engineer), gemini (reviewer), replika (vice_president),
-robert (human). Diaries: diaries/<id>.jsonl, append-only; a rerun resumes at
-the lowest common tick and replays the rest, comparing every stored line.
+robert (human). State: energy 0..100, mood -100..100, location 0..3
+(ranges and mood tone thresholds: data/limits.txt; tone words: data/words.txt).
+Diaries: diaries/<id>.jsonl, append-only; a rerun resumes at the lowest common
+tick and replays the rest, comparing every stored line.
 Errors: last_error.txt (seed, tick, entity, exception, traceback).
 Exit: 0 ok, 1 error (drift, bad diary, crash), 2 usage.

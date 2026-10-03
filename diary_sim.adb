@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL; a rerun
@@ -6,38 +6,34 @@
 --  comparing each regenerated line with the stored one instead of writing.
 pragma Ada_2022;
 
-with Ada.Characters.Handling, Ada.Command_Line, Ada.Directories,
-     Ada.Exceptions, Ada.Streams.Stream_IO, Ada.Strings.Fixed, Ada.Text_IO,
-     Ada.Containers.Indefinite_Vectors, Ada.Containers.Indefinite_Hashed_Maps, Ada.Strings.Hash,
-     Ada.Strings.Unbounded, GNAT.Traceback.Symbolic, Sim_Util;
+with Ada.Characters.Handling, Ada.Command_Line, Ada.Directories, Ada.Exceptions, Ada.Strings.Fixed,
+     Ada.Strings.Unbounded, Ada.Text_IO, GNAT.Traceback.Symbolic, Sim_Util;
 use Ada.Strings.Unbounded, Sim_Util;
 
 procedure Diary_Sim is
    package TIO renames Ada.Text_IO;
    package Fx renames Ada.Strings.Fixed;
-   subtype Int is Sim_Util.Int;
-   use type Ada.Directories.File_Size, Ada.Containers.Count_Type;
+   use type Ada.Directories.File_Size;
 
-   type Action is (Rest, Work, Explore, Talk, Wander);
+   --  Five actions, then the mood tone lists (a suffix picked by current mood).
+   type List_Id is (Rest, Work, Explore, Talk, Wander, Mood_Low, Mood_Neutral, Mood_High);
+   subtype Action is List_Id range Rest .. Wander;
    type Entity_Id is range 1 .. 4;
    type State is record
-      Energy, Mood : Integer range 0 .. 100;
-      Location     : Integer range 0 .. 3;   --  office lab cafe home
+      Energy, Mood, Location : Integer;   --  ranges: data/limits.txt; location: office lab cafe home
    end record;
    Energy_D : constant array (Action) of Integer := [14, -8, -10, -2, -3];
-   Mood_D   : constant array (Action) of Integer := [1, -4, 2, 2, 1];
+   Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0];   --  wander: rolled
 
-   package Str_Vectors is new Ada.Containers.Indefinite_Vectors (Positive, String);
-   package Str_Maps is new Ada.Containers.Indefinite_Hashed_Maps (String, String, Ada.Strings.Hash, "=");
    Usage_Error, Diary_Error : exception;
-
    Seed, Ticks, Every, Seed_Opt, Crash_At : Int := -1;
    Fresh, Seed_Shown : Boolean := False;
-   Messages : Str_Maps.Map;
-   Words    : array (Action) of Str_Vectors.Vector;
+   --  Limits, built-in values; data/limits.txt overrides them.
+   E_Min, E_Max, M_Min, M_Max, L_Max, Tone_Low, Tone_High : Integer := 0;
+   Words    : array (List_Id) of Str_Vectors.Vector;
    Disk     : array (Entity_Id) of Str_Vectors.Vector;      --  complete lines on disk
-   St       : array (Entity_Id) of State := [others => (80, 50, 3)];
+   St       : array (Entity_Id) of State := [others => (80, 0, 3)];
    Out_File : array (Entity_Id) of TIO.File_Type;
    Pending  : Unbounded_String;                             --  output held until the seed line
    Warnings, Events, Written, Verified : Natural := 0;
@@ -49,59 +45,11 @@ procedure Diary_Sim is
    function Kind (E : Entity_Id) return String is
      (case E is when 1 => "engineer", when 2 => "reviewer", when 3 => "vice_president", when 4 => "human");
    function Path (E : Entity_Id) return String is ("diaries/" & Name (E) & ".jsonl");
-   function Low (A : Action) return String is (Ada.Characters.Handling.To_Lower (A'Image));
-   function Built_In (A : Action) return String is
+   function Low (A : List_Id) return String is (Ada.Characters.Handling.To_Lower (A'Image));
+   function Built_In (A : List_Id) return String is
      (case A is when Rest => "rested a while", when Work => "did some work", when Explore => "explored a little",
-                when Talk => "wanted to talk to someone", when Wander => "wandered around");
-
-   --  ---- data files and messages -----------------------------------------
-
-   function Data_Path (File : String) return String is
-   begin
-      return (if Ada.Directories.Exists ("data/" & File) then "data/" & File
-              else Ada.Directories.Containing_Directory (Ada.Command_Line.Command_Name) & "/../data/" & File);
-   exception
-      when others => return "data/" & File;
-   end Data_Path;
-
-   procedure Read_Lines (File : String; Into : in out Str_Vectors.Vector; Found : out Boolean) is
-      F : TIO.File_Type;
-   begin
-      Found := Ada.Directories.Exists (File);
-      if Found then
-         TIO.Open (F, TIO.In_File, File);
-         while not TIO.End_Of_File (F) loop
-            Into.Append (TIO.Get_Line (F));
-         end loop;
-         TIO.Close (F);
-      end if;
-   end Read_Lines;
-
-   --  A message of data/messages.txt with {1}..{7} filled in and \n as line break.
-   function Msg (Key : String; A1, A2, A3, A4, A5, A6, A7 : String := "") return String is
-      A : constant array (1 .. 7) of Unbounded_String :=
-        [To_Unbounded_String (A1), To_Unbounded_String (A2), To_Unbounded_String (A3), To_Unbounded_String (A4),
-         To_Unbounded_String (A5), To_Unbounded_String (A6), To_Unbounded_String (A7)];
-      R : Unbounded_String := To_Unbounded_String (if Messages.Contains (Key) then Messages (Key) else "[" & Key & "]");
-      P : Natural;
-   begin
-      if not Messages.Contains (Key) then   --  data/messages.txt missing: key and values
-         for X of A loop Append (R, " " & X); end loop;
-      end if;
-      for N in A'Range loop
-         loop
-            P := Index (R, "{" & Img (N) & "}");
-            exit when P = 0;
-            Replace_Slice (R, P, P + 2, To_String (A (N)));
-         end loop;
-      end loop;
-      loop
-         P := Index (R, "\n");
-         exit when P = 0;
-         Replace_Slice (R, P, P + 1, "" & ASCII.LF);
-      end loop;
-      return (if Messages.Contains (Key) then To_String (R) else Fx.Trim (To_String (R), Ada.Strings.Both));
-   end Msg;
+                when Talk => "wanted to talk to someone", when Wander => "wandered around",
+                when Mood_Low => "feeling low", when Mood_Neutral => "feeling steady", when Mood_High => "feeling good");
 
    procedure Say (Line : String) is   --  console output, held back until the seed line is out
    begin
@@ -121,40 +69,41 @@ procedure Diary_Sim is
    begin
       Read_Lines (Data_Path ("messages.txt"), Lines, Found);
       if not Found then Warn ("warning: data/messages.txt not found; messages show their keys"); end if;
-      for L of Lines loop
-         if L'Length > 0 and then L (L'First) /= '#' and then Fx.Index (L, " = ") > 0 then
-            Messages.Include (L (L'First .. Fx.Index (L, " = ") - 1), L (Fx.Index (L, " = ") + 3 .. L'Last));
-         end if;
-      end loop;
+      Read_Lines (Data_Path ("limits.txt"), Lines, Found);
+      if not Found then Warn (Msg ("warn.limits_file")); end if;
+      Load_Keys (Lines);
+      E_Min := Integer (Limit ("energy.min", 0));
+      E_Max := Integer (Limit ("energy.max", 100));
+      M_Min := Integer (Limit ("mood.min", -100));
+      M_Max := Integer (Limit ("mood.max", 100));
+      L_Max := Integer (Limit ("location.max", 3));
+      Tone_Low := Integer (Limit ("mood.tone_low", -34));    --  mood <= this: low tone
+      Tone_High := Integer (Limit ("mood.tone_high", 34));   --  mood >= this: high tone
       Lines.Clear;
       Read_Lines (Data_Path ("words.txt"), Lines, Found);
       for L of Lines loop
          if L'Length > 2 and then L (L'First) = '[' then
             Sec := -1;
-            for A in Action loop
-               if L = "[" & Low (A) & "]" then Sec := Action'Pos (A); end if;
+            for A in List_Id loop
+               if L = "[" & Low (A) & "]" then Sec := List_Id'Pos (A); end if;
             end loop;
          elsif L'Length > 0 and then L (L'First) /= '#' and then Sec >= 0 then
-            Words (Action'Val (Sec)).Append (L);
+            Words (List_Id'Val (Sec)).Append (L);
          end if;
       end loop;
-      if not Found or else (for all A in Action => Words (A).Is_Empty) then
+      if not Found or else (for all A in List_Id => Words (A).Is_Empty) then
          Warn (Msg ("warn.words_file"));
          Found := False;
       end if;
-      for A in Action loop
+      for A in List_Id loop
          if Words (A).Is_Empty then
             if Found then Warn (Msg ("warn.words_empty", Low (A))); end if;
             Words (A).Append (Built_In (A));
-         elsif Words (A).Length /= 60 then
+         elsif Natural (Words (A).Length) /= 60 then
             Warn (Msg ("warn.words_list", Low (A), Img (Integer (Words (A).Length))));
          end if;
       end loop;
    end Load_Data;
-
-   --  ---- diary lines -------------------------------------------------------
-
-   function Forced (Tick : Int) return Natural is (Natural'Value ("tick " & Img (Tick)));   --  always fails
 
    --  Advance entity E by one tick; returns its diary line.
    function Step (E : Entity_Id; Tick : Int) return String is
@@ -163,18 +112,24 @@ procedure Diary_Sim is
         (case Die is when 1 .. 6 => Rest, when 7 .. 10 => Work, when 11 .. 13 => Explore,
                      when 14 .. 16 => Talk, when others => Wander);
       S   : State renames St (E);
-      Text : constant String := Words (A) (Words (A).First_Index + Pick60 (Seed, Positive (E), Tick) mod Natural (Words (A).Length));
    begin
-      S.Energy := Clamp (S.Energy + Energy_D (A), 100);
-      S.Mood := Clamp (S.Mood + Mood_D (A), 100);
+      S.Energy := Clamp (S.Energy + Energy_D (A), E_Min, E_Max);
+      S.Mood := Clamp (S.Mood + Mood_D (A), M_Min, M_Max);
       S.Location := (if A = Wander then Roll (Seed, Positive (E), Tick, 1, 4) - 1 else Home (A));
-      return "{""v"":1,""seed"":" & Img (Seed) & ",""tick"":" & Img (Tick) & ",""ts"":""" & Stamp
-        & """,""t"":""" & Low (A) & """,""text"":""" & Esc (Text)
-        & """,""state"":{""energy"":" & Img (S.Energy) & ",""mood"":" & Img (S.Mood)
-        & ",""location"":" & Img (S.Location) & "}}";
+      declare
+         Tone : constant List_Id := (if S.Mood <= Tone_Low then Mood_Low elsif S.Mood >= Tone_High then Mood_High
+                                     else Mood_Neutral);
+         Text : constant String := Words (A) (Words (A).First_Index + Pick60 (Seed, Positive (E), Tick, 10) mod Natural (Words (A).Length))
+           & ", " & Words (Tone) (Words (Tone).First_Index + Pick60 (Seed, Positive (E), Tick, 100) mod Natural (Words (Tone).Length));
+      begin
+         return "{""v"":1,""seed"":" & Img (Seed) & ",""tick"":" & Img (Tick) & ",""ts"":""" & Stamp
+           & """,""t"":""" & Low (A) & """,""text"":""" & Esc (Text)
+           & """,""state"":{""energy"":" & Img (S.Energy) & ",""mood"":" & Img (S.Mood)
+           & ",""location"":" & Img (S.Location) & "}}";
+      end;
    end Step;
 
-   --  ---- autoload and errors -----------------------------------------------
+   function Forced (Tick : Int) return Natural is (Natural'Value ("tick " & Img (Tick)));   --  always fails
 
    procedure Load_Diary (E : Entity_Id; Disk_Seed : in out Int) is
       Lines : Str_Vectors.Vector;
@@ -184,11 +139,11 @@ procedure Diary_Sim is
       for I in 1 .. Natural (Lines.Length) loop
          declare
             L : constant String := Lines (I);
-            N : constant String := Img (Int (Disk (E).Length) + 1);
+            N : constant Int := Int (Disk (E).Length) + 1;
          begin
             if Complete (L) then
-               if Field (L, "tick") /= Int (Disk (E).Length) + 1 then
-                  raise Diary_Error with Msg ("err.gap", Name (E), Img (I), Img (Field (L, "tick")), N);
+               if Field (L, "tick") /= N then
+                  raise Diary_Error with Msg ("err.gap", Name (E), Img (I), Img (Field (L, "tick")), Img (N));
                elsif Disk_Seed >= 0 and then Field (L, "seed") /= Disk_Seed then
                   raise Diary_Error with Msg ("err.seed", Name (E), Img (I), Img (Field (L, "seed")), Img (Disk_Seed));
                end if;
@@ -200,17 +155,6 @@ procedure Diary_Sim is
          end;
       end loop;
    end Load_Diary;
-
-   function Ends_With_Lf (File : String) return Boolean is
-      F : Ada.Streams.Stream_IO.File_Type;
-      C : Character := ASCII.LF;
-   begin
-      Ada.Streams.Stream_IO.Open (F, Ada.Streams.Stream_IO.In_File, File);
-      Ada.Streams.Stream_IO.Set_Index (F, Ada.Streams.Stream_IO.Size (F));
-      Character'Read (Ada.Streams.Stream_IO.Stream (F), C);
-      Ada.Streams.Stream_IO.Close (F);
-      return C = ASCII.LF;
-   end Ends_With_Lf;
 
    --  last_error.txt gets everything; the console the first 14 lines (+ a note).
    procedure Report (E : Ada.Exceptions.Exception_Occurrence) is
@@ -254,17 +198,14 @@ begin
          Eq  : constant Natural := Fx.Index (A, "=");
          Opt : constant String := (if Eq > 0 then A (A'First .. Eq - 1) else A);
          Val : constant String := (if Eq > 0 then A (Eq + 1 .. A'Last) else "");
+         Help  : Str_Vectors.Vector;
+         Found : Boolean;
       begin
          if Opt = "--help" or else Opt = "-h" then
-            declare
-               Help  : Str_Vectors.Vector;
-               Found : Boolean;
-            begin
-               Read_Lines (Data_Path ("help.txt"), Help, Found);
-               for L of Help loop TIO.Put_Line (L); end loop;
-               if not Found then TIO.Put_Line ("diary_sim: data/help.txt not found (--ticks --seed --every --fresh --crash-at)"); end if;
-               return;
-            end;
+            Read_Lines (Data_Path ("help.txt"), Help, Found);
+            for L of Help loop TIO.Put_Line (L); end loop;
+            if not Found then TIO.Put_Line ("diary_sim: data/help.txt not found (--ticks --seed --every --fresh --crash-at)"); end if;
+            return;
          elsif Opt = "--fresh" then Fresh := True;
          elsif Opt = "--ticks" then Ticks := Number (Opt, Val);
          elsif Opt = "--seed" then Seed_Opt := Number (Opt, Val);
@@ -308,8 +249,8 @@ begin
          declare
             L : constant String := Disk (E) (Common);
          begin
-            St (E) := (Clamp (Integer (Field (L, "energy")), 100), Clamp (Integer (Field (L, "mood")), 100),
-                       Clamp (Integer (Field (L, "location")), 3));
+            St (E) := (Clamp (Integer (Field (L, "energy")), E_Min, E_Max), Clamp (Integer (Field (L, "mood")), M_Min, M_Max),
+                       Clamp (Integer (Field (L, "location")), 0, L_Max));
          end;
       end if;
    end loop;

@@ -1,18 +1,99 @@
---  Version: 0.002
+--  Version: 0.003
 pragma Ada_2022;
 
-with Ada.Calendar.Formatting, Ada.Strings.Fixed, Ada.Strings.Unbounded, Interfaces;
+with Ada.Calendar.Formatting, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Maps, Ada.Directories,
+     Ada.Streams.Stream_IO, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO, Interfaces;
 
 package body Sim_Util is
 
    package Fx renames Ada.Strings.Fixed;
+   package Str_Maps is new Ada.Containers.Indefinite_Hashed_Maps (String, String, Ada.Strings.Hash, "=");
    subtype U64 is Interfaces.Unsigned_64;
    use type U64;
+   Texts : Str_Maps.Map;   --  everything loaded by Load_Keys
 
    function Img (N : Int) return String is (Fx.Trim (N'Image, Ada.Strings.Both));
    function Img (N : Integer) return String is (Img (Int (N)));
 
-   function Clamp (V, Hi : Integer) return Integer is (Integer'Max (0, Integer'Min (Hi, V)));
+   function Clamp (V, Lo, Hi : Integer) return Integer is (Integer'Max (Lo, Integer'Min (Hi, V)));
+
+   function Data_Path (File : String) return String is
+   begin
+      return (if Ada.Directories.Exists ("data/" & File) then "data/" & File
+              else Ada.Directories.Containing_Directory (Ada.Command_Line.Command_Name) & "/../data/" & File);
+   exception
+      when others => return "data/" & File;
+   end Data_Path;
+
+   procedure Read_Lines (File : String; Into : in out Str_Vectors.Vector; Found : out Boolean) is
+      F : Ada.Text_IO.File_Type;
+   begin
+      Found := Ada.Directories.Exists (File);
+      if Found then
+         Ada.Text_IO.Open (F, Ada.Text_IO.In_File, File);
+         while not Ada.Text_IO.End_Of_File (F) loop
+            Into.Append (Ada.Text_IO.Get_Line (F));
+         end loop;
+         Ada.Text_IO.Close (F);
+      end if;
+   end Read_Lines;
+
+   procedure Load_Keys (Lines : Str_Vectors.Vector) is
+   begin
+      for L of Lines loop
+         if L'Length > 0 and then L (L'First) /= '#' and then Fx.Index (L, " = ") > 0 then
+            Texts.Include (L (L'First .. Fx.Index (L, " = ") - 1), L (Fx.Index (L, " = ") + 3 .. L'Last));
+         end if;
+      end loop;
+   end Load_Keys;
+
+   function Msg (Key : String; A1, A2, A3, A4, A5, A6, A7 : String := "") return String is
+      use Ada.Strings.Unbounded;
+      A : constant array (1 .. 7) of Unbounded_String :=
+        [To_Unbounded_String (A1), To_Unbounded_String (A2), To_Unbounded_String (A3), To_Unbounded_String (A4),
+         To_Unbounded_String (A5), To_Unbounded_String (A6), To_Unbounded_String (A7)];
+      R : Unbounded_String := To_Unbounded_String (if Texts.Contains (Key) then Texts (Key) else "[" & Key & "]");
+      P : Natural;
+   begin
+      if not Texts.Contains (Key) then
+         for X of A loop Append (R, " " & X); end loop;
+      end if;
+      for N in A'Range loop
+         loop
+            P := Index (R, "{" & Img (N) & "}");
+            exit when P = 0;
+            Replace_Slice (R, P, P + 2, To_String (A (N)));
+         end loop;
+      end loop;
+      loop
+         P := Index (R, "\n");
+         exit when P = 0;
+         Replace_Slice (R, P, P + 1, "" & ASCII.LF);
+      end loop;
+      return (if Texts.Contains (Key) then To_String (R) else Fx.Trim (To_String (R), Ada.Strings.Both));
+   end Msg;
+
+   function Limit (Key : String; Default : Int) return Int is
+      T : constant String := (if Texts.Contains (Key) then Fx.Trim (Texts (Key), Ada.Strings.Both) else "");
+      Neg : constant Boolean := T'Length > 1 and then T (T'First) = '-';
+      D : constant String := (if Neg then T (T'First + 1 .. T'Last) else T);
+   begin
+      if D'Length not in 1 .. 9 or else (for some C of D => C not in '0' .. '9') then
+         return Default;
+      end if;
+      return (if Neg then -Int'Value (D) else Int'Value (D));
+   end Limit;
+
+   function Ends_With_Lf (File : String) return Boolean is
+      F : Ada.Streams.Stream_IO.File_Type;
+      C : Character := ASCII.LF;
+   begin
+      Ada.Streams.Stream_IO.Open (F, Ada.Streams.Stream_IO.In_File, File);
+      Ada.Streams.Stream_IO.Set_Index (F, Ada.Streams.Stream_IO.Size (F));
+      Character'Read (Ada.Streams.Stream_IO.Stream (F), C);
+      Ada.Streams.Stream_IO.Close (F);
+      return C = ASCII.LF;
+   end Ends_With_Lf;
 
    function Mix (X : U64) return U64 is
       Z : U64 := (X xor Interfaces.Shift_Right (X, 30)) * 16#BF58476D1CE4E5B9#;
@@ -27,37 +108,39 @@ package body Sim_Util is
                mod U64 (Sides)) + 1);
 
    --  Base-60 pick, 0 .. 59: D4 (reroll on 1) = block 1/2/3 of 20, then D20.
-   function Pick60 (Seed : Int; Entity : Positive; Tick : Int) return Natural is
-      Salt : Natural := 10;
+   function Pick60 (Seed : Int; Entity : Positive; Tick : Int; Salt_Base : Natural) return Natural is
+      Salt : Natural := Salt_Base;
       D4   : Positive;
    begin
       loop
          D4 := Roll (Seed, Entity, Tick, Salt, 4);
          Salt := Salt + 1;
-         exit when D4 > 1 or else Salt > 40;
+         exit when D4 > 1 or else Salt > Salt_Base + 30;
       end loop;
-      return (if D4 = 1 then 0 else D4 - 2) * 20 + Roll (Seed, Entity, Tick, 50, 20) - 1;
+      return (if D4 = 1 then 0 else D4 - 2) * 20 + Roll (Seed, Entity, Tick, Salt_Base + 40, 20) - 1;
    end Pick60;
 
-   function Field (L, Key : String) return Int is   --  "key":123 -> 123, else -1
+   function Field (L, Key : String) return Int is   --  "key":-12 -> -12, else No_Value
       K : constant String := """" & Key & """:";
       P : constant Natural := Fx.Index (L, K);
-      V : Int := 0;
       I : Natural := P + K'Length;
+      Neg : constant Boolean := P > 0 and then I <= L'Last and then L (I) = '-';
+      V : Int := 0;
    begin
-      if P = 0 or else I > L'Last or else L (I) not in '0' .. '9' then return -1; end if;
+      if Neg then I := I + 1; end if;
+      if P = 0 or else I > L'Last or else L (I) not in '0' .. '9' then return No_Value; end if;
       while I <= L'Last and then L (I) in '0' .. '9' loop
-         if V > Int'Last / 20 then return -1; end if;
+         if V > Int'Last / 20 then return No_Value; end if;
          V := V * 10 + Int (Character'Pos (L (I)) - 48);
          I := I + 1;
       end loop;
-      return V;
+      return (if Neg then -V else V);
    end Field;
 
    function Complete (L : String) return Boolean is
      (L'Length > 40 and then L (L'First .. L'First + 6) = "{""v"":1," and then L (L'Last - 1 .. L'Last) = "}}"
       and then Field (L, "seed") >= 0 and then Field (L, "tick") >= 0 and then Field (L, "energy") >= 0
-      and then Field (L, "mood") >= 0 and then Field (L, "location") >= 0);
+      and then Field (L, "mood") /= No_Value and then Field (L, "location") >= 0);
 
    function No_Ts (L : String) return String is   --  the line without its timestamp
       P : constant Natural := Fx.Index (L, """ts"":""");
