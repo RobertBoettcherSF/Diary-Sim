@@ -333,3 +333,15 @@ visit.bond_min = -20
 visit.bond_max = 20
 visit.log_lines = 5
 visit.comment_pct = 70
+
+# chessrules=2 sessions (all the rules of chess; needs chess=1; new sessions carry the marker, chessrules.enabled = 0 turns that off: the
+# old rules exactly).  Besides mate, stalemate and the ply cap: a draw by insufficient material (K v K, K+B v K, K+N v K, K+B v K+B with
+# bishops on one colour) and FIVEFOLD repetition (fivefold) and the 75-MOVE rule (moves75 half-moves without pawn move or capture) are
+# automatic; THREEFOLD repetition (chess.repeat) and the 50-MOVE rule are claims of the side to move: claim_pct percent each move that
+# the position allows it, plus claim_behind when that side is behind in material (else the game goes on).  Marker-less sessions keep
+# the old rules (threefold and 50 moves end the game at once).  Changing these numbers needs --fresh (chess.txt drifts).
+chessrules.enabled = 1
+chess.fivefold = 5
+chess.moves75 = 150
+chess.claim_pct = 40
+chess.claim_behind = 40

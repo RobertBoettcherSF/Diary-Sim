@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  See sim_chess.ads.
 pragma Ada_2022;
 
@@ -437,6 +437,35 @@ package body Sim_Chess is
       if P.Ep >= 0 then Mix (3000 + Unsigned_64 (P.Ep)); end if;
       return H;
    end Key;
+
+   function Same_Key (A, B : Position) return Boolean is (Key (A) = Key (B));
+
+   function Insufficient (P : Position) return Boolean is
+      Minors : Natural := 0;
+      Bishops : Natural := 0;
+      First_Side : Colour := White;
+      First_Shade, Shade : Integer := 0;
+      Mixed : Boolean := False;
+   begin
+      for S in Square loop
+         case P.Board (S).Kind is
+            when Pawn | Rook | Queen => return False;
+            when Knight => Minors := Minors + 1;
+            when Bishop =>
+               Minors := Minors + 1;
+               Shade := (File_Of (S) + Rank_Of (S)) mod 2;
+               if Bishops = 0 then
+                  First_Side := P.Board (S).Side;
+                  First_Shade := Shade;
+               else
+                  Mixed := First_Side = P.Board (S).Side or else First_Shade /= Shade;
+               end if;
+               Bishops := Bishops + 1;
+            when None | King => null;
+         end case;
+      end loop;
+      return Minors <= 1 or else (Minors = 2 and then Bishops = 2 and then not Mixed);
+   end Insufficient;
 
    function Material (P : Position; Side : Colour) return Integer is
       Value : constant array (Piece_Kind) of Integer := [0, 1, 3, 3, 5, 9, 0];

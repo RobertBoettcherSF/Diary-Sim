@@ -16,7 +16,7 @@ bad() { echo "  FAIL -- $*"; fails=$((fails + 1)); }
 idn() { sed 's/^\([a-z]*\) *=.*/\1 = \1/' "$root/data/names.txt" > "$1/names.txt"; }
 idata="$w/idata"; mkdir -p "$idata"; cp -r "$root/data/." "$idata/"; idn "$idata"
 # screens (and later chess) change the dice of the words: the older scenarios run with them off; their own scenarios switch them on
-sed -i 's/^screen.enabled = .*/screen.enabled = 0/; s/^chess.enabled = .*/chess.enabled = 0/; s/^robot.enabled = .*/robot.enabled = 0/; s/^govern.enabled = .*/govern.enabled = 0/; s/^screen.coin_enabled = .*/screen.coin_enabled = 0/; s/^players4.enabled = .*/players4.enabled = 0/; s/^preport.pause = .*/preport.pause = 0/' "$idata/limits.txt"
+sed -i 's/^screen.enabled = .*/screen.enabled = 0/; s/^chess.enabled = .*/chess.enabled = 0/; s/^robot.enabled = .*/robot.enabled = 0/; s/^govern.enabled = .*/govern.enabled = 0/; s/^screen.coin_enabled = .*/screen.coin_enabled = 0/; s/^players4.enabled = .*/players4.enabled = 0/; s/^preport.pause = .*/preport.pause = 0/; s/^chessrules.enabled = .*/chessrules.enabled = 0/' "$idata/limits.txt"
 mkdir -p "$w/ib/bin"; cp "$bin" "$w/ib/bin/"; cp -r "$idata" "$w/ib/data"; bin="$w/ib/bin/diary_sim"   # the binary beside its identity-names data
 lines() { cat "$1"/*.jsonl | wc -l; }
 dups()  { for f in "$1"/*.jsonl; do grep '}}$' "$f" | grep -o '"tick":[0-9]*' | sort | uniq -d; done | wc -l; }
@@ -782,7 +782,7 @@ unset DIARY_HOME
 
 echo "== 32. chess (chess=1): perft, games, Elo, timeout / resignation, players vs wesen, replay-verified C lines =="
 "$bin" --perft > "$w/p1.txt" 2>&1; rc=$?
-[ $rc = 0 ] && grep -q '^18 checks, 0 failed' "$w/p1.txt" && grep -q 'perft 4 197281' "$w/p1.txt" && grep -q 'state checkmate' "$w/p1.txt" && grep -q 'move e1g1 = 5171' "$w/p1.txt" && ok "--perft: six reference positions (castling, en passant, promotion), mate / stalemate / fifty-move states and ICCF notation, 18 checks" || bad "perft ($rc)"
+[ $rc = 0 ] && grep -q '^32 checks, 0 failed' "$w/p1.txt" && grep -q 'perft 4 197281' "$w/p1.txt" && grep -q 'state checkmate' "$w/p1.txt" && grep -q 'move e1g1 = 5171' "$w/p1.txt" && ok "--perft: six reference positions (castling, en passant, promotion), mate / stalemate / fifty-move states, ICCF notation, the insufficient-material and repetition-key positions of chessrules=2, 32 checks" || bad "perft ($rc)"
 rm -rf "$w/ch"; mkdir -p "$w/ch/bin" "$w/ch/h" "$w/ch/bad/bin" "$w/ch/off/bin" "$w/ch/o" "$w/ch/t/bin" "$w/ch/t/h" "$w/ch/r/bin" "$w/ch/r/h" "$w/ch/n/bin" "$w/ch/n/h"
 cp "$bin" "$w/ch/bin/"; cp -r "$idata" "$w/ch/data"; sed -i 's/^chess.enabled = .*/chess.enabled = 1/' "$w/ch/data/limits.txt"; cb="$w/ch/bin/diary_sim"
 cp "$bin" "$w/ch/bad/bin/"; cp -r "$w/ch/data" "$w/ch/bad/data"; sed -i 's/^perft.2 = 3 97862/perft.2 = 3 97863/' "$w/ch/bad/data/chess.txt"; ( cd "$w/ch/bad" && ./bin/diary_sim --perft > "$w/ch/p2.txt" 2>&1 ); rc=$?; cp "$w/ch/p2.txt" "$w/p2.txt"
@@ -1315,6 +1315,35 @@ badp=0
 for rd in "head -1" "true" "(sleep 0.3; head -2)"; do printf 'say hello\nwait 2\nsay hi\nleave\n' | "$vb" --visit ada --more 6 --every 5000 2> pe.txt | eval "$rd" > /dev/null; rcp=${PIPESTATUS[1]}; rcq=${PIPESTATUS[0]}; [ "$rcq" = 0 ] && [ ! -s pe.txt ] || badp=$((badp + 1)); done
 [ "$badp" = 0 ] && "$vb" --more 0 --every 5000 2>&1 | grep -q 'ticks verified' && ok "a closed output pipe is quiet (exit 0, nothing on stderr); the session still saved and replays" || bad "closed pipe ($badp)"
 grep -q 'visit' "$root/README.md" && grep -q 'STEP 2' "$root/README.md" && grep -q 'make visit' "$root/README.md" && grep -q -- '--visit' "$root/data/help.txt" && grep -q '^visit: all' "$root/Makefile" && grep -q 'sim_visit.ads sim_visit.adb' "$root/Makefile" && head -1 "$root/sim_visit.adb" | grep -q 'Version: [0-9]' && grep -q 'PROOF-LATER' "$root/sim_visit.ads" && ok "README (with the STEP 2 hook), --help, make visit, version-check list, PROOF-LATER label" || bad "visit docs"
+unset DIARY_HOME
+
+echo "== 43. all the rules of chess (chessrules=2): insufficient material, repetition key, fivefold, 75 moves, claims; marker off = the old rules =="
+"$bin" --perft > "$w/p3.txt" 2>&1
+ni=$(grep -c '^ok   rule insufficient' "$w/p3.txt"); ne=$(grep -c '^ok   rule enough' "$w/p3.txt"); nk=$(grep -c '^ok   key ' "$w/p3.txt")
+[ "$ni" = 4 ] && [ "$ne" = 6 ] && [ "$nk" = 4 ] && grep -q 'rule insufficient 8/8/8/4k3/8/3K4/8/8' "$w/p3.txt" && grep -q 'rule enough 8/8/4kb2/8/8/3K1B2' "$w/p3.txt" && ok "a position per draw: K v K, K+B v K, K+N v K and K+B v K+B (same colour) are insufficient; opposite bishops, R, P, N v N, B+N, Q are not; the repetition key counts side to move, castling rights and the en passant target but not the move counters" || bad "rule positions ($ni/$ne/$nk)"
+rm -rf "$w/cr"; mkdir -p "$w/cr"
+for d in on off fv rp rn m75; do mkdir -p "$w/cr/$d/bin" "$w/cr/$d/h"; cp "$bin" "$w/cr/$d/bin/"; cp -r "$idata" "$w/cr/$d/data"; sed -i 's/^chess.enabled = .*/chess.enabled = 1/; s/^chessrules.enabled = .*/chessrules.enabled = 1/' "$w/cr/$d/data/limits.txt"; done
+sed -i 's/^chessrules.enabled = .*/chessrules.enabled = 0/' "$w/cr/off/data/limits.txt"
+sed -i 's/^chess.fivefold = .*/chess.fivefold = 1/' "$w/cr/fv/data/limits.txt"
+sed -i 's/^chess.repeat = .*/chess.repeat = 1/; s/^chess.claim_pct = .*/chess.claim_pct = 100/; s/^chess.fivefold = .*/chess.fivefold = 50/' "$w/cr/rp/data/limits.txt"
+sed -i 's/^chess.repeat = .*/chess.repeat = 1/; s/^chess.claim_pct = .*/chess.claim_pct = 0/; s/^chess.claim_behind = .*/chess.claim_behind = 0/; s/^chess.fivefold = .*/chess.fivefold = 50/' "$w/cr/rn/data/limits.txt"
+sed -i 's/^chess.moves75 = .*/chess.moves75 = 1/' "$w/cr/m75/data/limits.txt"
+for d in on off fv rp rn m75; do ( cd "$w/cr/$d/h" || exit 1; export DIARY_HOME="$w/cr/$d/h"; "$w/cr/$d/bin/diary_sim" --seed 42 --ticks 300 --yes --every 5000 > h1.txt 2>&1; "$w/cr/$d/bin/diary_sim" --more 300 --every 5000 > h2.txt 2>&1 ); done
+cd "$w/cr/on/h" || exit 1; export DIARY_HOME="$w/cr/on/h"
+nm=$(grep -c '^S[0-9].* chess=1 chessrules=2' diaries/sessions.txt)
+[ "$nm" = 2 ] && grep -c '^S[0-9].* chessrules=2' "$w/cr/off/h/diaries/sessions.txt" | grep -q '^0$' && ok "new sessions carry chessrules=2 after chess=1 (2); chessrules.enabled = 0 gives the old marker-less sessions" || bad "chessrules marker ($nm)"
+ends() { grep ' end ' "$1/diaries/chess.txt" | sed -E 's/.* end [^ ]+ ([a-z0-9]+) plies.*/\1/' | sort | uniq -c | tr '\n' ' '; }
+nf=$(grep ' end .* fivefold ' "$w/cr/fv/h/diaries/chess.txt" | wc -l); nfa=$(grep -c ' end ' "$w/cr/fv/h/diaries/chess.txt")
+[ "$nf" -ge 1 ] && [ "$nf" -ge $((nfa - 1)) ] && ok "fivefold repetition is automatic (chess.fivefold = 1: $nf of $nfa finished games end 'fivefold')" || bad "fivefold ($nf / $nfa): $(ends "$w/cr/fv/h")"
+nr=$(grep ' end .* repetition ' "$w/cr/rp/h/diaries/chess.txt" | wc -l); nrn=$(grep ' end .* repetition ' "$w/cr/rn/h/diaries/chess.txt" | wc -l); nrf=$(grep -c ' end ' "$w/cr/rn/h/diaries/chess.txt")
+[ "$nr" -ge 1 ] && [ "$nrn" = 0 ] && ok "threefold repetition is a claim: with claim_pct = 100 the game ends 'repetition' ($nr), with claim_pct = 0 none does ($nrf games ended otherwise: $(ends "$w/cr/rn/h"))" || bad "claims ($nr / $nrn)"
+n75=$(grep ' end .* seventyfive ' "$w/cr/m75/h/diaries/chess.txt" | wc -l)
+[ "$n75" -ge 1 ] && ok "the 75-move rule is automatic (chess.moves75 = 1 for the test: $n75 games end 'seventyfive')" || bad "75 moves ($n75): $(ends "$w/cr/m75/h")"
+! grep -qE ' end .* (material|fivefold|seventyfive) ' "$w/cr/off/h/diaries/chess.txt" && grep -q ' end ' "$w/cr/off/h/diaries/chess.txt" && ok "marker off: the old rules (no material / fivefold / 75-move ends; threefold and 50 moves end the game at once)" || bad "old rules"
+for d in on fv rp m75 off; do ( cd "$w/cr/$d/h" || exit 1; export DIARY_HOME="$w/cr/$d/h"; "$w/cr/$d/bin/diary_sim" --more 0 --every 5000 > r1.txt 2>&1; grep -q '^import OK: 4 entities, 600 ticks verified' r1.txt || echo "replay $d failed" ); done > "$w/cr/replay.txt"
+[ ! -s "$w/cr/replay.txt" ] && ok "every variant replays and verifies (C lines recomputed with the rules of its session marker)" || bad "chessrules replay: $(cat "$w/cr/replay.txt")"
+cd "$w/cr/fv/h" || exit 1; export DIARY_HOME="$w/cr/fv/h"; sed -i '/^S2 /s/ chessrules=2//' diaries/sessions.txt; "$w/cr/fv/bin/diary_sim" --more 0 --every 5000 > r2.txt 2>&1; head -1 debug.txt | grep -q '^DRIFT' && ok "a removed chessrules=2 marker (other rules for the same games) is DRIFT" || bad "chessrules marker removed"
+grep -q 'chessrules' "$root/README.md" && grep -q 'chessrules' "$root/data/limits.txt" && grep -q 'draw rules' "$root/data/help.txt" && ok "README, --help and limits.txt describe chessrules=2" || bad "chessrules docs"
 unset DIARY_HOME
 
 rm -rf "$w"

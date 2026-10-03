@@ -1,4 +1,4 @@
---  Version: 0.005
+--  Version: 0.006
 --  The chess games of diary_sim (chess=1 sessions), a rest activity of the four wesen and the three players.
 --  A competitor is a wesen (1 .. 4) or a player (5 .. 7: Player 1, Player 2, Player 3 = iris, sol, noor; player 4 does not play chess).  A player is "in range" of a wesen
 --  that it watches or that stands in the same or a neighbouring cell as one it watches.  When a wesen rests, it may play a
@@ -27,6 +27,12 @@ package Sim_Games is
    subtype Comp_Id is Positive range 1 .. 7;   --  1 .. 4 = Entity_Id, 5 .. 7 = players
    type Mood_Array is array (Entity_Id) of Integer;
 
+   --  chessrules=2 sessions: all the rules.  Besides mate, stalemate and the ply cap (the old rules): a draw by insufficient material
+   --  (Sim_Chess.Insufficient) is automatic; fivefold repetition (chess.fivefold) and the 75-move rule (chess.moves75 half-moves
+   --  without a pawn move or capture) are automatic; threefold repetition (chess.repeat) and the 50-move rule are CLAIMS of the side
+   --  to move, made with the chance chess.claim_pct (+ chess.claim_behind when it is behind in material; own salt 9440), else the
+   --  game goes on.  Rules 0 (no marker) = the old rules exactly (threefold and 50 moves end the game at once).
+   procedure Set_Rules (V : Natural);
    procedure Init (Seed : Int);   --  no games, start ratings; reads data/limits.txt (chess.*) and data/chess.txt (elo.table)
 
    function Comp_Name (C : Comp_Id) return String;   --  ids: ada .. robert, iris sol noor (display names are applied on output)

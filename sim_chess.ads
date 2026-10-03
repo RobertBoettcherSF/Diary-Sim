@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  Chess for diary_sim (chess=1 sessions): a legal-move generator with the full rules (castling, en passant,
 --  promotion, check, checkmate, stalemate, the 50-move rule), coordinate and ICCF notation, and a move chooser
 --  whose strength runs from a random legal move to a 1-ply lookahead.  Plain integer arithmetic on a 64-cell board,
@@ -58,6 +58,10 @@ package Sim_Chess is
    function Iccf (M : Move) return String;    --  5254, 5758 + 1 / 2 / 3 / 4 for q / r / b / n: 57581
    function Same (A, B : Move) return Boolean;
    function Key (P : Position) return Interfaces.Unsigned_64;   --  one value per position (repetition test)
+   function Same_Key (A, B : Position) return Boolean;   --  the repetition test of two positions
+   --  chessrules=2: no checkmate is possible for either side by any sequence of legal moves (K v K, K+B v K, K+N v K, K+B v K+B with
+   --  bishops on squares of the same colour).
+   function Insufficient (P : Position) return Boolean;
    function Material (P : Position; Side : Colour) return Integer;   --  balance for Side: pawns 1, knights and bishops 3, rooks 5, queens 9
 
    function Perft (P : Position; Depth : Natural) return Natural;   --  the number of leaf positions

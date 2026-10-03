@@ -284,6 +284,15 @@ wesen may play each other too (`chess.player_pct`), so wesen and players (Player
   (`chess.repeat`) and the ply cap (`chess.max_plies`) end a game as a draw. Moves are recorded as coordinates (`e2e4`, `a7a8q`)
   and as ICCF numbers (`5254`, `17181`). `make perft` (`--perft`) checks the generator against the reference counts (six well-known
   positions, mate / stalemate / fifty-move states, notation); PROOF-LATER labels mark the rule and Elo arithmetic.
+* **All the rules (`chessrules=2`, `chessrules.enabled`):** a session that carries the marker (new sessions of a `chess=1` save) adds
+  the rest of the FIDE draw rules; without the marker (old sessions, or `chessrules.enabled = 0`) the rules above are replayed
+  exactly as before. Order after mate / stalemate: (1) *insufficient material* is automatic - K v K, K+B v K, K+N v K, K+B v K+B with
+  bishops on the same colour (`material`); (2) *fivefold repetition* (`chess.fivefold`, 5) is automatic (`fivefold`); (3) the
+  *75-move rule* (`chess.moves75` = 150 half-moves without a pawn move or capture) is automatic (`seventyfive`); (4) *threefold
+  repetition* (`chess.repeat`) and the *50-move rule* are CLAIMS: the side to move claims with `chess.claim_pct` (40 %), more when
+  behind in material (`chess.claim_behind`, +40) - a hashed roll, so the game may go on without a claim (`repetition`, `fifty`).
+  A position repeats when board, side to move, castling rights and the en passant target square (as the position records it) are
+  equal; the move counters do not count. `make perft` has a position for every draw (`perft.rule.N`, `perft.key.N`: 32 checks).
 * **Who moves how:** the side to move chooses by hash dice; strength (the chance of the best 1-ply move, else a random legal move) comes from
   the wesen's Rule 30 core personality (a player: a hashed birth value), `chess.strength.min .. max`.
 * **Results:** win, loss, draw, win by TIMEOUT (the side to move has used `chess.timeout` ticks; its clock stops while it is on HOLIDAY: a

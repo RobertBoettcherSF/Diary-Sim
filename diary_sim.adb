@@ -1,4 +1,4 @@
---  Version: 0.032
+--  Version: 0.033
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -92,7 +92,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.032";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.033";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -2407,6 +2407,35 @@ procedure Diary_Sim is
             end;
          end;
       end loop;
+      for N in 1 .. 99 loop   --  perft.rule.N = insufficient|enough FEN (chessrules=2: no mate possible)
+         declare
+            T : constant String := Msg ("perft.rule." & Img (N));
+         begin
+            exit when T (T'First) = '[';
+            declare
+               Want : constant String := Word_At (T, 1);
+               Got : constant String := (if Sim_Chess.Insufficient (Pos_Of (After (T, 1))) then "insufficient" else "enough");
+            begin
+               Check (Got = Want, "rule " & Want & " " & After (T, 1), Want, Got);
+            end;
+         end;
+      end loop;
+      for N in 1 .. 99 loop   --  perft.key.N = same|diff FEN | FEN (the repetition key: board, side to move, castling rights, en passant)
+         declare
+            T : constant String := Msg ("perft.key." & Img (N));
+            Bar : constant Natural := Fx.Index (T, " | ");
+         begin
+            exit when T (T'First) = '[';
+            declare
+               Want : constant String := Word_At (T, 1);
+               A : constant Sim_Chess.Position := Pos_Of (T (T'First + Want'Length + 1 .. Bar - 1));
+               B : constant Sim_Chess.Position := Pos_Of (T (Bar + 3 .. T'Last));
+               Got : constant String := (if Sim_Chess.Same_Key (A, B) then "same" else "diff");
+            begin
+               Check (Got = Want, "key " & T, Want, Got);
+            end;
+         end;
+      end loop;
       for N in 1 .. 99 loop   --  perft.note.N = coordinate iccf FEN
          declare
             T : constant String := Msg ("perft.note." & Img (N));
@@ -2655,6 +2684,7 @@ procedure Diary_Sim is
       Rest : Boolean := False;          --  rest=1: recovery rates, rest trade-off and cool-downs
       Grant : Boolean := False;         --  grant=1: grants of petitions (diaries/grants.txt) change recovery rates
       Chess : Boolean := False;         --  chess=1: chess games as a rest activity, Elo ratings (Sim_Games, diaries/chess.txt)
+      Chessrules : Boolean := False;    --  chessrules=2: all the rules of chess (insufficient material, fivefold, 75 moves, claims; needs chess=1)
       Screen : Boolean := False;        --  screen=1: the wesen own small text screens (Sim_Screen, diaries/screens.txt)
       Robot : Boolean := False;         --  robot=1: the robot steered through the screens (Sim_Robot, diaries/robot.txt)
       Govern : Boolean := False;        --  govern=1: the players decide petitions (Sim_Govern, diaries/govern.txt)
@@ -2683,7 +2713,7 @@ procedure Diary_Sim is
      ("S" & Img (R.N) & " start=" & Img (R.Start) & " votes=" & Votes_Text (R.Votes) & " len=" & Img (R.Len)
       & " src=" & (if R.By_Vote then "vote" else "explicit") & (if R.Dharma then " dharma=1" else "")
       & (if R.World then " world=1" else "") & (if R.Rest then " rest=1" else "") & (if R.Grant then " grant=1" else "")
-      & (if R.Screen then " screen=1" else "") & (if R.Chess then " chess=1" else "")
+      & (if R.Screen then " screen=1" else "") & (if R.Chess then " chess=1" else "") & (if R.Chessrules then " chessrules=2" else "")
       & (if R.Robot then " robot=1" else "") & (if R.Govern then " govern=1" else "") & (if R.Scoin then " scoin=1" else "")
       & (if R.Preport then " preport=1" else "") & (if R.Players4 then " players4=1" else "") & (if R.Nextticks then " nextticks=1" else "")
       & (if R.Visit then " visit=1 vwho=" & Name (Entity_Id (R.Visit_Who)) else ""));
@@ -2722,6 +2752,7 @@ procedure Diary_Sim is
       R.Grant := Token (L, "grant") = "1";
       R.Screen := Token (L, "screen") = "1";
       R.Chess := Token (L, "chess") = "1";
+      R.Chessrules := R.Chess and then Token (L, "chessrules") = "2";
       R.Robot := Token (L, "robot") = "1";
       R.Govern := Token (L, "govern") = "1";
       R.Scoin := Token (L, "scoin") = "1";
@@ -2880,6 +2911,7 @@ procedure Diary_Sim is
       Grant_Active := R.Grant;
       Screen_Active := R.Screen;
       Chess_Active := R.Chess;
+      Sim_Games.Set_Rules (if R.Chessrules then 2 else 0);
       Robot_Active := R.Robot;
       Govern_Active := R.Govern;
       Scoin_Active := R.Scoin and then R.Screen;
@@ -3079,6 +3111,7 @@ procedure Diary_Sim is
    function Rest_Wanted return Boolean is (World_Wanted and then Limit ("rest.enabled", 1) /= 0);   --  rest=1 needs the world
    function Grant_Wanted return Boolean is (Rest_Wanted and then Limit ("grant.enabled", 1) /= 0);   --  grant=1 needs rest=1
    function Chess_Wanted return Boolean is (World_Wanted and then Limit ("chess.enabled", 1) /= 0);   --  chess=1 needs the world
+   function Chessrules_Wanted return Boolean is (Chess_Wanted and then Limit ("chessrules.enabled", 1) /= 0);   --  chessrules=2 needs chess=1
    function Screen_Wanted return Boolean is (World_Wanted and then Limit ("screen.enabled", 1) /= 0);   --  screen=1 needs the world
    function Robot_Wanted return Boolean is (Screen_Wanted and then Limit ("robot.enabled", 1) /= 0);     --  robot=1 needs the screens
    function Scoin_Wanted return Boolean is (Screen_Wanted and then Limit ("screen.coin_enabled", 1) /= 0);   --  scoin=1 needs the screens
@@ -3105,7 +3138,7 @@ procedure Diary_Sim is
       Session_N := (if Sessions.Is_Empty then 0 else Sessions.Last_Element.N);
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
-               Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted,
+               Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted,
                Visit => Visit_Mode, Visit_Who => Visit_Who);
          if R.Len > 0 then
             Append_Session (R);
@@ -3122,7 +3155,7 @@ procedure Diary_Sim is
          Kalpa_Line := To_Unbounded_String (Msg ("kalpa.resume", Img (R.N), Yuga (R.N), Votes_Text (R.Votes), Img (R.Len), Img (Ticks)));
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
-               World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted,
+               World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted,
                Visit => False, Visit_Who => 0);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);

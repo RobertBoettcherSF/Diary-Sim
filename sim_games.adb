@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  See sim_games.ads.
 pragma Ada_2022;
 
@@ -46,6 +46,12 @@ package body Sim_Games is
    Table : Table_Array := [others => 0];
    Gap, Start_Pct, Pause, Timeout, Max_Plies, Repeat, Hol_Pct, Hol_Len, Smin, Smax, Win_Mood, Draw_Mood, Loss_Mood,
      Res_Pct, Res_Gap, Res_Mood, Res_Mood_Pct, Res_Min, PP_Pct, Elo_Start, Elo_K : Integer := 1;
+   Rules, Fives, Moves75, Claim_Pct, Claim_Behind : Integer := 0;   --  chessrules=2 (Set_Rules): 0 = the old rules
+
+   procedure Set_Rules (V : Natural) is
+   begin
+      Rules := V;
+   end Set_Rules;
 
    function L (Key : String; D, Lo, Hi : Integer) return Integer is
      (Integer'Max (Lo, Integer'Min (Hi, Integer (Limit (Key, Int (D))))));
@@ -100,7 +106,7 @@ package body Sim_Games is
       Pause := L ("chess.pause", 30, 0, 100_000);
       Timeout := L ("chess.timeout", 300, 10, 1_000_000);
       Max_Plies := L ("chess.max_plies", 160, 20, 1000);
-      Repeat := L ("chess.repeat", 3, 2, 10);
+      Repeat := L ("chess.repeat", 3, 1, 10);
       Hol_Pct := L ("chess.holiday_pct", 2, 0, 100);
       Hol_Len := L ("chess.holiday_len", 60, 1, 100_000);
       Smin := L ("chess.strength.min", 0, 0, 100);
@@ -116,6 +122,11 @@ package body Sim_Games is
       PP_Pct := L ("chess.player_pct", 25, 0, 100);
       Elo_Start := L ("chess.elo.start", 1200, 100, 4000);
       Elo_K := L ("chess.elo.k", 24, 1, 200);
+      Fives := L ("chess.fivefold", 5, 1, 50);
+      Moves75 := L ("chess.moves75", 150, 1, 1000);
+      Claim_Pct := L ("chess.claim_pct", 40, 0, 100);
+      Claim_Behind := L ("chess.claim_behind", 40, 0, 100);
+      Rules := 0;
       Rate := [others => Elo_Start];
       Load_Table;
    end Init;
@@ -307,6 +318,25 @@ package body Sim_Games is
                Finish (Gi, (if Mover = G.W then White_Wins else Black_Wins), "mate", Tick, Lines);
             elsif State = Sim_Chess.Stalemate then
                Finish (Gi, Draw, "stalemate", Tick, Lines);
+            elsif Rules >= 2 then   --  all the rules: automatic draws, claims
+               declare
+                  Claimant : constant Comp_Id := (if Sim_Chess."=" (Nxt.To_Move, Sim_Chess.White) then G.W else G.B);
+                  Chance : constant Integer :=
+                    Claim_Pct + (if Sim_Chess.Material (Nxt, Nxt.To_Move) < 0 then Claim_Behind else 0);
+                  Claimable : constant Boolean := Reps >= Repeat or else State = Sim_Chess.Fifty_Moves;
+               begin
+                  if Sim_Chess.Insufficient (Nxt) then
+                     Finish (Gi, Draw, "material", Tick, Lines);
+                  elsif Reps >= Fives then
+                     Finish (Gi, Draw, "fivefold", Tick, Lines);
+                  elsif Nxt.Half >= Moves75 then
+                     Finish (Gi, Draw, "seventyfive", Tick, Lines);
+                  elsif Claimable and then Int (Roll (Seed_V, Claimant, Tick, 9440, 100)) <= Int (Integer'Min (100, Chance)) then
+                     Finish (Gi, Draw, (if Reps >= Repeat then "repetition" else "fifty"), Tick, Lines);
+                  elsif Natural (G.Moves.Length) >= Max_Plies then
+                     Finish (Gi, Draw, "cap", Tick, Lines);
+                  end if;
+               end;
             elsif State = Sim_Chess.Fifty_Moves then
                Finish (Gi, Draw, "fifty", Tick, Lines);
             elsif Reps >= Repeat then
