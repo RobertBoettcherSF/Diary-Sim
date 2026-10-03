@@ -1,0 +1,7 @@
+obj/
+bin/
+diaries/
+diaries_old_*/
+last_error.txt
+b~*
+*.tmp

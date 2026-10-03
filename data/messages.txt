@@ -1,0 +1,27 @@
+# Console wording: key = text.  {1}..{4} are fill-ins, \n is a line break.
+seed = seed {1} ({2})
+seed.disk = from existing diaries
+seed.option = from --seed
+seed.default = default
+entities = entities: {1}
+resume = resuming after tick {1}, running to tick {2}
+progress = tick {1}/{2} | entities {3} | events {4}
+summary = done: ticks {1}..{2} | entities {3} | events {4} (written {5}, replay-verified {6}) | warnings {7}
+nothing = nothing to do: every diary already has tick {1} (--ticks={2})
+warn.words_file = warning: data/words.txt not found or unreadable; using the built-in word list
+warn.words_list = warning: word list "{1}" has {2} entries (60 expected)
+warn.words_empty = warning: word list "{1}" is empty; using the built-in text
+warn.behind = warning: {1} is behind: {2} ticks on disk, others up to {3}; resuming from the lowest common tick {4}
+warn.bad_line = warning: {1}.jsonl line {2} is not a complete entry (half-written?); skipped
+warn.seed_ignored = warning: --seed={1} ignored; the existing diaries use seed {2}
+fresh.moved = old diaries moved to {1}/
+err.gap = {1}.jsonl line {2}: found tick {3}, expected {4} (missing or duplicate tick)
+err.seed = {1}.jsonl line {2}: seed {3} differs from seed {4} of the other lines
+err.drift = backup and code have drifted: {1} tick {2} differs from what this code generates\nstored:    {3}\ngenerated: {4}
+err.number = option {1}: "{2}" is not a whole number
+err.range = option {1} must be at least 1
+err.option = unknown option "{1}" (try --help)
+err.head = diary_sim stopped: {1}
+err.where = seed {1} | tick {2} | entity {3} | exception {4}
+err.trace = traceback:
+err.more = ... {1} more lines in last_error.txt

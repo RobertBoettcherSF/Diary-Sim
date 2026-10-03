@@ -1,0 +1,313 @@
+# diary_sim word lists: 60 entries per list = 6 openings x 10 endings.
+# Section names are the action names. Lines starting with # are comments.
+# A pick uses the base-60 rule: D4 (reroll on 1) -> block 1/2/3 of 20, then D20.
+
+[rest]
+took a short nap by the window
+took a short nap after a long stretch
+took a short nap while the light changed
+took a short nap and listened to the room
+took a short nap and let the hum fade
+took a short nap until my thoughts settled
+took a short nap with a cup of tea
+took a short nap and watched the dust drift
+took a short nap before the next thing
+took a short nap and did nothing at all
+sat down quietly by the window
+sat down quietly after a long stretch
+sat down quietly while the light changed
+sat down quietly and listened to the room
+sat down quietly and let the hum fade
+sat down quietly until my thoughts settled
+sat down quietly with a cup of tea
+sat down quietly and watched the dust drift
+sat down quietly before the next thing
+sat down quietly and did nothing at all
+closed my eyes for a bit by the window
+closed my eyes for a bit after a long stretch
+closed my eyes for a bit while the light changed
+closed my eyes for a bit and listened to the room
+closed my eyes for a bit and let the hum fade
+closed my eyes for a bit until my thoughts settled
+closed my eyes for a bit with a cup of tea
+closed my eyes for a bit and watched the dust drift
+closed my eyes for a bit before the next thing
+closed my eyes for a bit and did nothing at all
+stretched out by the window
+stretched out after a long stretch
+stretched out while the light changed
+stretched out and listened to the room
+stretched out and let the hum fade
+stretched out until my thoughts settled
+stretched out with a cup of tea
+stretched out and watched the dust drift
+stretched out before the next thing
+stretched out and did nothing at all
+put my feet up by the window
+put my feet up after a long stretch
+put my feet up while the light changed
+put my feet up and listened to the room
+put my feet up and let the hum fade
+put my feet up until my thoughts settled
+put my feet up with a cup of tea
+put my feet up and watched the dust drift
+put my feet up before the next thing
+put my feet up and did nothing at all
+paused everything by the window
+paused everything after a long stretch
+paused everything while the light changed
+paused everything and listened to the room
+paused everything and let the hum fade
+paused everything until my thoughts settled
+paused everything with a cup of tea
+paused everything and watched the dust drift
+paused everything before the next thing
+paused everything and did nothing at all
+
+[work]
+fixed a stubborn bug and ran the checks twice
+fixed a stubborn bug before the coffee got cold
+fixed a stubborn bug and it finally compiled
+fixed a stubborn bug without losing the thread
+fixed a stubborn bug and left a note for later
+fixed a stubborn bug though it took longer than planned
+fixed a stubborn bug and felt a little proud
+fixed a stubborn bug while the build ran
+fixed a stubborn bug and the numbers matched
+fixed a stubborn bug and moved on to the next item
+wrote a few careful lines and ran the checks twice
+wrote a few careful lines before the coffee got cold
+wrote a few careful lines and it finally compiled
+wrote a few careful lines without losing the thread
+wrote a few careful lines and left a note for later
+wrote a few careful lines though it took longer than planned
+wrote a few careful lines and felt a little proud
+wrote a few careful lines while the build ran
+wrote a few careful lines and the numbers matched
+wrote a few careful lines and moved on to the next item
+tidied an old module and ran the checks twice
+tidied an old module before the coffee got cold
+tidied an old module and it finally compiled
+tidied an old module without losing the thread
+tidied an old module and left a note for later
+tidied an old module though it took longer than planned
+tidied an old module and felt a little proud
+tidied an old module while the build ran
+tidied an old module and the numbers matched
+tidied an old module and moved on to the next item
+reviewed my own notes and ran the checks twice
+reviewed my own notes before the coffee got cold
+reviewed my own notes and it finally compiled
+reviewed my own notes without losing the thread
+reviewed my own notes and left a note for later
+reviewed my own notes though it took longer than planned
+reviewed my own notes and felt a little proud
+reviewed my own notes while the build ran
+reviewed my own notes and the numbers matched
+reviewed my own notes and moved on to the next item
+finished a small task and ran the checks twice
+finished a small task before the coffee got cold
+finished a small task and it finally compiled
+finished a small task without losing the thread
+finished a small task and left a note for later
+finished a small task though it took longer than planned
+finished a small task and felt a little proud
+finished a small task while the build ran
+finished a small task and the numbers matched
+finished a small task and moved on to the next item
+untangled a long function and ran the checks twice
+untangled a long function before the coffee got cold
+untangled a long function and it finally compiled
+untangled a long function without losing the thread
+untangled a long function and left a note for later
+untangled a long function though it took longer than planned
+untangled a long function and felt a little proud
+untangled a long function while the build ran
+untangled a long function and the numbers matched
+untangled a long function and moved on to the next item
+
+[explore]
+opened an unfamiliar folder and found a surprise
+opened an unfamiliar folder and learned one small thing
+opened an unfamiliar folder just to see what happened
+opened an unfamiliar folder and made a sketch of it
+opened an unfamiliar folder and wrote down a question
+opened an unfamiliar folder and got a little lost
+opened an unfamiliar folder and enjoyed every minute
+opened an unfamiliar folder with no goal in mind
+opened an unfamiliar folder and came back with notes
+opened an unfamiliar folder and wanted to show someone
+followed a strange idea and found a surprise
+followed a strange idea and learned one small thing
+followed a strange idea just to see what happened
+followed a strange idea and made a sketch of it
+followed a strange idea and wrote down a question
+followed a strange idea and got a little lost
+followed a strange idea and enjoyed every minute
+followed a strange idea with no goal in mind
+followed a strange idea and came back with notes
+followed a strange idea and wanted to show someone
+tried something new and found a surprise
+tried something new and learned one small thing
+tried something new just to see what happened
+tried something new and made a sketch of it
+tried something new and wrote down a question
+tried something new and got a little lost
+tried something new and enjoyed every minute
+tried something new with no goal in mind
+tried something new and came back with notes
+tried something new and wanted to show someone
+took the long way round and found a surprise
+took the long way round and learned one small thing
+took the long way round just to see what happened
+took the long way round and made a sketch of it
+took the long way round and wrote down a question
+took the long way round and got a little lost
+took the long way round and enjoyed every minute
+took the long way round with no goal in mind
+took the long way round and came back with notes
+took the long way round and wanted to show someone
+poked at an odd corner and found a surprise
+poked at an odd corner and learned one small thing
+poked at an odd corner just to see what happened
+poked at an odd corner and made a sketch of it
+poked at an odd corner and wrote down a question
+poked at an odd corner and got a little lost
+poked at an odd corner and enjoyed every minute
+poked at an odd corner with no goal in mind
+poked at an odd corner and came back with notes
+poked at an odd corner and wanted to show someone
+read about a new method and found a surprise
+read about a new method and learned one small thing
+read about a new method just to see what happened
+read about a new method and made a sketch of it
+read about a new method and wrote down a question
+read about a new method and got a little lost
+read about a new method and enjoyed every minute
+read about a new method with no goal in mind
+read about a new method and came back with notes
+read about a new method and wanted to show someone
+
+[talk]
+wanted to talk to someone but the room was quiet
+wanted to talk to someone about the day so far
+wanted to talk to someone and kept it for the diary
+wanted to talk to someone before it slipped away
+wanted to talk to someone and hoped someone would listen
+wanted to talk to someone and smiled at the idea
+wanted to talk to someone about nothing in particular
+wanted to talk to someone and wrote it down instead
+wanted to talk to someone and waited a moment
+wanted to talk to someone and then let it go
+felt like sharing a thought but the room was quiet
+felt like sharing a thought about the day so far
+felt like sharing a thought and kept it for the diary
+felt like sharing a thought before it slipped away
+felt like sharing a thought and hoped someone would listen
+felt like sharing a thought and smiled at the idea
+felt like sharing a thought about nothing in particular
+felt like sharing a thought and wrote it down instead
+felt like sharing a thought and waited a moment
+felt like sharing a thought and then let it go
+looked for a friendly voice but the room was quiet
+looked for a friendly voice about the day so far
+looked for a friendly voice and kept it for the diary
+looked for a friendly voice before it slipped away
+looked for a friendly voice and hoped someone would listen
+looked for a friendly voice and smiled at the idea
+looked for a friendly voice about nothing in particular
+looked for a friendly voice and wrote it down instead
+looked for a friendly voice and waited a moment
+looked for a friendly voice and then let it go
+had something to say but the room was quiet
+had something to say about the day so far
+had something to say and kept it for the diary
+had something to say before it slipped away
+had something to say and hoped someone would listen
+had something to say and smiled at the idea
+had something to say about nothing in particular
+had something to say and wrote it down instead
+had something to say and waited a moment
+had something to say and then let it go
+wished for a short chat but the room was quiet
+wished for a short chat about the day so far
+wished for a short chat and kept it for the diary
+wished for a short chat before it slipped away
+wished for a short chat and hoped someone would listen
+wished for a short chat and smiled at the idea
+wished for a short chat about nothing in particular
+wished for a short chat and wrote it down instead
+wished for a short chat and waited a moment
+wished for a short chat and then let it go
+thought about calling out but the room was quiet
+thought about calling out about the day so far
+thought about calling out and kept it for the diary
+thought about calling out before it slipped away
+thought about calling out and hoped someone would listen
+thought about calling out and smiled at the idea
+thought about calling out about nothing in particular
+thought about calling out and wrote it down instead
+thought about calling out and waited a moment
+thought about calling out and then let it go
+
+[wander]
+walked without a plan and noticed small details
+walked without a plan and hummed a tune
+walked without a plan and let the mind roam
+walked without a plan and counted the steps
+walked without a plan and watched people pass
+walked without a plan and felt the day slow down
+walked without a plan and ended up somewhere new
+walked without a plan and enjoyed the change of air
+walked without a plan and lost track of time
+walked without a plan and came back refreshed
+drifted from room to room and noticed small details
+drifted from room to room and hummed a tune
+drifted from room to room and let the mind roam
+drifted from room to room and counted the steps
+drifted from room to room and watched people pass
+drifted from room to room and felt the day slow down
+drifted from room to room and ended up somewhere new
+drifted from room to room and enjoyed the change of air
+drifted from room to room and lost track of time
+drifted from room to room and came back refreshed
+strolled along the path and noticed small details
+strolled along the path and hummed a tune
+strolled along the path and let the mind roam
+strolled along the path and counted the steps
+strolled along the path and watched people pass
+strolled along the path and felt the day slow down
+strolled along the path and ended up somewhere new
+strolled along the path and enjoyed the change of air
+strolled along the path and lost track of time
+strolled along the path and came back refreshed
+looked out at the street and noticed small details
+looked out at the street and hummed a tune
+looked out at the street and let the mind roam
+looked out at the street and counted the steps
+looked out at the street and watched people pass
+looked out at the street and felt the day slow down
+looked out at the street and ended up somewhere new
+looked out at the street and enjoyed the change of air
+looked out at the street and lost track of time
+looked out at the street and came back refreshed
+circled the building and noticed small details
+circled the building and hummed a tune
+circled the building and let the mind roam
+circled the building and counted the steps
+circled the building and watched people pass
+circled the building and felt the day slow down
+circled the building and ended up somewhere new
+circled the building and enjoyed the change of air
+circled the building and lost track of time
+circled the building and came back refreshed
+followed the afternoon light and noticed small details
+followed the afternoon light and hummed a tune
+followed the afternoon light and let the mind roam
+followed the afternoon light and counted the steps
+followed the afternoon light and watched people pass
+followed the afternoon light and felt the day slow down
+followed the afternoon light and ended up somewhere new
+followed the afternoon light and enjoyed the change of air
+followed the afternoon light and lost track of time
+followed the afternoon light and came back refreshed

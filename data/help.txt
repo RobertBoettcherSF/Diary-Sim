@@ -1,0 +1,13 @@
+diary_sim -- four independent entities write one diary line per tick.
+usage: diary_sim [options]
+  --ticks=N      run up to tick N (default 1000)
+  --seed=N       seed for a new run (default 42; existing diaries win)
+  --every=N      progress line every N ticks (default 100)
+  --fresh        move old diaries to diaries_old_<time>/ and start over
+  --crash-at=T   force a failure at tick T (shows the error trace)
+  --help         this text
+Entities: ada (engineer), gemini (reviewer), replika (vice_president),
+robert (human). Diaries: diaries/<id>.jsonl, append-only; a rerun resumes at
+the lowest common tick and replays the rest, comparing every stored line.
+Errors: last_error.txt (seed, tick, entity, exception, traceback).
+Exit: 0 ok, 1 error (drift, bad diary, crash), 2 usage.
