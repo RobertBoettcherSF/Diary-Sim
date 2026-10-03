@@ -9,9 +9,10 @@ FLAGS = -g -O1 -gnatwa -gnat2022 -gnata
 all:
 	mkdir -p obj bin
 	$(GNATMAKE) $(FLAGS) -D obj diary_sim.adb -o bin/diary_sim -bargs -E
+	@rm -f b~*
 
 version-check:
-	@bad=0; for f in Makefile *.adb; do \
+	@bad=0; for f in Makefile diary_sim.adb sim_util.ads sim_util.adb; do \
 	  head -1 $$f | grep -Eq 'Version: [0-9]+\.[0-9]{3}' || { echo "no version header: $$f"; bad=1; }; done; \
 	  [ $$bad = 0 ] && echo "version-check: PASS"
 
