@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  See sim_govern.ads.
 pragma Ada_2022;
 
@@ -383,7 +383,7 @@ package body Sim_Govern is
    end Tick_Begin;
 
    --  ---- reports (from the D lines only) ---------------------------------------------------------------------------
-   type Count5 is array (1 .. 6) of Natural;
+   subtype Count5 is Counts_T;
    function Count_For (Pl : String) return Count5 is
       C : Count5 := [others => 0];
       Seen : Str_Vectors.Vector;
@@ -413,6 +413,33 @@ package body Sim_Govern is
    function Counter_Of (C : Count5) return String is
      (Msg ("govern.counter", Img (C (1)), Img (C (2)), Img (C (3)), Img (C (4)), Img (C (5)))
       & (if C (6) > 0 then Msg ("govern.counter.veto", Img (C (6))) else ""));
+
+   function Counts_Of (P : Player_Id) return Counts_T is (Count_For (Player_Name (P)));
+
+   function Top_Concern (P : Player_Id) return String is
+      Score : array (1 .. 40) of Natural := [others => 0];
+      Pl : constant String := Player_Name (P);
+      Best : Natural := 0;
+   begin
+      for Ln of Dec_Lines loop
+         if Tok (Ln, "player") = Pl and then Tok (Ln, "kind") in "grant" | "partial" | "defer" | "refuse" then
+            declare
+               T : constant Natural := Topic_Id (Tok (Ln, "topic"));
+            begin
+               if T in 1 .. 40 then Score (T) := Score (T) + (if Tok (Ln, "kind") in "defer" | "refuse" then 2 else 1); end if;
+            end;
+         end if;
+      end loop;
+      for T in Score'Range loop
+         if Score (T) > 0 and then (Best = 0 or else Score (T) > Score (Best)) then Best := T; end if;
+      end loop;
+      return (if Best = 0 then "" else Topic_Name (Best));
+   end Top_Concern;
+
+   procedure Lower_Standing (E : Entity_Id; By : Natural) is
+   begin
+      Stand (E) := Integer'Max (0, Stand (E) - By);
+   end Lower_Standing;
 
    function Counter_Line (P : Player_Id) return String is (Counter_Of (Count_For (Player_Name (P))));
    function Totals_Line return String is

@@ -360,6 +360,52 @@ running save needs `--fresh`.
   line (if it fits the cap).
 * The Buddhism layer is not fed by governance (kept simple).
 
+## Player reports: text boxes, claims and `make audit` (`preport=1` sessions)
+
+At the very end of EVERY run (after the report, the vote table, "Saved to ..." - the last thing Robert sees) each of the three players
+(Epsilon, Zeta, Eta; names from `data/names.txt`) writes Robert a report as a framed text box: `+ - |`, exactly 80 columns, printed in one
+piece, first person, built from the templates of `data/preport.txt` (three tones - plain / calm / alarm - from the player's Rule 30
+personality): how many petitions came to it (and whether it was quiet lately), what it decided (granted / partial / deferred / refused /
+reverted - the **true counts of the D records**, never omitted, never changed), how the wesen it watches are doing ("overall happiness
+about +21 on a scale from -100 to +100"), its top concern (the topic it was asked about most; refused / deferred ones count double) and
+one line about what it wants from Robert. The same boxes go to `player_reports.txt` in the save folder (latest run). Sample (seed 42, 1800
+ticks):
+
+```
++-- Eta reports to Robert (tick 1800) ----------------------------------------+
+| I am Eta. I keep an eye on Delta. Here is my report.                         |
+| 9 petitions came to me so far. Lately there were only a few.                 |
+| I granted 1, granted 2 in part, put 2 off for later and refused 6.           |
+| Overall happiness of Delta is about +82 on a scale from -100 to +100. They   |
+| are doing very well.                                                         |
+| My top concern is more time to rest.                                         |
+| Most of the wishes I see I have to turn down or put off. I would like you to |
+| look at my refusals and approve the ones you agree with.                     |
++------------------------------------------------------------------------------+
+```
+
+* **Players may misreport.** Rule changes (D records) are NEVER misreported - only the impression: the happiness and how many petitions came
+  lately (a tone 0 .. 3: quiet / few / several / many). A player's **honesty** (0 .. 100) is `preport.hon_base` + (brevity - 50) * `brev_w` -
+  warmth * `warm_w` + (trust - 50) * `trust_w` + (standing - 50) * `stand_w` (percent; blunt players and trusted, well-regarded wesen get
+  the plain truth, generous players like to please). The chance to colour a claim is (100 - honesty) * `lie_scale` percent, rolled with
+  `hash(seed, wesen, tick, 9800)`; a second roll (9801) says rosy (up) or gloomy (down; generous players are rosier) and a third (9802)
+  the size, `lie_min` .. `lie_max` (5 .. 30) mood points, clamped to the mood scale (-100 .. 100: it never claims an impossible value);
+  the tone moves by one step the same way. The box states only what the player claims.
+* **The truth is recorded.** At the last tick of every `preport=1` session each player claims for each wesen it watches; the claim is a
+  record line `P<n> t=<tick> player= wesen= claimed= true= tone=<claimed>/<true> flag=lie|none` in `diaries/preports.txt`, recomputed by
+  every replay (Sim_Store, like screens / chess / governance). A changed, invented or removed line, or a removed `preport=1` marker, is
+  DRIFT; a run that stops in the middle of a session (explicit `--ticks` below the end) shows the boxes without recording them.
+* **`make audit`** (`--audit`) replays and prints per player the number of claims, the misreports, the biggest one (wesen, tick, claimed,
+  true, difference) and the latest claims per wesen with the lies marked `<- MISREPORT`; it writes nothing.
+* **`make challenge PLAYER=<name>`** (`--challenge <name>`; optional `AS=`) appends `Q<n> tick=<T> player=<id> by=<who>` to
+  `diaries/challenges.txt` at the lowest common tick; it is refused (exit 2) when that player has no misreport left to challenge (one
+  challenge per misreport round). The next run lowers the standing of that player with each of its wesen by `preport.challenge_cost` (3,
+  never below 0) from tick T + 1 (replay-verified: it changes later decisions).
+* The digest has a `preport rounds, lies/claims, biggest` line (section `preport`: `make run SECTION=preport`, `--debug-section preport`).
+* `preport.enabled = 0` in `data/limits.txt` (or `govern.enabled = 0`): new sessions carry no marker; nothing is written, printed or
+  changed (byte-identical to before). Changing `preport.*` or `data/preport.txt` numbers of a save with preport sessions: use `--fresh`
+  (the claims are part of the record; wording changes are safe). Needs `govern=1` (the D records).
+
 ## The debug digest (`DEBUG=1`, `--debug`)
 
 `debug.txt` (always written, <= 1500 bytes) is unchanged. For a compact file to attach to chat:
@@ -504,7 +550,7 @@ make run                     # = make play: AUTO-LOAD the save and continue (no 
 make menu                    # the main menu: intro, DIARY title, New Game / Load Game / Inbox / Settings / Quit (terminal only)
 make demo                    # PREVIEW: 200 ticks in memory, a screen of excerpts, nothing written to disk
 make run DEBUG=1             # also write debug_digest.txt (+ debug_full.txt) to attach; make demo DEBUG=1: only the digest
-make run SECTION=drift       # print one block of debug_full.txt (drift trace players inbox run status)
+make run SECTION=drift       # print one block of debug_full.txt (drift trace players inbox run ledger preport status)
 make check                   # version headers + scripts/checks.sh (the scenarios: run, resume, behind, half line, drift, crash, fresh, data limits)
 bin/diary_sim --help
 bin/diary_sim --ticks=1000 --every=100     # --ticks 1000 works too

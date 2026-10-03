@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  Governance of diary_sim (govern=1 sessions; needs rest=1): the players (Epsilon, Zeta, Eta) decide what happens to the
 --  petitions of the wesen they watch.  A SHORT WHITELIST of rule levers (data/govern.txt: recovery rate, cool-down length, the mood
 --  cost of work, the quick-rest energy) can each be moved a small step by a petition of the matching topic, never past its bounds.
@@ -46,6 +46,13 @@ package Sim_Govern is
    function Counter_Line (P : Sim_Dharma.Player_Id) return String;   --  "12 petitions seen, 5 granted, 3 partial, 2 deferred, 2 refused"
    function Totals_Line return String;                                --  "seen/granted/partial/deferred/refused" for the digest
    function Decision_Count return Natural;
+   --  For the player reports (Sim_Preport), from the D records: seen / granted / partial / deferred / refused / vetoed of a player,
+   --  and the topic it was asked about most (refused and deferred ones count double; "" before the first decision).
+   type Counts_T is array (1 .. 6) of Natural;
+   function Counts_Of (P : Sim_Dharma.Player_Id) return Counts_T;
+   function Top_Concern (P : Sim_Dharma.Player_Id) return String;
+   --  Robert caught a player lying (make challenge): the player's standing with E drops by By points (never below 0).
+   procedure Lower_Standing (E : Entity_Id; By : Natural);
    function View return Str_Vectors.Vector;                           --  --govern / make govern (ids; the output layer maps names)
    function Describe (Line : String) return String;                   --  one D line as a sentence
 

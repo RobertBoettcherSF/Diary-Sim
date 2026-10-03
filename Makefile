@@ -38,6 +38,11 @@
 # make veto DECISION=D12 [AS=name]     Robert reverts a granted / partial decision of a player (one V line in diaries/vetoes.txt at the lowest
 #                 common tick; the next run writes the D line, lowers the player's standing and trust).  make approve DECISION=D12: raises both.
 #                 make grant (a petition granted by Robert himself) stays as it is
+# make audit     the player reports checked (preport=1 sessions): per player what it CLAIMED to Robert against what was TRUE, the number of
+#                 misreports, the biggest one and the latest claims per wesen; replays and verifies, writes nothing.  The text boxes of the
+#                 players come last at the end of every run (also in player_reports.txt of the save folder).
+# make challenge PLAYER=<name> [AS=name]   Robert caught a player lying (see make audit): one Q line in diaries/challenges.txt at the lowest
+#                 common tick; the next run lowers that player's standing with its wesen a little (data/limits.txt preport.challenge_cost)
 # DEBUG=1         make run DEBUG=1 / make demo DEBUG=1 (--debug): also write debug_digest.txt (<= debug.digest_bytes,
 #                 data/limits.txt; line 1 = status, anomalies, then only what changed since the last digest)
 #                 to attach to chat: in the save folder for run, in the current folder for demo (the only
@@ -52,7 +57,7 @@ OPT ?= -O0
 JOBS ?= -j0
 FLAGS = -g $(OPT) -gnatwa -gnat2022 -gnata $(JOBS)
 
-.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve
+.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge
 export WESEN PLAYER TEXT AS
 
 EVERY ?= 100
@@ -63,7 +68,7 @@ all:
 	@rm -f b~*
 
 version-check:
-	@bad=0; for f in Makefile diary_sim.adb sim_util.ads sim_util.adb sim_world.ads sim_world.adb sim_quit.ads sim_quit.adb sim_menu.ads sim_menu.adb sim_dharma.ads sim_dharma.adb sim_things.ads sim_things.adb sim_ledger.ads sim_ledger.adb sim_store.ads sim_store.adb sim_screen.ads sim_screen.adb sim_chess.ads sim_chess.adb sim_games.ads sim_games.adb sim_robot.ads sim_robot.adb sim_govern.ads sim_govern.adb; do \
+	@bad=0; for f in Makefile diary_sim.adb sim_util.ads sim_util.adb sim_world.ads sim_world.adb sim_quit.ads sim_quit.adb sim_menu.ads sim_menu.adb sim_dharma.ads sim_dharma.adb sim_things.ads sim_things.adb sim_ledger.ads sim_ledger.adb sim_store.ads sim_store.adb sim_screen.ads sim_screen.adb sim_chess.ads sim_chess.adb sim_games.ads sim_games.adb sim_robot.ads sim_robot.adb sim_govern.ads sim_govern.adb sim_preport.ads sim_preport.adb; do \
 	  head -1 $$f | grep -Eq 'Version: [0-9]+\.[0-9]{3}' || { echo "no version header: $$f"; bad=1; }; done; \
 	  v=$$(head -1 diary_sim.adb | grep -Eo '[0-9]+\.[0-9]{3}'); \
 	  grep -q "Build : constant String := \"$$v\"" diary_sim.adb || { echo "Build constant differs from diary_sim.adb header $$v"; bad=1; }; \
@@ -118,6 +123,12 @@ veto: all
 
 approve: all
 	bin/diary_sim --approve $(DECISION) $(if $(AS),--as $(AS))
+
+audit: all
+	bin/diary_sim --audit
+
+challenge: all
+	bin/diary_sim --challenge "$(PLAYER)" $(if $(AS),--as $(AS))
 
 ledger: all
 	bin/diary_sim --ledger$(if $(FULL),=full)

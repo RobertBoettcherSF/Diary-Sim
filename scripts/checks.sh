@@ -575,7 +575,7 @@ cp diaries/sessions.txt ss.bak; sum_before=$(cksum < diaries/sessions.txt)
 "$gb" --debug-section players > g4.txt 2>&1; rc4=$?
 [ $rc4 = 0 ] && [ "$(head -1 g4.txt)" = "section players" ] && grep -q '^players: iris attn' g4.txt && [ "$(head -1 debug_digest.txt)" = "section players" ] && [ "$sum_before" = "$(cksum < diaries/sessions.txt)" ] && ! grep -q '^import' g4.txt \
   && ok "--debug-section players: only that block of debug_full.txt, printed and written; nothing is simulated" || bad "debug-section"
-"$gb" --debug-section nosuch > g5.txt 2>&1; rc5=$?; [ $rc5 = 2 ] && grep -q 'unknown --debug-section nosuch (one of: status drift trace players inbox run ledger)' g5.txt && ok "unknown section: usage error, exit 2, the list of sections" || bad "unknown section"
+"$gb" --debug-section nosuch > g5.txt 2>&1; rc5=$?; [ $rc5 = 2 ] && grep -q 'unknown --debug-section nosuch (one of: status drift trace players inbox run ledger preport)' g5.txt && ok "unknown section: usage error, exit 2, the list of sections" || bad "unknown section"
 sed -i '/^S1 /s/votes=[0-9]*/votes=7/' diaries/sessions.txt; "$gb" --more 0 --debug > g6.txt 2>&1
 head -1 debug_digest.txt | grep -q '^DRIFT v' && sed -n 2p debug_digest.txt | grep -q '^error: sessions.txt S1' && "$gb" --debug-section drift 2> /dev/null | grep -q '^error: sessions.txt S1' && ok "DRIFT: line 1 DRIFT, the one thing wrong on line 2; section drift has it" || bad "drift digest"
 cp ss.bak diaries/sessions.txt; "$gb" --more 10 --crash-at 255 --debug > g7.txt 2>&1
@@ -1029,6 +1029,92 @@ t0=$(date +%s.%N); "$bin" --seed 42 --ticks 600 --yes --every 5000 > a1.txt 2>&1
 grep -q '^import OK: 4 entities, 1200 ticks verified' a3.txt && ok "1500 ticks over three runs (the last one replay-verifies 1200 ticks of every record file and adds 300): $(awk -v a="$t0" -v b="$t1" 'BEGIN { printf "%.1f", b - a }') s" || bad "speed run"
 awk -v a="$t0" -v b="$t1" 'BEGIN { exit !(b - a < 60) }' && ok "well under a minute (limit 60 s here; ~3 s on an 8-core box)" || bad "slow: $t0 -> $t1"
 grep -q 'Known_Count' "$root/README.md" && grep -q -- '-j0' "$root/README.md" && ok "README documents the build flags and the replay cost" || bad "speed docs"
+unset DIARY_HOME
+
+echo "== 38. player report boxes (preport=1): framed first-person text boxes last on the console and in player_reports.txt, claimed vs true records, bounded lies, make audit / challenge, DRIFT, off = unchanged =="
+rm -rf "$w/pr"; mkdir -p "$w/pr/bin" "$w/pr/h" "$w/pr/off/bin" "$w/pr/off/h" "$w/pr/hi/bin" "$w/pr/hi/h" "$w/pr/no/bin" "$w/pr/no/h"
+for d in "" off/ hi/ no/; do cp "$bin" "$w/pr/${d}bin/"; cp -r "$idata" "$w/pr/${d}data"; sed -i 's/^govern.enabled = .*/govern.enabled = 1/' "$w/pr/${d}data/limits.txt"; done
+sed -i 's/^preport.enabled = .*/preport.enabled = 0/' "$w/pr/off/data/limits.txt"; sed -i 's/^preport.lie_scale = .*/preport.lie_scale = 1000/' "$w/pr/hi/data/limits.txt"; sed -i 's/^preport.lie_scale = .*/preport.lie_scale = 0/' "$w/pr/no/data/limits.txt"
+prb="$w/pr/bin/diary_sim"; cd "$w/pr" || exit 1
+runpr() { local d="$w/pr/${1}"; ( cd "${d}h" || exit 1; export DIARY_HOME="${d}h"; "${d}bin/diary_sim" --seed 42 --ticks 300 --yes --every 5000 > "${d}c1.txt" 2>&1; for i in 2 3 4; do "${d}bin/diary_sim" --more 300 --every 5000 > "${d}c$i.txt" 2>&1; done ); }
+runpr ""; runpr off/; runpr hi/; runpr no/
+export DIARY_HOME="$w/pr/h"; cd "$w/pr/h" || exit 1
+np=$(grep -c '^P[0-9]' diaries/preports.txt); nm=$(grep -c '^S[0-9].* preport=1' diaries/sessions.txt)
+[ "$nm" = 4 ] && [ "$np" = 16 ] && head -1 diaries/preports.txt | grep -q '^# seed 42$' && ok "new sessions carry preport=1 ($nm); every session end records one P line per wesen in diaries/preports.txt ($np lines)" || bad "preport markers/records ($nm $np)"
+bf=$(grep '^P[0-9]' diaries/preports.txt | awk '{ ok = 1; split("t player wesen claimed true tone flag", k, " "); for (i = 1; i <= 7; i++) if (index($0, " " k[i] "=") == 0) ok = 0; if (!ok) n++ } END { print n + 0 }')
+[ "$bf" = 0 ] && ok "P lines carry t, player, wesen, claimed, true, tone (claimed/true) and flag" || bad "P line fields ($bf)"
+# the boxes: after 'Saved to', framed, 80 columns, one per player, the same text in player_reports.txt
+tail -n +$(( $(grep -n '^Saved to ' ../c4.txt | tail -1 | cut -d: -f1) + 1 )) ../c4.txt > ../tailc4.txt
+nb=$(grep -c '^+-- .* reports to Robert (tick 1200) -*+$' ../tailc4.txt); wd=$(grep -E '^[+|]' ../tailc4.txt | awk 'length != 80 { n++ } END { print n + 0 }'); oth=$(grep -vE '^[+|]|^$' ../tailc4.txt | wc -l)
+[ "$nb" = 3 ] && [ "$wd" = 0 ] && [ "$oth" = 1 ] && ok "the console ends with three framed boxes (+ - |, every line 80 columns) and one hint line, after 'Saved to'" || bad "boxes on the console ($nb $wd $oth)"
+[ "$(head -n -0 ../tailc4.txt | grep -v '^$' | tail -1 | cut -c1-20)" = "The players say what" ] && cmp -s <(grep -E '^[+|]' ../tailc4.txt) <(grep -E '^[+|]' player_reports.txt) && ok "player_reports.txt in the save folder holds the same boxes" || bad "player_reports.txt"
+fp=0; for pl in iris sol noor; do blk=$(awk -v p="$pl" '$0 ~ "^\\+-- " p " reports" { on = 1 } on { print } on && /^\+-+\+$/ { exit }' player_reports.txt | sed -E 's/^\| //; s/ \|$//' | tr '\n' ' '); echo "$blk" | grep -q ' I ' && echo "$blk" | grep -qE 'My top concern|concern for me' && echo "$blk" | grep -q 'Overall happiness' && fp=$((fp + 1)); done
+[ "$fp" = 3 ] && ok "each box is first-person prose (I / My), with the overall happiness it reports and its top concern" || bad "first person ($fp)"
+# the decision counts are the D records
+dc=0; for pl in iris sol noor; do
+  want=$(awk -v p="$pl" '$0 ~ "^D[0-9]" && index($0, " player=" p " ") { for (i = 1; i <= NF; i++) if ($i ~ /^kind=/) c[substr($i, 6)]++ } END { printf "I granted %d, granted %d in part, put %d off for later and refused %d.", c["grant"], c["partial"], c["defer"], c["refuse"] }' diaries/govern.txt)
+  blk=$(awk -v p="$pl" '$0 ~ "^\\+-- " p " reports" { on = 1 } on { print } on && /^\+-+\+$/ { exit }' player_reports.txt | sed -E 's/^\| //; s/ \|$//' | tr '\n' ' ' | sed 's/  */ /g')
+  case "$blk" in *"$want"*) dc=$((dc + 1));; *) echo "   $pl: want '$want' in '$blk'";; esac
+done
+[ "$dc" = 3 ] && ok "what each player decided (granted / partial / deferred / refused) in the box equals the counts of the D records" || bad "D counts ($dc)"
+# the claims: bounded, valid, flag = difference, the truth is the mood of the diary
+lm=$(sed -n 's/^preport.lie_max = \([0-9]*\).*/\1/p' "$w/pr/data/limits.txt")
+oobp=$(grep '^P[0-9]' diaries/preports.txt | sed -E 's/.* claimed=(-?[0-9]+) true=(-?[0-9]+) tone=([0-9])\/([0-9]) flag=([a-z]+).*/\1 \2 \3 \4 \5/' | awk -v lm="$lm" '{ d = $1 - $2; if (d < 0) d = -d; bad = 0; if (d > lm || $1 < -100 || $1 > 100 || $2 < -100 || $2 > 100 || $3 > 3 || $4 > 3) bad = 1; diff = ($1 != $2 || $3 != $4); if (diff != ($5 == "lie")) bad = 1; n += bad } END { print n + 0 }')
+tr=0; for pair in "ada:iris" "gemini:iris" "replika:sol" "robert:noor"; do e=${pair%%:*}; pl=${pair##*:}; t=$(grep "^P[0-9]* t=300 player=$pl wesen=$e " diaries/preports.txt | sed -E 's/.* true=(-?[0-9]+) .*/\1/'); m=$(sed -n 300p diaries/$e.jsonl | sed -E 's/.*"mood":(-?[0-9]+).*/\1/'); [ "$t" = "$m" ] && tr=$((tr + 1)); done
+[ "$oobp" = 0 ] && [ "$tr" = 4 ] && ok "every claim is within $lm mood points of the truth and on the scale (-100 .. 100); flag=lie exactly when claimed differs from true; the true value is the mood in the diary (4 of 4 at tick 300)" || bad "claims ($oobp $tr)"
+nl=$(grep -c ' flag=lie' diaries/preports.txt); echo "   misreports in the normal save: $nl of $np claims"
+nh=$(grep -c ' flag=lie' "$w/pr/hi/h/diaries/preports.txt"); nn=$(grep -c ' flag=lie' "$w/pr/no/h/diaries/preports.txt")
+bh=$(grep '^P[0-9]' "$w/pr/hi/h/diaries/preports.txt" | sed -E 's/.* claimed=(-?[0-9]+) true=(-?[0-9]+) .*/\1 \2/' | awk -v lm="$lm" '{ d = $1 - $2; if (d < 0) d = -d; if (d > lm || $1 < -100 || $1 > 100) n++ } END { print n + 0 }')
+dn=$(grep '^P[0-9]' "$w/pr/no/h/diaries/preports.txt" | sed -E 's/.* claimed=(-?[0-9]+) true=(-?[0-9]+) tone=([0-9])\/([0-9]) .*/\1 \2 \3 \4/' | awk '$1 != $2 || $3 != $4 { n++ } END { print n + 0 }')
+[ "$nl" -ge 1 ] && [ "$nh" -ge 8 ] && [ "$bh" = 0 ] && [ "$nn" = 0 ] && [ "$dn" = 0 ] && ok "honesty is data: a player CAN misreport ($nl in the normal save), always when the trait is turned against it ($nh of 16, all within $lm points), never when lie_scale = 0 (claimed = true)" || bad "honesty ($nl $nh $bh $nn $dn)"
+# the D records are never touched: the same D lines whatever the players claim
+cmp -s "$w/pr/hi/h/diaries/govern.txt" "$w/pr/no/h/diaries/govern.txt" && cmp -s diaries/govern.txt "$w/pr/off/h/diaries/govern.txt" && ok "rule changes (D records) are identical with honest, normal and lying players: the claims never reach the rules" || bad "D records differ with the claims"
+# replay and DRIFT
+"$prb" --more 0 --every 5000 > r1.txt 2>&1; grep -q '^import OK: 4 entities, 1200 ticks verified' r1.txt && ok "the replay recomputes and verifies every P line" || bad "preport replay"
+cp diaries/preports.txt ../preports.keep; sed -i '2s/ claimed=[-0-9]* / claimed=57 /' diaries/preports.txt; "$prb" --more 0 --every 5000 > r2.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && grep -q 'preports.txt P' r2.txt && ok "a changed claim: import FAILED, DRIFT" || bad "tampered claim"
+cp ../preports.keep diaries/preports.txt; sed -i '3d' diaries/preports.txt; "$prb" --more 0 --every 5000 > r3.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "a removed P line: DRIFT" || bad "removed line"
+cp ../preports.keep diaries/preports.txt; rm diaries/preports.txt; "$prb" --more 0 --every 5000 > r4.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "a removed preports.txt: DRIFT" || bad "removed file"
+cp ../preports.keep diaries/preports.txt; echo "P999 t=5 player=iris wesen=ada claimed=1 true=1 tone=0/0 flag=none" >> diaries/preports.txt; "$prb" --more 0 --every 5000 > r5.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "an invented P line: DRIFT" || bad "invented line"
+cp ../preports.keep diaries/preports.txt; cp diaries/sessions.txt ../sess.keep; sed -i '/^S2 /s/ preport=1//' diaries/sessions.txt; "$prb" --more 0 --every 5000 > r6.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "S line with its preport=1 marker removed: DRIFT" || bad "tampered marker"
+cp ../sess.keep diaries/sessions.txt; "$prb" --more 0 --every 5000 > r7.txt 2>&1; grep -q '^import OK: 4 entities, 1200 ticks verified' r7.txt && ok "restored: replays again" || bad "restore"
+# make audit
+"$prb" --audit > au.txt 2>&1; rc=$?
+al=$(awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^flag=/ && $i == "flag=lie") n++ } END { print n + 0 }' diaries/preports.txt)
+as=$(grep -E '^(iris|sol|noor): claims' au.txt | sed -E 's/.*misreports ([0-9]+),.*/\1/' | awk '{ s += $1 } END { print s + 0 }')
+big=$(grep '^P[0-9]' diaries/preports.txt | grep ' flag=lie' | sed -E 's/.* claimed=(-?[0-9]+) true=(-?[0-9]+) .*/\1 \2/' | awk '{ d = $1 - $2; if (d < 0) d = -d; if (d > m) m = d } END { print m + 0 }')
+bg=$(grep 'biggest:' au.txt | sed -E 's/.*off by (-?[0-9]+),.*/\1/' | awk '{ d = $1; if (d < 0) d = -d; if (d > m) m = d } END { print m + 0 }')
+echo "   audit: misreports $as (records $al), biggest $bg (records $big)"
+[ "$rc" = 0 ] && head -1 au.txt | grep -q 'CLAIMED' && [ "$(grep -cE '^(iris|sol|noor): claims' au.txt)" = 3 ] && [ "$as" = "$al" ] && [ "$bg" = "$big" ] && grep -q 'claimed .*true' au.txt && [ ! -s ../au_err.txt ] && ok "make audit: per player claims, misreports, the biggest; the numbers equal the P records (--audit writes nothing)" || bad "audit ($rc $as $al $bg $big)"
+# make challenge
+"$prb" --govern > gv0.txt 2>&1; cp -r "$w/pr/h" "$w/pr/hc"
+lp=$(grep ' flag=lie' diaries/preports.txt | head -1 | sed -E 's/.* player=([a-z]+) .*/\1/'); lw=$(grep ' flag=lie' diaries/preports.txt | head -1 | sed -E 's/.* wesen=([a-z]+) .*/\1/')
+nolie=""; for pl in iris sol noor; do [ "$(grep -c " player=$pl .* flag=lie" diaries/preports.txt)" = 0 ] && nolie=$pl; done
+"$prb" --challenge "$lp" > ch1.txt 2>&1; rc1=$?; "$prb" --challenge nobody > ch2.txt 2>&1; rc2=$?
+nr=$(grep " player=$lp .* flag=lie" diaries/preports.txt | sed -E 's/.* t=([0-9]+) .*/\1/' | sort -u | wc -l); for i in $(seq 2 $nr); do "$prb" --challenge "$lp" > /dev/null 2>&1; done; "$prb" --challenge "$lp" > ch3.txt 2>&1; rc3=$?
+nq=$(grep -c '^Q[0-9]' diaries/challenges.txt)
+[ "$rc1" = 0 ] && [ "$rc2" = 2 ] && [ "$rc3" = 2 ] && [ "$nq" = "$nr" ] && grep -q "^Q1 tick=1200 player=$lp " diaries/challenges.txt && ok "make challenge: a caught player gets a Q line (one per misreport round: $nq); a player without a misreport left, or an unknown name, is refused (exit 2)" || bad "challenge ($rc1 $rc2 $rc3 $nq $nr)"
+rm -rf "$w/pr/hc/diaries/challenges.txt"
+cost=$(sed -n 's/^preport.challenge_cost = \([0-9]*\).*/\1/p' "$w/pr/data/limits.txt")
+DIARY_HOME="$w/pr/hc" "$prb" --more 3 --every 5000 > cc1.txt 2>&1; "$prb" --more 3 --every 5000 > cc2.txt 2>&1
+sa=$(DIARY_HOME="$w/pr/hc" "$prb" --govern | grep "^  $lw:" | sed -E 's/.* stand ([0-9]+) .*/\1/'); sb=$(DIARY_HOME="$w/pr/h" "$prb" --govern | grep "^  $lw:" | sed -E 's/.* stand ([0-9]+) .*/\1/')
+echo "   standing of $lw: $sa without the challenge, $sb with it ($nq challenge(s) of $lp, cost $cost each)"
+grep -q '^import OK: 4 entities, 1200 ticks verified' cc2.txt && grep -q '^import OK: 4 entities, 1200 ticks verified' cc1.txt && [ $((sa - sb)) -ge "$cost" ] && ok "the next run lowers the standing of the caught player's wesen by preport.challenge_cost (replay-verified)" || bad "challenge effect ($sa $sb)"
+# digest and sections
+"$prb" --more 0 --every 5000 --debug > dg.txt 2>&1; db=$(wc -c < debug_digest.txt); "$prb" --debug-section preport > ds.txt 2>&1
+grep -q 'misreports' ds.txt && [ "$db" -le 1500 ] && ok "the digest has the preport section/line (rounds, misreports, biggest) and stays within its cap ($db bytes)" || bad "digest ($db)"
+# off: nothing at all
+cd "$w/pr/off/h" || exit 1; export DIARY_HOME="$w/pr/off/h"
+"$w/pr/off/bin/diary_sim" --audit > ../oa.txt 2>&1
+[ ! -e diaries/preports.txt ] && [ ! -e player_reports.txt ] && ! grep -q 'preport=1' diaries/sessions.txt && ! grep -q 'reports to Robert' ../c4.txt && grep -q 'no player report' ../oa.txt && ok "preport.enabled = 0: no marker, no preports.txt, no player_reports.txt, no boxes; --audit says there is nothing" || bad "preport off"
+same=0   # (the normal save has 3 more ticks from the challenge test: compare the first 1200 ticks)
+for e in ada gemini replika robert; do cmp -s <(head -n 1200 diaries/$e.jsonl | sed -E 's/"ts":"[^"]*",//') <(head -n 1200 "$w/pr/h/diaries/$e.jsonl" | sed -E 's/"ts":"[^"]*",//') || same=$((same + 1)); done
+[ "$same" = 0 ] && ok "with and without the player reports the simulation is the same: the diary lines of the 4 wesen are identical" || bad "reports change the simulation ($same)"
+grep -q -- '--audit' "$root/data/help.txt" && grep -q -- '--challenge' "$root/data/help.txt" && grep -q 'make audit' "$root/README.md" && grep -q 'make challenge' "$root/README.md" && grep -q 'player_reports.txt' "$root/README.md" && grep -q '^preport.lie_max' "$root/data/limits.txt" && [ -f "$root/data/preport.txt" ] && grep -q '^audit:' "$root/Makefile" && grep -q '^challenge:' "$root/Makefile" && ok "--help, README, Makefile and data/ document and offer the reports, audit and challenge" || bad "preport docs"
 unset DIARY_HOME
 
 rm -rf "$w"

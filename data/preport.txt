@@ -1,0 +1,57 @@
+# Player reports (preport=1 sessions): the text boxes of the three players at the end of every run (player_reports.txt, last on the console)
+# and the wording of --audit.  First person, plain prose; the numbers and the honesty trait are in data/limits.txt (preport.*).
+# {1} .. {7} are filled in by the program; names are shown with the display names of data/names.txt.  A player says only what it CLAIMS:
+# happiness and how many petitions came lately may be coloured (see make audit), the decision counts (granted / partial / deferred /
+# refused / reverted) are always the true D records.  Changing the wording here is safe; the claims themselves are replay-checked.
+preport.title = {1} reports to Robert (tick {2})
+preport.and = and
+preport.open.plain = I am {1}. I keep an eye on {2}. Here is my report.
+preport.open.calm = This is {1}. I watch over {2} and I take my time with them. This is how things stand.
+preport.open.alarm = {1} here. I am watching {2} closely and I want you to read this carefully.
+preport.pet.none = No petition has come to me yet.
+preport.pet = {1} petitions came to me so far. {2}
+preport.pet.one = One petition came to me so far. {1}
+preport.tone.0 = Lately it has been quiet.
+preport.tone.1 = Lately there were only a few.
+preport.tone.2 = Lately there were several.
+preport.tone.3 = Lately they keep coming, one after the other.
+preport.dec = I granted {1}, granted {2} in part, put {3} off for later and refused {4}.
+preport.dec.veto = You reverted {1} of my decisions.
+preport.happy.great = Overall happiness of {1} is about {2} on a scale from -100 to +100. They are doing very well.
+preport.happy.good = Overall happiness of {1} is about {2} on a scale from -100 to +100. They are doing well.
+preport.happy.ok = Overall happiness of {1} is about {2} on a scale from -100 to +100. They are doing all right.
+preport.happy.low = Overall happiness of {1} is about {2} on a scale from -100 to +100. They are not doing well.
+preport.happy.bad = Overall happiness of {1} is about {2} on a scale from -100 to +100. They are doing badly.
+preport.concern = My top concern is {1}.
+preport.concern.none = Nothing stands out as a concern for me right now.
+preport.want.veto.plain = I would like you to trust my decisions, Robert, or tell me what I should do differently.
+preport.want.veto.calm = When you revert my decisions I lose my footing. Please talk to me before you do it again.
+preport.want.veto.alarm = Stop undoing my decisions, Robert. I cannot keep order if you do.
+preport.want.low.plain = I would like you to say something to them (make say, TEXT=...). They could use a kind word.
+preport.want.low.calm = A kind word from you would help them, Robert. Please say something to them (make say).
+preport.want.low.alarm = They need you now, Robert. Say something to them (make say) before it gets worse.
+preport.want.hard.plain = Most of the wishes I see I have to turn down or put off. I would like you to look at my refusals and approve the ones you agree with.
+preport.want.hard.calm = I turn down more wishes than I like. If you think I am too strict, approve what you agree with and I will learn from it.
+preport.want.hard.alarm = Too many wishes pile up that I cannot grant. Look at my refusals, Robert, and tell me where I am wrong.
+preport.want.calm.plain = I do not need anything from you now, Robert. Keep going and send word if something changes.
+preport.want.calm.calm = Nothing is needed from you for now, Robert. Everything is in hand. Thank you for watching.
+preport.want.calm.alarm = Nothing breaks right now, but stay alert, Robert, and look in again soon.
+preport.hint = The players say what they choose to say. make audit shows what they claimed against what is true.
+preport.digest = preport {1} rounds, {2}/{3} misreports, biggest {4}
+# --audit / make audit
+audit.head = audit: what each player CLAIMED to Robert against what was TRUE (one claim per wesen at the end of each session):
+audit.none = no player report yet (it starts with a session marked preport=1: make run).
+audit.player = {1}: claims {2}, misreports {3}, challenged {4}
+audit.big = biggest: {1} at tick {2}: claimed {3}, true {4} (off by {5}, tone {6})
+audit.nobig = biggest: none, every claim was true
+audit.last = latest claims (tick {1}), claimed against true:
+audit.row = {1} ({2}): claimed {3}, true {4}, tone {5}
+audit.lie = <- MISREPORT {1}
+audit.hint = make challenge PLAYER=<name> lowers the standing of a player whose misreport you caught (a little).
+# make challenge
+challenge.ok = {1}: {2} challenged for its misreports; its standing with its wesen drops by {3} from tick {4}.
+challenge.nolie = {1} has no misreport left to challenge (make audit shows them).
+challenge.noplayer = no such player: {1} (use Epsilon, Zeta or Eta).
+challenges.header = # Q<n> tick=<T> player=<id> by=<who>  (Robert's input: a lie of that player was caught; applied after tick T, its standing drops a little)
+err.preport = preports.txt {1} differs from the replay: {2}
+err.preport_in = challenges.txt {1} cannot be applied: that player had no misreport left to challenge at that tick

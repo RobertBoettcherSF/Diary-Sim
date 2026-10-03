@@ -14,15 +14,17 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
   --map          print the treadmill view of the last session end (make map)
   --elo          Elo ranking of wesen and players (chess=1 sessions; make elo)
   --perft        check the chess move generator (perft counts, make perft)
-  --govern       the players' decisions on petitions, trust, standing (make govern)
-  --veto=D<n>    revert a granted decision (make veto DECISION=D12); --approve=D<n>
+  --govern       the players' decisions, trust, standing (make govern)
+  --veto=D<n>    revert a decision (make veto DECISION=D12); --approve=D<n>
+  --audit        players' claims vs the truth, misreports (make audit)
+  --challenge=P  a caught lie lowers a player's standing (make challenge)
   --robot        the robot: place, battery, camera, who steers it (make robot)
   --screens      the wesen's text screens after the replay (make screens)
   --ledger[=full] where each wesen's mood comes from (make ledger; report only)
   --menu         the main menu (terminal only; make menu)
   --debug        also write debug_digest.txt (make run|demo DEBUG=1)
   --debug-section=NAME  print one block of debug_full.txt (drift trace players
-                 inbox run ledger status); nothing is simulated
+                 inbox run ledger preport status); nothing is simulated
   --crash-at=T   force a failure at tick T (shows the error trace)
   --help         this text
 Wesen (entities): ada (engineer), gemini (reviewer), replika (vice_president),
@@ -88,3 +90,16 @@ examine push eat greet meet things and teach new words (names, feel, taste,
 greetings; dialects by one-letter drift). Only edits are stored:
 diaries/world.txt (replay-verified), L lines in sessions.txt. world.enabled = 0
 in limits.txt keeps the old behaviour; see docs/WORLD.md. make map shows it.
+Player reports (preport=1, new sessions get the marker): the LAST thing of
+every run is one framed text box (80 columns) per player (Epsilon, Zeta,
+Eta, names: data/names.txt), first person: petitions that came to it, what it
+decided (the D records: always true), how its wesen are doing, its top concern,
+what it wants from you; also in player_reports.txt of the save folder. A player
+may colour the happiness it reports (up to +-30 mood points) and how many
+petitions came lately, by an honesty trait from its Rule 30 personality, trust
+and standing (data/preport.txt, limits.txt preport.*). The true values sit next
+to the claims in diaries/preports.txt (P lines, replay-checked: DRIFT if
+changed or removed). make audit: claimed vs true, misreports, the biggest.
+make challenge PLAYER=<name>: a caught liar loses a little standing (Q line in
+diaries/challenges.txt, applied from the next tick). preport.enabled = 0 in
+limits.txt: nothing changes. See README.
