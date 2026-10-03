@@ -51,8 +51,11 @@ echo "   (second run on the repaired files:)"; "$bin" --ticks=1000 | tail -2
 echo "== 5. drift: robert's stored line 300 edited, ada cut to 100 lines =="
 fresh_copy; head -n 100 "$w/base/diaries/ada.jsonl" > diaries/ada.jsonl
 sed -i '300s/"text":"[a-z]/"text":"X/' diaries/robert.jsonl; n=$(lines diaries)
-"$bin" --ticks=1000; rc=$?
-[ $rc = 1 ] && grep -q "robert tick 300" last_error.txt && ok "stopped (exit 1), names robert tick 300" || bad "rc=$rc"
+rm -f last_error.txt; "$bin" --ticks=1000 > drift5.txt 2>&1; rc=$?; cat drift5.txt
+[ $rc = 1 ] && ! [ -e last_error.txt ] && ! grep -qi 'traceback\|Diary_Sim at\|last_error' drift5.txt && [ "$(sed -n '/drifted/,$p' drift5.txt | wc -l)" -le 4 ] && grep -q '^likely cause: these diaries were probably written by an older build or with different data/ settings' drift5.txt \
+  && grep -q '^fix: move them aside (mv diaries diaries_old_X) or start over with --fresh' drift5.txt && grep -q 'first difference at column [0-9]*: stored ".*" vs generated' drift5.txt \
+  && ok "drift: exit 1, 3 plain lines (what differs, likely cause, fixes), no traceback, no last_error.txt" || bad "drift console"
+[ $rc = 1 ] && grep -q "robert tick 300" debug.txt && ok "stopped (exit 1), names robert tick 300 in debug.txt" || bad "rc=$rc"
 [ "$(lines diaries)" -ge "$n" ] && ok "nothing truncated" || bad "diaries shrank"
 
 echo "== 6. forced crash =="
@@ -215,18 +218,23 @@ cp diaries/sessions.txt s_full.txt; "$kb" --every 1000 > out.txt 2>&1
 cmp -s s_full.txt diaries/sessions.txt || true
 grep -q '^S2 ' diaries/sessions.txt && grep -q '^kalpa 2 (Treta)' out.txt && ok "a finished session is followed by a new vote (S2, Treta) at the common tick" || bad "second session"
 rm -rf "$w/kal/c"; mkdir "$w/kal/c"; cd "$w/kal/c" || exit 1
-"$kb" --every 1000 --crash-at 120 > out.txt 2>&1; [ $? = 1 ] && grep -q "^$(echo "$rec" | cut -d' ' -f1-4)" diaries/sessions.txt && [ "$(wc -l < diaries/sessions.txt)" = 3 ] && ok "crash mid-session: the S1 record is already on disk" || bad "crash record"
+"$kb" --every 1000 --crash-at 120 > out.txt 2>&1; [ $? = 1 ] && grep -q "^$(echo "$rec" | cut -d' ' -f1-4)" diaries/sessions.txt && [ "$(wc -l < diaries/sessions.txt)" = 4 ] && ok "crash mid-session: the S1 record is already on disk" || bad "crash record"
 "$kb" --every 1000 > out.txt 2>&1
-grep -q '^kalpa 1 (Satya) resumes: votes' out.txt && grep -q "target tick $len" out.txt && [ "$(wc -l < diaries/sessions.txt)" = 3 ] && cmp -s "$w/kal/a/diaries/sessions.txt" <(cat diaries/sessions.txt) && [ "$(wc -l < diaries/gemini.jsonl)" = "$len" ] \
+grep -q '^kalpa 1 (Satya) resumes: votes' out.txt && grep -q "target tick $len" out.txt && [ "$(wc -l < diaries/sessions.txt)" = 4 ] && cmp -s "$w/kal/a/diaries/sessions.txt" <(cat diaries/sessions.txt) && [ "$(wc -l < diaries/gemini.jsonl)" = "$len" ] \
   && ok "crash then bare rerun: same target, no second vote, sessions.txt identical to the clean run" || bad "resume of a crashed session"
 cmp -s <(sed 's/"ts":"[^"]*"//' diaries/robert.jsonl) <(sed 's/"ts":"[^"]*"//' "$w/kal/a/diaries/robert.jsonl") && ok "resumed diaries identical to the uninterrupted run" || bad "resumed diaries differ"
 "$kb" --ticks $((len + 30)) --every 1000 > out.txt 2>&1
 tail -1 diaries/sessions.txt | grep -Eq "^S2 start=$len votes=[0-9/]+ len=30 src=explicit$" && grep -q '^kalpa 2 (Treta): explicit, 30 ticks' out.txt && ok "--ticks overrides the vote: recorded as src=explicit with the would-be votes" || bad "explicit session"
 "$kb" --more 5 --every 1000 > out.txt 2>&1; tail -1 diaries/sessions.txt | grep -Eq "^S3 start=$((len + 30)) .* len=5 src=explicit$" && ok "--more overrides the vote too (S3, Dvapara)" || bad "--more session"
-cp -r diaries ../d_ok; sed -i '3s/votes=[0-9]*/votes=7/' diaries/sessions.txt; "$kb" --more 0 > out.txt 2>&1
+cp -r diaries ../d_ok; sed -i '/^S1 /s/votes=[0-9]*/votes=7/' diaries/sessions.txt; "$kb" --more 0 > out.txt 2>&1
 head -1 debug.txt | grep -q '^DRIFT' && grep -q 'import FAILED.*sessions.txt S1' out.txt && ok "tampered votes in sessions.txt: import FAILED, DRIFT" || bad "tampered sessions.txt"
-rm -rf diaries; cp -r ../d_ok diaries; head -n 3 diaries/sessions.txt > s.cut; printf 'S9 start=99999 votes=1/2/3/4 len=5 src=vote\nS10 sta' >> s.cut; cp s.cut diaries/sessions.txt; "$kb" --more 0 > out.txt 2>&1
+rm -rf diaries; cp -r ../d_ok diaries; head -n 4 diaries/sessions.txt > s.cut; printf 'S9 start=99999 votes=1/2/3/4 len=5 src=vote\nS10 sta' >> s.cut; cp s.cut diaries/sessions.txt; "$kb" --more 0 > out.txt 2>&1
 grep -q 'warning: sessions.txt line .* is not a complete session record' out.txt && grep -q 'session 9 starting at tick 99999' out.txt && grep -q '^import OK' out.txt && ok "half-written / ahead records only warn" || bad "sessions.txt warnings"
+rm -rf diaries; cp -r ../d_ok diaries; grep -q '^# build v' diaries/sessions.txt && ok "sessions.txt header carries '# build vX.YYY'" || bad "no build header"
+rm -f last_error.txt; sed -i 's/^# build v.*/# build v0.001/' diaries/sessions.txt; sed -i '/^S1 /s/votes=[0-9]*/votes=7/' diaries/sessions.txt; "$kb" --more 0 > out.txt 2>&1
+grep -q 'diaries written by build v0.001, this is v' out.txt && ! [ -e last_error.txt ] && ok "drift hint names the build that wrote the diaries when it differs" || bad "build hint"
+sed -i '/^# build v/d' diaries/sessions.txt; sed -i '/^S1 /s/votes=[0-9]*/votes=7/' diaries/sessions.txt; "$kb" --more 0 > out.txt 2>&1
+grep -q '^likely cause' out.txt && ! grep -q 'diaries written by build' out.txt && ok "an old sessions.txt without a build line: that sentence is skipped" || bad "old file hint"
 rm -rf diaries; cp -r ../d_ok diaries; sed -i '1s/42/7/' diaries/sessions.txt; "$kb" --more 0 > out.txt 2>&1
 grep -q 'sessions.txt is from seed 7' out.txt && ok "sessions.txt of another seed: clear error" || bad "sessions.txt seed"
 

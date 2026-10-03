@@ -15,7 +15,7 @@ warn.seed_ignored = warning: --seed={1} ignored; the existing diaries use seed {
 fresh.moved = old diaries moved to {1}/
 err.gap = {1}.jsonl line {2}: found tick {3}, expected {4} (missing or duplicate tick)
 err.seed = {1}.jsonl line {2}: seed {3} differs from seed {4} of the other lines
-err.drift = backup and code have drifted: {1} tick {2}; first difference at {3} (stored|generated)
+err.drift = backup and code have drifted: {1} tick {2}; first difference at {3}
 err.number = option {1}: "{2}" is not a whole number
 err.range = option {1} must be at least 1
 err.option = unknown option "{1}" (try --help)
@@ -92,3 +92,6 @@ warn.session_ahead = warning: sessions.txt lists session {1} starting at tick {2
 err.session = sessions.txt S{1} (start tick {2}): stored {3}, the replay gives {4}; backup, code or data/kalpas.txt changed (use --fresh)
 err.session_seed = diaries/sessions.txt is from seed {1}, not this run's seed; move it away or use --fresh
 hdr.sessions = # S<n> start=<tick> votes=<a>/<b>/<c>/<d> len=<ticks> src=vote|explicit
+drift.cause = likely cause: these diaries were probably written by an older build or with different data/ settings{1}
+drift.build = ; diaries written by build v{1}, this is v{2}
+drift.fix = fix: move them aside (mv diaries diaries_old_X) or start over with --fresh; to keep reading old diaries use the matching older build

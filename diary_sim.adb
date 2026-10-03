@@ -1,4 +1,4 @@
---  Version: 0.009
+--  Version: 0.010
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -34,8 +34,9 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.009";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.010";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
+   Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
    Fresh, Seed_Shown : Boolean := False;
    Explicit : Boolean := False;        --  --ticks or --more given: no vote
@@ -437,6 +438,7 @@ procedure Diary_Sim is
    Common, Longest : Natural := 0;
    Names : Unbounded_String;
    Import_Block, Kalpa_Line : Unbounded_String;
+   Disk_Build : Unbounded_String;      --  '# build' of diaries/sessions.txt (empty: unknown, older file)
    I : Positive := 1;
    Verify_To : Natural := 0;           --  ticks replayed (verify only) before the import line
    Import_Done : Boolean := False;
@@ -529,7 +531,7 @@ procedure Diary_Sim is
          begin
             if Tick <= Int (Disk (E).Length) then   --  already on disk: compare, do not write
                if No_Ts (Line) /= No_Ts (Disk (E) (Positive (Tick))) then
-                  raise Diary_Error with Msg ("err.drift", Name (E), Img (Tick),
+                  raise Drift_Error with Msg ("err.drift", Name (E), Img (Tick),
                                               Diff_At (No_Ts (Disk (E) (Positive (Tick))), No_Ts (Line)));
                end if;
                Verified := Verified + 1;
@@ -695,6 +697,7 @@ procedure Diary_Sim is
       Lines : Str_Vectors.Vector;
       Found : Boolean;
       Mark  : constant String := "# seed ";
+      Bmark : constant String := "# build v";
       R     : Session_Rec;
       OK    : Boolean;
    begin
@@ -709,6 +712,8 @@ procedure Diary_Sim is
                if L /= Mark & Img (Seed) then
                   raise Diary_Error with Msg ("err.session_seed", L (L'First + Mark'Length .. L'Last));
                end if;
+            elsif L'Length > Bmark'Length and then L (L'First .. L'First + Bmark'Length - 1) = Bmark then
+               Disk_Build := To_Unbounded_String (L (L'First + Bmark'Length .. L'Last));
             elsif L'Length > 0 and then L (L'First) = 'S' then
                Parse_Session (L, R, OK);
                if OK then Sessions.Append (R); else Warn (Msg ("warn.session_bad", Img (I))); end if;
@@ -728,7 +733,7 @@ procedure Diary_Sim is
                V : constant Kalpa_Votes := Votes_At (T);
             begin
                if V /= R.Votes then
-                  raise Diary_Error with Msg ("err.session", Img (R.N), Img (R.Start), "votes " & Votes_Text (R.Votes),
+                  raise Drift_Error with Msg ("err.session", Img (R.N), Img (R.Start), "votes " & Votes_Text (R.Votes),
                                               "votes " & Votes_Text (V));
                end if;
             end;
@@ -749,6 +754,7 @@ procedure Diary_Sim is
       else
          TIO.Create (F, TIO.Out_File, Sessions_Path);
          TIO.Put_Line (F, "# seed " & Img (Seed));
+         TIO.Put_Line (F, "# build v" & Build);
          TIO.Put_Line (F, Msg ("hdr.sessions"));
       end if;
       TIO.Put_Line (F, Session_Line (R));
@@ -789,6 +795,25 @@ procedure Diary_Sim is
          Kalpa_Line := To_Unbounded_String (Msg ("kalpa.vote", Img (Next_N), Yuga (Next_N), Votes_Text (V), Img (R.Len)));
       end if;
    end Decide_Session;
+
+   --  An expected stop (drift at import, bad diary): a few plain lines, debug.txt DRIFT, exit 1.
+   --  No traceback and no last_error.txt: this is not a crash.
+   procedure Validation_Stop (Message : String; Drift : Boolean) is
+      Built : constant String :=
+        (if Length (Disk_Build) > 0 and then To_String (Disk_Build) /= Build
+         then Msg ("drift.build", To_String (Disk_Build), Build) else "");
+   begin
+      if not Import_Done then TIO.Put_Line (Msg ("import.failed", Message)); else TIO.Put_Line (Message); end if;
+      if Drift then
+         TIO.Put_Line (Msg ("drift.cause", Built));
+         TIO.Put_Line (Msg ("drift.fix"));
+      end if;
+      if Import_Done then Write_Petitions; end if;
+      Write_Debug ("DRIFT", "error: " & Message & (if Built'Length > 0 then ASCII.LF & Msg ("drift.cause", Built) else ""));
+      TIO.Put_Line (Msg ("debug.attach"));
+      Ada.Command_Line.Set_Exit_Status (1);
+   end Validation_Stop;
+
 begin
    Load_Data;
    while I <= Ada.Command_Line.Argument_Count loop
@@ -1037,12 +1062,10 @@ exception
       TIO.Put_Line (TIO.Standard_Error, Ada.Exceptions.Exception_Message (E));
       Write_Debug ("USAGE", "error: " & Ada.Exceptions.Exception_Message (E));
       Ada.Command_Line.Set_Exit_Status (2);
-   when E : Diary_Error =>   --  drift, bad diary, seed mismatch: a validation stop
-      if not Import_Done then TIO.Put_Line (Msg ("import.failed", Ada.Exceptions.Exception_Message (E))); end if;
-      if Import_Done then Write_Petitions; end if;
-      Write_Debug ("DRIFT", Error_Brief (E));
-      Report (E);
-      Ada.Command_Line.Set_Exit_Status (1);
+   when E : Drift_Error =>   --  stored lines differ from the replay: an expected stop, no traceback
+      Validation_Stop (Ada.Exceptions.Exception_Message (E), True);
+   when E : Diary_Error =>   --  bad diary, seed mismatch, misplaced folder: also an expected stop
+      Validation_Stop (Ada.Exceptions.Exception_Message (E), False);
    when E : others =>
       if not Import_Done then TIO.Put_Line (Msg ("import.failed", Ada.Exceptions.Exception_Message (E))); end if;
       if Import_Done then Write_Petitions; end if;

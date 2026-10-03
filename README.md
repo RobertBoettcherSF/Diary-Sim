@@ -17,8 +17,15 @@ Plain Ada, standard library only. Not pushed anywhere yet (local git repo).
    `import OK: none (fresh start, seed 42)`); stored diaries always win.
 3. The import line says what was loaded: `import OK: 4 entities, 200 ticks verified,
    continuing from 201 (800 lines on disk, longest 200)`.
-4. Corrupt or drifted backup: `import FAILED: backup and code have drifted: <entity>
-   tick <n> ...`, status `DRIFT` in `debug.txt`, exit 1, nothing is truncated. A
+4. Corrupt or drifted backup (typically diaries from an OLDER build, or changed `data/`):
+   a drift is an expected stop, not a crash: 3 plain lines (`import FAILED: backup and
+   code have drifted: <entity> tick <n>; first difference at column N: stored "..." vs
+   generated "..."`, the likely cause, the two fixes: `mv diaries diaries_old_X` or
+   `--fresh`; to keep reading old diaries use the matching older build), status `DRIFT`
+   in `debug.txt`, exit 1, no traceback and no `last_error.txt`, nothing is truncated.
+   If `diaries/sessions.txt` has a `# build vX.YYY` line that differs from this build, the
+   cause line adds `diaries written by build v0.007, this is v0.010` (older files
+   without it skip that sentence). A
    `diaries/diaries/` or wrongly cased `Diaries/` folder is detected: if `diaries/` has
    no `*.jsonl` the run stops with a hint to copy the folder's contents up one level
    (with real diaries present it only warns).
@@ -51,8 +58,8 @@ for the number of NEW ticks (think kalpas in Hinduism: ages of different length)
 - **Explicit wins:** `TICKS=N`, `--more N` or `--ticks N` run that length; the session is
   still recorded (`src=explicit`) together with the votes the entities would have cast.
 - **The record:** `diaries/sessions.txt` (inside `diaries/`, so your backup has it),
-  append-only and flushed: `S3 start=630 votes=120/340/80/410 len=230 src=vote`, after a
-  `# seed N` header. A session of 0 new ticks (a pure verification) is not recorded.
+  append-only and flushed: `S3 start=630 votes=120/340/80/410 len=230 src=vote`, after
+  `# seed N` and `# build vX.YYY` header lines. A session of 0 new ticks (a pure verification) is not recorded.
 - **Verified on import:** while the replay passes the start tick of a stored session the
   votes are recomputed from the replayed state; a difference stops the run as DRIFT
   (`import FAILED`, nothing truncated). So **changing `data/kalpas.txt` (or the
@@ -303,6 +310,7 @@ Any unhandled error writes `last_error.txt` (seed, tick, entity, exception,
 frames innermost first, then the raw `GNAT.Traceback.Symbolic` text) and prints the
 same to the console, at most 15 lines. Built with `-g -bargs -E` (see Makefile).
 `--crash-at=T` forces a failure in tick T (only for a tick not yet on disk) to show it.
+A stored-diary drift or a bad diary is NOT a crash: no traceback block, no `last_error.txt` (see Resume).
 After a crash just run again: the diaries are flushed after every event. The
 console shows at most 15 lines of the error block, then `wrote last_error.txt, please
 paste it` and `back up diaries/ before the next run`.

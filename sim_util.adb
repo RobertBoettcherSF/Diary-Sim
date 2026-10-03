@@ -1,4 +1,4 @@
---  Version: 0.004
+--  Version: 0.005
 pragma Ada_2022;
 
 with Ada.Calendar.Formatting, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Maps, Ada.Directories,
@@ -193,7 +193,7 @@ package body Sim_Util is
          function Cut (S : String) return String is
            (if From > S'Length then "" else S (S'First + From - 1 .. S'First + Integer'Min (S'Length, From + 35) - 1));
       begin
-         return "column" & I'Image & "|" & Cut (A) & "|" & Cut (B);
+         return "column" & I'Image & ": stored """ & Cut (A) & """ vs generated """ & Cut (B) & """";
       end;
    end Diff_At;
 
