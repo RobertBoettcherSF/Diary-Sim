@@ -1,4 +1,4 @@
-# Version: 0.021
+# Version: 0.022
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -27,7 +27,7 @@
 # make ledger    print the mood ledger (report only): per wesen the top 3 drains and gains of mood, whole run and last
 #                 session, one sentence each (FULL=1: also by action, place, verb, event, rest model); replays and
 #                 verifies the save, writes nothing
-# make elo       print the Elo ranking of the four wesen and the three players (chess=1 sessions; display names; replays and
+# make elo       print the Elo ranking of the four wesen and the players (chess=1 sessions; display names; replays and
 #                 verifies the save, writes nothing).  make perft: the move generator checks (data/chess.txt), no save needed
 # make screens   print the text screens of the wesen as of the end of the replay (screen=1 sessions: words known, things examined,
 #                 words seen on others' screens; pinned *, unknown ?) and the notes lying on things; read-only, replay-verified

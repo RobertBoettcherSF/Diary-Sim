@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Containers.Vectors, Ada.Strings.Fixed, Ada.Strings.Unbounded, Interfaces;
@@ -61,7 +61,10 @@ package body Sim_Dharma is
    Ended : Boolean := False;
 
    Base_Aware, Sens : array (Entity_Id) of Integer := [others => 0];   --  from the Rule 30 core bits
-   Watch : array (Entity_Id) of Player_Id := [others => 1];
+   type Watch_Array is array (Entity_Id) of Player_Id;
+   Watch, Watch0 : Watch_Array := [others => 1];   --  Watch0: players.txt 'watches'; Watch: this session's
+   Takes : array (Entity_Id) of Natural := [others => 0];            --  players.txt 'takes': the player that takes E over in a players4=1 session
+   Last_P : Player_Id := 3;
 
    --  The players: persistent state.
    type Trusts is array (Entity_Id) of Integer;
@@ -138,6 +141,8 @@ package body Sim_Dharma is
    function Aware_Pts (E : Entity_Id) return Integer is (Integer (Aware_M (E) / 1000));
    function Player_Name (P : Player_Id) return String is (To_String (P_Name (P)));
    function Watcher (E : Entity_Id) return Player_Id is (Watch (E));
+   function Chess_Watcher (E : Entity_Id) return Player_Id is (Watch0 (E));
+   function Last_Player return Player_Id is (Last_P);
    --  name (role): goal, straight from data/players.txt (needs no Init)
    function Player_Info (P : Player_Id) return String is
       K : constant String := "player." & Img (Integer (P)) & ".";
@@ -193,7 +198,7 @@ package body Sim_Dharma is
    --  ---- Init --------------------------------------------------------------------------------
    --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (parsing of the data/ keys, bit counts)
    procedure Init (Seed : Int) is
-      Defaults : constant array (Player_Id) of String (1 .. 5) := ["iris ", "sol  ", "noor "];
+      Defaults : constant array (Player_Id) of String (1 .. 5) := ["iris ", "sol  ", "noor ", "vega "];
    begin
       Sd := Seed;
       for A in Action loop Deed_W (A) := L ("deed." & Low (A), 0); end loop;
@@ -264,6 +269,8 @@ package body Sim_Dharma is
       Last_C := Null_Unbounded_String; Last_Win_N := 0;
       Msgs := [others => 0];
       Watch := [others => 1];
+      Takes := [others => 0];
+      Last_P := 3;
       for P in Player_Id loop
          declare
             K : constant String := "player." & Img (Integer (P)) & ".";
@@ -276,6 +283,9 @@ package body Sim_Dharma is
             P_Goal_Tag (P) := To_Unbounded_String (Fx.Trim ((if Bar > 0 then G (G'First .. Bar - 1) else G), Ada.Strings.Both));
             for W of Split (Txt (K & "watches", ""), ',') loop
                if Find_Wesen (W) > 0 then Watch (Entity_Id (Find_Wesen (W))) := P; end if;
+            end loop;
+            for W of Split (Txt (K & "takes", ""), ',') loop
+               if Find_Wesen (W) > 0 then Takes (Entity_Id (Find_Wesen (W))) := Natural (P); end if;
             end loop;
             --  personality: hashed start row, then Rule 30 steps (own salts 5040 .. 5071)
             for I in 0 .. 31 loop
@@ -294,6 +304,7 @@ package body Sim_Dharma is
             Trust (P) := [others => Trust_Start];
          end;
       end loop;
+      Watch0 := Watch;
       for E in Entity_Id loop
          Base_Aware (E) := Aw_Base_Max * Core_Percent (Seed, E) / 100;
          Sens (E) := Sens_Min + (Sens_Max - Sens_Min) * Core_Percent (Seed, E) / 100;
@@ -352,7 +363,7 @@ package body Sim_Dharma is
                   for E in Entity_Id loop Raise_Aware (E, Aw_All, A.Tick); end loop;
                when Relay =>
                   for E in Entity_Id loop
-                     if A.To in 1 .. 3 and then Natural (Watch (E)) = A.To then Relay_To (Watch (E), E, A); end if;
+                     if A.To in 1 .. 4 and then Natural (Watch (E)) = A.To then Relay_To (Watch (E), E, A); end if;
                   end loop;
                when Answer =>
                   for E in Entity_Id loop Relay_To (Watch (E), E, A); end loop;
@@ -394,9 +405,16 @@ package body Sim_Dharma is
    end Tick_End;
 
    --  ---- sessions ----------------------------------------------------------------------------
-   procedure Begin_Life (Seed, Tick : Int; Session : Positive; Locations : Positive; Dharma : Boolean) is
+   procedure Begin_Life (Seed, Tick : Int; Session : Positive; Locations : Positive; Dharma : Boolean; Players4 : Boolean := False) is
    begin
       Life_Start := Tick;
+      Last_P := (if Players4 then 4 else 3);   --  player 4 is there from the first players4=1 session on and takes its wesen over
+      Watch := Watch0;
+      if Players4 then
+         for E in Entity_Id loop
+            if Takes (E) in 1 .. 4 then Watch (E) := Player_Id (Takes (E)); end if;
+         end loop;
+      end if;
       for E in Entity_Id loop
          declare
             Shift : constant Integer := Clamp (Net (E) / Bias_Div, -Bias_Cap, Bias_Cap);
@@ -577,7 +595,7 @@ package body Sim_Dharma is
               Cut (To_String (D.Text), 40));
       end loop;
       --  players: trust, attention, tone (the state is recorded in the Y lines)
-      for P in Player_Id loop
+      for P in Player_Id range 1 .. Last_P loop
          declare
             Alerts, Notes : Integer := 0;
          begin
@@ -608,13 +626,13 @@ package body Sim_Dharma is
             end if;
          end;
       end loop;
-      for P in Player_Id loop
+      for P in Player_Id range 1 .. Last_P loop
          Res.Append ("Y" & Img (Session) & " tick=" & Img (Tick) & " player=" & Player_Name (P) & " attn=" & Img (Attn (P))
                      & " tone=" & Sgn (Int (Tone (P))) & " brev=" & Img (Brev (P)) & " warm=" & Sgn (Int (Warm (P)))
                      & " trust=" & Img (Trust (P) (1)) & "/" & Img (Trust (P) (2)) & "/" & Img (Trust (P) (3)) & "/" & Img (Trust (P) (4)));
       end loop;
       --  the reports of the players to Robert (the inbox): same facts, own emphasis, omission, wording
-      for P in Player_Id loop
+      for P in Player_Id range 1 .. Last_P loop
          declare
             type Cand is record
                Idx, Prio : Natural;
@@ -668,7 +686,7 @@ package body Sim_Dharma is
             end loop;
          end;
       end loop;
-      for P in Player_Id loop   --  govern=1: the changes and decisions, from the D records, whatever the tone
+      for P in Player_Id range 1 .. Last_P loop   --  govern=1: the changes and decisions, from the D records, whatever the tone
          for K in 1 .. Natural (Gov_Lines (P).Length) loop
             Inbox.Append ("I" & Img (Integer (Inbox.Length) + 1) & " " & Msg ("sev.2") & " from=" & Player_Name (P)
                           & " s" & Img (Session) & " t" & Img (Tick) & " | " & Gov_Lines (P) (K) & " | src=s" & Img (Session) & ":govern");
@@ -698,7 +716,7 @@ package body Sim_Dharma is
       declare
          Pl : Unbounded_String;
       begin
-         for P in Player_Id loop
+         for P in Player_Id range 1 .. Last_P loop
             Append (Pl, (if P = 1 then "" else " | ") & Player_Name (P) & " attn " & Img (Attn (P)) & " tone " & Sgn (Int (Tone (P)))
                     & " trust " & Img (Trust (P) (1)) & "/" & Img (Trust (P) (2)) & "/" & Img (Trust (P) (3)) & "/" & Img (Trust (P) (4)));
          end loop;

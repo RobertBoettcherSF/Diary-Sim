@@ -111,10 +111,10 @@ word keeps 960).
   (`rebirth=<location>` in its `D` line). **Replay compatibility:** the move only applies to sessions
   with `dharma=1`, i.e. new diaries; a session of an older diary replays exactly as written.
 
-**Players.** Three in-sim players (`data/players.txt`: name, role, 3-4 values, one goal) sit
+**Players.** Three in-sim players (a fourth one in `players4=1` sessions, see "The fourth player"; `data/players.txt`: name, role, 3-4 values, one goal) sit
 between the wesen and Robert, the real player. Each has a personality (tone, brevity, warmth) from Rule 30
 bits, an **attention**, a **trust** per wesen and a tone bias, all persisted as `Y<n>` lines in
-`sessions.txt`. All three read the same recorded facts (karma, liberation, unrest, conflict, awareness,
+`sessions.txt`. All of them read the same recorded facts (karma, liberation, unrest, conflict, awareness,
 anchor, petition, what happened to Robert's messages) and each writes up to `inbox.max_lines`
 summary lines per session to **`diaries/inbox.txt`** (newest `inbox.view` = 40 lines; the file is a
 view, the replay regenerates everything and compares). Bias changes **emphasis** (goal and value
@@ -155,7 +155,7 @@ behaviour byte for byte. Design and file formats: `docs/WORLD.md`.
 
 ```
 ada = Jack        gemini = John     replika = Jill     robert = Jane
-iris = Player 1   sol = Player 2    noor = Player 3                (the in-sim players below Robert)
+iris = Player 1   sol = Player 2    noor = Player 3   vega = Player 4   (the in-sim players below Robert)
 ```
 
 Edit the names freely (no rebuild, no `--fresh`). Only DISPLAY text uses them: the console, `run_report.txt`,
@@ -264,7 +264,7 @@ needed: the next session (`make run` / `--more`) of an old save simply gets the 
 without it.
 
 **Markers of a session:** every session line in `diaries/sessions.txt` lists the features it STARTED with (`world`, `rest`, `grant`,
-`screen`, `chess`, `robot`, `govern`, `scoin`), taken from `data/limits.txt` (`*.enabled`) when the session begins. A running save can gain
+`screen`, `chess`, `robot`, `govern`, `scoin`, `preport`, `players4`), taken from `data/limits.txt` (`*.enabled`) when the session begins. A running save can gain
 a feature mid-way without `--fresh`: the next NEW session carries the marker and the feature begins there (robot and governance start with
 their first marked session; earlier sessions replay as before). A session that is resumed (unfinished) keeps its old markers. The end
 report shows the blocks of the features the LAST session has; for the others it prints one line, `robot: off for this save (...),
@@ -278,7 +278,7 @@ wording and the checks of the move generator in `data/chess.txt`). New sessions 
 (`chess.enabled = 0`: nothing changes). When a wesen RESTS next to another wesen (same or neighbouring cell) or in range of a
 player (a player is in range of the wesen it watches and of those next to it), the pair may sit down to a correspondence game
 (`chess.start_pct`), and one move is made whenever they meet again after `chess.gap` ticks. The two players in range of a resting
-wesen may play each other too (`chess.player_pct`), so wesen and players (Player 1, Player 2, Player 3) are all opponents.
+wesen may play each other too (`chess.player_pct`), so wesen and players (Player 1, Player 2, Player 3) are all opponents (Player 4 does not play chess).
 
 * **Rules:** own legal-move generator with castling, en passant, promotion, check, checkmate, stalemate, the 50-move rule; a repetition
   (`chess.repeat`) and the ply cap (`chess.max_plies`) end a game as a draw. Moves are recorded as coordinates (`e2e4`, `a7a8q`)
@@ -363,25 +363,26 @@ running save needs `--fresh`.
 
 ## Player reports: text boxes, claims and `make audit` (`preport=1` sessions)
 
-At the very end of EVERY run (after the report, the vote table, "Saved to ..." - the last thing Robert sees) each of the three players
-(Player 1, Player 2, Player 3; names from `data/names.txt`) writes Robert a report as a framed text box: `+ - |`, exactly 80 columns, printed in one
-piece, first person, built from the templates of `data/preport.txt` (three tones - plain / calm / alarm - from the player's Rule 30
+At the very end of EVERY run (after the report, the vote table, "Saved to ..." - the last thing Robert sees) each player
+(Player 1, Player 2, Player 3 and, from `players4=1` sessions on, Player 4; names from `data/names.txt`) writes Robert a report as a framed text box: `+ - |`, exactly 80 columns, printed in frames
+pieces of at most `preport.page_lines` lines, first person, built from the templates of `data/preport.txt` (three tones - plain / calm / alarm - from the player's Rule 30
 personality): how many petitions came to it (and whether it was quiet lately), what it decided (granted / partial / deferred / refused /
 reverted - the **true counts of the D records**, never omitted, never changed), how the wesen it watches are doing ("overall happiness
 about +21 on a scale from -100 to +100"), its top concern (the topic it was asked about most; refused / deferred ones count double) and
 one line about what it wants from Robert. The same boxes go to `player_reports.txt` in the save folder (latest run). Sample (seed 42, 1800
-ticks):
+ticks, the box of Player 4):
 
 ```
-+-- Player 3 reports to Robert (tick 1800) ------------------------------------+
-| I am Player 3. I keep an eye on Jane. Here is my report.                     |
-| 9 petitions came to me so far. Lately there were only a few.                 |
-| I granted 1, granted 2 in part, put 2 off for later and refused 6.           |
-| Overall happiness of Jane is about +82 on a scale from -100 to +100. They    |
++-- Player 4 reports to Robert (tick 2100) ------------------------------------+
+| Player 4 here. I am watching John closely and I want you to read this        |
+| carefully.                                                                   |
+| 11 petitions came to me so far. Lately it has been quiet.                    |
+| I granted 4, granted 3 in part, put 5 off for later and refused 4.           |
+| Overall happiness of John is about +78 on a scale from -100 to +100. They    |
 | are doing very well.                                                         |
-| My top concern is more time to rest.                                         |
-| Most of the wishes I see I have to turn down or put off. I would like you to |
-| look at my refusals and approve the ones you agree with.                     |
+| My top concern is quicker recovery after hard work.                          |
+| Too many wishes pile up that I cannot grant. Look at my refusals, Robert,    |
+| and tell me where I am wrong.                                                |
 +------------------------------------------------------------------------------+
 ```
 
@@ -406,6 +407,30 @@ ticks):
 * `preport.enabled = 0` in `data/limits.txt` (or `govern.enabled = 0`): new sessions carry no marker; nothing is written, printed or
   changed (byte-identical to before). Changing `preport.*` or `data/preport.txt` numbers of a save with preport sessions: use `--fresh`
   (the claims are part of the record; wording changes are safe). Needs `govern=1` (the D records).
+
+## The fourth player (`players4=1` sessions)
+
+Robert has four players below him: **Player 1 .. Player 4** (ids `iris`, `sol`, `noor`, `vega`). Player 4 is a full player, like the other three:
+its own Rule 30 personality (tone, brevity, warmth from `hash(seed, vega)`), attention, a trust and a standing per wesen (`Y` lines), a
+governance share (it decides the petitions of the wesen it watches, `D` records with `player=vega`), an inbox voice, an honesty trait (the
+P records of the report boxes) and a report box of its own.
+
+* **Data, not code:** `data/players.txt` has the `player.4.*` keys (name, role, values, goal). `player.N.takes = <wesen>` says which wesen the
+  player takes over from the one that watched it before: `player.4.takes = gemini` - Player 1 keeps ada (Jack), Player 4 gets gemini (John),
+  Player 2 replika (Jill), Player 3 robert (Jane): four wesen, four players, one watcher each. Without a `takes` key the old watch rule
+  (`player.N.watches`) is used. Its display name is `vega = Player 4` in `data/names.txt`. The number of players is a data question up to
+  four; a fifth player would need a bigger id range in `sim_dharma.ads` (and a tour through the loops that are gated by `Last_Player`).
+* **Marker:** a new session carries `players4=1` in its `diaries/sessions.txt` line when `players4.enabled = 1` (default) in
+  `data/limits.txt` (and `dharma=1`). Sessions without the marker replay with three players, exactly as before; **an existing save gets
+  Player 4 from its next NEW session on, no `--fresh` needed**: earlier sessions are replayed with three players (byte-identical), and a
+  removed marker is DRIFT. `players4.enabled = 0`: no marker, three players, everything as before (byte-identical). A session that is resumed keeps its old markers.
+* **Chess:** Player 4 does not play chess (the Elo list stays seven names; changing that would change every chess session).
+* **Boxes:** at the end of a run the four boxes are written to `player_reports.txt`. On the console they come in **frames of at most
+  `preport.page_lines` = 23 lines, one write per frame**: when the console is a terminal a line `-- more: press Enter --` waits between the
+  frames (`preport.pause = 0` in `data/limits.txt`: no waiting) (so each frame fits an 80x24 screen); in a pipe the frames follow each other. The last thing printed is still the hint line.
+  `make audit` and `make govern` list all four players.
+* **Addressing:** `make say PLAYER="Player 4" TEXT="..."` (also `player4`, `4`, `vega`; `make challenge PLAYER=4`). On a save whose latest
+  session has no `players4=1` an address to Player 4 is recorded but nobody passes it on (no effect).
 
 ## The debug digest (`DEBUG=1`, `--debug`)
 

@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 --  See sim_govern.ads.
 pragma Ada_2022;
 
@@ -489,7 +489,7 @@ package body Sim_Govern is
          return R;
       end if;
       R.Append (Msg ("govern.head"));
-      for P in Player_Id loop
+      for P in Player_Id range 1 .. Last_Player loop
          R.Append (Msg ("govern.player", Player_Name (P), Counter_Line (P)));
          for E in Entity_Id loop
             if Watcher (E) = P then

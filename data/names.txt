@@ -8,7 +8,8 @@ ada = Jack
 gemini = John
 replika = Jill
 robert = Jane
-# the in-sim players below Robert (the human player); a player is addressed as 'Player 1', 'Player1' or '1' (make say PLAYER=...)
+# the in-sim players below Robert (the human player); a player is addressed as 'Player 1', 'Player1' or '1' (make say PLAYER=...); Player 4 only exists in players4=1 sessions
 iris = Player 1
 sol = Player 2
 noor = Player 3
+vega = Player 4

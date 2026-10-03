@@ -16,7 +16,7 @@ bad() { echo "  FAIL -- $*"; fails=$((fails + 1)); }
 idn() { sed 's/^\([a-z]*\) *=.*/\1 = \1/' "$root/data/names.txt" > "$1/names.txt"; }
 idata="$w/idata"; mkdir -p "$idata"; cp -r "$root/data/." "$idata/"; idn "$idata"
 # screens (and later chess) change the dice of the words: the older scenarios run with them off; their own scenarios switch them on
-sed -i 's/^screen.enabled = .*/screen.enabled = 0/; s/^chess.enabled = .*/chess.enabled = 0/; s/^robot.enabled = .*/robot.enabled = 0/; s/^govern.enabled = .*/govern.enabled = 0/; s/^screen.coin_enabled = .*/screen.coin_enabled = 0/' "$idata/limits.txt"
+sed -i 's/^screen.enabled = .*/screen.enabled = 0/; s/^chess.enabled = .*/chess.enabled = 0/; s/^robot.enabled = .*/robot.enabled = 0/; s/^govern.enabled = .*/govern.enabled = 0/; s/^screen.coin_enabled = .*/screen.coin_enabled = 0/; s/^players4.enabled = .*/players4.enabled = 0/; s/^preport.pause = .*/preport.pause = 0/' "$idata/limits.txt"
 mkdir -p "$w/ib/bin"; cp "$bin" "$w/ib/bin/"; cp -r "$idata" "$w/ib/data"; bin="$w/ib/bin/diary_sim"   # the binary beside its identity-names data
 lines() { cat "$1"/*.jsonl | wc -l; }
 dups()  { for f in "$1"/*.jsonl; do grep '}}$' "$f" | grep -o '"tick":[0-9]*' | sort | uniq -d; done | wc -l; }
@@ -338,7 +338,7 @@ for i in 1 2 3; do
 done
 grep -q 'import OK: 4 entities, 80 ticks verified, continuing from 81' o3.txt && grep -q '^session 3 .*ticks 80 -> 120 (+40)' o3.txt && [ "$(grep -c . diaries/sessions.txt)" -ge 5 ] && ok "1, 2, 3 runs: ticks 40/80/120, sessions 1/2/3, word lines grow, each run replay-verifies the earlier ones, 'since the last session' block shown" || bad "accumulation"
 [ "$(wc -c < debug.txt)" -le 1500 ] && grep -q '^session 3 ' debug.txt && grep -q '^Saved to ' debug.txt && ok "debug.txt stays <= 1500 B and carries the session and save lines" || bad "debug.txt session lines"
-rm -rf "$w/mig"; mkdir -p "$w/mig/S"; tar -C "$root" --exclude=.git --exclude=obj --exclude=bin --exclude=diaries --exclude=entities -cf - . | tar -C "$w/mig/S" -xf -; idn "$w/mig/S/data"; ( cd "$w/mig/S" && make > /dev/null 2>&1 && DIARY_HOME=. bin/diary_sim --more 10 --every 1000 > /dev/null 2>&1 )
+rm -rf "$w/mig"; mkdir -p "$w/mig/S"; tar -C "$root" --exclude=.git --exclude=obj --exclude=bin --exclude=diaries --exclude=entities -cf - . | tar -C "$w/mig/S" -xf -; idn "$w/mig/S/data"; sed -i "s/^preport.pause = .*/preport.pause = 0/" "$w/mig/S/data/limits.txt"; ( cd "$w/mig/S" && make > /dev/null 2>&1 && DIARY_HOME=. bin/diary_sim --more 10 --every 1000 > /dev/null 2>&1 )
 cd "$w/mig/S" && env -u DIARY_HOME bin/diary_sim --more 5 --every 1000 > "$w/mig/o.txt" 2>&1
 grep -q '^Found a save inside the source folder' "$w/mig/o.txt" && [ -d diaries ] && grep -q 'import OK: none (fresh start' "$w/mig/o.txt" && ok "a save inside the source folder, no terminal: hint only, nothing copied or touched" || bad "migration hint"
 if command -v python3 > /dev/null; then
@@ -1126,6 +1126,47 @@ okn=0; for pair in "Player 1:iris" "player1:iris" "PLAYER 2:sol" "Player3:noor" 
 "$pnb" --say "Player 9" --text "x" > pn9.txt 2>&1; rc=$?; [ "$rc" != 0 ] && ok "an unknown player name is refused (exit $rc)" || bad "unknown player accepted"
 grep -q '^iris *= *Player 1' "$root/data/names.txt" && grep -q '^ada *= *Jack' "$root/data/names.txt" && ! grep -qi 'greek\|alpha\|beta' "$root/data/names.txt" && grep -q 'PLAYER="Player 1"' "$root/README.md" && ok "data/names.txt and the README use the new names (internal ids stay iris / sol / noor, ada / gemini / replika / robert)" || bad "names docs"
 grep -q 'Player 1' "$root/data/help.txt" && awk 'length > 79 { n++ } END { exit n > 0 }' "$root/data/help.txt" && ok "help text names the players and stays within 79 columns" || bad "help names"
+unset DIARY_HOME
+
+echo "== 40. fourth player (players4=1): Player 4 with its own personality, standing, watcher, share, honesty and report box; old saves get it from their next new session =="
+rm -rf "$w/p4"; mkdir -p "$w/p4"
+for d in a b c; do mkdir -p "$w/p4/$d/bin" "$w/p4/$d/h"; cp "$bin" "$w/p4/$d/bin/"; cp -r "$idata" "$w/p4/$d/data"; sed -i 's/^govern.enabled = .*/govern.enabled = 1/' "$w/p4/$d/data/limits.txt"; done
+sed -i 's/^players4.enabled = .*/players4.enabled = 1/; s/^preport.pause = .*/preport.pause = 1/' "$w/p4/b/data/limits.txt"
+runp4() { local d="$w/p4/$1"; ( cd "$d/h" || exit 1; export DIARY_HOME="$d/h"; "$d/bin/diary_sim" --seed 42 --ticks 300 --yes --every 5000 > "$d/c1.txt" 2>&1; for i in 2 3 4; do "$d/bin/diary_sim" --more 300 --every 5000 > "$d/c$i.txt" 2>&1; if [ "$1" = a ] && [ "$i" = 2 ]; then sed -i 's/^players4.enabled = .*/players4.enabled = 1/' "$d/data/limits.txt"; fi; done ); }
+runp4 a; runp4 b; runp4 c
+cd "$w/p4/b/h" || exit 1; export DIARY_HOME="$w/p4/b/h"
+n4=$(grep -c '^S[0-9].* players4=1' diaries/sessions.txt); na=$(grep -c '^S[0-9].* players4=1' "$w/p4/a/h/diaries/sessions.txt"); nc=$(grep -c 'players4' "$w/p4/c/h/diaries/sessions.txt")
+[ "$n4" = 4 ] && [ "$na" = 2 ] && [ "$nc" = 0 ] && ! grep -q '^S[12] .*players4' "$w/p4/a/h/diaries/sessions.txt" && ok "new sessions carry players4=1 ($n4 of 4); a save made without it gets the marker from its next new session only (S3, S4: $na), no --fresh; players4.enabled = 0 never writes it" || bad "players4 markers ($n4 $na $nc)"
+"$w/p4/a/bin/diary_sim" --more 0 --every 5000 > "$w/p4/ra.txt" 2>&1; ! head -1 "$w/p4/a/h/debug.txt" | grep -q '^DRIFT' && grep -q '^import OK: 4 entities, 1200 ticks verified' "$w/p4/ra.txt" && ok "the old save (two 3-player sessions, then two 4-player sessions) replays and verifies all 1200 ticks" || bad "old save replay"
+oldsame=0; for e in ada gemini replika robert; do cmp -s <(head -n 600 "$w/p4/a/h/diaries/$e.jsonl" | sed -E 's/"ts":"[^"]*",//') <(head -n 600 "$w/p4/c/h/diaries/$e.jsonl" | sed -E 's/"ts":"[^"]*",//') || oldsame=$((oldsame + 1)); done
+dsame=$(cmp -s <(awk '/^D[0-9]/ { split($0, a, " t="); split(a[2], b, " "); if (b[1] <= 600) print }' "$w/p4/a/h/diaries/govern.txt") <(awk '/^D[0-9]/ { split($0, a, " t="); split(a[2], b, " "); if (b[1] <= 600) print }' "$w/p4/c/h/diaries/govern.txt") && echo 0 || echo 1)
+[ "$oldsame" = 0 ] && [ "$dsame" = 0 ] && ok "the first two sessions are byte-identical with and without the fourth player in later sessions (diaries and D records up to tick 600)" || bad "old sessions changed ($oldsame $dsame)"
+dv=$(grep -c ' player=vega ' diaries/govern.txt); dc3=$(grep -c ' player=vega ' "$w/p4/c/h/diaries/govern.txt")
+[ "$dv" -ge 1 ] && [ "$dc3" = 0 ] && ok "Player 4 (vega) decides petitions: $dv D records in the 4-player save, none with players4 off" || bad "vega decisions ($dv $dc3)"
+wmap=$(grep '^P[0-9]' diaries/preports.txt | sed -E 's/.* player=([a-z]+) wesen=([a-z]+) .*/\2=\1/' | sort -u | tr '\n' ' ')
+[ "$wmap" = "ada=iris gemini=vega replika=sol robert=noor " ] && ok "watchers: every wesen has one player (Player 1 ada, Player 4 gemini, Player 2 replika, Player 3 robert; player.4.takes in players.txt)" || bad "watchers ($wmap)"
+"$w/p4/b/bin/diary_sim" --govern > gv.txt 2>&1; "$w/p4/b/bin/diary_sim" --inbox > ib.txt 2>&1; "$w/p4/b/bin/diary_sim" --audit > au.txt 2>&1
+[ "$(grep -cE '^(iris|sol|noor|vega): ' gv.txt)" = 4 ] && [ "$(grep -cE '^(iris|sol|noor|vega): claims' au.txt)" = 4 ] && grep -q 'vega' ib.txt && ok "--govern, --audit and the inbox view list four players" || bad "views ($(grep -cE '^(iris|sol|noor|vega): ' gv.txt) / $(grep -cE '^(iris|sol|noor|vega): claims' au.txt))"
+tail -n +$(( $(grep -n '^Saved to ' ../c4.txt | tail -1 | cut -d: -f1) + 1 )) ../c4.txt > ../tailc4.txt
+nb=$(grep -c '^+-- .* reports to Robert (tick 1200) -*+$' ../tailc4.txt); wd=$(grep -E '^[+|]' ../tailc4.txt | awk 'length != 80 { n++ } END { print n + 0 }')
+nb3=$(grep -c '^+-- .* reports to Robert' "$w/p4/c/c4.txt")
+[ "$nb" = 4 ] && [ "$wd" = 0 ] && [ "$nb3" = 3 ] && grep -q '^+-- vega reports to Robert' ../tailc4.txt && grep -q '^+-- vega reports to Robert' player_reports.txt && ok "four 80-column boxes at the end of the run (Player 1 .. Player 4), three with players4 off" || bad "boxes ($nb $wd $nb3)"
+np=$(grep -c '^P[0-9]' diaries/preports.txt); pv=$(grep -c 'player=vega wesen=gemini' diaries/preports.txt)
+[ "$np" = 16 ] && [ "$pv" = 4 ] && ok "honesty: the P records name the watcher (vega: 4 rounds), 16 claims in all, each player with its own trait" || bad "P lines ($np $pv)"
+# pagination: frames of at most preport.page_lines lines, one write each; the text is the same whatever the page size
+if command -v script > /dev/null 2>&1; then
+  printf '\n\n\n\n' | script -qec "$w/p4/b/bin/diary_sim --more 0 --every 5000" /dev/null 2>&1 | tr -d '\r' > pg.txt
+  pl=$(sed -n 's/^preport.page_lines = \([0-9]*\).*/\1/p' "$w/p4/b/data/limits.txt")
+  fm=$(awk -v lim="$pl" '/^\+-- .* reports to Robert/ && !on { on = 1 } on { if ($0 ~ /^-- more/) { if (n > m) m = n; n = 0; k++ } else n++ } END { if (n > m) m = n; print m + 0, k + 0 }' pg.txt)
+  [ "${fm% *}" -le "$pl" ] && [ "${fm#* }" -ge 1 ] && [ "$(grep -c '^+-- .* reports to Robert' pg.txt)" = 4 ] && ok "on a terminal the boxes come in frames of at most $pl lines (largest ${fm% *}, ${fm#* } pauses), all four boxes shown" || bad "pagination ($fm)"
+fi
+grep -E '^[+|]' ../tailc4.txt > ../box23.txt; cp -r "$w/p4/b" "$w/p4/b8"; sed -i 's/^preport.page_lines = .*/preport.page_lines = 8/' "$w/p4/b8/data/limits.txt"; cd "$w/p4/b8/h" || exit 1; DIARY_HOME="$w/p4/b8/h" "$w/p4/b8/bin/diary_sim" --more 0 --every 5000 > ../p8.txt 2>&1
+cmp -s <(grep -E '^[+|]' ../p8.txt) ../box23.txt && ok "the page size changes only where the pauses fall, not the boxes" || bad "page size changes the text"
+cd "$w/p4/b/h"; "$w/p4/b/bin/diary_sim" --say "Player 4" --text "hello" > sy.txt 2>&1; tail -n 1 diaries/says.txt | grep -q ' to=vega ' && "$w/p4/b/bin/diary_sim" --say player4 --text "x" > /dev/null 2>&1 && "$w/p4/b/bin/diary_sim" --say 4 --text "x" > /dev/null 2>&1 && ok "--say reaches Player 4 as 'Player 4', player4 and 4 (recorded to=vega)" || bad "say vega"
+cp diaries/sessions.txt ../sess.keep; sed -i '/^S4 /s/ players4=1//' diaries/sessions.txt; "$w/p4/b/bin/diary_sim" --more 0 --every 5000 > ../t1.txt 2>&1
+head -1 debug.txt | grep -q '^DRIFT' && ok "S line with its players4=1 marker removed: DRIFT" || bad "marker tamper"
+cp ../sess.keep diaries/sessions.txt; "$w/p4/b/bin/diary_sim" --more 0 --every 5000 > ../t2.txt 2>&1; grep -q '^import OK: 4 entities, 1200 ticks verified' ../t2.txt && ok "restored: replays again" || bad "p4 restore"
+grep -q '^player.4.name = vega' "$root/data/players.txt" && grep -q '^player.4.takes' "$root/data/players.txt" && grep -q '^vega *= *Player 4' "$root/data/names.txt" && grep -q '^players4.enabled' "$root/data/limits.txt" && grep -q 'players4' "$root/README.md" && grep -q 'Player 4' "$root/data/help.txt" && ok "players.txt, names.txt, limits.txt, README and --help describe the fourth player" || bad "p4 docs"
 unset DIARY_HOME
 
 rm -rf "$w"

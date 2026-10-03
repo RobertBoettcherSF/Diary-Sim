@@ -1,6 +1,6 @@
---  Version: 0.003
+--  Version: 0.004
 --  The chess games of diary_sim (chess=1 sessions), a rest activity of the four wesen and the three players.
---  A competitor is a wesen (1 .. 4) or a player (5 .. 7: Player 1, Player 2, Player 3 = iris, sol, noor).  A player is "in range" of a wesen
+--  A competitor is a wesen (1 .. 4) or a player (5 .. 7: Player 1, Player 2, Player 3 = iris, sol, noor; player 4 does not play chess).  A player is "in range" of a wesen
 --  that it watches or that stands in the same or a neighbouring cell as one it watches.  When a wesen rests, it may play a
 --  correspondence game against a wesen next to it or a player in range (a game starts if there is none; one move is made when
 --  they meet again after chess.gap ticks), and two players in range of it may play each other.  The side to move chooses by hash

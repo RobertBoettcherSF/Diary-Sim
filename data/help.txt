@@ -31,7 +31,7 @@ Wesen (entities): ada (engineer), gemini (reviewer), replika (vice_president),
 robert (human). State: energy 0..100, mood -100..100, location 0..3
 (ranges, word-game limits, vote thresholds: data/limits.txt; wording:
 data/words.txt, data/messages.txt; vocabulary: data/vocab.txt).
-Names SHOWN: data/names.txt (id = Name, also for the 3 players); ids, files,
+Names SHOWN: data/names.txt (id = Name, also for the players); ids, files,
 hashes and diaries never change. Rest (new sessions, rest=1): each wesen has
 its own recovery rate, a quick rest after work restores less, a work burst
 starts a cool-down (limits.txt rest.*); R lines in sessions.txt.
@@ -57,7 +57,7 @@ make play AUTO-LOAD: 'Save folder: <path>', 'Found N sessions, T ticks -
 continuing' (or 'No save found - creating it') come first. Text: data/menu.txt.
 End of session: each wesen (the 4 entities) names a favourite word, recorded
 in diaries/sessions.txt (W lines) and verified on import.
-Record-first layer (karma, rebirth, unrest, anchor, awareness) + 3 players who
+Record-first layer (karma, rebirth, unrest, anchor, awareness) + players who
 write reports to Robert: diaries/inbox.txt (make inbox, menu Inbox). Robert
 speaks between sessions: make say PLAYER=<p> or WESEN=<w> TEXT="..." (else
 all); make answer TEXT="..." (the latest petition); AS=name. Replay-verified.
@@ -91,7 +91,7 @@ greetings; dialects by one-letter drift). Only edits are stored:
 diaries/world.txt (replay-verified), L lines in sessions.txt. world.enabled = 0
 in limits.txt keeps the old behaviour; see docs/WORLD.md. make map shows it.
 Player reports (preport=1, new sessions get the marker): the LAST thing of
-every run is one framed text box (80 columns) per player (Player 1, 2, 3;
+every run is one framed text box (80 columns) per player (Player 1 to 4;
 names: data/names.txt), first person: petitions that came to it, what it
 decided (the D records: always true), how its wesen are doing, its top concern,
 what it wants from you; also in player_reports.txt of the save folder. A player
@@ -103,3 +103,8 @@ changed or removed). make audit: claimed vs true, misreports, the biggest.
 make challenge PLAYER=<name>: a caught liar loses a little standing (Q line in
 diaries/challenges.txt, applied from the next tick). preport.enabled = 0 in
 limits.txt: nothing changes. See README.
+Player 4 (players4=1: new sessions get the marker; an old save gets it from
+its next new session, no --fresh): a 4th player with its own personality,
+trust, watcher, decisions, honesty and box; players4.enabled = 0 in
+limits.txt: 3 players as before. Boxes come in frames of preport.page_lines
+(23) lines, Enter between them on a terminal. make say PLAYER="Player 4".

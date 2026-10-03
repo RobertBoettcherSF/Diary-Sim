@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  See sim_games.ads.
 pragma Ada_2022;
 
@@ -174,7 +174,7 @@ package body Sim_Games is
    function In_Range (P : Comp_Id; E : Entity_Id) return Boolean is
    begin
       for W in Entity_Id loop
-         if Comp_Id (Sim_Dharma.Watcher (W)) + 4 = P and then (W = E or else Sim_Things.Adjacent (E, W)) then return True; end if;
+         if Comp_Id (Sim_Dharma.Chess_Watcher (W)) + 4 = P and then (W = E or else Sim_Things.Adjacent (E, W)) then return True; end if;
       end loop;
       return False;
    end In_Range;

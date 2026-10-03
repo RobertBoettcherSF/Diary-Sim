@@ -21,3 +21,11 @@ player.3.role = keeper of order
 player.3.values = order,fairness,loyalty,calm
 player.3.goal = conflict | keep commitments and duties clear
 player.3.watches = robert
+# Player 4 (players4=1 sessions, new sessions get the marker; players4.enabled in limits.txt): it joins at the start of such a session, takes over
+# the wesen named in 'takes' from the player that watched it before (its personality is hashed from the seed like the others; it keeps no chess
+# rating).  Old sessions of a save replay with three players exactly as before.
+player.4.name = vega
+player.4.role = keeper of the shared stories
+player.4.values = voice,fairness,growth
+player.4.goal = petition | make sure every petition is heard
+player.4.takes = gemini

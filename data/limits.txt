@@ -296,3 +296,8 @@ preport.tone2 = 80
 preport.tone3 = 150
 preport.challenge_cost = 3
 preport.width = 80
+# The fourth player (data/players.txt player.4.*): new sessions carry players4=1 unless 0; a text box frame has at most this many lines
+players4.enabled = 1
+preport.page_lines = 23
+# 1: on a terminal the next frame waits for Enter (-- more --); 0: the frames follow each other
+preport.pause = 1

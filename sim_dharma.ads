@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  The Buddhism layer of diary_sim, RECORD-FIRST: karma, reincarnation values, attachment
 --  (unrest), the commitment ladder with an anchor, awareness ("feels watched"), and the three
 --  in-sim PLAYERS that sit between the wesen and Robert (the real player) and write him summary
@@ -17,7 +17,9 @@ package Sim_Dharma is
 
    use Sim_Util, Sim_World;
 
-   type Player_Id is range 1 .. 3;
+   --  Players 1 .. 3 exist from the start; player 4 joins with the first players4=1 session (Begin_Life) and takes over the
+   --  wesen named in data/players.txt (player.4.takes).  Last_Player says how many are in the current session (3 or 4).
+   type Player_Id is range 1 .. 4;
    --  say: from Robert to one wesen; say_all: to all four; relay: to a player, who may pass it
    --  on to the wesen it watches; answer: to all players (an answer to the latest collective petition).
    type Address_Kind is (Say, Say_All, Relay, Answer);
@@ -30,7 +32,9 @@ package Sim_Dharma is
    function Player_Info (P : Player_Id) return String;   --  name (role): goal
    function Find_Player (Text : String) return Natural;   --  0: no such player
    function Find_Wesen (Text : String) return Natural;    --  0: no such wesen
-   function Watcher (E : Entity_Id) return Player_Id;     --  the player that watches E
+   function Watcher (E : Entity_Id) return Player_Id;     --  the player that watches E (in this session)
+   function Chess_Watcher (E : Entity_Id) return Player_Id;   --  the player of players.txt 'watches' (players 1 .. 3): the chess opponents
+   function Last_Player return Player_Id;                 --  3, or 4 in a players4=1 session
 
    --  ---- per tick (record only) -------------------------------------------------------------
    --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (counters, clamps, integer arithmetic)
@@ -45,7 +49,7 @@ package Sim_Dharma is
    --  A life begins with a session: the four values are rolled (salts 5001 .. 5004), biased by
    --  the karma.  Dharma = False (a session of an older diary): no rebirth move.
    --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (clamped sums of hashed rolls)
-   procedure Begin_Life (Seed, Tick : Int; Session : Positive; Locations : Positive; Dharma : Boolean);
+   procedure Begin_Life (Seed, Tick : Int; Session : Positive; Locations : Positive; Dharma : Boolean; Players4 : Boolean := False);
    function Rebirth_Location (E : Entity_Id) return Integer;   --  -1: none (liberated wesen only)
    procedure Mark_Start;   --  remembers the numbers for the "since the last session" block
 

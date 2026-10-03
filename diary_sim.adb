@@ -1,4 +1,4 @@
---  Version: 0.029
+--  Version: 0.030
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -92,7 +92,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.029";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.030";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -2171,6 +2171,58 @@ procedure Diary_Sim is
       if Fails > 0 then Ada.Command_Line.Set_Exit_Status (1); end if;
    end Do_Perft;
 
+   --  The box block of the players, last on the console: whole boxes in frames of at most preport.page_lines lines (80x24 terminal), ONE
+   --  write per frame; on a terminal (and preport.pause = 1) a frame waits for Enter, otherwise (pipe, file) the frames follow each other.
+   procedure Put_Frames (Block : String) is
+      Max : constant Natural := Natural (Int'Max (8, Limit ("preport.page_lines", 23)));
+      Frame : Unbounded_String;
+      N : Natural := 0;       --  lines in the frame
+      Box : Unbounded_String;
+      Box_N : Natural := 0;   --  lines of the box being read (the blank line after it ends it)
+      Ask : constant Boolean := Limit ("preport.pause", 1) /= 0 and then Is_Tty (0) and then Is_Tty (1);
+      Frames : Natural := 0;
+      procedure Flush is
+      begin
+         if N = 0 then return; end if;
+         if Frames > 0 and then Ask then
+            Con.Put_Line (Msg ("preport.more"));
+            begin
+               TIO.Skip_Line;
+            exception
+               when TIO.End_Error => null;
+            end;
+         end if;
+         Con.Put (To_String (Frame));
+         Frames := Frames + 1;
+         Frame := Null_Unbounded_String; N := 0;
+      end Flush;
+      procedure Take_Box is
+      begin
+         if Box_N = 0 then return; end if;
+         if N + Box_N > Max then Flush; end if;
+         Append (Frame, To_String (Box)); N := N + Box_N;
+         Box := Null_Unbounded_String; Box_N := 0;
+      end Take_Box;
+      From : Natural := Block'First;
+   begin
+      for I in Block'Range loop
+         if Block (I) = ASCII.LF then
+            declare
+               Ln : constant String := Block (From .. I - 1);
+            begin
+               if Ln = "" then
+                  Append (Box, ASCII.LF); Box_N := Box_N + 1; Take_Box;   --  a box and the blank line after it
+               else
+                  Append (Box, Ln & ASCII.LF); Box_N := Box_N + 1;
+               end if;
+            end;
+            From := I + 1;
+         end if;
+      end loop;
+      Take_Box;
+      Flush;
+   end Put_Frames;
+
    --  The audit after the replay (--audit / make audit): what the players claimed against what was true.
    function Audit_Text return String is
       R : Unbounded_String;
@@ -2319,6 +2371,7 @@ procedure Diary_Sim is
       Robot : Boolean := False;         --  robot=1: the robot steered through the screens (Sim_Robot, diaries/robot.txt)
       Govern : Boolean := False;        --  govern=1: the players decide petitions (Sim_Govern, diaries/govern.txt)
       Scoin : Boolean := False;         --  scoin=1: screen blends have their own per-session cap and rate (not the global coin_cap)
+      Players4 : Boolean := False;      --  players4=1: a fourth player (Sim_Dharma) takes over a wesen from this session on
       Preport : Boolean := False;       --  preport=1: the players report to Robert in text boxes; their claims are recorded (Sim_Preport, diaries/preports.txt)
    end record;
    package Session_Vectors is new Ada.Containers.Vectors (Positive, Session_Rec);
@@ -2341,7 +2394,7 @@ procedure Diary_Sim is
       & (if R.World then " world=1" else "") & (if R.Rest then " rest=1" else "") & (if R.Grant then " grant=1" else "")
       & (if R.Screen then " screen=1" else "") & (if R.Chess then " chess=1" else "")
       & (if R.Robot then " robot=1" else "") & (if R.Govern then " govern=1" else "") & (if R.Scoin then " scoin=1" else "")
-      & (if R.Preport then " preport=1" else ""));
+      & (if R.Preport then " preport=1" else "") & (if R.Players4 then " players4=1" else ""));
    function Yuga (N : Positive) return String is (Msg ("yuga." & Img ((N - 1) mod 4)));
    --  The four votes of a session that starts after tick Start (state: St, known words).
    function Votes_At (Start : Int) return Kalpa_Votes is
@@ -2381,6 +2434,7 @@ procedure Diary_Sim is
       R.Govern := Token (L, "govern") = "1";
       R.Scoin := Token (L, "scoin") = "1";
       R.Preport := Token (L, "preport") = "1";
+      R.Players4 := Token (L, "players4") = "1";
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
         and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0;
       while OK and then K < 4 loop
@@ -2521,7 +2575,7 @@ procedure Diary_Sim is
    --  A liberated wesen of a new session moves to the location its own dice name (record + effect).
    procedure Start_Life (R : Session_Rec) is
    begin
-      Sim_Dharma.Begin_Life (Seed, R.Start, R.N, L_Max + 1, R.Dharma);
+      Sim_Dharma.Begin_Life (Seed, R.Start, R.N, L_Max + 1, R.Dharma, R.Players4);
       World_Active := R.World;
       if R.Rest and then not Rest_Active then Rest_Begin (Seed); end if;   --  the state runs on from session to session
       Rest_Active := R.Rest;
@@ -2722,6 +2776,7 @@ procedure Diary_Sim is
    function Robot_Wanted return Boolean is (Screen_Wanted and then Limit ("robot.enabled", 1) /= 0);     --  robot=1 needs the screens
    function Scoin_Wanted return Boolean is (Screen_Wanted and then Limit ("screen.coin_enabled", 1) /= 0);   --  scoin=1 needs the screens
    function Govern_Wanted return Boolean is (Rest_Wanted and then Limit ("govern.enabled", 1) /= 0);     --  govern=1 needs the rest model (the levers)
+   function Players4_Wanted return Boolean is (Limit ("players4.enabled", 1) /= 0);   --  players4=1: the fourth player (data/players.txt player.4.*)
    function Preport_Wanted return Boolean is (Govern_Wanted and then Limit ("preport.enabled", 1) /= 0);   --  preport=1 needs the governance (the D records)
 
    --  After the replay of 1 .. Common: resume the unfinished session, or start one
@@ -2742,7 +2797,7 @@ procedure Diary_Sim is
       Session_N := (if Sessions.Is_Empty then 0 else Sessions.Last_Element.N);
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
-               Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Preport => Preport_Wanted);
+               Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -2758,7 +2813,7 @@ procedure Diary_Sim is
          Kalpa_Line := To_Unbounded_String (Msg ("kalpa.resume", Img (R.N), Yuga (R.N), Votes_Text (R.Votes), Img (R.Len), Img (Ticks)));
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
-               World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Preport => Preport_Wanted);
+               World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);
@@ -2870,13 +2925,27 @@ procedure Diary_Sim is
       return Res;
    end Inbox_File_Lines;
 
+   --  How many players does the save have (the inbox view does not replay): 4 once a session carries players4=1.
+   function Players_In_Save return Sim_Dharma.Player_Id is
+      Lines : Str_Vectors.Vector;
+      Found : Boolean;
+   begin
+      if Ada.Directories.Exists (Sessions_Path) then
+         Read_Lines (Sessions_Path, Lines, Found);
+         for L of Lines loop
+            if L'Length > 1 and then L (L'First) = 'S' and then Token (L, "players4") = "1" then return 4; end if;
+         end loop;
+      end if;
+      return 3;
+   end Players_In_Save;
+
    function Inbox_Page return String is
       V : constant Str_Vectors.Vector := Inbox_File_Lines;
       R : Unbounded_String;
    begin
       if V.Is_Empty then return Msg ("inbox.none") & ASCII.LF & Msg ("inbox.answer") & ASCII.LF; end if;
       Append (R, Msg ("inbox.page", Img (Integer (V.Length))) & ASCII.LF);
-      for P in Sim_Dharma.Player_Id loop Append (R, "  " & Msg ("inbox.players", Sim_Dharma.Player_Info (P)) & ASCII.LF); end loop;
+      for P in Sim_Dharma.Player_Id range 1 .. Players_In_Save loop Append (R, "  " & Msg ("inbox.players", Sim_Dharma.Player_Info (P)) & ASCII.LF); end loop;
       for L of V loop Append (R, L & ASCII.LF); end loop;
       Append (R, Msg ("inbox.answer") & ASCII.LF);
       return To_String (R);
@@ -4065,7 +4134,7 @@ begin
       end if;
       if Govern_Active then   --  the players' decisions: counts per player, trust and standing, the last decisions
          Append (Rep, Msg ("govern.rep") & ASCII.LF);
-         for P in Sim_Dharma.Player_Id loop
+         for P in Sim_Dharma.Player_Id range 1 .. Sim_Dharma.Last_Player loop
             Append (Rep, Msg ("govern.player", Sim_Dharma.Player_Name (P), Sim_Govern.Counter_Line (P)) & ASCII.LF);
          end loop;
          for E in Entity_Id loop
@@ -4139,7 +4208,7 @@ begin
                          Img (Petition_Total), Ada.Directories.Full_Name ("petitions.txt")));
       Con.Put_Line (Msg ("pet.attach"));
       Put_Saved;
-      if Preport_Active then Con.Put (Sim_Preport.Boxes (Ticks, Mood_Now, Pets_Now)); end if;   --  the last thing Robert sees: the boxes of the players, in one piece
+      if Preport_Active then Put_Frames (Sim_Preport.Boxes (Ticks, Mood_Now, Pets_Now)); end if;   --  the last thing Robert sees: the boxes of the players
    end;
 exception
    when E : Usage_Error =>

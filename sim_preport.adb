@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  See sim_preport.ads.
 pragma Ada_2022;
 
@@ -302,7 +302,7 @@ package body Sim_Preport is
         (if Last_T = Tick and then not Latest.Is_Empty then Latest else Make_Entries (Tick, Mood, Pets, 0));
       R : Unbounded_String;
    begin
-      for P in Player_Id loop
+      for P in Player_Id range 1 .. Last_Player loop
          Append (R, Box_Of (P, Tick, Made) & ASCII.LF);
       end loop;
       Append (R, Shown (Msg ("preport.hint")) & ASCII.LF);
@@ -318,7 +318,7 @@ package body Sim_Preport is
          R.Append (Msg ("audit.none"));
          return R;
       end if;
-      for P in Player_Id loop
+      for P in Player_Id range 1 .. Last_Player loop
          declare
             Claims, Lies : Natural := 0;
             Big : Entry_T;
