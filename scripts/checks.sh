@@ -187,6 +187,8 @@ total=$(grep -h -o 'filed petition P[0-9]*' diaries/*.jsonl | wc -l); lines=$(gr
 echo "   $total petitions in the diaries, $lines in petitions.txt"
 [ "$total" -ge 8 ] && [ "$total" -le 60 ] && [ "$lines" = "$total" ] && ok "a handful of petitions, one per diary line, all in petitions.txt" || bad "petition counts"
 grep -q '^P1 tick=[0-9]* from=[a-z]* topic=[a-z_]* .*wish=' petitions.txt && ok "line format P<n> tick= from= topic= wish=" || bad "petition line format"
+bad_o=$(grep -v ' repeat=' petitions.txt | grep -c 'Once again'); bad_r=$(grep ' repeat=' petitions.txt | grep -vc 'wish=Once again'); bad_w=$(grep -ci 'we could use\|I mean it kindly' petitions.txt)
+[ "$bad_o" = 0 ] && [ "$bad_r" = 0 ] && [ "$bad_w" = 0 ] && ok "'Once again' opens exactly the repeat=N petitions; no 'we could use ... my days' person mix, no 'Kindly ... I mean it kindly'" || bad "petition wording ($bad_o $bad_r $bad_w)"
 for n in ada gemini replika robert; do c=$(grep -c "from=$n " petitions.txt); [ "$c" -ge 1 ] && [ "$c" -le 30 ] || bad "$n filed $c petitions"; done
 grep -q 'petitions.txt (small) for the agenda' out.txt && grep -q 'wrote petitions.txt' out.txt && grep -q '^ada words.* pet [0-9]' debug.txt && grep -q '^topics ' debug.txt && ok "console/debug.txt mention petitions, topics line present" || bad "console/debug petition lines"
 cp petitions.txt p_full.txt; sed -i 's/^propose.file_cap = .*/propose.file_cap = 5/' "$w/pet/data/limits.txt"; "$w/pet/bin/diary_sim" --ticks=1000 > /dev/null

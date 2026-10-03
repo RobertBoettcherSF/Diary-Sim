@@ -1,4 +1,4 @@
---  Version: 0.011
+--  Version: 0.012
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
@@ -528,7 +528,7 @@ package body Sim_World is
       Ben   : constant Integer := Integer'Min (100, Benches);
       Total : Integer := 0;
       Pick  : Positive;
-      Rep   : Natural;
+      Rep, Opening : Natural;
       W     : array (1 .. Max_Topics) of Integer := [others => 0];
       Open_L : Str_Vectors.Vector renames Words (Wish_Open);
       Close_L : Str_Vectors.Vector renames Words (Wish_Close);
@@ -550,12 +550,26 @@ package body Sim_World is
          end loop;
       end if;
       Rep := Topic_By (E, Topic);
+      declare   --  wording only: the opening is the same dice value, "Once again" (one block) only for a repeated topic
+         Len : constant Natural := Natural (Open_L.Length);
+         Blk : constant Natural := Natural (Limit ("propose.repeat_block", 3));
+         Size : constant Natural := Len / 6;
+      begin
+         Opening := Pick60 (Seed, Eid, Tick, 800) mod Len;
+         if Blk in 1 .. 6 and then Size > 0 and then Len = 6 * Size then
+            if Rep > 0 then
+               Opening := (Blk - 1) * Size + Opening mod Size;
+            elsif Opening / Size = Blk - 1 then
+               Opening := (if Blk = 1 then Size else 0) + Opening mod Size;
+            end if;
+         end if;
+      end;
       Petitions.Append
         (Petition_Rec'
            (Tick => Tick, From => E, Topic => Topic, Repeat => Rep,
             Granted => 0,
             Wish => To_Unbounded_String
-              (Open_L (Open_L.First_Index + Pick60 (Seed, Eid, Tick, 800) mod Natural (Open_L.Length)) & " "
+              (Open_L (Open_L.First_Index + Opening) & " "
                & To_String (Topics (Topic).Phrase) & " "
                & Close_L (Close_L.First_Index + Pick60 (Seed, Eid, Tick, 850) mod Natural (Close_L.Length)))));
       Topic_By (E, Topic) := Rep + 1;

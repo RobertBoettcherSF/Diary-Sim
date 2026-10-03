@@ -11,4 +11,4 @@ new_action 3 0 10 0 5 = a new kind of action to try
 different_locations 2 0 10 0 0 = different places to be in
 more_talk_partners 2 0 30 10 0 = more people to talk to
 quieter_mood 2 0 35 0 0 = a calmer and steadier mood
-other 3 0 0 0 0 = something small changed in my world
+other 3 0 0 0 0 = a small change to my daily routine

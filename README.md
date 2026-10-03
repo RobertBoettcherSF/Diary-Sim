@@ -609,7 +609,7 @@ The topic is rolled by state-weighted dice from the fixed list `data/topics.txt`
 `faster_work_recovery`; low mood -> `quieter_mood`, `more_talk_partners`; few known
 words -> `more_words`; many benches -> `bigger_bench_budget`; plus `new_action`,
 `different_locations`, `other`). With `propose.repeat_percent` (15) chance the entity
-re-files its previous topic; the line then carries `repeat=N` (N earlier petitions of
+re-files its previous topic; the line then carries `repeat=N` (and only such a petition opens with "Once again": `propose.repeat_block`) (N earlier petitions of
 that entity on that topic). The wish text is `[wish_open]` + topic phrase +
 `[wish_close]` from `data/words.txt` (60 entries each, base-60 picks). The adverb of a wish opens the sentence (`Briefly, I would like quicker recovery ...`); the same 60-entry lists, wording only, no replay change. Everything is a
 pure function of (seed, entity, tick, state), so the replay rebuilds it.

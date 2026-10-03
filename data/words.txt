@@ -1,5 +1,8 @@
 # diary_sim word lists: 60 entries per list = 6 openings x 10 endings.
 # [wish_open]: 6 blocks of 10: no adverb, then Kindly, Once again, Honestly, Briefly, Politely at the START of the sentence.
+#   Block 3 ("Once again") is used ONLY for a petition on a topic the wesen has filed before (the repeat=N marker; the block number is
+#   propose.repeat_block in limits.txt); a first-time petition that would land in it gets the same ending of block 1 instead.
+#   The openings talk in the first person singular ("I could use ... so my days go better"); "us" appears only in the closing.
 # Section names are the action names. Lines starting with # are comments.
 # A pick uses the base-60 rule: D4 (reroll on 1) -> block 1/2/3 of 20, then D20.
 # [propose] is the action text, [wish_open] and [wish_close] frame a petition wish (the topic
@@ -886,7 +889,7 @@ My wish is
 I am asking for
 I hope for
 May I have
-We could use
+I could use
 I petition for
 Kindly, I would like
 Kindly, please consider
@@ -896,7 +899,7 @@ Kindly, my wish is
 Kindly, I am asking for
 Kindly, I hope for
 Kindly, may I have
-Kindly, we could use
+Kindly, I could use
 Kindly, I petition for
 Once again, I would like
 Once again, please consider
@@ -906,7 +909,7 @@ Once again, my wish is
 Once again, I am asking for
 Once again, I hope for
 Once again, may I have
-Once again, we could use
+Once again, I could use
 Once again, I petition for
 Honestly, I would like
 Honestly, please consider
@@ -916,7 +919,7 @@ Honestly, my wish is
 Honestly, I am asking for
 Honestly, I hope for
 Honestly, may I have
-Honestly, we could use
+Honestly, I could use
 Honestly, I petition for
 Briefly, I would like
 Briefly, please consider
@@ -926,7 +929,7 @@ Briefly, my wish is
 Briefly, I am asking for
 Briefly, I hope for
 Briefly, may I have
-Briefly, we could use
+Briefly, I could use
 Briefly, I petition for
 Politely, I would like
 Politely, please consider
@@ -936,7 +939,7 @@ Politely, my wish is
 Politely, I am asking for
 Politely, I hope for
 Politely, may I have
-Politely, we could use
+Politely, I could use
 Politely, I petition for
 
 [wish_close]
@@ -945,7 +948,7 @@ so my days go better. That is all.
 so my days go better. I will wait.
 so my days go better. Please answer soon.
 so my days go better. No hurry.
-so my days go better. I mean it kindly.
+so my days go better. I mean it well.
 so my days go better. It is a small thing.
 so my days go better. I remain hopeful.
 so my days go better. Please think it over.
@@ -955,7 +958,7 @@ because it matters to me. That is all.
 because it matters to me. I will wait.
 because it matters to me. Please answer soon.
 because it matters to me. No hurry.
-because it matters to me. I mean it kindly.
+because it matters to me. I mean it well.
 because it matters to me. It is a small thing.
 because it matters to me. I remain hopeful.
 because it matters to me. Please think it over.
@@ -965,7 +968,7 @@ so I can do my part. That is all.
 so I can do my part. I will wait.
 so I can do my part. Please answer soon.
 so I can do my part. No hurry.
-so I can do my part. I mean it kindly.
+so I can do my part. I mean it well.
 so I can do my part. It is a small thing.
 so I can do my part. I remain hopeful.
 so I can do my part. Please think it over.
@@ -975,7 +978,7 @@ because it would help us all. That is all.
 because it would help us all. I will wait.
 because it would help us all. Please answer soon.
 because it would help us all. No hurry.
-because it would help us all. I mean it kindly.
+because it would help us all. I mean it well.
 because it would help us all. It is a small thing.
 because it would help us all. I remain hopeful.
 because it would help us all. Please think it over.
@@ -985,7 +988,7 @@ so things feel fairer. That is all.
 so things feel fairer. I will wait.
 so things feel fairer. Please answer soon.
 so things feel fairer. No hurry.
-so things feel fairer. I mean it kindly.
+so things feel fairer. I mean it well.
 so things feel fairer. It is a small thing.
 so things feel fairer. I remain hopeful.
 so things feel fairer. Please think it over.
@@ -995,7 +998,7 @@ because I have thought about it. That is all.
 because I have thought about it. I will wait.
 because I have thought about it. Please answer soon.
 because I have thought about it. No hurry.
-because I have thought about it. I mean it kindly.
+because I have thought about it. I mean it well.
 because I have thought about it. It is a small thing.
 because I have thought about it. I remain hopeful.
 because I have thought about it. Please think it over.

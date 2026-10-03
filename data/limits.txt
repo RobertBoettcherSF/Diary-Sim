@@ -56,6 +56,8 @@ weight.propose = 1
 lean.propose = 5
 propose.cooldown = 80
 propose.repeat_percent = 15
+# the block (1 .. 6) of [wish_open] that opens with "Once again": used only when the wesen files a topic it filed before (repeat=N); 0 = off
+propose.repeat_block = 3
 propose.file_cap = 40
 # Kalpas (session length voted by the entities, see data/kalpas.txt): the decided length is
 # the median of the four votes, clamped to kalpa.min..kalpa.max.  A vote leans one block
