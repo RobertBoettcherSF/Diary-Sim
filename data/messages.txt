@@ -47,12 +47,10 @@ summary.files = full text with reasons: summary.txt, summary.jsonl
 summary.reason = - {1} {2}: {3}
 
 # ---- import / report / export ---------------------------------------------------------
-import.none = import OK: none (fresh start)
-import.ok = import OK: diaries for {1}/4 entities, {2} lines on disk (longest {3}, lowest common tick {4}), replay-verify {5}
+import.none = import OK: none (fresh start, seed {1})
+import.ok = import OK: {1} entities, {2} ticks verified, continuing from {3} ({4} lines on disk, longest {5})
 import.entities = import: entities/ {1}; words known at tick {2}: {3}
 import.failed = import FAILED: {1}
-verify.ok = OK (ticks 1..{1})
-verify.none = n/a (no common tick yet)
 ent.present = present ({1}/4 folders)
 ent.rebuilt = rebuilt ({1} of 4 folders were missing)
 report.head = report: turns this run {1} (ticks {2}..{3}; total simulated {3}), resumed from tick {4} | events written {5}, verified {6} | warnings {7}
@@ -76,3 +74,6 @@ report.pet = petitions {1} filed ({2}); top topics: {3}
 pet.file = wrote petitions.txt ({1} of {2} petitions): {3}
 pet.attach = attach petitions.txt (small) for the agenda
 pet.head = # seed {1} | petitions: showing the last {2} of {3} (propose.file_cap in data/limits.txt)
+warn.nested = warning: found {1} - the backup folder must be diaries/ with diaries/<id>.jsonl directly inside; copy its contents up one level
+err.nested = found {1} but no diaries/*.jsonl: copy the CONTENTS of that folder into diaries/ (diaries/ada.jsonl ...), then run again
+debug.ticks_v = no new tick yet: replayed 1..{1} of {2} on disk

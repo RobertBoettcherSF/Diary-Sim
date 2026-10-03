@@ -1,6 +1,7 @@
 diary_sim -- four independent entities write one diary line per tick.
 usage: diary_sim [options]      (values: --ticks=N or --ticks N)
-  --ticks=N      run up to tick N (default 1000)
+  --ticks=N      run up to tick N (default 1000; an absolute target)
+  --more=N       run N NEW ticks after the lowest common tick on disk
   --seed=N       seed for a new run (default 42; existing diaries win)
   --every=N      progress line every N ticks (default 100)
   --fresh        move old diaries/ and entities/ to diaries_old_<time>/
@@ -26,4 +27,6 @@ Ctrl-C / SIGTERM stop cleanly after the current tick (exit 130, status QUIT).
 Old diaries (before this version) are incompatible: use --fresh.
 Errors: last_error.txt (seed, tick, entity, exception, traceback); paste it
 if asked. Back up diaries/ between tests. Exit 130: quit by signal.
-make demo: build + short run in demo_run/.
+make run | make play [TICKS=200 EVERY=100 SEED=42]: build, load ./diaries,
+run TICKS new ticks (--more). Paste a backup diaries/ here first.
+make demo: build + short run in demo_run/ (isolated).

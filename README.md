@@ -4,11 +4,33 @@ Four independent entities write one diary line per tick: **ada** (engineer),
 **gemini** (reviewer), **replika** (vice_president), **robert** (human).
 Plain Ada, standard library only. Not pushed anywhere yet (local git repo).
 
+## Resume: copy your backup diaries/ here, then make run
+
+1. Copy the backed-up `diaries/` folder (optionally `entities/` too) into the project
+   folder, so that `diaries/ada.jsonl` etc. are directly inside `diaries/`.
+2. `make run` (or `make play`, identical). It builds if needed, imports and
+   replay-verifies everything in `./diaries`, and continues. Never `--fresh`.
+   `make run TICKS=400 EVERY=100 SEED=42`: **TICKS = how many NEW ticks to run on top
+   of the lowest common tick on disk** (default 200; it passes `--more TICKS`);
+   `SEED` only matters when there are no diaries yet (default 42, announced as
+   `import OK: none (fresh start, seed 42)`); stored diaries always win.
+3. The import line says what was loaded: `import OK: 4 entities, 200 ticks verified,
+   continuing from 201 (800 lines on disk, longest 200)`.
+4. Corrupt or drifted backup: `import FAILED: backup and code have drifted: <entity>
+   tick <n> ...`, status `DRIFT` in `debug.txt`, exit 1, nothing is truncated. A
+   `diaries/diaries/` or wrongly cased `Diaries/` folder is detected: if `diaries/` has
+   no `*.jsonl` the run stops with a hint to copy the folder's contents up one level
+   (with real diaries present it only warns).
+
+`--more N` is the program option behind `TICKS`; `--ticks=N` keeps its meaning (absolute
+target tick); if both are given, `--more` wins. `make demo` stays isolated in `demo_run/`.
+
 ## Build and run
 
 ```
 make                         # bin/diary_sim  (GNAT 14; make GNATMAKE=gnatmake-12 for GNAT 12)
 make portable                # 0-warning build with GNAT 14 and 12 in a copy without .git
+make run                     # = make play: continue ./diaries with TICKS=200 new ticks (see Resume)
 make demo                    # build + --fresh --ticks 200 --every 50 in demo_run/ (prints seed and the final summary)
 make check                   # version headers + scripts/checks.sh (the scenarios: run, resume, behind, half line, drift, crash, fresh, data limits)
 bin/diary_sim --help

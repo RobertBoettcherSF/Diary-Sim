@@ -1,4 +1,4 @@
---  Version: 0.007
+--  Version: 0.008
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -31,9 +31,9 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.007";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.008";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
-   Seed, Ticks, Every, Seed_Opt, Crash_At : Int := -1;
+   Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
    Fresh, Seed_Shown : Boolean := False;
    --  Limits, built-in values; data/limits.txt overrides them.
    E_Min, E_Max, M_Min, M_Max, L_Max, Tone_Low, Tone_High : Integer := 0;
@@ -376,6 +376,43 @@ procedure Diary_Sim is
         & ASCII.LF & "at: " & To_String (Res);
    end Error_Brief;
 
+   --  A pasted backup in the wrong place: diaries/diaries, Diaries/, DIARIES/ ...
+   --  Stops (Diary_Error) when diaries/ holds no *.jsonl but a misplaced folder is found;
+   --  otherwise only warns.  PROOF-LATER: Importance 2/10, Urgency 2/10, SPARK2 (directory scan)
+   procedure Check_Layout is
+      use Ada.Directories;
+      Has_Jsonl : Boolean := False;
+      Hint : Unbounded_String;
+      S : Search_Type;
+      D : Directory_Entry_Type;
+      function Lower (X : String) return String is (Ada.Characters.Handling.To_Lower (X));
+   begin
+      if Exists ("diaries") and then Kind ("diaries") = Directory then
+         Start_Search (S, "diaries", "*.jsonl");
+         Has_Jsonl := More_Entries (S);
+         End_Search (S);
+         if Exists ("diaries/diaries") then Hint := To_Unbounded_String ("diaries/diaries"); end if;
+      end if;
+      Start_Search (S, ".", "*", [Directory => True, others => False]);
+      while More_Entries (S) loop
+         Get_Next_Entry (S, D);
+         if Lower (Simple_Name (D)) in "diaries" | "entities" and then Simple_Name (D) not in "diaries" | "entities"
+           and then Length (Hint) = 0
+         then
+            Hint := To_Unbounded_String (Simple_Name (D) & "/");   --  wrong case
+         end if;
+      end loop;
+      End_Search (S);
+      if Length (Hint) > 0 then
+         if Has_Jsonl then
+            Warn (Msg ("warn.nested", To_String (Hint)));
+         else
+            raise Diary_Error with Msg ("err.nested", To_String (Hint));
+         end if;
+      end if;
+      if Exists ("entities/entities") then Warn (Msg ("warn.nested", "entities/entities")); end if;
+   end Check_Layout;
+
    function Number (Opt, Text : String) return Int is
    begin
       if Text'Length not in 1 .. 15 or else (for some C of Text => C not in '0' .. '9') then
@@ -415,8 +452,9 @@ procedure Diary_Sim is
    begin
       Part (Head) := To_Unbounded_String (Status & " v" & Build & " seed " & (if Seed < 0 then "?" else Img (Seed)) & ASCII.LF);
       Part (Ticks_P) := To_Unbounded_String
-        (Msg ("debug.ticks", Img (Int (Common) + 1), Img (Last_Done), Img (Int'Max (0, Last_Done - Int (Common))),
-              Img (Common)) & ASCII.LF);
+        ((if Last_Done > Int (Common)
+          then Msg ("debug.ticks", Img (Int (Common) + 1), Img (Last_Done), Img (Last_Done - Int (Common)), Img (Common))
+          else Msg ("debug.ticks_v", Img (Last_Done), Img (Common))) & ASCII.LF);
       Part (Import_P) := To_Unbounded_String ((if Length (Import_Block) > 0 then To_String (Import_Block) else Msg ("debug.pending", "import"))
                                               & ASCII.LF);
       Part (Export_P) := To_Unbounded_String ((if Length (Export_Line) > 0 then To_String (Export_Line) else Msg ("debug.pending", "export"))
@@ -559,9 +597,8 @@ procedure Diary_Sim is
          if not Disk (E).Is_Empty then Have := Have + 1; end if;
          Append (Know, (if E = 1 then "" else " ") & Name (E) & " " & Img (Known_Count (E)));
       end loop;
-      if Total_Lines = 0 then return Msg ("import.none"); end if;
-      return Msg ("import.ok", Img (Have), Img (Total_Lines), Img (Longest), Img (Common),
-                  (if Verify_To > 0 then Msg ("verify.ok", Img (Verify_To)) else Msg ("verify.none")))
+      if Total_Lines = 0 then return Msg ("import.none", Img (Seed)); end if;
+      return Msg ("import.ok", Img (Have), Img (Verify_To), Img (Int (Common) + 1), Img (Total_Lines), Img (Longest))
         & ASCII.LF
         & Msg ("import.entities",
                (if Ent_Missing = 0 then Msg ("ent.present", "4") else Msg ("ent.rebuilt", Img (Ent_Missing))),
@@ -574,7 +611,7 @@ begin
          A   : constant String := Ada.Command_Line.Argument (I);
          Eq  : constant Natural := Fx.Index (A, "=");
          Opt : constant String := (if Eq > 0 then A (A'First .. Eq - 1) else A);
-         Num : constant Boolean := Opt in "--ticks" | "--seed" | "--every" | "--crash-at";
+         Num : constant Boolean := Opt in "--ticks" | "--seed" | "--every" | "--crash-at" | "--more";
          Sep : constant Boolean := Num and then Eq = 0 and then I < Ada.Command_Line.Argument_Count;   --  --ticks 200
          Val : constant String := (if Eq > 0 then A (Eq + 1 .. A'Last) elsif Sep then Ada.Command_Line.Argument (I + 1) else "");
          Help  : Str_Vectors.Vector;
@@ -591,6 +628,7 @@ begin
          elsif Opt = "--seed" then Seed_Opt := Number (Opt, Val);
          elsif Opt = "--every" then Every := Number (Opt, Val);
          elsif Opt = "--crash-at" then Crash_At := Number (Opt, Val);
+         elsif Opt = "--more" then More := Number (Opt, Val);
          else raise Usage_Error with Msg ("err.option", A);
          end if;
       end;
@@ -612,6 +650,7 @@ begin
          Say (Msg ("fresh.moved", Old));
       end;
    end if;
+   Check_Layout;
    Ada.Directories.Create_Path ("diaries");
    for E in Entity_Id loop
       Cur_Name := To_Unbounded_String (Name (E));
@@ -621,6 +660,7 @@ begin
       Append (Names, (if E = 1 then "" else " ") & Name (E) & "(" & Kind (E) & ")");
    end loop;
    Cur_Name := To_Unbounded_String ("-");
+   if More >= 0 then Ticks := Int (Common) + More; end if;   --  --more N: N new ticks after the lowest common tick
 
    Seed := (if Disk_Seed >= 0 then Disk_Seed elsif Seed_Opt >= 0 then Seed_Opt else 42);
    TIO.Put_Line (Msg ("seed", Img (Seed), Msg (if Disk_Seed >= 0 then "seed.disk" elsif Seed_Opt >= 0 then "seed.option"

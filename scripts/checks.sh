@@ -118,10 +118,10 @@ sed -i 's/^start_percent = .*/start_percent = 100/' "$w/all/data/limits.txt"; cd
 "$w/all/bin/diary_sim" --ticks=100 --every=100 > /dev/null; n=$(grep -c '^[^#[:space:]]' "$root/data/vocab.txt")
 [ "$(grep -c ' start 0$' entities/robert/words.txt)" = "$n" ]  && [ "$(cat entities/*/words.txt | awk -v n="$n" '$3 == "taught" && $1 <= n' | wc -l)" = 0 ] && ok "all $n words known at start, no base word taught (only coined ones)" || bad "start_percent=100"
 echo "== 14. import confirmation, end report, run_report.txt =="
-grep -q 'import OK: none (fresh start)' "$w/base/out1.txt" && grep -q 'export OK: diaries/ 4 files, 4000 lines' "$w/base/out1.txt" && ok "first run: 'import OK: none', 'export OK' with real counts" || bad "first-run import/export lines"
+grep -q 'import OK: none (fresh start' "$w/base/out1.txt" && grep -q 'export OK: diaries/ 4 files, 4000 lines' "$w/base/out1.txt" && ok "first run: 'import OK: none', 'export OK' with real counts" || bad "first-run import/export lines"
 cd "$w/base" || exit 1
 "$bin" --ticks=1200 --every=600 > again.txt
-grep -q 'import OK: diaries for 4/4 entities, 4000 lines on disk (longest 1000, lowest common tick 1000), replay-verify OK' again.txt \
+grep -q 'import OK: 4 entities, 1000 ticks verified, continuing from 1001 (4000 lines on disk, longest 1000)' again.txt \
   && grep -q 'entities/ present (4/4' again.txt && grep -q 'turns this run 200' again.txt && grep -q 'resumed from tick 1000' again.txt \
   && grep -q 'export OK: diaries/ 4 files, 4800 lines' again.txt && ok "resumed run: import OK with the right numbers, report, export OK" || bad "resumed-run lines"
 cmp <(sed -n '/^report:/,/^export OK/p' again.txt) <(sed -n '/^report:/,/^export OK/p' run_report.txt) && grep -q '^import OK' run_report.txt && ok "run_report.txt holds the same import/report lines" || bad "run_report.txt differs"
@@ -163,7 +163,7 @@ echo "   most ticks at a mood/energy bound: $worst of $(wc -l < diaries/ada.json
 [ $worst -lt 150 ] && ok "nobody stuck at a bound" || bad "an entity sits at a bound ($worst ticks)"
 rm -rf "$w/off"; mkdir -p "$w/off/bin" "$w/off/run"; cp "$bin" "$w/off/bin/"; cp -r "$root/data" "$w/off/data"
 sed -i 's/^rule30.enabled = .*/rule30.enabled = 0/' "$w/off/data/limits.txt"; cd "$w/off/run" || exit 1
-"$w/off/bin/diary_sim" --ticks=1000 --every=1000 > /dev/null; "$w/off/bin/diary_sim" --ticks=1000 --every=1000 | grep -q 'replay-verify OK' \
+"$w/off/bin/diary_sim" --ticks=1000 --every=1000 > /dev/null; "$w/off/bin/diary_sim" --ticks=1000 --every=1000 | grep -q 'import OK: 4 entities, 1000 ticks verified' \
   && ! cmp -s <(sed 's/"ts":"[^"]*"//' diaries/ada.jsonl) <(sed 's/"ts":"[^"]*"//' "$w/base/diaries/ada.jsonl") && ok "rule30.enabled=0: old fixed table, deterministic, differs from rule 30" || bad "rule30.enabled=0"
 grep -q '^ada acts r' "$w/base/debug.txt" && grep -q '^actions ' "$w/base/run_report.txt" && ok "action counts in debug.txt and run_report.txt" || bad "no action counts"
 
@@ -179,6 +179,24 @@ grep -q 'petitions.txt (small) for the agenda' out.txt && grep -q 'wrote petitio
 cp petitions.txt p_full.txt; sed -i 's/^propose.file_cap = .*/propose.file_cap = 5/' "$w/pet/data/limits.txt"; "$w/pet/bin/diary_sim" --ticks=1000 > /dev/null
 [ "$(grep -c '^P[0-9]* tick=' petitions.txt)" = 5 ] && head -1 petitions.txt | grep -q "last 5 of $total" && [ "$(grep -c filed diaries/ada.jsonl)" -ge 1 ] && cmp -s <(tail -n 5 p_full.txt) <(tail -n 5 petitions.txt) && ok "file cap keeps the newest 5 lines; the diaries keep all" || bad "file cap"
 rm -f petitions.txt; "$w/pet/bin/diary_sim" --ticks=1000 > /dev/null; [ -s petitions.txt ] && ok "deleted petitions.txt is rebuilt by the replay" || bad "petitions.txt not rebuilt"
+
+echo "== 18. make run / make play, --more, misplaced backups =="
+rm -rf "$w/proj"; mkdir "$w/proj"; tar -C "$root" --exclude=.git --exclude=obj --exclude=bin --exclude=diaries --exclude=entities --exclude=demo_run -cf - . | tar -C "$w/proj" -xf -
+cd "$w/proj" || exit 1; make run TICKS=100 > out.txt 2>&1
+grep -q 'import OK: none (fresh start, seed 42)' out.txt && [ "$(wc -l < diaries/ada.jsonl)" = 100 ] && ok "fresh make run TICKS=100: default seed 42 announced, 100 ticks" || bad "fresh make run"
+cp -r diaries "$w/bk"; rm -rf diaries entities; cp -r "$w/bk" diaries
+make run TICKS=50 > out.txt 2>&1
+grep -q 'import OK: 4 entities, 100 ticks verified, continuing from 101 (400 lines on disk, longest 100)' out.txt && grep -q 'ticks 101..150; total simulated 150' out.txt && [ "$(wc -l < diaries/robert.jsonl)" = 150 ] && ok "backup pasted back, make run TICKS=50: verified 100, continued 101..150" || bad "resumed make run"
+rm -rf diaries entities; cp -r "$w/bk" diaries; make play TICKS=50 > out2.txt 2>&1
+cmp -s <(sed 's/"ts":"[^"]*"//' diaries/ada.jsonl) <(sed -n 1,150p "$w/proj/diaries/ada.jsonl" | sed 's/"ts":"[^"]*"//') && grep -q 'continuing from 101' out2.txt && ok "make play is the same as make run (same lines)" || bad "make play differs"
+bin/diary_sim --ticks=150 > /dev/null; [ "$(wc -l < diaries/ada.jsonl)" = 150 ] && ok "--ticks stays an absolute target (no new ticks at 150)" || bad "--ticks semantics"
+bin/diary_sim --more 0 | grep -q 'turns this run 0' && ok "--more 0 only verifies" || bad "--more 0"
+rm -rf diaries entities; cp -r "$w/bk" diaries; sed -i '60s/"text":"[a-z]/"text":"X/' diaries/gemini.jsonl; n=$(cat diaries/*.jsonl | wc -l)
+make run > out.txt 2>&1; head -1 debug.txt | grep -q '^DRIFT' && grep -q 'import FAILED: backup and code have drifted: gemini tick 60' out.txt && [ "$(cat diaries/*.jsonl | wc -l)" = "$n" ] && ok "corrupt backup: import FAILED, DRIFT in debug.txt, nothing truncated" || bad "corrupt backup"
+rm -rf diaries; mkdir diaries; cp -r "$w/bk" diaries/diaries; make run > out.txt 2>&1
+grep -q 'found diaries/diaries but no diaries/\*.jsonl' out.txt && ok "diaries/diaries: clear hint, stop" || bad "nested hint"
+rm -rf diaries; cp -r "$w/bk" Diaries; make run > out.txt 2>&1
+grep -q 'found Diaries/' out.txt && ok "wrong case Diaries/: clear hint, stop" || bad "case hint"
 
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="
