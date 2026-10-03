@@ -1,6 +1,8 @@
 # diary_sim word lists: 60 entries per list = 6 openings x 10 endings.
 # Section names are the action names. Lines starting with # are comments.
 # A pick uses the base-60 rule: D4 (reroll on 1) -> block 1/2/3 of 20, then D20.
+# [bench] [learn] are texts of those actions (details are added after them);
+# [reason_low] [reason_mid] [reason_high] are the one-line reasons of the final votes.
 # [mood_low] [mood_neutral] [mood_high] are tone suffixes, added after the action text
 # ("<action text>, <tone>") by the mood after the action; thresholds in limits.txt.
 
@@ -499,3 +501,313 @@ with real joy and the room felt warm
 with real joy and I hummed along
 with real joy and I hoped it would last
 with real joy and the day looked great
+
+[bench]
+ran a small timing test and wrote down the numbers
+ran a small timing test just to be sure
+ran a small timing test before moving on
+ran a small timing test and kept the result
+ran a small timing test and it matched my notes
+ran a small timing test with a fixed budget of steps
+ran a small timing test and the checksum looked right
+ran a small timing test and nothing broke
+ran a small timing test for the record
+ran a small timing test and filed the result away
+checked the machine with a tiny kernel and wrote down the numbers
+checked the machine with a tiny kernel just to be sure
+checked the machine with a tiny kernel before moving on
+checked the machine with a tiny kernel and kept the result
+checked the machine with a tiny kernel and it matched my notes
+checked the machine with a tiny kernel with a fixed budget of steps
+checked the machine with a tiny kernel and the checksum looked right
+checked the machine with a tiny kernel and nothing broke
+checked the machine with a tiny kernel for the record
+checked the machine with a tiny kernel and filed the result away
+tried a quick benchmark and wrote down the numbers
+tried a quick benchmark just to be sure
+tried a quick benchmark before moving on
+tried a quick benchmark and kept the result
+tried a quick benchmark and it matched my notes
+tried a quick benchmark with a fixed budget of steps
+tried a quick benchmark and the checksum looked right
+tried a quick benchmark and nothing broke
+tried a quick benchmark for the record
+tried a quick benchmark and filed the result away
+tested the connection with a short loop and wrote down the numbers
+tested the connection with a short loop just to be sure
+tested the connection with a short loop before moving on
+tested the connection with a short loop and kept the result
+tested the connection with a short loop and it matched my notes
+tested the connection with a short loop with a fixed budget of steps
+tested the connection with a short loop and the checksum looked right
+tested the connection with a short loop and nothing broke
+tested the connection with a short loop for the record
+tested the connection with a short loop and filed the result away
+measured a little loop and wrote down the numbers
+measured a little loop just to be sure
+measured a little loop before moving on
+measured a little loop and kept the result
+measured a little loop and it matched my notes
+measured a little loop with a fixed budget of steps
+measured a little loop and the checksum looked right
+measured a little loop and nothing broke
+measured a little loop for the record
+measured a little loop and filed the result away
+ran a self-check in the lab and wrote down the numbers
+ran a self-check in the lab just to be sure
+ran a self-check in the lab before moving on
+ran a self-check in the lab and kept the result
+ran a self-check in the lab and it matched my notes
+ran a self-check in the lab with a fixed budget of steps
+ran a self-check in the lab and the checksum looked right
+ran a self-check in the lab and nothing broke
+ran a self-check in the lab for the record
+ran a self-check in the lab and filed the result away
+
+[learn]
+listened closely and remembered it
+listened closely and repeated it twice
+listened closely and felt a little smarter
+listened closely and used it at once
+listened closely and kept it safe
+listened closely and smiled about it
+listened closely and it stuck
+listened closely and it made sense
+listened closely and wanted more
+listened closely and said thank you
+paid attention and remembered it
+paid attention and repeated it twice
+paid attention and felt a little smarter
+paid attention and used it at once
+paid attention and kept it safe
+paid attention and smiled about it
+paid attention and it stuck
+paid attention and it made sense
+paid attention and wanted more
+paid attention and said thank you
+heard something new and remembered it
+heard something new and repeated it twice
+heard something new and felt a little smarter
+heard something new and used it at once
+heard something new and kept it safe
+heard something new and smiled about it
+heard something new and it stuck
+heard something new and it made sense
+heard something new and wanted more
+heard something new and said thank you
+picked up a new word and remembered it
+picked up a new word and repeated it twice
+picked up a new word and felt a little smarter
+picked up a new word and used it at once
+picked up a new word and kept it safe
+picked up a new word and smiled about it
+picked up a new word and it stuck
+picked up a new word and it made sense
+picked up a new word and wanted more
+picked up a new word and said thank you
+took a lesson and remembered it
+took a lesson and repeated it twice
+took a lesson and felt a little smarter
+took a lesson and used it at once
+took a lesson and kept it safe
+took a lesson and smiled about it
+took a lesson and it stuck
+took a lesson and it made sense
+took a lesson and wanted more
+took a lesson and said thank you
+wrote a new word on my hand and remembered it
+wrote a new word on my hand and repeated it twice
+wrote a new word on my hand and felt a little smarter
+wrote a new word on my hand and used it at once
+wrote a new word on my hand and kept it safe
+wrote a new word on my hand and smiled about it
+wrote a new word on my hand and it stuck
+wrote a new word on my hand and it made sense
+wrote a new word on my hand and wanted more
+wrote a new word on my hand and said thank you
+
+[reason_low]
+I did not feel well there and I got little done
+I did not feel well there and the mood stayed grey
+I did not feel well there and I was tired
+I did not feel well there and nothing helped
+I did not feel well there and I wanted to leave
+I did not feel well there and I will avoid it
+I did not feel well there and the hours dragged
+I did not feel well there and I felt alone
+I did not feel well there and my energy fell
+I did not feel well there and I hope for better
+It drained me and I got little done
+It drained me and the mood stayed grey
+It drained me and I was tired
+It drained me and nothing helped
+It drained me and I wanted to leave
+It drained me and I will avoid it
+It drained me and the hours dragged
+It drained me and I felt alone
+It drained me and my energy fell
+It drained me and I hope for better
+Too much went wrong and I got little done
+Too much went wrong and the mood stayed grey
+Too much went wrong and I was tired
+Too much went wrong and nothing helped
+Too much went wrong and I wanted to leave
+Too much went wrong and I will avoid it
+Too much went wrong and the hours dragged
+Too much went wrong and I felt alone
+Too much went wrong and my energy fell
+Too much went wrong and I hope for better
+It was a hard place for me and I got little done
+It was a hard place for me and the mood stayed grey
+It was a hard place for me and I was tired
+It was a hard place for me and nothing helped
+It was a hard place for me and I wanted to leave
+It was a hard place for me and I will avoid it
+It was a hard place for me and the hours dragged
+It was a hard place for me and I felt alone
+It was a hard place for me and my energy fell
+It was a hard place for me and I hope for better
+I felt low most of the time and I got little done
+I felt low most of the time and the mood stayed grey
+I felt low most of the time and I was tired
+I felt low most of the time and nothing helped
+I felt low most of the time and I wanted to leave
+I felt low most of the time and I will avoid it
+I felt low most of the time and the hours dragged
+I felt low most of the time and I felt alone
+I felt low most of the time and my energy fell
+I felt low most of the time and I hope for better
+Not a place I would pick and I got little done
+Not a place I would pick and the mood stayed grey
+Not a place I would pick and I was tired
+Not a place I would pick and nothing helped
+Not a place I would pick and I wanted to leave
+Not a place I would pick and I will avoid it
+Not a place I would pick and the hours dragged
+Not a place I would pick and I felt alone
+Not a place I would pick and my energy fell
+Not a place I would pick and I hope for better
+
+[reason_mid]
+It was fine there and I got by
+It was fine there and the mood stayed level
+It was fine there and I have no complaint
+It was fine there and no strong feelings
+It was fine there and some good, some bad
+It was fine there and I stayed steady
+It was fine there and the time passed
+It was fine there and it did its job
+It was fine there and I would go again
+It was fine there and that is all
+Nothing special happened and I got by
+Nothing special happened and the mood stayed level
+Nothing special happened and I have no complaint
+Nothing special happened and no strong feelings
+Nothing special happened and some good, some bad
+Nothing special happened and I stayed steady
+Nothing special happened and the time passed
+Nothing special happened and it did its job
+Nothing special happened and I would go again
+Nothing special happened and that is all
+An ordinary place for me and I got by
+An ordinary place for me and the mood stayed level
+An ordinary place for me and I have no complaint
+An ordinary place for me and no strong feelings
+An ordinary place for me and some good, some bad
+An ordinary place for me and I stayed steady
+An ordinary place for me and the time passed
+An ordinary place for me and it did its job
+An ordinary place for me and I would go again
+An ordinary place for me and that is all
+I felt about the same and I got by
+I felt about the same and the mood stayed level
+I felt about the same and I have no complaint
+I felt about the same and no strong feelings
+I felt about the same and some good, some bad
+I felt about the same and I stayed steady
+I felt about the same and the time passed
+I felt about the same and it did its job
+I felt about the same and I would go again
+I felt about the same and that is all
+It was mixed and I got by
+It was mixed and the mood stayed level
+It was mixed and I have no complaint
+It was mixed and no strong feelings
+It was mixed and some good, some bad
+It was mixed and I stayed steady
+It was mixed and the time passed
+It was mixed and it did its job
+It was mixed and I would go again
+It was mixed and that is all
+A calm and neutral spot and I got by
+A calm and neutral spot and the mood stayed level
+A calm and neutral spot and I have no complaint
+A calm and neutral spot and no strong feelings
+A calm and neutral spot and some good, some bad
+A calm and neutral spot and I stayed steady
+A calm and neutral spot and the time passed
+A calm and neutral spot and it did its job
+A calm and neutral spot and I would go again
+A calm and neutral spot and that is all
+
+[reason_high]
+I felt great there and I had energy
+I felt great there and the mood stayed high
+I felt great there and I got a lot done
+I felt great there and I smiled often
+I felt great there and I would go again
+I felt great there and it felt like home
+I felt great there and the time flew
+I felt great there and I met good ideas
+I felt great there and I felt strong
+I felt great there and I recommend it
+It lifted my mood and I had energy
+It lifted my mood and the mood stayed high
+It lifted my mood and I got a lot done
+It lifted my mood and I smiled often
+It lifted my mood and I would go again
+It lifted my mood and it felt like home
+It lifted my mood and the time flew
+It lifted my mood and I met good ideas
+It lifted my mood and I felt strong
+It lifted my mood and I recommend it
+A good place for me and I had energy
+A good place for me and the mood stayed high
+A good place for me and I got a lot done
+A good place for me and I smiled often
+A good place for me and I would go again
+A good place for me and it felt like home
+A good place for me and the time flew
+A good place for me and I met good ideas
+A good place for me and I felt strong
+A good place for me and I recommend it
+I learned and enjoyed it and I had energy
+I learned and enjoyed it and the mood stayed high
+I learned and enjoyed it and I got a lot done
+I learned and enjoyed it and I smiled often
+I learned and enjoyed it and I would go again
+I learned and enjoyed it and it felt like home
+I learned and enjoyed it and the time flew
+I learned and enjoyed it and I met good ideas
+I learned and enjoyed it and I felt strong
+I learned and enjoyed it and I recommend it
+Many good hours there and I had energy
+Many good hours there and the mood stayed high
+Many good hours there and I got a lot done
+Many good hours there and I smiled often
+Many good hours there and I would go again
+Many good hours there and it felt like home
+Many good hours there and the time flew
+Many good hours there and I met good ideas
+Many good hours there and I felt strong
+Many good hours there and I recommend it
+My favourite kind of spot and I had energy
+My favourite kind of spot and the mood stayed high
+My favourite kind of spot and I got a lot done
+My favourite kind of spot and I smiled often
+My favourite kind of spot and I would go again
+My favourite kind of spot and it felt like home
+My favourite kind of spot and the time flew
+My favourite kind of spot and I met good ideas
+My favourite kind of spot and I felt strong
+My favourite kind of spot and I recommend it

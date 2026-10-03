@@ -5,7 +5,7 @@ GNAT12_ENV=${GNAT12_ENV:-/home/box/deps/gnat12/env.sh}
 status=0
 for v in 14 12; do
   tmp=$(mktemp -d)
-  tar -C "$root" --exclude=.git --exclude=obj --exclude=bin --exclude=diaries -cf - . | tar -C "$tmp" -xf -
+  tar -C "$root" --exclude=.git --exclude=obj --exclude=bin --exclude=diaries --exclude=entities --exclude=demo_run -cf - . | tar -C "$tmp" -xf -
   out=$(
     cd "$tmp" || exit 1
     if [ "$v" = 12 ]; then . "$GNAT12_ENV"; gn=gnatmake-12

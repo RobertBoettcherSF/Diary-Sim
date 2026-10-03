@@ -2,6 +2,10 @@ obj/
 bin/
 diaries/
 diaries_old_*/
+entities/
+demo_run/
+summary.txt
+summary.jsonl
 last_error.txt
 b~*
 *.tmp

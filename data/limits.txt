@@ -8,3 +8,16 @@ location.max = 3
 # mood <= tone_low: [mood_low];  mood >= tone_high: [mood_high];  else [mood_neutral].
 mood.tone_low = -34
 mood.tone_high = 34
+# Vocabulary and the word game. start_percent: share of the vocabulary each entity
+# knows at tick 0 (a deterministic random slice; 100 = everybody knows everything).
+start_percent = 25
+# Chance (percent per talk) that the speaker teaches a word the partner lacks.
+teach_percent = 50
+# Chance (percent per explore or wander) to coin a compound word; at most coin_cap in total.
+coin_percent = 20
+coin_cap = 40
+# Fixed step budget of one bench run (a count of loop steps, never a clock).
+bench_steps = 2000
+# Final vote reasons: vote <= vote.low picks [reason_low], vote >= vote.high [reason_high], else [reason_mid].
+vote.low = -20
+vote.high = 20

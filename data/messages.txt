@@ -7,7 +7,7 @@ entities = entities: {1}
 resume = resuming after tick {1}, running to tick {2}
 progress = tick {1}/{2} | entities {3} | events {4}
 summary = done: ticks {1}..{2} | entities {3} | events {4} (written {5}, replay-verified {6}) | warnings {7}
-nothing = nothing to do: every diary already has tick {1} (--ticks={2})
+nothing = all diaries already have tick {1} (--ticks={2}); verifying them
 warn.words_file = warning: data/words.txt not found or unreadable; using the built-in word list
 warn.words_list = warning: word list "{1}" has {2} entries (60 expected)
 warn.words_empty = warning: word list "{1}" is empty; using the built-in text
@@ -27,3 +27,24 @@ err.trace = traceback (innermost first):
 err.raw = raw traceback:
 err.more = ... {1} more lines in last_error.txt
 warn.limits_file = warning: data/limits.txt not found or unreadable; using the built-in limits (energy 0..100, mood -100..100, location 0..3)
+
+# ---- vocabulary, bench, summary ---------------------------------------------------
+warn.vocab_file = warning: data/vocab.txt not found or empty; using a built-in 12-word vocabulary
+err.entities_seed = {1} is from seed {2}, not this run's seed; move entities/ away or use --fresh
+hdr.words = # id word how tick extra   (how: start | taught (extra: teacher) | coined (extra: parents))
+hdr.bench = # tick kernel steps result checksum
+verifying = replaying ticks 1..{2}; {1} already on disk are verified, the rest is written
+detail.taught = taught {1} the word '{2}'
+detail.learned = learned the word '{1}' from {2}
+detail.coined = coined '{1}' from {2} + {3}
+detail.bench = bench {1}: {2} steps, result {3}, checksum {4}
+loc.0 = office
+loc.1 = lab
+loc.2 = cafe
+loc.3 = home
+summary.head = votes -100..100 per location, whole run, words (seed {1}, {2} ticks)
+summary.cols = entity     office    lab   cafe   home |    run | learned coined bench
+summary.fav = favourite location: {1} (sum of votes {2})
+summary.dis = biggest disagreement: {1} (spread {2}: {3} {4} vs {5} {6})
+summary.files = full text with reasons: summary.txt, summary.jsonl
+summary.reason = - {1} {2}: {3}

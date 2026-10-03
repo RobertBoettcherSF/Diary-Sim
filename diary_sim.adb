@@ -1,37 +1,40 @@
---  Version: 0.003
+--  Version: 0.004
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
---  any tick can be recomputed alone.  Diaries are append-only JSONL; a rerun
---  resumes at the lowest common tick and replays ticks already on disk,
---  comparing each regenerated line with the stored one instead of writing.
+--  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
+--  replays ticks 1 .. N from scratch (words, lessons and coined words cannot be
+--  read back from a diary line): a tick already on disk is compared with the
+--  regenerated line instead of written, a tick beyond the disk is appended.
+--  entities/<id>/words.txt and bench.txt are append-only working files (NOT a VM):
+--  a line the replay produces and the file lacks is appended, so they can be
+--  rebuilt from nothing.  Bench hook for later: see README (PROOF-LATER).
 pragma Ada_2022;
 
-with Ada.Characters.Handling, Ada.Command_Line, Ada.Directories, Ada.Exceptions, Ada.Strings.Fixed,
-     Ada.Strings.Unbounded, Ada.Text_IO, GNAT.Traceback.Symbolic, Sim_Util;
-use Ada.Strings.Unbounded, Sim_Util;
+with Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Directories,
+     Ada.Exceptions, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
+     GNAT.Traceback.Symbolic, Sim_Util, Sim_World;
+use Ada.Strings.Unbounded, Sim_Util, Sim_World;
 
 procedure Diary_Sim is
    package TIO renames Ada.Text_IO;
    package Fx renames Ada.Strings.Fixed;
    use type Ada.Directories.File_Size;
 
-   --  Five actions, then the mood tone lists (a suffix picked by current mood).
-   type List_Id is (Rest, Work, Explore, Talk, Wander, Mood_Low, Mood_Neutral, Mood_High);
-   subtype Action is List_Id range Rest .. Wander;
-   type Entity_Id is range 1 .. 4;
    type State is record
       Energy, Mood, Location : Integer;   --  ranges: data/limits.txt; location: office lab cafe home
    end record;
-   Energy_D : constant array (Action) of Integer := [14, -8, -10, -2, -3];
-   Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1];
-   Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0];   --  wander: rolled
+   --  Rest Work Explore Talk Wander Bench Learn.  Learn keeps the location (Home -1).
+   Energy_D : constant array (Action) of Integer := [14, -8, -10, -2, -3, -4, -1];
+   Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 1];
+   Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1];   --  wander: rolled
 
    Usage_Error, Diary_Error : exception;
    Seed, Ticks, Every, Seed_Opt, Crash_At : Int := -1;
    Fresh, Seed_Shown : Boolean := False;
    --  Limits, built-in values; data/limits.txt overrides them.
    E_Min, E_Max, M_Min, M_Max, L_Max, Tone_Low, Tone_High : Integer := 0;
-   Words    : array (List_Id) of Str_Vectors.Vector;
+   Start_Pct, Teach_Pct, Coin_Pct, Coin_Cap, Bench_Steps : Int := 0;
+   Vocab    : Str_Vectors.Vector;
    Disk     : array (Entity_Id) of Str_Vectors.Vector;      --  complete lines on disk
    St       : array (Entity_Id) of State := [others => (80, 0, 3)];
    Out_File : array (Entity_Id) of TIO.File_Type;
@@ -40,15 +43,27 @@ procedure Diary_Sim is
    Cur_Tick : Int := 0;
    Cur_Name : Unbounded_String := To_Unbounded_String ("-");
 
-   function Name (E : Entity_Id) return String is
-     (case E is when 1 => "ada", when 2 => "gemini", when 3 => "replika", when 4 => "robert");
-   function Kind (E : Entity_Id) return String is
-     (case E is when 1 => "engineer", when 2 => "reviewer", when 3 => "vice_president", when 4 => "human");
+   --  Lessons: Pending_Word (E) /= 0 means E's next event is "learn" (from Pending_From).
+   Pending_Word : array (Entity_Id) of Natural := [others => 0];
+   Pending_From : array (Entity_Id) of Entity_Id := [others => 1];
+   Did_Learn, Did_Coin, Did_Bench : Boolean := False;   --  what the last Step did
+   Votes_Of : All_Stats;
+
+   --  Working folder files, append-only, "ensure present" (see header).
+   package Str_Sets is new Ada.Containers.Indefinite_Hashed_Sets (String, Ada.Strings.Hash, "=");
+   type Side_Kind is (Words_File, Bench_File);
+   Side_Have : array (Entity_Id, Side_Kind) of Str_Sets.Set;
+   Side_Out  : array (Entity_Id, Side_Kind) of TIO.File_Type;
    function Path (E : Entity_Id) return String is ("diaries/" & Name (E) & ".jsonl");
+   function Side_Path (E : Entity_Id; K : Side_Kind) return String is
+     ("entities/" & Name (E) & (if K = Words_File then "/words.txt" else "/bench.txt"));
    function Low (A : List_Id) return String is (Ada.Characters.Handling.To_Lower (A'Image));
+   function Low_Kernel (K : Kernel) return String is (Ada.Characters.Handling.To_Lower (K'Image));
    function Built_In (A : List_Id) return String is
      (case A is when Rest => "rested a while", when Work => "did some work", when Explore => "explored a little",
                 when Talk => "wanted to talk to someone", when Wander => "wandered around",
+                when Bench => "ran a small benchmark", when Learn => "learned something new",
+                when Reason_Low => "it was hard", when Reason_Mid => "it was fine", when Reason_High => "it was good",
                 when Mood_Low => "feeling low", when Mood_Neutral => "feeling steady", when Mood_High => "feeling good");
 
    procedure Say (Line : String) is   --  console output, held back until the seed line is out
@@ -79,6 +94,11 @@ procedure Diary_Sim is
       L_Max := Integer (Limit ("location.max", 3));
       Tone_Low := Integer (Limit ("mood.tone_low", -34));    --  mood <= this: low tone
       Tone_High := Integer (Limit ("mood.tone_high", 34));   --  mood >= this: high tone
+      Start_Pct := Int'Min (100, Limit ("start_percent", 25));   --  share of the vocabulary known at tick 0
+      Teach_Pct := Limit ("teach_percent", 50);
+      Coin_Pct := Limit ("coin_percent", 20);
+      Coin_Cap := Limit ("coin_cap", 40);
+      Bench_Steps := Int'Max (1, Limit ("bench_steps", 2000));
       Lines.Clear;
       Read_Lines (Data_Path ("words.txt"), Lines, Found);
       for L of Lines loop
@@ -99,28 +119,170 @@ procedure Diary_Sim is
          if Words (A).Is_Empty then
             if Found then Warn (Msg ("warn.words_empty", Low (A))); end if;
             Words (A).Append (Built_In (A));
-         elsif Natural (Words (A).Length) /= 60 then
+         elsif Natural (Words (A).Length) /= 60 and then A in Action | Reason_Low | Reason_Mid | Reason_High | Mood_Low
+           | Mood_Neutral | Mood_High
+         then
             Warn (Msg ("warn.words_list", Low (A), Img (Integer (Words (A).Length))));
          end if;
       end loop;
+      --  Vocabulary: one English word per line, id = line order; '#' and blank lines ignored.
+      Lines.Clear;
+      Read_Lines (Data_Path ("vocab.txt"), Lines, Found);
+      for L of Lines loop
+         declare
+            T : constant String := Fx.Trim (L, Ada.Strings.Both);
+         begin
+            if T'Length > 0 and then T (T'First) /= '#' then Vocab.Append (T); end if;
+         end;
+      end loop;
+      if Vocab.Is_Empty then
+         Warn (Msg ("warn.vocab_file"));
+         for W of Str_Vectors.Vector'(["hand", "phone", "house", "water", "go", "see", "eat", "sleep", "work", "talk",
+                                       "home", "book"]) loop
+            Vocab.Append (W);
+         end loop;
+      end if;
    end Load_Data;
 
-   --  Advance entity E by one tick; returns its diary line.
+   --  ---- working folder files -------------------------------------------------------
+
+   --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (parsing of the '# seed N' header)
+   procedure Open_Side (E : Entity_Id; K : Side_Kind) is
+      P     : constant String := Side_Path (E, K);
+      Lines : Str_Vectors.Vector;
+      Found : Boolean;
+      Mark  : constant String := "# seed ";
+   begin
+      if Ada.Directories.Exists (P) and then Ada.Directories.Size (P) > 0 then
+         Read_Lines (P, Lines, Found);
+         if not Lines.Is_Empty and then Fx.Index (Lines.First_Element, Mark) = 1
+           and then Lines.First_Element /= Mark & Img (Seed)
+         then
+            raise Diary_Error with Msg ("err.entities_seed", P, Lines.First_Element (Mark'Length + 1 .. Lines.First_Element'Last));
+         end if;
+         for L of Lines loop Side_Have (E, K).Include (L); end loop;
+         declare
+            Needs_Lf : constant Boolean := not Ends_With_Lf (P);
+         begin
+            TIO.Open (Side_Out (E, K), TIO.Append_File, P);
+            if Needs_Lf then TIO.New_Line (Side_Out (E, K)); end if;
+         end;
+      else
+         TIO.Create (Side_Out (E, K), TIO.Out_File, P);
+         TIO.Put_Line (Side_Out (E, K), Mark & Img (Seed));
+         TIO.Put_Line (Side_Out (E, K), Msg (if K = Words_File then "hdr.words" else "hdr.bench"));
+         TIO.Flush (Side_Out (E, K));
+      end if;
+   end Open_Side;
+
+   --  Append Line unless the file already has it; flushed at once.
+   procedure Ensure (E : Entity_Id; K : Side_Kind; Line : String) is
+   begin
+      if not Side_Have (E, K).Contains (Line) then
+         TIO.Put_Line (Side_Out (E, K), Line);
+         TIO.Flush (Side_Out (E, K));
+         Side_Have (E, K).Include (Line);
+      end if;
+   end Ensure;
+
+   function Words_Line (W : Positive; How : String; Tick : Int; Extra : String) return String is
+     (Img (W) & " " & Word (W) & " " & How & " " & Img (Tick) & (if Extra = "" then "" else " " & Extra));
+
+   --  Advance entity E by one tick; returns its diary line.  Teaching, coining and
+   --  bench happen here; their working-folder lines are ensured as they occur.
    function Step (E : Entity_Id; Tick : Int) return String is
       Die : constant Positive := Roll (Seed, Positive (E), Tick, 0, 20);
       A   : constant Action :=
-        (case Die is when 1 .. 6 => Rest, when 7 .. 10 => Work, when 11 .. 13 => Explore,
-                     when 14 .. 16 => Talk, when others => Wander);
+        (if Pending_Word (E) /= 0 then Learn
+         else (case Die is when 1 .. 6 => Rest, when 7 .. 10 => Work, when 11 .. 13 => Explore,
+                           when 14 .. 16 => Talk, when 17 .. 19 => Wander, when others => Bench));
       S   : State renames St (E);
+      Detail : Unbounded_String;
+      Eid : constant Positive := Positive (E);
+
+      --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (pick indices stay inside 1 .. count)
+      procedure Teach is
+         P : constant Entity_Id := Entity_Id ((Integer (E) - 1 + Roll (Seed, Eid, Tick, 3, 3)) mod 4 + 1);
+         N : constant Natural := Teachable_Count (E, P);
+      begin
+         if Int (Roll (Seed, Eid, Tick, 2, 100)) <= Teach_Pct and then Pending_Word (P) = 0 and then N > 0 then
+            Pending_Word (P) := Nth_Teachable (E, P, Roll (Seed, Eid, Tick, 4, N));
+            Pending_From (P) := E;
+            Detail := To_Unbounded_String (Msg ("detail.taught", Name (P), Word (Pending_Word (P))));
+         end if;
+      end Teach;
+
+      procedure Coin is
+         K : constant Natural := Known_Count (E);
+      begin
+         if Int (Roll (Seed, Eid, Tick, 5, 100)) <= Coin_Pct and then K >= 2
+           and then Int (Count - Base_Count) < Coin_Cap
+         then
+            declare
+               Ia : constant Positive := Roll (Seed, Eid, Tick, 6, K);
+               Ib0 : constant Positive := Roll (Seed, Eid, Tick, 7, K - 1);
+               Ib : constant Positive := (if Ib0 >= Ia then Ib0 + 1 else Ib0);
+               Pa : constant Positive := Nth_Known (E, Ia);
+               Pb : constant Positive := Nth_Known (E, Ib);
+               Text : constant String := Word (Pa) & Word (Pb);
+            begin
+               if Text'Length <= 24 and then Find (Text) = 0 then
+                  declare
+                     W : constant Positive := Add_Coined (Text, Pa, Pb);
+                  begin
+                     Learn_Word (E, W);
+                     Ensure (E, Words_File, Words_Line (W, "coined", Tick, Parents (W)));
+                     Detail := To_Unbounded_String (Msg ("detail.coined", Text, Word (Pa), Word (Pb)));
+                     Did_Coin := True;
+                  end;
+               end if;
+            end;
+         end if;
+      end Coin;
+
    begin
+      Did_Learn := False;
+      Did_Coin := False;
+      Did_Bench := False;
       S.Energy := Clamp (S.Energy + Energy_D (A), E_Min, E_Max);
       S.Mood := Clamp (S.Mood + Mood_D (A), M_Min, M_Max);
-      S.Location := (if A = Wander then Roll (Seed, Positive (E), Tick, 1, 4) - 1 else Home (A));
+      if A = Wander then
+         S.Location := Roll (Seed, Eid, Tick, 1, 4) - 1;
+      elsif Home (A) >= 0 then
+         S.Location := Home (A);
+      end if;
+      S.Location := Clamp (S.Location, 0, L_Max);
+      case A is
+         when Talk => Teach;
+         when Explore | Wander => Coin;
+         when Learn =>
+            declare
+               W : constant Positive := Pending_Word (E);
+            begin
+               Learn_Word (E, W);
+               Ensure (E, Words_File, Words_Line (W, "taught", Tick, Name (Pending_From (E))));
+               Detail := To_Unbounded_String (Msg ("detail.learned", Word (W), Name (Pending_From (E))));
+               Pending_Word (E) := 0;
+               Did_Learn := True;
+            end;
+         when Bench =>
+            declare
+               R : constant Bench_Result := Run_Bench (Seed, E, Tick, Bench_Steps);
+            begin
+               Ensure (E, Bench_File, Img (Tick) & " " & Low_Kernel (R.Which) & " " & Img (R.Steps) & " "
+                       & Img (R.Result) & " " & Img (R.Checksum));
+               Detail := To_Unbounded_String (Msg ("detail.bench", Low_Kernel (R.Which), Img (R.Steps), Img (R.Result),
+                                                   Img (R.Checksum)));
+               Did_Bench := True;
+            end;
+         when others => null;
+      end case;
       declare
          Tone : constant List_Id := (if S.Mood <= Tone_Low then Mood_Low elsif S.Mood >= Tone_High then Mood_High
                                      else Mood_Neutral);
-         Text : constant String := Words (A) (Words (A).First_Index + Pick60 (Seed, Positive (E), Tick, 10) mod Natural (Words (A).Length))
-           & ", " & Words (Tone) (Words (Tone).First_Index + Pick60 (Seed, Positive (E), Tick, 100) mod Natural (Words (Tone).Length));
+         Text : constant String := Words (A) (Words (A).First_Index + Pick60 (Seed, Eid, Tick, 10) mod Natural (Words (A).Length))
+           & ", " & Words (Tone) (Words (Tone).First_Index + Pick60 (Seed, Eid, Tick, 100) mod Natural (Words (Tone).Length))
+           & (if Length (Detail) > 0 then "; " & To_String (Detail) else "");
       begin
          return "{""v"":1,""seed"":" & Img (Seed) & ",""tick"":" & Img (Tick) & ",""ts"":""" & Stamp
            & """,""t"":""" & Low (A) & """,""text"":""" & Esc (Text)
@@ -190,17 +352,21 @@ procedure Diary_Sim is
    Disk_Seed : Int := -1;
    Common, Longest : Natural := 0;
    Names : Unbounded_String;
+   I : Positive := 1;
 begin
    Load_Data;
-   for I in 1 .. Ada.Command_Line.Argument_Count loop
+   while I <= Ada.Command_Line.Argument_Count loop
       declare
          A   : constant String := Ada.Command_Line.Argument (I);
          Eq  : constant Natural := Fx.Index (A, "=");
          Opt : constant String := (if Eq > 0 then A (A'First .. Eq - 1) else A);
-         Val : constant String := (if Eq > 0 then A (Eq + 1 .. A'Last) else "");
+         Num : constant Boolean := Opt in "--ticks" | "--seed" | "--every" | "--crash-at";
+         Sep : constant Boolean := Num and then Eq = 0 and then I < Ada.Command_Line.Argument_Count;   --  --ticks 200
+         Val : constant String := (if Eq > 0 then A (Eq + 1 .. A'Last) elsif Sep then Ada.Command_Line.Argument (I + 1) else "");
          Help  : Str_Vectors.Vector;
          Found : Boolean;
       begin
+         if Sep then I := I + 1; end if;
          if Opt = "--help" or else Opt = "-h" then
             Read_Lines (Data_Path ("help.txt"), Help, Found);
             for L of Help loop TIO.Put_Line (L); end loop;
@@ -214,13 +380,23 @@ begin
          else raise Usage_Error with Msg ("err.option", A);
          end if;
       end;
+      I := I + 1;
    end loop;
    Ticks := (if Ticks < 0 then 1000 else Ticks);
    Every := (if Every < 0 then 100 else Int'Max (1, Every));
 
-   if Fresh and then Ada.Directories.Exists ("diaries") then
-      Ada.Directories.Rename ("diaries", "diaries_old_" & Plain_Stamp);
-      Say (Msg ("fresh.moved", "diaries_old_" & Plain_Stamp));
+   if Fresh and then (Ada.Directories.Exists ("diaries") or else Ada.Directories.Exists ("entities")) then
+      declare
+         Old : constant String := "diaries_old_" & Plain_Stamp;
+      begin
+         if Ada.Directories.Exists ("diaries") then
+            Ada.Directories.Rename ("diaries", Old);
+         else
+            Ada.Directories.Create_Path (Old);
+         end if;
+         if Ada.Directories.Exists ("entities") then Ada.Directories.Rename ("entities", Old & "/entities"); end if;
+         Say (Msg ("fresh.moved", Old));
+      end;
    end if;
    Ada.Directories.Create_Path ("diaries");
    for E in Entity_Id loop
@@ -245,21 +421,20 @@ begin
       if Natural (Disk (E).Length) < Longest then
          Warn (Msg ("warn.behind", Name (E), Img (Integer (Disk (E).Length)), Img (Longest), Img (Common)));
       end if;
-      if Common > 0 then   --  resume state comes from the line at the common tick
-         declare
-            L : constant String := Disk (E) (Common);
-         begin
-            St (E) := (Clamp (Integer (Field (L, "energy")), E_Min, E_Max), Clamp (Integer (Field (L, "mood")), M_Min, M_Max),
-                       Clamp (Integer (Field (L, "location")), 0, L_Max));
-         end;
-      end if;
    end loop;
-   if Int (Common) >= Ticks then
-      TIO.Put_Line (Msg ("nothing", Img (Common), Img (Ticks)));
-      return;
-   end if;
-   TIO.Put_Line (Msg ("resume", Img (Common), Img (Ticks)));
+   TIO.Put_Line (Msg ((if Common = 0 then "resume" else "verifying"), Img (Common), Img (Ticks)));
 
+   --  Every run starts from the vocabulary and replays from tick 1.
+   Sim_World.Init (Vocab, Seed, Start_Pct);
+   for E in Entity_Id loop
+      Cur_Name := To_Unbounded_String (Name (E));
+      Ada.Directories.Create_Path ("entities/" & Name (E));
+      for K in Side_Kind loop Open_Side (E, K); end loop;
+      for W in 1 .. Base_Count loop
+         if Knows (E, W) then Ensure (E, Words_File, Words_Line (W, "start", 0, "")); end if;
+      end loop;
+   end loop;
+   Cur_Name := To_Unbounded_String ("-");
    for E in Entity_Id loop
       if Ada.Directories.Exists (Path (E)) then
          declare
@@ -273,11 +448,11 @@ begin
       end if;
    end loop;
 
-   for Tick in Int (Common) + 1 .. Ticks loop
+   for Tick in Int range 1 .. Ticks loop
       Cur_Tick := Tick;
       for E in Entity_Id loop      --  fixed id order
          Cur_Name := To_Unbounded_String (Name (E));
-         if Tick = Crash_At and then E = 1 then Events := Forced (Tick); end if;
+         if Tick = Crash_At and then Tick > Int (Common) and then E = 1 then Events := Forced (Tick); end if;
          declare
             Line : constant String := Step (E, Tick);
          begin
@@ -293,15 +468,33 @@ begin
                Written := Written + 1;
             end if;
             Events := Written + Verified;
+            Record_Tick (Votes_Of (E), St (E).Location, St (E).Mood, St (E).Energy, Did_Learn, Did_Coin, Did_Bench);
          end;
       end loop;
-      if Tick mod Every = 0 then
+      if Tick > Int (Common) and then Tick mod Every = 0 then
          TIO.Put_Line (Msg ("progress", Img (Tick), Img (Ticks), Img (Integer (Entity_Id'Last)), Img (Events)));
       end if;
    end loop;
    for F of Out_File loop TIO.Close (F); end loop;
-   TIO.Put_Line (Msg ("summary", Img (Common + 1), Img (Ticks), Img (Integer (Entity_Id'Last)), Img (Events),
-                      Img (Written), Img (Verified), Img (Warnings)));
+   for F of Side_Out loop TIO.Close (F); end loop;
+   TIO.Put_Line (Msg ("summary", Img (Int'Min (Int (Common) + 1, Ticks)), Img (Ticks), Img (Integer (Entity_Id'Last)),
+                      Img (Events), Img (Written), Img (Verified), Img (Warnings)));
+   declare
+      Console, Text, Json : Unbounded_String;
+      procedure Save (File : String; Content : Unbounded_String) is
+         F : TIO.File_Type;
+      begin
+         TIO.Create (F, TIO.Out_File, File);
+         TIO.Put (F, To_String (Content));
+         TIO.Close (F);
+      end Save;
+   begin
+      Summarize (Seed, Ticks, Votes_Of, Console, Text, Json);
+      Save ("summary.txt", Text);
+      Save ("summary.jsonl", Json);
+      TIO.Put (To_String (Console));
+      TIO.Put_Line (Msg ("summary.files"));
+   end;
 exception
    when E : Usage_Error =>
       TIO.Put_Line (TIO.Standard_Error, Ada.Exceptions.Exception_Message (E));

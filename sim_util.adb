@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 pragma Ada_2022;
 
 with Ada.Calendar.Formatting, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Maps, Ada.Directories,
@@ -16,6 +16,7 @@ package body Sim_Util is
    function Img (N : Integer) return String is (Img (Int (N)));
 
    function Clamp (V, Lo, Hi : Integer) return Integer is (Integer'Max (Lo, Integer'Min (Hi, V)));
+   function Sgn (V : Int) return String is ((if V > 0 then "+" else "") & Img (V));
 
    function Data_Path (File : String) return String is
    begin

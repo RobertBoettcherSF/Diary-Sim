@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 --  Pure helpers of diary_sim: deterministic hash rolls and the diary line
 --  format (read side).  Standard library only.
 pragma Ada_2022;
@@ -24,6 +24,7 @@ package Sim_Util is
    function Img (N : Int) return String;         --  no leading blank
    function Img (N : Integer) return String;
    function Clamp (V, Lo, Hi : Integer) return Integer;
+   function Sgn (V : Int) return String;   --  +12 or -5 or 0
    function Stamp return String;                      --  2026-10-03T02:19:00
    function Plain_Stamp return String;                --  20261003_021900
    --  Where two lines first differ, as "column N" plus ~36 characters of each.
