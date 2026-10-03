@@ -1,4 +1,4 @@
---  Version: 0.013
+--  Version: 0.014
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
@@ -67,6 +67,14 @@ package body Sim_World is
       function Word_Char (C : Character) return Boolean is (C in 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_');
       R : Unbounded_String;
       I : Positive := Text'First;
+      --  The id at I follows a ':' inside a source tag "src=s1:t600:ada" (an inbox line): shown as a name, too.
+      function In_Src_Tag (At_I : Positive) return Boolean is
+         B : Natural := At_I;
+      begin
+         if At_I = Text'First or else Text (At_I - 1) /= ':' then return False; end if;
+         while B > Text'First and then Text (B - 1) /= ' ' loop B := B - 1; end loop;
+         return B + 3 <= Text'Last and then Text (B .. B + 3) = "src=";
+      end In_Src_Tag;
    begin
       if Pairs.Is_Empty then return Text; end if;
       while I <= Text'Last loop
@@ -74,7 +82,8 @@ package body Sim_World is
             Done : Boolean := False;
          begin
             if Text (I) in 'a' .. 'z'
-              and then (I = Text'First or else not (Word_Char (Text (I - 1)) or else Text (I - 1) in '/' | '-' | ':' | '.'))
+              and then (I = Text'First or else not (Word_Char (Text (I - 1)) or else Text (I - 1) in '/' | '-' | ':' | '.')
+                        or else In_Src_Tag (I))
             then
                for P of Pairs loop
                   declare

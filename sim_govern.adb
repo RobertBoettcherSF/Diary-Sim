@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  See sim_govern.ads.
 pragma Ada_2022;
 
@@ -429,7 +429,7 @@ package body Sim_Govern is
    end Lever_Label;
 
    function Describe (Line : String) return String is
-     (Msg ("govern.desc", Line (Line'First .. Fx.Index (Line, " ") - 1), Tok (Line, "player") & "/" & Tok (Line, "wesen"), Tok (Line, "topic"),
+     (Msg ("govern.desc", Line (Line'First .. Fx.Index (Line, " ") - 1), Sim_World.Show (Tok (Line, "player")) & "/" & Sim_World.Show (Tok (Line, "wesen")), Tok (Line, "topic"),
            Msg ("kind." & Tok (Line, "kind")), Lever_Label (Tok (Line, "lever")), Tok (Line, "old") & ">" & Tok (Line, "new"),
            Msg ("why." & Tok (Line, "why"))));
 

@@ -1,5 +1,5 @@
---  Version: 0.001
---  Governance of diary_sim (govern=1 sessions; needs rest=1): the players (Modulus, Kernel, Vertex) decide what happens to the
+--  Version: 0.002
+--  Governance of diary_sim (govern=1 sessions; needs rest=1): the players (Epsilon, Zeta, Eta) decide what happens to the
 --  petitions of the wesen they watch.  A SHORT WHITELIST of rule levers (data/govern.txt: recovery rate, cool-down length, the mood
 --  cost of work, the quick-rest energy) can each be moved a small step by a petition of the matching topic, never past its bounds.
 --  For every petition the responsible player rolls hash dice (salts 9700 .. 9799) weighted by its Rule 30 personality (generous /

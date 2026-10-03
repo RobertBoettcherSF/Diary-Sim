@@ -138,7 +138,7 @@ grep -q 'import OK: 4 entities, 1000 ticks verified, continuing from 1001 (4000 
   && grep -q 'entities/ present (4/4' again.txt && grep -q 'turns this run 200' again.txt && grep -q 'resumed from tick 1000' again.txt \
   && grep -q 'export OK: diaries/ 4 files, 4800 lines' again.txt && ok "resumed run: import OK with the right numbers, report, export OK" || bad "resumed-run lines"
 cmp <(sed -n '/^report:/,/^export OK/p' again.txt) <(sed -n '/^report:/,/^export OK/p' run_report.txt) && grep -q '^import OK' run_report.txt && ok "run_report.txt holds the same import/report lines" || bad "run_report.txt differs"
-[ "$(wc -l < again.txt)" -le 76 ] && ok "console output $(wc -l < again.txt) lines (<= 76, with the treadmill block)" || bad "console output too long"
+[ "$(wc -l < again.txt)" -le 77 ] && ok "console output $(wc -l < again.txt) lines (<= 77, with the treadmill block and the robot / governance off line)" || bad "console output too long"
 rm -rf entities; "$bin" --ticks=1200 | grep -q 'entities/ rebuilt (4 of 4' && ok "missing entities/ reported as rebuilt" || bad "no rebuilt message"
 fresh_copy; sed -i '300s/"text":"[a-z]/"text":"X/' diaries/robert.jsonl
 "$bin" --ticks=1000 > drift.txt; grep -q 'import FAILED: backup and code have drifted: robert tick 300' drift.txt && ok "drift: console says 'import FAILED' with entity and tick" || bad "no import FAILED"
@@ -543,7 +543,7 @@ grep -q '^import OK: 4 entities, 200 ticks verified' o1.txt && grep -q '^S2 .* d
 # make say / make inbox
 cd "$w/dh/a" || exit 1; rm -rf diaries; cp -r ../d_dh diaries
 DIARY_HOME="$w/dh/a" make -s -C "$root" say PLAYER=sol TEXT="via make" AS=rob > mk1.txt 2>&1; tail -n 1 diaries/says.txt | grep -q ' to=sol kind=relay by=rob .*text=via make$' \
-  && DIARY_HOME="$w/dh/a" make -s -C "$root" inbox > mk2.txt 2>&1 && grep -q '^inbox for Robert (newest' mk2.txt && grep -q '^  player Kernel (tracker of progress)' mk2.txt && ok "make say PLAYER=... TEXT=... records the words; make inbox prints the inbox" || bad "make say / inbox"
+  && DIARY_HOME="$w/dh/a" make -s -C "$root" inbox > mk2.txt 2>&1 && grep -q '^inbox for Robert (newest' mk2.txt && grep -q '^  player Zeta (tracker of progress)' mk2.txt && ok "make say PLAYER=... TEXT=... records the words; make inbox prints the inbox" || bad "make say / inbox"
 "$db" --say bob --text x > mk3.txt 2>&1; rc=$?; [ $rc = 2 ] && grep -q 'neither a player' mk3.txt && "$db" --say ada --text "" > mk4.txt 2>&1; [ $? = 2 ] && ok "say to an unknown name or with no text: usage error (exit 2), nothing written" || bad "say usage"
 
 echo "== 25. debug digest: --debug / DEBUG=1 (run and demo), byte cap, sections =="
@@ -636,20 +636,20 @@ unset DIARY_HOME
 echo "== 27. display names (data/names.txt): only display text changes, files and hashes keep the ids =="
 snap() { ( cd "$1" && { for e in ada gemini replika robert; do sed 's/"ts":"[^"]*"//' diaries/$e.jsonl; done; grep -v '^# build' diaries/sessions.txt; cat diaries/inbox.txt diaries/world.txt diaries/says.txt; for e in ada gemini replika robert; do cat entities/$e/words.txt; done; } | cksum ); }
 rm -rf "$w/nm"; mkdir -p "$w/nm/a/bin" "$w/nm/b/bin" "$w/nm/h"; cp "$bin" "$w/nm/a/bin/"; cp -r "$root/data" "$w/nm/a/data"; cp "$bin" "$w/nm/b/bin/"; cp -r "$root/data" "$w/nm/b/data"
-printf '# test names\nada = Alpha\ngemini = Beta\nreplika = Gamma\nrobert = Delta\niris = Eps\nsol = Zeta\nnoor = Eta\n' > "$w/nm/b/data/names.txt"
+printf '# test names\nada = Aleph\ngemini = Bet\nreplika = Gimel\nrobert = Dalet\niris = He\nsol = Vav\nnoor = Zayin\n' > "$w/nm/b/data/names.txt"
 na="$w/nm/a/bin/diary_sim"; nb="$w/nm/b/bin/diary_sim"; cd "$w/nm/h" || exit 1; export DIARY_HOME="$w/nm/h"
-"$na" --ticks 300 --yes --every 5000 > n1.txt 2>&1; "$na" --say Lemma --text "hello there" > n1s.txt 2>&1; "$na" --more 200 --every 5000 > n2.txt 2>&1
+"$na" --ticks 300 --yes --every 5000 > n1.txt 2>&1; "$na" --say Alpha --text "hello there" > n1s.txt 2>&1; "$na" --more 200 --every 5000 > n2.txt 2>&1
 before=$(snap .); cp diaries/sessions.txt s0.txt; cp diaries/inbox.txt i0.txt
-grep -q '^entities: Lemma(engineer) Corollary(reviewer) Theorem(vice_president) Axiom(human)' n1.txt && grep -q 'Lemma' run_report.txt && grep -q 'Lemma' summary.txt && grep -q '^Lemma ' debug.txt \
+grep -q '^entities: Alpha(engineer) Beta(reviewer) Gamma(vice_president) Delta(human)' n1.txt && grep -q 'Alpha' run_report.txt && grep -q 'Alpha' summary.txt && grep -q '^Alpha ' debug.txt \
   && [ -n "$(grep -m1 'to=ada' diaries/says.txt)" ] && grep -q 'src=[a-z0-9]*:t[0-9]*:\(ada\|gemini\|replika\|robert\)' diaries/inbox.txt \
-  && ok "default data/names.txt: Lemma / Corollary / Theorem / Axiom in the console, reports and debug.txt; say to a display name is recorded under the id (to=ada); inbox src tags keep the ids" || bad "default display names"
-"$na" --inbox > ib1.txt 2>&1; grep -q 'player Modulus (' ib1.txt && ! grep -q 'player iris' ib1.txt && ok "the players show as Modulus / Kernel / Vertex in the inbox view" || bad "player display names"
+  && ok "default data/names.txt: Alpha / Beta / Gamma / Delta in the console, reports and debug.txt; say to a display name is recorded under the id (to=ada); inbox src tags keep the ids" || bad "default display names"
+"$na" --inbox > ib1.txt 2>&1; grep -q 'player Epsilon (' ib1.txt && ! grep -q 'player iris' ib1.txt && ok "the players show as Epsilon / Zeta / Eta in the inbox view" || bad "player display names"
 "$nb" --more 0 --every 5000 > n3.txt 2>&1; after=$(snap .)
-grep -q '^import OK: 4 entities, 500 ticks verified' n3.txt && grep -q '^entities: Alpha(engineer) Beta(reviewer) Gamma(vice_president) Delta(human)' n3.txt && grep -q 'Alpha' run_report.txt && ! grep -q 'Lemma' run_report.txt debug.txt summary.txt \
+grep -q '^import OK: 4 entities, 500 ticks verified' n3.txt && grep -q '^entities: Aleph(engineer) Bet(reviewer) Gimel(vice_president) Dalet(human)' n3.txt && grep -q 'Aleph' run_report.txt && ! grep -q 'Alpha' run_report.txt debug.txt summary.txt \
   && [ "$before" = "$after" ] && grep -v '^# build' diaries/sessions.txt | cmp -s - <(grep -v '^# build' s0.txt) && cmp -s i0.txt diaries/inbox.txt && ls diaries/ada.jsonl entities/ada/words.txt > /dev/null 2>&1 && [ ! -e diaries/Alpha.jsonl ] \
   && ok "names.txt changed: the diaries, sessions.txt (minus the build line), inbox, world.txt, says and words files are byte-identical, replay-verify still passes, only the display text changed" || bad "names.txt change touched files ($before / $after)"
-"$nb" --map > mp.txt 2>&1; grep -q '^treadmill  Alpha ' mp.txt && ok "--map uses the display names" || bad "map names"
-"$nb" --say Gamma --text "x" > n4.txt 2>&1; tail -n 1 diaries/says.txt | grep -q ' to=replika ' && ok "--say accepts the display name and records the id" || bad "say with display name"
+"$nb" --map > mp.txt 2>&1; grep -q '^treadmill  Aleph ' mp.txt && ok "--map uses the display names" || bad "map names"
+"$nb" --say Gimel --text "x" > n4.txt 2>&1; tail -n 1 diaries/says.txt | grep -q ' to=replika ' && ok "--say accepts the display name and records the id" || bad "say with display name"
 rm -f "$w/nm/b/data/names.txt"; "$nb" --more 0 --every 5000 > n5.txt 2>&1; grep -q 'names.txt' n5.txt && grep -q '^import OK' n5.txt && grep -q '^entities: ada(engineer)' n5.txt && ok "names.txt missing: a warning, the ids are shown, replay still verifies" || bad "missing names.txt"
 grep -q 'data/names.txt' "$root/data/help.txt" "$root/README.md" && ok "--help and README mention data/names.txt" || bad "docs names.txt"
 unset DIARY_HOME
@@ -709,7 +709,7 @@ done
 [ $good = 1 ] && ok "by verb: every diary verb (rest, work, ..., examine, push, eat, greet) has exactly the ledger's sum and tick count" || bad "ledger verbs"
 grep -q '^  rest model .*quick-rest penalty -[0-9]*/[0-9]*t' led.txt && grep -q '^  - run ' led.txt && grep -q '^  + last ' led.txt && [ "$(grep -c ' loses most mood from ' led.txt)" = 4 ] && ok "top drains and gains for both scopes, the rest-model line and one sentence per wesen" || bad "ledger lines"
 "$bin" --ledger=full > led2.txt 2>&1; cmp -s led.txt led2.txt && ok "the same replay prints the same ledger" || bad "ledger not deterministic"
-"$w/nm/a/bin/diary_sim" --ledger > led_n.txt 2>&1; grep -q '^Lemma  ' led_n.txt && grep -q 'Lemma loses most mood from' led_n.txt && ! grep -q '^ada' led_n.txt && [ "$(awk 'length > 79' led_n.txt | wc -l)" = 0 ] && ok "display names from data/names.txt (Lemma ...), still within 79 columns" || bad "ledger names"
+"$w/nm/a/bin/diary_sim" --ledger > led_n.txt 2>&1; grep -q '^Alpha ' led_n.txt && grep -q 'Alpha loses most mood from' led_n.txt && ! grep -q '^ada' led_n.txt && [ "$(awk 'length > 79' led_n.txt | wc -l)" = 0 ] && ok "display names from data/names.txt (Alpha ...), still within 79 columns" || bad "ledger names"
 "$bin" --more 20 --every 5000 --debug > l3.txt 2>&1
 sz_d=$(wc -c < debug.txt); sz_g=$(wc -c < debug_digest.txt); "$w/nm/a/bin/diary_sim" --more 0 --every 5000 --debug > l3n.txt 2>&1; sz_dn=$(wc -c < debug.txt); sz_gn=$(wc -c < debug_digest.txt)
 grep -q '^mood ledger: seed 42' run_report.txt && grep -q '^\[ledger\]' debug_full.txt && "$bin" --debug-section ledger | grep -q '^section ledger' && [ "$sz_d" -le 1500 ] && [ "$sz_g" -le 1500 ] && [ "$sz_dn" -le 1500 ] && [ "$sz_gn" -le 1500 ] && ok "run_report.txt carries the ledger, the digest section 'ledger' is in debug_full.txt (--debug-section ledger), debug.txt and the digest stay <= 1500 B (with the identity ids and with the longer display names)" || bad "ledger in reports"
@@ -803,7 +803,7 @@ op=$(grep ' end ' diaries/chess.txt | awk '{ ok = 1; for (i = 1; i <= NF; i++) i
 [ "$op" = 0 ] && ok "in every finished game the two rating changes are exact opposites" || bad "elo deltas ($op)"
 mkdir -p "$w/ch/dn/bin" "$w/ch/dn/h"; cp "$bin" "$w/ch/dn/bin/"; cp -r "$root/data" "$w/ch/dn/data"; sed -i 's/^chess.enabled = .*/chess.enabled = 1/' "$w/ch/dn/data/limits.txt"
 DIARY_HOME="$w/ch/dn/h" "$w/ch/dn/bin/diary_sim" --seed 42 --ticks 300 --yes --every 5000 > /dev/null 2>&1; DIARY_HOME="$w/ch/dn/h" "$w/ch/dn/bin/diary_sim" --elo > e2.txt 2>&1
-grep -q 'Modulus' e2.txt && grep -q 'Kernel' e2.txt && grep -q 'Vertex' e2.txt && grep -q 'Lemma' e2.txt && ! grep -Eq '^[0-9]\. (ada|iris|sol|noor) ' e2.txt && [ "$(awk 'length > 79' e2.txt | wc -l)" = 0 ] && ok "--elo shows display names (Lemma .. Axiom, Modulus, Kernel, Vertex), no line over 79 columns" || bad "elo display names"
+grep -q 'Epsilon' e2.txt && grep -q 'Zeta' e2.txt && grep -q 'Eta' e2.txt && grep -q 'Alpha' e2.txt && ! grep -Eq '^[0-9]\. (ada|iris|sol|noor) ' e2.txt && [ "$(awk 'length > 79' e2.txt | wc -l)" = 0 ] && ok "--elo shows display names (Alpha .. Delta, Epsilon, Zeta, Eta), no line over 79 columns" || bad "elo display names"
 if [ -f "$w/pty_multi.py" ]; then   # (the menu scenario's pty helper exists in a full run)
   python3 "$w/pty_multi.py" "$w/ch/h" "$cb" '5\n' > mu.txt 2>&1; grep -aq '^ *chess Elo [A-Za-z]* [0-9]* |' mu.txt && ok "menu: the start screen has a 'chess Elo' line with the best ratings" || bad "menu elo line"
 fi
@@ -866,7 +866,7 @@ grep -q 'by=robot' diaries/world.txt && ok "the robot's pick / push are world ed
 "$rbn" --robot > rv.txt 2>&1; rc=$?
 mkdir -p "$w/rb/disp"; cp -r "$w/rb/data" "$w/rb/disp/data"; cp "$root/data/names.txt" "$w/rb/disp/data/names.txt"; ( cd "$w/rb/disp" && "$rbn" --robot > "$w/rb/h/rd.txt" 2>&1 )
 [ $rc = 0 ] && grep -q '^robot ' rv.txt && grep -q 'battery' rv.txt && grep -q 'steered by' rv.txt && [ "$(grep -cE '^  [^ ]{5}$' rv.txt)" = 5 ] && [ "$(awk 'length > 79' rv.txt | wc -l)" = 0 ] && ok "--robot: state, battery, 5x5 camera, controllers, last commands (display names, <= 79 columns)" || bad "--robot view ($rc)"
-grep -qE 'Lemma|Corollary|Theorem|Axiom' rd.txt && ! grep -qwE 'ada|gemini|replika|robert' rd.txt && ok "the robot view uses the display names (Lemma, Corollary, Theorem, Axiom)" || bad "robot names"
+grep -qE 'Alpha|Beta|Gamma|Delta' rd.txt && ! grep -qwE 'ada|gemini|replika|robert' rd.txt && ok "the robot view uses the display names (Alpha, Beta, Gamma, Delta)" || bad "robot names"
 grep -q '^robot (' run_report.txt && grep -q '^ada: commands' run_report.txt && ok "the end report has the robot block" || bad "robot report"
 cp diaries/robot.txt ../robot.keep
 sed -i '0,/ exec /s/ pos=\([-0-9]*\),/ pos=\1\1,/' diaries/robot.txt; "$rbn" --more 0 --every 5000 > h4.txt 2>&1

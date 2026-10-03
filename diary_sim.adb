@@ -1,4 +1,4 @@
---  Version: 0.027
+--  Version: 0.028
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -92,7 +92,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.027";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.028";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -179,6 +179,16 @@ procedure Diary_Sim is
    Screens_View : Boolean := False;              --  --screens: replay, then show the screens (a view like --ledger)
    Rate_Pct, Load, Hist, Cool, Streak, Since_Work, Cool_N, Cut_N, Quick_N : array (Entity_Id) of Natural := [others => 0];
    function RL (Key : String; Default : Integer) return Integer is (Integer (Limit (Key, Int (Default))));
+   --  "G7 ada-iris 1-0 ..." of the chess report: the two ids of the pairing shown as display names ('-' keeps Show from doing it).
+   function Game_Names (L : String) return String is
+      A : constant Natural := Fx.Index (L, " ");
+      B : constant Natural := (if A = 0 then 0 else Fx.Index (L, " ", A + 1));
+      D : constant Natural := (if B = 0 then 0 else Fx.Index (L (A + 1 .. B - 1), "-"));
+   begin
+      if D = 0 then return L; end if;
+      return L (L'First .. A) & Sim_World.Show (L (A + 1 .. D - 1)) & "-" & Sim_World.Show (L (D + 1 .. B - 1)) & L (B .. L'Last);
+   end Game_Names;
+
    function Rate_Now (E : Entity_Id) return Natural is   --  the recovery rate, with the governed offset (govern=1)
      (Natural'Max (1, Integer (Rate_Pct (E)) + Sim_Govern.Off (E, Sim_Govern.Rate)));
    function Cool_Len (E : Entity_Id) return Positive is
@@ -3850,7 +3860,7 @@ begin
          Append (Rep, Msg ("chess.rep") & ASCII.LF);
          for C in Sim_Games.Comp_Id loop Append (Rep, Sim_Games.Summary (C) & ASCII.LF); end loop;
          Append (Rep, Msg ("chess.head") & ASCII.LF);
-         for L of Sim_Games.Report (True) loop Append (Rep, L & ASCII.LF); end loop;
+         for L of Sim_Games.Report (True) loop Append (Rep, Game_Names (L) & ASCII.LF); end loop;
       end if;
       if Robot_Active then   --  the robot: state, commands and errors per wesen
          for L of Sim_Robot.Report loop Append (Rep, L & ASCII.LF); end loop;

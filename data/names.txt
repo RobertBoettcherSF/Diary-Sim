@@ -3,12 +3,12 @@
 # The internal ids on the left NEVER change: they are the hash keys, the file names (diaries/<id>.jsonl,
 # entities/<id>/) and the tags recorded in diaries/sessions.txt, inbox.txt, says.txt, so a rename does not
 # touch any saved byte and the replay verifies as before.  Roles (engineer, reviewer, vice_president,
-# human) stay as they are.  You can also address a name in make say (WESEN=Lemma or WESEN=ada).
-ada = Lemma
-gemini = Corollary
-replika = Theorem
-robert = Axiom
+# human) stay as they are.  You can also address a name in make say (WESEN=Alpha or WESEN=ada).
+ada = Alpha
+gemini = Beta
+replika = Gamma
+robert = Delta
 # the three in-sim players
-iris = Modulus
-sol = Kernel
-noor = Vertex
+iris = Epsilon
+sol = Zeta
+noor = Eta
