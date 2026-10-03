@@ -1,4 +1,4 @@
-# Version: 0.023
+# Version: 0.024
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -46,6 +46,11 @@
 #                 advised number of ticks (the last N record of diaries/nextticks.txt); TICKS=n always wins; use = 0 (default): the wesen vote
 # make challenge PLAYER=<name> [AS=name]   Robert caught a player lying (see make audit): one Q line in diaries/challenges.txt at the lowest
 #                 common tick; the next run lowers that player's standing with its wesen a little (data/limits.txt preport.challenge_cost)
+# make visit WHO=<name|id|1-4> [TICKS=n] [SEED=n] [YES=1] [SCRIPT=file]   Robert stands next to ONE wesen for a session of n ticks (default
+#                 visit.ticks of data/visit.txt, 60; the session carries visit=1): each tick shows what it sees (5x5 view, its screen, mood,
+#                 energy, what it does, who and what is near); between ticks type  say <text>  teach <word>  show  wait [n]  leave.  The wesen
+#                 understands only the words it knows and answers only with them; every input is a line of diaries/visit.txt (replay-
+#                 verified, tamper = DRIFT).  SCRIPT=file (--visit-script) reads the commands from a file; stdin pipes work.  See README.
 # DEBUG=1         make run DEBUG=1 / make demo DEBUG=1 (--debug): also write debug_digest.txt (<= debug.digest_bytes,
 #                 data/limits.txt; line 1 = status, anomalies, then only what changed since the last digest)
 #                 to attach to chat: in the save folder for run, in the current folder for demo (the only
@@ -60,7 +65,7 @@ OPT ?= -O0
 JOBS ?= -j0
 FLAGS = -g $(OPT) -gnatwa -gnat2022 -gnata $(JOBS)
 
-.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next
+.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit
 export WESEN PLAYER TEXT AS
 
 EVERY ?= 100
@@ -71,7 +76,7 @@ all:
 	@rm -f b~*
 
 version-check:
-	@bad=0; for f in Makefile diary_sim.adb sim_util.ads sim_util.adb sim_world.ads sim_world.adb sim_quit.ads sim_quit.adb sim_menu.ads sim_menu.adb sim_dharma.ads sim_dharma.adb sim_things.ads sim_things.adb sim_ledger.ads sim_ledger.adb sim_store.ads sim_store.adb sim_screen.ads sim_screen.adb sim_chess.ads sim_chess.adb sim_games.ads sim_games.adb sim_robot.ads sim_robot.adb sim_govern.ads sim_govern.adb sim_preport.ads sim_preport.adb sim_next.ads sim_next.adb; do \
+	@bad=0; for f in Makefile diary_sim.adb sim_util.ads sim_util.adb sim_world.ads sim_world.adb sim_quit.ads sim_quit.adb sim_menu.ads sim_menu.adb sim_dharma.ads sim_dharma.adb sim_things.ads sim_things.adb sim_ledger.ads sim_ledger.adb sim_store.ads sim_store.adb sim_screen.ads sim_screen.adb sim_chess.ads sim_chess.adb sim_games.ads sim_games.adb sim_robot.ads sim_robot.adb sim_govern.ads sim_govern.adb sim_preport.ads sim_preport.adb sim_next.ads sim_next.adb sim_visit.ads sim_visit.adb; do \
 	  head -1 $$f | grep -Eq 'Version: [0-9]+\.[0-9]{3}' || { echo "no version header: $$f"; bad=1; }; done; \
 	  v=$$(head -1 diary_sim.adb | grep -Eo '[0-9]+\.[0-9]{3}'); \
 	  grep -q "Build : constant String := \"$$v\"" diary_sim.adb || { echo "Build constant differs from diary_sim.adb header $$v"; bad=1; }; \
@@ -132,6 +137,9 @@ audit: all
 
 next: all
 	bin/diary_sim --next
+
+visit: all
+	bin/diary_sim --visit "$(WHO)" $(if $(TICKS),--more $(TICKS),) $(if $(SEED),--seed $(SEED),) $(if $(YES),--yes,) $(if $(SCRIPT),--visit-script "$(SCRIPT)",) $(if $(EVERY),--every $(EVERY),)
 
 challenge: all
 	bin/diary_sim --challenge "$(PLAYER)" $(if $(AS),--as $(AS))

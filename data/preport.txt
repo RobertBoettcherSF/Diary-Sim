@@ -65,3 +65,19 @@ challenges.header = # Q<n> tick=<T> player=<id> by=<who>  (Robert's input: a lie
 err.preport = preports.txt {1} differs from the replay: {2}
 err.preport_in = challenges.txt {1} cannot be applied: that player had no misreport left to challenge at that tick
 preport.more = -- more: press Enter --
+
+# One optional short line of a player about a visit of Robert to a wesen (visit=1 sessions; the chance is visit.comment_pct in limits.txt).
+# {1} player, {2} wesen, {3} how many times Robert spoke, {4} the change of the trust of the wesen towards Robert.  Band: quiet (no talk),
+# warm (trust up by 2 or more), flat, cool (down by 2 or more).  First person, one line each.
+rbox.visit.quiet.1 = {1}: Robert stood next to {2} for a while and said nothing.
+rbox.visit.quiet.2 = {1}: I saw Robert watch {2}. He did not speak.
+rbox.visit.quiet.3 = {1}: Robert only watched {2} this time.
+rbox.visit.warm.1 = {1}: Robert talked to {2} {3} times, and {2} trusts him more now ({4}).
+rbox.visit.warm.2 = {1}: {2} seems to like Robert's visit; trust {4} after {3} talks.
+rbox.visit.warm.3 = {1}: the visit did {2} good, I think (trust {4}).
+rbox.visit.flat.1 = {1}: Robert talked to {2} {3} times. Nothing much changed.
+rbox.visit.flat.2 = {1}: a short visit to {2}; I saw no real change (trust {4}).
+rbox.visit.flat.3 = {1}: {2} and Robert talked; it was a plain visit.
+rbox.visit.cool.1 = {1}: {2} did not like the talk with Robert much (trust {4}).
+rbox.visit.cool.2 = {1}: the visit went badly for {2}; trust {4}.
+rbox.visit.cool.3 = {1}: I think {2} was unsettled by the visit (trust {4}).

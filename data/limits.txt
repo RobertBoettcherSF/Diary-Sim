@@ -304,3 +304,32 @@ preport.pause = 1
 # The advice for the next run (data/ticks.txt): new sessions carry nextticks=1 unless 0; 1: make run without TICKS runs the advised number of ticks
 nextticks.enabled = 1
 nextticks.use = 0
+
+# The visit (make visit; visit=1 sessions, Sim_Visit, diaries/visit.txt).  enabled = 0: new sessions cannot be a visit.  Chances in percent.
+# teach_pct: a taught word is taken in; show_words / show_pct: base words on the shown screen and the chance that an unknown one is learned;
+# turn_cap / session_cap: words learned from the human per tick and per visit (the caps of the screens: screen.read).  unk_pct, pet_pct,
+# tired_pct, fond_pct: the share of answers that use the unknown-word, petition, tired and fond / cold templates.  bond_*: the small change of
+# the trust of the wesen towards the human (say / teach / show / a say it understood nothing of), bounded by bond_min .. bond_max; fond_at and
+# cold_at: the trust where the fond / cold answers begin.  comment_pct: a player may add one line about the visit to the box.
+# Changing these numbers changes the answers: it needs --fresh (diaries/visit.txt drifts).
+visit.enabled = 1
+visit.teach_pct = 60
+visit.show_words = 3
+visit.show_pct = 35
+visit.turn_cap = 3
+visit.session_cap = 20
+visit.unk_pct = 50
+visit.pet_pct = 40
+visit.tired_pct = 50
+visit.tired_energy = 25
+visit.fond_pct = 40
+visit.fond_at = 5
+visit.cold_at = -3
+visit.bond_say = 1
+visit.bond_teach = 2
+visit.bond_show = 1
+visit.bond_unknown = -1
+visit.bond_min = -20
+visit.bond_max = 20
+visit.log_lines = 5
+visit.comment_pct = 70

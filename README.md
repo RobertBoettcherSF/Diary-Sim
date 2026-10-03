@@ -491,6 +491,96 @@ nextticks.use = 0: advice only (make run without TICKS keeps the vote of the wes
   `bin/diary_sim --next-ticks`, which prints the number of the last N line and nothing else; no N line yet: the vote as before).
   `TICKS=n` always wins. The bare program and the menu are not changed (they keep the vote).
 
+## Visit: watch and talk to one wesen (`visit=1` sessions, `make visit`)
+
+Inspired by *Exile* (1988): Robert, the human player, takes a place **next to one wesen** for a stretch of ticks, watches it go about its
+life and talks to it. This is **STEP 1 (watch and talk)**; STEP 2 (possess / steer) is only a design hook, see the end of this section.
+The code is the new unit `sim_visit.ads/.adb` (PROOF-LATER label: parsing, template filling, bounded arithmetic); text and numbers are data
+(`data/visit.txt`, `visit.*` in `data/limits.txt`, `rbox.visit.*` in `data/preport.txt`).
+
+```
+make visit WHO=ada                 # Adam, 60 ticks (visit.ticks of data/visit.txt)
+make visit WHO=2 TICKS=100         # the 2nd wesen (order Adam, Eve, Abel, Ruth), 100 ticks
+make visit WHO=Eve SCRIPT=talk.txt # commands from a file (--visit-script), no keyboard
+printf 'say hello\nwait 3\nleave\n' | bin/diary_sim --visit abel --more 20 --yes   # a pipe works too
+```
+
+`WHO` is a display name (Adam, Eve, Abel, Ruth), an id (ada, gemini, replika, robert), an old name (Jack, John, Jill, Jane) or 1 .. 4.
+`--visit WHO` (also `--visit=WHO`) starts a **normal explicit session** of TICKS ticks (`--more n`, default `visit.ticks`) that carries the
+marker **`visit=1 vwho=<id>`** in `diaries/sessions.txt`: the ticks belong to the normal tick stream, the visit counts toward the session,
+the wesen acts on its own and the other three wesen, the players and the world run as always. Without `--visit` nothing is different:
+**off is byte-identical** (no marker, no `diaries/visit.txt`, no new dice; `visit.enabled = 0` in `limits.txt` turns the feature off).
+
+**The frame** (text only, at most 23 lines of 79 characters, written in ONE piece per tick, the prompt included):
+
+```
+== Adam | tick 12 | visit 12/60 | trust +2 ==
+ View 5x5        Screen of Adam          Status
+ * # Y # .       +--------------------+  mood -1 (even)
+ 2 * T ^ ;       |water city lack     |  energy 77
+ * * @ H v       |house               |  place 3
+ v * * ^ ^       |                    |  words 66 known
+ n * n o =       |                    |  petitions 0 open
+ @ Adam  H you   |                    |  trust +2 (neutral)
+ 1-4 wesen *thing|                    |  it does: wander
+                 +--------------------+
+Now: followed the afternoon light and lost track of time, ...
+Near: Eve; odd bent amber, sour rough bark, tiny stubby bead
+Adam: "what house?"
+visit> 
+```
+
+The 5x5 view is the camera of the robot (`@` the wesen, `H` you, digits other wesen, `*` things, other glyphs the biome), then its
+screen (`screen=1`), mood with its band, energy, place, the words it knows, its open petitions, its trust towards you, the verb and the
+diary sentence of this tick (what it does and says), who is near (same or neighbouring cell) and the three nearest things, then the last
+lines of the talk. A tick without a prompt (`visit.every` in `data/visit.txt`, or while a `wait` runs) is the same frame without prompt.
+
+**Commands** (between ticks; every `visit.every`-th tick, default every tick):
+
+* `say <text>` - the wesen **understands only the words it knows at that tick** (about 65 at the start, ~700 later); the others are
+  listed as "Unknown to Adam: ...". Its answer is built **only from its known vocabulary**: `data/visit.txt` holds templates per mood
+  band (miserable, low, even, good, glad) and sets for tiredness, open petitions, fond / cold trust, and "I do not know that word" (7
+  variants `visit.unk.N`). A template is a row of tokens: `word` (said only if known, else dropped), `a|b|c` (the first known),
+  `{pool}` (one known word of `visit.pool.<pool>`), `{echo}` (a known word you just said), `{any}` (any known word), `. , ? !`. A word the
+  wesen lacks is simply left out, so early talks are short and odd ("what? i") and get richer as its vocabulary grows; an answer that
+  keeps no word is shown as "Adam looks at you and says nothing.". Which set and which variant is a hash of (seed, wesen, tick, command
+  number); nothing is random.
+* `teach <word>` - feeds the **word learning path** (`Learn_Word`, filed in `entities/<id>/words.txt` as "visit", noted on the screen):
+  taken in with the chance `visit.teach_pct`, at most `visit.turn_cap` (3, like `screen.read`) words per tick and `visit.session_cap`
+  per visit; a word not in the vocabulary ("zebra") is refused, a known one is acknowledged.
+* `show` - shows it a screen of `visit.show_words` base words; each one it does not know is learned with `visit.show_pct` (the screen
+  learning chance, `screen.learn_pct`), same caps.
+* `wait [n]` - n ticks pass without a prompt (an empty line is a `wait 1`). `leave` (also `quit`, `q`, end of input) - the frames stop,
+  the session runs on to its end without them. An unknown command prints one help line.
+
+**Trust.** The wesen's trust towards you (the *bond*, -20 .. +20) moves by small data-set numbers: `visit.bond_say` +1 when it understood
+a word, `visit.bond_unknown` -1 when it understood none, `visit.bond_teach` +2, `visit.bond_show` +1 (when something was learned).
+It is shown in the head line, colours the answers (fond from `visit.fond_at`, cold from `visit.cold_at`) and is recomputed by every
+replay. It changes nothing else in the simulation. A player may add **one short optional line** about the visit to the end box of the
+players (`rbox.visit.<quiet|warm|flat|cool>.N` in `data/preport.txt`, chance `visit.comment_pct`), e.g. `Player 2: Robert talked to Eve
+3 times, and Eve trusts him more now (+3).`
+
+**Record-first.** Every input is a line `V<n> t=<tick> cmd=<say|teach|show|wait|leave> [n=..] h=<check> [text=..]` and every answer
+an `A<n>` line (`mood`, words `heard` / `unk`nown, `bond` change/value, the `reply`, or the word and result of a teach, the words of a
+show) in **`diaries/visit.txt`** (`Sim_Store`, own hash salts 9900 .. 9999). The commands are applied at the end of their tick, by the same
+code live and on replay, so the **save replays byte-identical including the visit**. The V line carries a check number `h=` over its
+content; a changed, removed or invented V / A line, an input outside a `visit=1` session or a removed marker is **DRIFT**. Changing
+`data/visit.txt` templates or the `visit.*` numbers of a save with visit lines needs `--fresh` (the wording keys of the frame are safe).
+
+**Scripted mode / pipes.** `--visit-script FILE` reads the commands from FILE (blank lines and `#` lines skipped), otherwise they come
+from stdin; on a pipe the commands are echoed after the prompt. At the end of the input the visitor leaves. Same conventions as the other
+views: a closed output pipe (`| head`) is quiet (the session runs on, nobody reads), Ctrl-C quits like every run (everything written is
+flushed, a rerun resumes).
+
+**STEP 2 hook: possess / steer (NOT built).** The idea of *Exile*: instead of only talking, the human may take the wesen's wheel for a
+tick. The prepared design, nothing of it is active: (1) a new command `steer <verb>` parsed by `Sim_Visit.Parse` (today `Bad`); (2) it is
+recorded like every input (`V<n> t=T cmd=steer verb=<verb>`, check number included) and applied at **tick+1** like `says.txt` and the
+grants, as an override of `Choose` for that wesen (`Steer_Override (E, Tick)` read in `Step`; replay-identical because the line is in
+`diaries/visit.txt`); (3) the wesen may **refuse** (a hash dice against its mood, energy and the bond, `visit.steer_*` in `limits.txt`,
+dice salts 9950 .. 9959 are reserved), a refusal is an `A` line too; (4) a steered tick costs trust or energy by data numbers and has
+a cap per visit; (5) only verbs the wesen's own action and world lists allow. The extension points are `Sim_Visit.Parse`, `Apply`
+(a new `Steer` kind) and the one call of `Visit_Step` in `Do_Tick` in `diary_sim.adb`.
+
 ## The debug digest (`DEBUG=1`, `--debug`)
 
 `debug.txt` (always written, <= 1500 bytes) is unchanged. For a compact file to attach to chat:
@@ -887,6 +977,6 @@ paste it` and `back up diaries/ before the next run`.
 vocabulary, Rule 30 personality, bench kernels, votes and summary text), `sim_util.ads/.adb` (hash rolls,
 line parsing, data-file helpers), `data/words.txt`, `data/topics.txt` (petition topics), `data/limits.txt`,
 `data/messages.txt` (all console wording), `data/kalpas.txt` (session length votes), `data/menu.txt` (menu text, title, tagline), `data/fonts.txt` (title letters), `data/vocab.txt`, `data/help.txt`, `sim_dharma.ads/.adb` (karma, rebirth, unrest, ladder, awareness, players, inbox), `sim_things.ads/.adb` (the treadmill world), `data/things.txt` (its lists), `docs/WORLD.md`, `data/karma.txt` (numbers), `data/dharma.txt` (wording, flavour labels), `data/players.txt` (the three players),
-`sim_next.ads/.adb` + `data/ticks.txt` (the advice for the next run), `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
+`sim_next.ads/.adb` + `data/ticks.txt` (the advice for the next run), `sim_visit.ads/.adb` + `data/visit.txt` (the visit: watch and talk), `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
 `Version:` header (`make version-check`); a touched file goes up by 0.001. V&V is
 suspended: no new test suites, `scripts/checks.sh` must keep passing.

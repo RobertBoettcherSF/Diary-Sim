@@ -1,4 +1,4 @@
---  Version: 0.031
+--  Version: 0.032
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -28,7 +28,7 @@ pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Finalization, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
-     GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Util, Sim_World;
+     GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Util, Sim_Visit, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
 
 procedure Diary_Sim is
@@ -92,7 +92,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.031";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.032";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -190,6 +190,29 @@ procedure Diary_Sim is
    Next_Store : Sim_Store.Store;
    Next_Lines : Str_Vectors.Vector;
    Next_View, Next_Ticks_Mode : Boolean := False;   --  --next / --next-ticks
+   --  visit=1 sessions (Sim_Visit): Robert stands next to one wesen; his inputs are V lines and the answers A lines in diaries/visit.txt
+   --  (Sim_Store, replay-verified).  --visit WHO / --visit-script FILE.
+   Visit_Mode : Boolean := False;                --  --visit given (this run starts a visit)
+   Visit_Opt, Visit_Script : Unbounded_String;
+   Visit_Who : Natural := 0;                     --  the wesen of --visit
+   Visit_Active : Boolean := False;              --  the session being replayed is a visit=1 session
+   Visit_E : Entity_Id := 1;
+   Visit_Start, Visit_End : Int := -1;           --  the ticks Visit_Start + 1 .. Visit_End are the visit
+   Visit_Path : constant String := "diaries/visit.txt";
+   Visit_Store : Sim_Store.Store;
+   type Visit_In is record
+      N : Positive := 1;
+      Tick : Int := 0;
+      C : Sim_Visit.Command;
+      Done : Boolean := False;
+   end record;
+   package Visit_Vectors is new Ada.Containers.Vectors (Positive, Visit_In);
+   Visit_Inputs : Visit_Vectors.Vector;
+   Visit_Left : Boolean := False;                --  the human left: no more frames
+   Visit_Wait : Int := 0;                        --  no prompt before this tick
+   Script_File : TIO.File_Type;
+   Script_On : Boolean := False;
+   Last_Diary : array (Entity_Id) of Unbounded_String;   --  the diary line of the latest tick of each wesen (the frame shows it)
    Audit_View, Challenge_Mode : Boolean := False;   --  --audit / --challenge <player>
    Challenge_Opt : Unbounded_String;
    Elo_View, Perft_Mode : Boolean := False;      --  --elo (replay, then the ranking) / --perft (the move generator checks)
@@ -346,7 +369,7 @@ procedure Diary_Sim is
       Read_Lines (Data_Path ("limits.txt"), Lines, Found);
       if not Found then Warn (Msg ("warn.limits_file")); end if;
       Read_Lines (Data_Path ("menu.txt"), Lines, Found);   --  menu text: keys only, a missing file shows the keys
-      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt", "screens.txt", "chess.txt", "robot.txt", "govern.txt", "preport.txt", "ticks.txt"]) loop   --  the Buddhism layer: numbers, wording, players
+      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt", "screens.txt", "chess.txt", "robot.txt", "govern.txt", "preport.txt", "ticks.txt", "visit.txt"]) loop   --  the Buddhism layer: numbers, wording, players
          Read_Lines (Data_Path (F), Lines, Found);
          if not Found then Warn (Msg ("warn.dharma_file", F)); end if;
       end loop;
@@ -1986,6 +2009,11 @@ procedure Diary_Sim is
       V : Str_Vectors.Vector;
    begin
       if Next_Active or else Sim_Next.Rounds > 0 then V := Sim_Next.Box_Lines (Tick, Next_Inputs); end if;
+      declare
+         Visit_Line : constant String := Sim_Visit.Comment (Session_N, Natural (Sim_Dharma.Last_Player));   --  a player on Robert's visit (visit=1)
+      begin
+         if Visit_Line /= "" then V.Append (Visit_Line); end if;
+      end;
       return V;
    end Next_Extra;
 
@@ -2040,6 +2068,178 @@ procedure Diary_Sim is
          end if;
       end loop;
    end Load_Vetoes;
+
+   --  ---- the visit (Sim_Visit): Robert next to one wesen; every input is a V line, every answer an A line of diaries/visit.txt ----------
+   --  The recorded inputs (V lines) are read before the replay and applied at the end of their tick, in this code path live and on replay.
+   --  A V line that is not exactly what the program writes (its check number h= included), a V line outside a visit=1 session, a missing,
+   --  changed or invented V / A line is DRIFT.
+   procedure Load_Visit is
+      Lines : Str_Vectors.Vector;
+      Found : Boolean;
+   begin
+      Visit_Inputs.Clear;
+      if not Ada.Directories.Exists (Visit_Path) then return; end if;
+      Read_Lines (Visit_Path, Lines, Found);
+      for L of Lines loop
+         if L'Length > 0 and then L (L'First) = 'V' then
+            declare
+               N : Natural;
+               Tk : Int;
+               C : Sim_Visit.Command;
+               OK : Boolean;
+            begin
+               Sim_Visit.Parse_Input (L, N, Tk, C, OK);
+               if not OK then raise Drift_Error with Msg ("err.visit_in", Sim_Store.Key_Of (L)); end if;
+               Visit_Inputs.Append (Visit_In'(N => Positive (N), Tick => Tk, C => C, Done => False));
+            end;
+         end if;
+      end loop;
+   end Load_Visit;
+
+   procedure Emit_Visit (Line : String; Tick : Int) is
+      Result : Sim_Store.Status;
+      Old : Unbounded_String;
+   begin
+      Sim_Store.Emit (Visit_Store, Line, Tick > Int (Common) and then not Preview and then not Ledger_Mode, Result, Old);
+      if Sim_Store."=" (Result, Sim_Store.Differs) then
+         raise Drift_Error with Msg ("err.visit", Sim_Store.Key_Of (Line), Diff_At (To_String (Old), Line));
+      elsif Sim_Store."=" (Result, Sim_Store.Skipped) then
+         raise Drift_Error with Msg ("err.visit", Sim_Store.Key_Of (Line), Diff_At ("(missing)", Line));
+      end if;
+   end Emit_Visit;
+
+   --  One command at the end of Tick: its V line, the effect (answer, words learned), its A line.
+   procedure Visit_Apply (N : Positive; C : Sim_Visit.Command; Tick : Int) is
+      Answer : Unbounded_String;
+      Learned : Sim_Visit.Word_Vectors.Vector;
+   begin
+      Emit_Visit (Sim_Visit.Input_Line (N, Tick, C), Tick);
+      Sim_Visit.Apply (C, Visit_E, Tick, N, St (Visit_E).Mood, St (Visit_E).Energy,
+                       (if Govern_Active then Sim_Govern.Open_Of (Visit_E) else 0), Answer, Learned);
+      for W of Learned loop
+         Ensure (Visit_E, Words_File, Words_Line (W, "visit", Tick, ""));
+         if Screen_Active then Sim_Screen.Note (Visit_E, W, "taught"); end if;
+      end loop;
+      if Length (Answer) > 0 then Emit_Visit (To_String (Answer), Tick); end if;
+   end Visit_Apply;
+
+   --  A new command of the live visit: numbered after the last V line, remembered, applied.
+   procedure Visit_Record (C : Sim_Visit.Command; Tick : Int) is
+      N : Positive := 1;
+   begin
+      for X of Visit_Inputs loop N := Positive'Max (N, X.N + 1); end loop;
+      Visit_Inputs.Append (Visit_In'(N => N, Tick => Tick, C => C, Done => True));
+      Visit_Apply (N, C, Tick);
+   end Visit_Record;
+
+   --  The next command line of the human (stdin) or of the script (blank lines and # lines skipped); Got False at the end of the input.
+   procedure Visit_Read (Line : out Unbounded_String; Got : out Boolean) is
+   begin
+      Line := Null_Unbounded_String;
+      Got := False;
+      TIO.Flush;
+      if Script_On then
+         while not TIO.End_Of_File (Script_File) loop
+            declare
+               L : constant String := Fx.Trim (TIO.Get_Line (Script_File), Ada.Strings.Both);
+            begin
+               if L'Length > 0 and then L (L'First) /= '#' then
+                  Line := To_Unbounded_String (L);
+                  Got := True;
+                  return;
+               end if;
+            end;
+         end loop;
+      else
+         Line := To_Unbounded_String (TIO.Get_Line);
+         Got := True;
+      end if;
+   exception
+      when others => Got := False;   --  end of the input, or a closed one
+   end Visit_Read;
+
+   --  The frame of this tick; then (every visit.every ticks) the commands of the human until a wait or leave.
+   procedure Visit_Live (Tick : Int) is
+      Sc : Sim_Visit.Scene;
+      Note : Unbounded_String;
+      Line : Unbounded_String;
+      Got : Boolean;
+      procedure Leave_Now is
+      begin
+         Visit_Record ((Kind => Sim_Visit.Leave, others => <>), Tick);
+         Visit_Left := True;
+         Con.Put_Line (Sim_Visit.Leave_Text (Visit_E));
+      end Leave_Now;
+   begin
+      Sc := (E => Visit_E, Tick => Tick, Index => Natural (Tick - Visit_Start), Total => Natural (Visit_End - Visit_Start),
+             Mood => St (Visit_E).Mood, Energy => St (Visit_E).Energy, Location => St (Visit_E).Location,
+             Pets => (if Govern_Active then Sim_Govern.Open_Of (Visit_E) else 0), Diary => Last_Diary (Visit_E),
+             World => World_Active, Screen => Screen_Active, Prompt => False, Note => Null_Unbounded_String);
+      if Natural (Tick - Visit_Start) mod Sim_Visit.Every /= 0 or else Tick < Visit_Wait then
+         Con.Put (Sim_Visit.Frame (Sc));
+         return;
+      end if;
+      Sc.Prompt := True;
+      loop
+         Sc.Note := Note;
+         Note := Null_Unbounded_String;
+         Con.Put (Sim_Visit.Frame (Sc));
+         if Con.Is_Dead or else Sim_Quit.Requested then
+            Visit_Left := True;   --  nobody reads: the session runs on quietly
+            return;
+         end if;
+         Visit_Read (Line, Got);
+         if not Got then
+            Con.Put ("" & ASCII.LF);
+            Leave_Now;
+            return;
+         end if;
+         if not Is_Tty (0) then Con.Put_Line (To_String (Line)); end if;
+         declare
+            C : constant Sim_Visit.Command := Sim_Visit.Parse (To_String (Line));
+         begin
+            case C.Kind is
+               when Sim_Visit.Bad =>
+                  Note := To_Unbounded_String (Msg ("visit.help.unknown", To_String (C.Text)) & " | " & Sim_Visit.Help_Text);
+               when Sim_Visit.Say | Sim_Visit.Teach | Sim_Visit.Show_Cmd =>
+                  Visit_Record (C, Tick);
+               when Sim_Visit.Wait =>
+                  Visit_Record (C, Tick);
+                  Visit_Wait := Tick + Int (C.N);
+                  return;
+               when Sim_Visit.Leave =>
+                  Leave_Now;
+                  return;
+            end case;
+         end;
+      end loop;
+   end Visit_Live;
+
+   procedure Visit_Step (Tick : Int) is
+   begin
+      for I in 1 .. Natural (Visit_Inputs.Length) loop
+         if not Visit_Inputs (I).Done and then Visit_Inputs (I).Tick = Tick then
+            Visit_Inputs.Reference (I).Done := True;
+            Visit_Apply (Visit_Inputs (I).N, Visit_Inputs (I).C, Tick);
+         end if;
+      end loop;
+      if Visit_Mode and then not Visit_Left and then Tick > Int (Common) and then not Ledger_Mode and then not Preview then
+         Visit_Live (Tick);
+      end if;
+   end Visit_Step;
+
+   procedure Verify_Visit (Upto : Int) is
+      Orphan : constant String := Sim_Store.Orphan (Visit_Store, Upto);
+   begin
+      for X of Visit_Inputs loop
+         if not X.Done and then X.Tick <= Upto then
+            raise Drift_Error with Msg ("err.visit_out", "V" & Img (X.N), Img (X.Tick));
+         end if;
+      end loop;
+      if Orphan /= "" then
+         raise Drift_Error with Msg ("err.visit", Sim_Store.Key_Of (Orphan), Diff_At (Orphan, "(not in the replay)"));
+      end if;
+   end Verify_Visit;
 
    procedure Do_Tick (Tick : Int) is
    begin
@@ -2096,6 +2296,7 @@ procedure Diary_Sim is
                Written := Written + 1;
             end if;
             Events := Written + Verified;
+            Last_Diary (E) := To_Unbounded_String (Line);
             Act_Count (E, Last_Act) := Act_Count (E, Last_Act) + 1;
             if Last_Verb in World_Verb then Verb_Count (E, Last_Verb) := Verb_Count (E, Last_Verb) + 1; end if;
             Sim_Dharma.Deed (E, Last_Act, Pre_Energy_G, Did_Teach, Did_Coin);
@@ -2110,6 +2311,7 @@ procedure Diary_Sim is
       if World_Active then Sim_Things.Churn (Tick); end if;   --  things come and go near the wesen
       Flush_Edits;
       Sim_Dharma.Tick_End (Tick);
+      if Visit_Active and then Tick > Visit_Start and then Tick <= Visit_End then Visit_Step (Tick); end if;   --  the visitor's turn
       if Preport_Active and then Tick = Preport_End then Preport_Round (Tick); end if;   --  the claims of the players at the end of the session
       if Next_Active and then Tick = Next_End then Next_Round (Tick); end if;   --  the advice for the next run
       Last_Done := Tick;
@@ -2460,6 +2662,8 @@ procedure Diary_Sim is
       Players4 : Boolean := False;      --  players4=1: a fourth player (Sim_Dharma) takes over a wesen from this session on
       Nextticks : Boolean := False;     --  nextticks=1: wesen propose and players decide the ticks of the next run (Sim_Next, diaries/nextticks.txt)
       Preport : Boolean := False;       --  preport=1: the players report to Robert in text boxes; their claims are recorded (Sim_Preport, diaries/preports.txt)
+      Visit : Boolean := False;         --  visit=1: Robert stands next to one wesen (vwho=<id>) and talks to it (Sim_Visit, diaries/visit.txt)
+      Visit_Who : Natural := 0;
    end record;
    package Session_Vectors is new Ada.Containers.Vectors (Positive, Session_Rec);
    Sessions : Session_Vectors.Vector;
@@ -2481,7 +2685,8 @@ procedure Diary_Sim is
       & (if R.World then " world=1" else "") & (if R.Rest then " rest=1" else "") & (if R.Grant then " grant=1" else "")
       & (if R.Screen then " screen=1" else "") & (if R.Chess then " chess=1" else "")
       & (if R.Robot then " robot=1" else "") & (if R.Govern then " govern=1" else "") & (if R.Scoin then " scoin=1" else "")
-      & (if R.Preport then " preport=1" else "") & (if R.Players4 then " players4=1" else "") & (if R.Nextticks then " nextticks=1" else ""));
+      & (if R.Preport then " preport=1" else "") & (if R.Players4 then " players4=1" else "") & (if R.Nextticks then " nextticks=1" else "")
+      & (if R.Visit then " visit=1 vwho=" & Name (Entity_Id (R.Visit_Who)) else ""));
    function Yuga (N : Positive) return String is (Msg ("yuga." & Img ((N - 1) mod 4)));
    --  The four votes of a session that starts after tick Start (state: St, known words).
    function Votes_At (Start : Int) return Kalpa_Votes is
@@ -2523,8 +2728,10 @@ procedure Diary_Sim is
       R.Preport := Token (L, "preport") = "1";
       R.Players4 := Token (L, "players4") = "1";
       R.Nextticks := Token (L, "nextticks") = "1";
+      R.Visit := Token (L, "visit") = "1";
+      R.Visit_Who := (if R.Visit then Sim_Dharma.Find_Wesen (Token (L, "vwho")) else 0);
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
-        and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0;
+        and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0 and then (R.Visit_Who > 0 or else not R.Visit);
       while OK and then K < 4 loop
          declare
             Stop : constant Natural := Fx.Index (V, "/", Pos);
@@ -2631,6 +2838,7 @@ procedure Diary_Sim is
       Preport_End := -1;
       Next_Active := False;
       Next_End := -1;
+      Visit_Active := False;
       if not Ada.Directories.Exists (Sessions_Path) then return; end if;
       Read_Lines (Sessions_Path, Lines, Found);
       for I in 1 .. Natural (Lines.Length) loop
@@ -2683,6 +2891,13 @@ procedure Diary_Sim is
       Next_Active := R.Nextticks and then R.Govern;
       Next_End := (if Next_Active then R.Start + R.Len else -1);   --  wesen and players give their advice at the last tick of the session
       if R.Robot then Sim_Robot.Begin_Life (R.Start); end if;   --  the robot comes into the world with its first session
+      Visit_Active := R.Visit;
+      if R.Visit then
+         Visit_E := Entity_Id (R.Visit_Who);
+         Visit_Start := R.Start;
+         Visit_End := R.Start + R.Len;
+         Sim_Visit.Begin_Session (R.N, Visit_E);
+      end if;
       for E in Entity_Id loop
          if Sim_Dharma.Rebirth_Location (E) >= 0 then St (E).Location := Clamp (Sim_Dharma.Rebirth_Location (E), 0, L_Max); end if;
       end loop;
@@ -2890,7 +3105,8 @@ procedure Diary_Sim is
       Session_N := (if Sessions.Is_Empty then 0 else Sessions.Last_Element.N);
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
-               Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted);
+               Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted,
+               Visit => Visit_Mode, Visit_Who => Visit_Who);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -2906,7 +3122,8 @@ procedure Diary_Sim is
          Kalpa_Line := To_Unbounded_String (Msg ("kalpa.resume", Img (R.N), Yuga (R.N), Votes_Text (R.Votes), Img (R.Len), Img (Ticks)));
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
-               World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted);
+               World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted,
+               Visit => False, Visit_Who => 0);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);
@@ -3849,7 +4066,7 @@ begin
          Eq  : constant Natural := Fx.Index (A, "=");
          Opt : constant String := (if Eq > 0 then A (A'First .. Eq - 1) else A);
          Num : constant Boolean := Opt in "--ticks" | "--seed" | "--every" | "--crash-at" | "--more";
-         Sep : constant Boolean := (Num or else Opt in "--home" | "--say" | "--text" | "--as" | "--grant" | "--veto" | "--approve" | "--challenge" | "--debug-section") and then Eq = 0 and then I < Ada.Command_Line.Argument_Count;   --  --ticks 200
+         Sep : constant Boolean := (Num or else Opt in "--home" | "--say" | "--text" | "--as" | "--grant" | "--veto" | "--approve" | "--challenge" | "--debug-section" | "--visit" | "--visit-script") and then Eq = 0 and then I < Ada.Command_Line.Argument_Count;   --  --ticks 200
          Val : constant String := (if Eq > 0 then A (Eq + 1 .. A'Last) elsif Sep then Ada.Command_Line.Argument (I + 1) else "");
          Help  : Str_Vectors.Vector;
          Found : Boolean;
@@ -3878,6 +4095,8 @@ begin
          elsif Opt = "--audit" then Ledger_Mode := True; Audit_View := True;
          elsif Opt = "--next" then Ledger_Mode := True; Next_View := True;
          elsif Opt = "--next-ticks" then Next_Ticks_Mode := True;
+         elsif Opt = "--visit" then Visit_Mode := True; Visit_Opt := To_Unbounded_String (Val);
+         elsif Opt = "--visit-script" then Visit_Script := To_Unbounded_String (Val);
          elsif Opt = "--challenge" then Challenge_Mode := True; Challenge_Opt := To_Unbounded_String (Val);
          elsif Opt = "--robot" then Ledger_Mode := True; Robot_View := True;
          elsif Opt = "--screens" then Ledger_Mode := True; Screens_View := True;
@@ -3901,6 +4120,27 @@ begin
       end;
       I := I + 1;
    end loop;
+   if Length (Visit_Script) > 0 and then not Visit_Mode then raise Usage_Error with Msg ("visit.err.nocmd"); end if;
+   if Visit_Mode then   --  --visit <name|id|1..4> [--more N]: the length defaults to visit.ticks of data/visit.txt
+      declare
+         T : constant String := Internal_Id (Ada.Characters.Handling.To_Lower (Fx.Trim (To_String (Visit_Opt), Ada.Strings.Both)));
+      begin
+         if T = "" then raise Usage_Error with Msg ("visit.err.nocmd"); end if;
+         Visit_Who := Sim_Dharma.Find_Wesen (T);
+         if Visit_Who = 0 and then T'Length = 1 and then T (T'First) in '1' .. '4' then Visit_Who := Natural'Value (T); end if;
+         if Visit_Who = 0 then raise Usage_Error with Msg ("visit.err.who", To_String (Visit_Opt)); end if;
+      end;
+      if not Sim_Visit.Enabled then raise Usage_Error with Msg ("visit.err.off"); end if;
+      if Length (Visit_Script) > 0 then
+         begin
+            TIO.Open (Script_File, TIO.In_File, To_String (Visit_Script));
+            Script_On := True;
+         exception
+            when others => raise Usage_Error with Msg ("visit.err.script", To_String (Visit_Script));
+         end;
+      end if;
+      if Ticks < 0 and then More < 0 then More := Int (Sim_Visit.Default_Ticks); end if;
+   end if;
    Explicit := Ticks >= 0 or else More >= 0;   --  otherwise the entities vote on the session length
    Every := (if Every < 0 then 100 else Int'Max (1, Every));
    if Preview and then (Fresh or else Yes or else More >= 0 or else Crash_At >= 0) then
@@ -4034,6 +4274,7 @@ begin
    Sim_Govern.Init (Seed);
    Sim_Preport.Init (Seed);
    Sim_Next.Init (Seed);
+   Sim_Visit.Init (Seed);
    for E in Entity_Id loop
       Cur_Name := To_Unbounded_String (Name (E));
       Ada.Directories.Create_Path ("entities/" & Name (E));
@@ -4075,6 +4316,8 @@ begin
    Load_Vetoes;
    Sim_Store.Open (Preport_Store, Preport_Path, "# seed " & Img (Seed));
    Sim_Store.Open (Next_Store, Next_Path, "# seed " & Img (Seed));
+   Sim_Store.Open (Visit_Store, Visit_Path, "# seed " & Img (Seed));
+   Load_Visit;
    Load_Challenges;
    Set_Ledger_From;
    if not Ledger_Mode then Write_Debug ("RUN", ""); end if;   --  stub: a kill -9 still leaves a file
@@ -4117,6 +4360,7 @@ begin
       Decide_Session;
       Set_Ledger_From;
       Con.Put_Line (To_String (Kalpa_Line));
+      if Visit_Mode and then Visit_Active then Con.Put_Line (Msg ("visit.start", Name (Visit_E), Img (Visit_End - Visit_Start))); end if;
    end if;
 
    --  Phase 2: the rest of the run (ticks beyond the common tick are appended where missing).
@@ -4124,7 +4368,7 @@ begin
       for Tick in Int range Int (Verify_To) + 1 .. Ticks loop
          Do_Tick (Tick);
          Check_Dharma_At (Tick);   --  a stored session end beyond the common tick (a diary was behind)
-         if Tick > Int (Common) and then Tick mod Every = 0 then
+         if Tick > Int (Common) and then Tick mod Every = 0 and then not (Visit_Mode and then Visit_Active and then not Visit_Left) then
             Con.Put_Line (Msg ("progress", Img (Tick), Img (Ticks), Img (Integer (Entity_Id'Last)), Img (Events)));
             Write_Debug ("RUN", "");   --  refresh the stub
          end if;
@@ -4149,6 +4393,7 @@ begin
       Verify_Govern (Last_Done);
       Verify_Preport (Last_Done);
       Verify_Next (Last_Done);
+      Verify_Visit (Last_Done);
    end if;
    if Quit_Seen then   --  Ctrl-C / SIGTERM: everything written so far is flushed; a rerun resumes
       Con.Put_Line (Msg ("quit", Sim_Quit.Which, Img (Last_Done)));
@@ -4302,6 +4547,9 @@ begin
          Ada.Command_Line.Set_Exit_Status (1);
       end if;
       Write_Petitions;
+      if Visit_Mode and then Visit_Active then
+         Con.Put_Line (Msg ("visit.done", Name (Visit_E), Img (Sim_Visit.Commands), Sgn (Int (Sim_Visit.Bond_Of (Visit_E)))));
+      end if;
       Write_Debug ((if Length (Fails) = 0 then "OK" else "DRIFT"), (if Length (Fails) = 0 then "" else "error: " & To_String (Export_Line)));
       Con.Put (To_String (Rep));
       Con.Put (To_String (Console));

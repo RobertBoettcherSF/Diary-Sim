@@ -1,0 +1,189 @@
+# The visit (make visit WHO=<name|id|1-4> / --visit; visit=1 sessions): Robert stands next to one wesen, watches it and talks to it.
+# The numbers (chances, caps, trust changes) are in data/limits.txt (visit.*); the wording and the answer templates are here.
+# Changing the templates changes the answers (they are replay-checked in diaries/visit.txt): a changed template needs --fresh.
+# {1} .. {7} are filled in by the program; names are shown with the display names of data/names.txt.
+visit.ticks = 60
+# a prompt every k-th tick (the frame is shown every tick)
+visit.every = 1
+
+# ---- THE ANSWER OF A WESEN: only words it KNOWS are ever said ------------------------------------------------------------------------
+# A template is a row of blank separated tokens:  word  = said only if the wesen knows it (else dropped);  a|b|c  = the first alternative it
+# knows;  {pool}  = one KNOWN word of visit.pool.<pool> (dropped if it knows none of them);  {echo}  = a known word you just said (or taught);
+# {any}  = any word it knows;  . , ? !  = punctuation (kept after a word).  A word the wesen does not know is simply left out, so with few
+# words an answer is short or odd, and it gets richer as the vocabulary grows.  An answer that keeps no word at all is "nothing" (below).
+# Mood bands (visit.cuts): 1 miserable, 2 low, 3 even, 4 good, 5 glad.  Other sets: unk = a word it does not know, pet = open petitions,
+# tired = low energy (visit.tired_energy), fond / cold = trust towards you (visit.fond_at / visit.cold_at), teach.* = after teach, show.* after show.
+visit.cuts = -50 -15 15 50
+visit.band.1 = miserable
+visit.band.2 = low
+visit.band.3 = even
+visit.band.4 = good
+visit.band.5 = glad
+visit.trust.cuts = -10 -3 3 10
+visit.trust.1 = hostile
+visit.trust.2 = wary
+visit.trust.3 = neutral
+visit.trust.4 = warm
+visit.trust.5 = fond
+
+visit.pool.greet = hello greeting goodbye thanks oh
+visit.pool.you = you your friend
+visit.pool.me = I my
+visit.pool.yes = yes true good
+visit.pool.no = no not none false
+visit.pool.good = good glad gladly healthy luck big new clear
+visit.pool.bad = bad sad pain sick fear broken sorry stupid alone
+visit.pool.tired = sleep night pale sick bad pain
+visit.pool.want = want need must try wait
+visit.pool.help = help give get fetch take
+visit.pool.thing = house home door table chair car water tea paper letter clock room
+visit.pool.food = eat drink water tea thirst hunger
+visit.pool.place = house home room street city village door office school
+visit.pool.time = now today tomorrow yesterday morning evening night soon again always sometimes often
+visit.pool.q = what why who where how when
+visit.pool.know = know understand think learn
+visit.pool.talk = say tell answer explain ask word
+visit.pool.folk = friend family mother father child girl boy man woman person
+visit.pool.feel = feel love laugh kiss
+visit.pool.go = go come run start stop meet visit
+
+# I do not know that word (at least three variants; the program picks one by a hash of seed, wesen, tick and command)
+visit.unk.1 = I not know word .
+visit.unk.2 = no know . no word .
+visit.unk.3 = {no} {know} {q}
+visit.unk.4 = oh . not understand word
+visit.unk.5 = sorry . I not know
+visit.unk.6 = word ? what ? I not understand
+visit.unk.7 = {no} {echo} . {no} {know}
+
+# an answer by mood band
+visit.say.1.1 = {bad} .
+visit.say.1.2 = no . {bad} {tired}
+visit.say.1.3 = {no} {want} {me}
+visit.say.1.4 = I {bad} . {echo} ?
+visit.say.1.5 = {tired} . {no} {echo}
+visit.say.2.1 = I {feel} {bad}
+visit.say.2.2 = {echo} . {bad} {time}
+visit.say.2.3 = {no} {good} . {time}
+visit.say.2.4 = {me} {know} {echo} . {tired}
+visit.say.2.5 = {q} {you} ?
+visit.say.2.6 = {any} .
+visit.say.3.1 = {echo} ?
+visit.say.3.2 = I know {echo} .
+visit.say.3.3 = {q} {echo} ?
+visit.say.3.4 = {yes} . {thing} {time}
+visit.say.3.5 = {me} {want} {thing} . {echo}
+visit.say.3.6 = {you} {talk} {echo} {time}
+visit.say.3.7 = {any} {any} ?
+visit.say.4.1 = {yes} . {good} {echo}
+visit.say.4.2 = I {feel} {good} .
+visit.say.4.3 = {greet} {folk} . {echo}
+visit.say.4.4 = {echo} {good} . {you} {know} ?
+visit.say.4.5 = {me} {know} {echo} . {yes}
+visit.say.5.1 = {greet} {you} !
+visit.say.5.2 = I {good} . {feel} {echo} !
+visit.say.5.3 = {yes} {yes} . {good} {time} !
+visit.say.5.4 = {you} {good} {folk} . {echo} !
+visit.say.5.5 = {greet} . {me} {feel} {good} {time}
+
+# low energy (a share of the answers when energy is below visit.tired_energy)
+visit.tired.1 = {tired} .
+visit.tired.2 = I {tired} . {no} {talk}
+visit.tired.3 = {time} . {tired} . {help}
+visit.tired.4 = oh . {me} {tired}
+
+# open petitions (a share of the answers while the wesen waits for a decision)
+visit.pet.1 = I {want} {thing} .
+visit.pet.2 = {help} {me} !
+visit.pet.3 = {me} {want} {help} {time} .
+visit.pet.4 = {you} {help} ? {me} {want} {echo}
+visit.pet.5 = {want} {food} . {help} ?
+
+# trust towards you (bond)
+visit.fond.1 = {you} {folk} . {good}
+visit.fond.2 = {greet} {folk} ! {you} {good}
+visit.fond.3 = I {feel} {you} . {echo}
+visit.fond.4 = {yes} {folk} . {time} {go} ?
+visit.cold.1 = {no} {you} .
+visit.cold.2 = {go} . {no} {talk}
+visit.cold.3 = {no} {folk} . {no} {echo}
+visit.cold.4 = not {good} . {you} {go}
+
+# after teach <word>
+visit.teach.ok.1 = {echo} ! {yes}
+visit.teach.ok.2 = {greet} . {echo} . {good}
+visit.teach.ok.3 = I {know} {echo} .
+visit.teach.ok.4 = {echo} ? {echo} !
+visit.teach.known.1 = I know {echo} .
+visit.teach.known.2 = {echo} . {yes} . {know}
+visit.teach.known.3 = oh . {echo} again ?
+visit.teach.miss.1 = {no} {know} .
+visit.teach.miss.2 = {q} ? {no} {know}
+visit.teach.miss.3 = oh . not .
+visit.teach.cap.1 = enough .
+visit.teach.cap.2 = {no} {time} . {tired}
+visit.teach.cap.3 = {time} . wait {me}
+visit.teach.cap.4 = {want} {tired} .
+visit.teach.cap.5 = ?
+
+# after show
+visit.show.ok.1 = {echo} ! {good}
+visit.show.ok.2 = {yes} . {echo} . {know}
+visit.show.ok.3 = oh ! {echo} ?
+visit.show.none.1 = {know} . {yes}
+visit.show.none.2 = {no} {know} . {time}
+visit.show.none.3 = oh . again
+
+# if the answer keeps no word at all (the wesen knows too few of the template words)
+visit.nothing.1 = {1} looks at you and says nothing.
+visit.nothing.2 = {1} opens its mouth and closes it again.
+visit.nothing.3 = {1} makes a small sound that is no word.
+visit.nothing.4 = {1} waits, and the silence stays.
+
+# ---- THE FRAME (80x24, text only) --------------------------------------------------------------------------------------------------------
+visit.head = == {1} | tick {2} | visit {3} | trust {4} ==
+visit.title.view = View 5x5
+visit.title.screen = Screen of {1}
+visit.title.status = Status
+visit.legend.1 = @ {1}  H you
+visit.legend.2 = 1-4 wesen *thing
+visit.noworld = (no world here)
+visit.noscreen = (no screen here)
+visit.stat.mood = mood {1} ({2})
+visit.stat.energy = energy {1}
+visit.stat.place = place {1}
+visit.stat.words = words {1} known
+visit.stat.pet = petitions {1} open
+visit.stat.trust = trust {1} ({2})
+visit.stat.doing = it does: {1}
+visit.now = Now:
+visit.near = Near:
+visit.near.nobody = nobody
+visit.near.nothing = nothing to touch
+visit.prompt = visit> 
+visit.help = say <text> | teach <word> | show | wait [n] | leave
+visit.leave = You leave {1}. The ticks run on.
+
+# the log under the frame
+visit.log.you = You: {1}
+visit.log.heard = {1} understands: {2}
+visit.log.unk = Unknown to {1}: {2}
+visit.log.reply = {1}: "{2}"
+visit.log.teach.learned = You teach {2}: {1} learns it.
+visit.log.teach.known = You teach {2}: {1} knows it already.
+visit.log.teach.missed = You teach {2}: {1} does not take it in.
+visit.log.teach.cap = You teach {2}: {1} cannot take in more now.
+visit.log.teach.nosuch = You teach {2}: no such word in the vocabulary.
+visit.log.show = You show a screen ({2}): {1} learns {3}.
+
+# messages of the run
+visit.err.who = visit: no such wesen: {1} (a name, an id, or 1 .. 4)
+visit.err.off = visit: switched off (visit.enabled = 0 in data/limits.txt)
+visit.err.script = visit: cannot read the script file {1}
+visit.err.nocmd = visit: please give a wesen (make visit WHO=<name|id|1..4>, --visit <name|id|1..4>)
+visit.start = You walk up to {1} and stay for {2} ticks.
+visit.help.unknown = I do not understand that: {1}
+visit.done = Your visit with {1}: {2} commands, trust {3}.
+err.visit = visit.txt {1} differs from the replay: {2}
+err.visit_in = visit.txt {1} is not a line the program wrote (changed? the check number h= no longer fits)
+err.visit_out = visit.txt {1} (tick {2}) is outside a visit=1 session or has no tick to run in

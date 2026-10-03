@@ -1230,6 +1230,93 @@ cd "$w/nx/use/h" || exit 1; export DIARY_HOME="$w/nx/use/h"; u1=$("$w/nx/use/bin
 grep -q 'nextticks' "$root/README.md" && grep -q 'make next' "$root/README.md" && grep -q -- '--next' "$root/data/help.txt" && [ -f "$root/data/ticks.txt" ] && grep -q '^nextticks.use' "$root/data/limits.txt" && ok "README, --help and data/ document the advice for the next run" || bad "nextticks docs"
 unset DIARY_HOME
 
+echo "== 42. visit (visit=1): watch and talk to one wesen, scripted; V / A records replay-verified; answers only from known words; off = same simulation =="
+rm -rf "$w/vi"; mkdir -p "$w/vi/bin" "$w/vi/h" "$w/vi/off/h" "$w/vi/say/h"
+cp "$bin" "$w/vi/bin/"; cp -r "$idata" "$w/vi/data"
+sed -i 's/^screen.enabled = .*/screen.enabled = 1/; s/^govern.enabled = .*/govern.enabled = 1/; s/^visit.comment_pct = .*/visit.comment_pct = 100/; s/^visit.teach_pct = .*/visit.teach_pct = 100/; s/^visit.show_pct = .*/visit.show_pct = 100/' "$w/vi/data/limits.txt"
+vb="$w/vi/bin/diary_sim"
+cat > "$w/vi/script.txt" <<'EOS'
+# a script: comments and blank lines are skipped
+
+say hello friend
+say qwxz
+say qwxz zzyx
+say I want to talk to you and know the house
+teach kilometer
+teach calendar
+teach cashier
+teach alphabet
+teach taxi
+teach zebra
+show
+wait 2
+say what is your name
+bogus command
+leave
+EOS
+vrun() { local d="$1"; shift; ( cd "$d" || exit 1; export DIARY_HOME="$d/h"; "$vb" --seed 42 --ticks 300 --yes --every 5000 > c0.txt 2>&1; "$vb" "$@" --every 5000 > c1.txt 2>&1 ); }
+vrun "$w/vi" --visit ada --more 60 --visit-script "$w/vi/script.txt"
+vrun "$w/vi/off" --more 60
+printf 'say hello\nsay qwxz\nwait 3\nsay what\nleave\n' > "$w/vi/say.txt"
+vrun "$w/vi/say" --visit 2 --more 60 --visit-script "$w/vi/say.txt"
+cd "$w/vi/h" || exit 1; export DIARY_HOME="$w/vi/h"
+nv=$(grep -c '^S[0-9].* visit=1 vwho=ada' diaries/sessions.txt); nv1=$(grep -c '^S1 .*visit' diaries/sessions.txt)
+[ "$nv" = 1 ] && [ "$nv1" = 0 ] && grep -q '^S2 .* len=60 src=explicit.* visit=1' diaries/sessions.txt && head -1 diaries/visit.txt | grep -q '^# seed 42$' && ok "the visit is a normal explicit session (len=60) with the marker visit=1 vwho=ada; the first session has none; diaries/visit.txt is recorded" || bad "visit marker ($nv / $nv1)"
+nV=$(grep -c '^V[0-9]' diaries/visit.txt); nA=$(grep -c '^A[0-9]' diaries/visit.txt); hb=$(grep '^V[0-9]' diaries/visit.txt | grep -vc ' h=[0-9]')
+[ "$nV" -ge 14 ] && [ "$nA" -ge 12 ] && [ "$hb" = 0 ] && grep -q ' cmd=wait n=2 ' diaries/visit.txt && grep -q ' cmd=leave' diaries/visit.txt && ! grep -q 'bogus' diaries/visit.txt && ok "every input is a V line with a check number ($nV), every answer an A line ($nA); wait and leave are recorded, a bad command is not" || bad "V/A lines ($nV/$nA/$hb)"
+fr=$(awk '/^== ada \| tick /{n++} END{print n+0}' ../c1.txt)
+mx=$(awk '/^== ada \| tick /{ if (n > m) m = n; n = 0 } /^You leave/{ exit } { n++ } END{ print m + 0 }' ../c1.txt)
+wd=$(awk '/^== ada \| tick /{go=1} /^You leave/{go=0} go && length > 79 { n++ } END{print n + 0}' ../c1.txt)
+[ "$fr" -ge 8 ] && [ "$mx" -le 24 ] && [ "$wd" = 0 ] && grep -q '^visit> say hello friend' ../c1.txt && grep -q '^ View 5x5' ../c1.txt && grep -q '^Now: ' ../c1.txt && grep -q '^Near: ' ../c1.txt && grep -q 'mood .* energy\|energy [0-9]' ../c1.txt && grep -q '^You leave ada' ../c1.txt && ok "$fr frames, none longer than $mx lines or 79 columns; view, screen, mood, energy, doing, near, the typed command echoed, leave ends the frames" || bad "frames ($fr / $mx / $wd)"
+grep -q '^Unknown to ada: qwxz' ../c1.txt && grep -q '^I do not understand that: bogus command' ../c1.txt && grep -q 'ada understands:' ../c1.txt && ok "words it does not know are shown as unknown to it; the words it understands are listed; a bad command prints help" || bad "unknown words"
+# only known words: every word of a reply was known (words.txt: start / taught / world / coined / visit with tick <=) at that tick
+chk=$(awk -v wf="entities/ada/words.txt" 'BEGIN { while ((getline l < wf) > 0) { if (l ~ /^#/) continue; split(l, a, " "); w = tolower(a[2]); if (!(w in first) || a[4] + 0 < first[w]) first[w] = a[4] + 0 } }
+  /^A[0-9]/ { t = $2; sub("t=", "", t); r = $0; sub(/.* reply=/, "", r); gsub(/[^A-Za-z ]/, " ", r); n = split(tolower(r), ws, " "); for (i = 1; i <= n; i++) { total++; if (!(ws[i] in first) || first[ws[i]] > t + 0) bad++ } } END { print bad + 0, total + 0 }' diaries/visit.txt)
+[ "${chk% *}" = 0 ] && [ "${chk#* }" -ge 10 ] && ok "all ${chk#* } words of the answers were known to the wesen at that tick (answers are built only from the known vocabulary)" || bad "answer words ($chk)"
+vu=$(grep -c '^visit.unk.[0-9]' "$w/vi/data/visit.txt"); ub=0; for b in 1 2 3 4 5; do [ "$(grep -c "^visit.say.$b.[0-9]" "$w/vi/data/visit.txt")" -ge 3 ] || ub=1; done
+[ "$vu" -ge 3 ] && [ "$ub" = 0 ] && ok "data/visit.txt: $vu variants of 'I do not know that word', at least 3 templates in each of the 5 mood bands" || bad "templates ($vu / $ub)"
+# teach: caps, learning path, trust
+lt=$(grep -c ' res=learned' diaries/visit.txt); tw=$(grep -c ' visit [0-9]*$' entities/ada/words.txt)
+pt=$(grep '^A[0-9]* t=[0-9]* cmd=\(teach\|show\)' diaries/visit.txt | awk '{ t = $2; l = 0; if ($0 ~ / res=learned/) l = 1; if (match($0, / learned=[0-9]+/)) l = substr($0, RSTART + 9, RLENGTH - 9) + 0; c[t] += l } END { for (k in c) if (c[k] > m) m = c[k]; print m + 0 }')
+[ "$lt" -ge 1 ] && [ "$pt" -le 3 ] && grep -q ' word=zebra res=nosuch' diaries/visit.txt && [ "$tw" -ge "$lt" ] && ok "teach feeds the word path ($lt learned, filed in words.txt as visit), at most $pt <= 3 words per tick (visit.turn_cap), a word outside the vocabulary (zebra) is refused" || bad "teach ($lt / $pt / $tw)"
+bo=$(grep '^A[0-9]' diaries/visit.txt | sed -E 's/.* bond=([+-]?[0-9]+)\/(-?[0-9]+) .*/\1 \2/' | awk '{ d = $1 + 0; if (d < -1 || d > 2 || $2 < -20 || $2 > 20) bad++ } END { print bad + 0 }')
+[ "$bo" = 0 ] && grep -qE ' cmd=teach .* res=learned bond=\+2/' diaries/visit.txt && grep -qE ' cmd=say .* bond=-1/' diaries/visit.txt && ok "trust moves by the small data numbers (+2 learned, +1 understood, -1 not understood), bounded -20 .. +20" || bad "bond ($bo)"
+ur=$(grep '^A[0-9]* t=[0-9]* cmd=say .* heard=- ' diaries/visit.txt | sed 's/.* reply=//' | sort -u | wc -l)
+[ "$ur" -ge 1 ] && ok "a say with no known word gets an unknown-word answer ($ur distinct)" || bad "unk answers"
+# the player's comment in the box
+pat=$(sed -n 's/^rbox\.visit\.[a-z]*\.[0-9]* = //p' "$w/vi/data/preport.txt" | sed -E 's/\{[0-9]\}/.*/g; s/[()]/\\&/g' | paste -sd'|')
+grep -E '^\|' player_reports.txt | sed -E 's/^\| //; s/ +\|$//' | tr '\n' ' ' | tr -s ' ' | grep -qE "$pat" && ok "a player adds one short line about the visit to the box (rbox.visit.* in data/preport.txt)" || bad "player comment"
+# replay, byte-identical, DRIFT
+cks() { cat diaries/*.txt diaries/*.jsonl | grep -v '^# build' | sed -E 's/"ts":"[^"]*",//' | cksum; }
+s1=$(cks); "$vb" --more 0 --every 5000 > r1.txt 2>&1; s2=$(cks)
+grep -q '^import OK: 4 entities, 360 ticks verified' r1.txt && [ "$s1" = "$s2" ] && ok "the save replays byte-identical including the visit (V and A lines recomputed and compared)" || bad "visit replay"
+cp diaries/visit.txt ../v.keep; cp diaries/sessions.txt ../vs.keep
+chkd() { "$vb" --more 0 --every 5000 > rd.txt 2>&1; head -1 debug.txt | grep -q '^DRIFT' && grep -q "$1" rd.txt && ok "$2: DRIFT" || bad "$2 ($(grep -m1 'FAILED' rd.txt))"; cp ../v.keep diaries/visit.txt; cp ../vs.keep diaries/sessions.txt; }
+sed -i '0,/text=hello friend/s//text=hello friends/' diaries/visit.txt; chkd 'visit.txt V' "a changed V line"
+sed -i '0,/ reply=/s// reply=x/' diaries/visit.txt; chkd 'visit.txt A' "a changed A line"
+sed -i '0,/^A2 /{/^A2 /d}' diaries/visit.txt; chkd 'visit.txt A2' "a removed A line"
+echo "V99 t=310 cmd=wait n=1 h=5" >> diaries/visit.txt; chkd 'visit.txt V99' "an invented V line"
+sed -i '/^S2 /s/ visit=1 vwho=ada//' diaries/sessions.txt; chkd 'visit.txt\|screens.txt\|DRIFT\|differs' "a removed visit=1 marker"
+"$vb" --more 0 --every 5000 > r6.txt 2>&1; grep -q '^import OK: 4 entities, 360 ticks verified' r6.txt && ok "restored: replays again" || bad "visit restore"
+# a visit that only talks does not change the simulation; off adds no record
+sm=0; for e in ada gemini replika robert; do cmp -s <(sed -E 's/"ts":"[^"]*",//' "$w/vi/say/h/diaries/$e.jsonl") <(sed -E 's/"ts":"[^"]*",//' "$w/vi/off/h/diaries/$e.jsonl") || sm=$((sm + 1)); done
+[ "$sm" = 0 ] && grep -q 'visit=1 vwho=gemini' "$w/vi/say/h/diaries/sessions.txt" && ok "a visit that only talks (say / wait / leave, WHO=2) leaves the four diaries identical to the same run without a visit" || bad "talk-only visit changes the simulation ($sm)"
+[ ! -e "$w/vi/off/h/diaries/visit.txt" ] && ! grep -q 'visit' "$w/vi/off/h/diaries/sessions.txt" && ! grep -qi 'visit' "$w/vi/off/c1.txt" && ok "off (no --visit): no marker, no diaries/visit.txt, nothing on the console" || bad "off leaves traces"
+# stdin pipe, WHO forms, errors, closed pipe, switched off
+cd "$w/vi/say/h" || exit 1; export DIARY_HOME="$w/vi/say/h"
+printf 'say hello\nteach tea\n\nleave\n' | "$vb" --visit Gemini --more 5 --every 5000 > p1.txt 2>&1; rc1=$?
+printf 'say hello\n' | "$vb" --visit 4 --more 5 --every 5000 > p2.txt 2>&1
+grep -q '^visit> say hello' p1.txt && [ "$rc1" = 0 ] && grep -q 'visit=1 vwho=gemini' diaries/sessions.txt && grep -q 'visit=1 vwho=robert' diaries/sessions.txt && grep -q '^You leave robert' p2.txt && ok "commands from a pipe (end of input = leave); WHO as an id (Gemini) or the 4th wesen (4)" || bad "pipe / WHO ($rc1)"
+"$vb" --visit nobody --more 5 > e1.txt 2>&1; r1=$?; "$vb" --visit-script "$w/vi/say.txt" --more 5 > e2.txt 2>&1; r2=$?; "$vb" --visit ada --visit-script /nonexistent --more 5 > e3.txt 2>&1; r3=$?
+[ "$r1" = 2 ] && [ "$r2" = 2 ] && [ "$r3" = 2 ] && grep -q 'no such wesen' e1.txt && grep -q 'please give a wesen' e2.txt && grep -q 'cannot read the script' e3.txt && ok "usage errors (unknown wesen, script without --visit, missing script): exit 2 with a message" || bad "usage errors ($r1 $r2 $r3)"
+mkdir -p "$w/vi/dis/bin" "$w/vi/dis/h"; cp "$vb" "$w/vi/dis/bin/"; cp -r "$w/vi/data" "$w/vi/dis/data"; sed -i 's/^visit.enabled = .*/visit.enabled = 0/' "$w/vi/dis/data/limits.txt"
+( cd "$w/vi/dis/h" && DIARY_HOME="$w/vi/dis/h" "$w/vi/dis/bin/diary_sim" --seed 42 --yes --visit ada --more 5 > d.txt 2>&1; echo "rc=$?" >> d.txt ); grep -q 'switched off' "$w/vi/dis/h/d.txt" && grep -q 'rc=2' "$w/vi/dis/h/d.txt" && ok "visit.enabled = 0: --visit is refused" || bad "visit.enabled"
+badp=0
+for rd in "head -1" "true" "(sleep 0.3; head -2)"; do printf 'say hello\nwait 2\nsay hi\nleave\n' | "$vb" --visit ada --more 6 --every 5000 2> pe.txt | eval "$rd" > /dev/null; rcp=${PIPESTATUS[1]}; rcq=${PIPESTATUS[0]}; [ "$rcq" = 0 ] && [ ! -s pe.txt ] || badp=$((badp + 1)); done
+[ "$badp" = 0 ] && "$vb" --more 0 --every 5000 2>&1 | grep -q 'ticks verified' && ok "a closed output pipe is quiet (exit 0, nothing on stderr); the session still saved and replays" || bad "closed pipe ($badp)"
+grep -q 'visit' "$root/README.md" && grep -q 'STEP 2' "$root/README.md" && grep -q 'make visit' "$root/README.md" && grep -q -- '--visit' "$root/data/help.txt" && grep -q '^visit: all' "$root/Makefile" && grep -q 'sim_visit.ads sim_visit.adb' "$root/Makefile" && head -1 "$root/sim_visit.adb" | grep -q 'Version: [0-9]' && grep -q 'PROOF-LATER' "$root/sim_visit.ads" && ok "README (with the STEP 2 hook), --help, make visit, version-check list, PROOF-LATER label" || bad "visit docs"
+unset DIARY_HOME
+
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="
 [ "$fails" = 0 ]

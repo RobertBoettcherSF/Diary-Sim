@@ -19,6 +19,8 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
   --audit        players' claims vs the truth, misreports (make audit)
   --next         the advice for the next run: wesen, players (make next)
   --next-ticks   the advised ticks, a bare number (nextticks.use=1; make run)
+  --visit=WHO    stand next to one wesen, watch and talk (make visit WHO=ada)
+  --visit-script=F  commands for --visit from a file (else stdin)
   --challenge=P  a caught lie lowers a player's standing (make challenge)
   --robot        the robot: place, battery, camera, who steers it (make robot)
   --screens      the wesen's text screens after the replay (make screens)
@@ -119,3 +121,17 @@ Player 4 (players4=1: new sessions get the marker; an old save gets it from
 its next new session, no --fresh): a 4th player with its own personality,
 trust, watcher, decisions, honesty and box; players4.enabled = 0 in
 limits.txt: 3 players as before. make say PLAYER="Player 4".
+Visit (visit=1 session; make visit WHO=<name|id|1-4> [TICKS=n]; --visit): you
+stand next to ONE wesen for n ticks (default visit.ticks in data/visit.txt, 60;
+a normal explicit session). Each tick a frame (80x24, one write) shows its 5x5
+view, its screen, mood, energy, what it does, who and what is near. At the
+prompt: say <text> (it knows only its own words; the others are shown as
+unknown to it; it answers only with words it knows, from data/visit.txt
+templates by mood, energy, petitions, trust: short and odd at first, richer
+with its vocabulary), teach <word> (data chance, caps per tick and visit),
+show (a screen of base words), wait [n] (an empty line = wait 1), leave.
+Trust of the wesen towards you moves by small numbers (limits.txt visit.*).
+Every input is a line of diaries/visit.txt, replay-verified (tamper = DRIFT).
+--visit-script FILE or a pipe: the commands without a keyboard; EOF = leave.
+visit.enabled = 0 in limits.txt: no visits. STEP 2 (possess / steer) is only
+a hook, see README.
