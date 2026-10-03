@@ -1003,6 +1003,23 @@ export DIARY_HOME="$w/sc/c/h"; cd "$w/sc/c" || exit 1
 grep -q 'screen.coin_cap' "$root/data/limits.txt" && grep -q 'scoin=1' "$root/README.md" && grep -q 'governance: off' "$root/README.md" && ok "limits and README describe scoin=1 and the 'off for this save' lines" || bad "scoin docs"
 unset DIARY_HOME
 
+echo "== 36. closed pipe: every view / print command ends quietly when its reader goes away (| head, | true) =="
+rm -rf "$w/pp"; mkdir -p "$w/pp/h"; export DIARY_HOME="$w/pp/h"; cd "$w/pp" || exit 1
+"$bin" --seed 42 --ticks 100 --yes --every 5000 > /dev/null 2>&1
+badp=0; nump=0
+for o in --help --ledger --ledger=full --govern --robot --elo --screens --inbox --map "--more 5"; do
+  for rd in "head -1" "true" "(sleep 0.3; head -2)"; do
+    nump=$((nump + 1))
+    # shellcheck disable=SC2086
+    "$bin" $o --every 5000 2> pe.txt | eval "$rd" > /dev/null; rcp=${PIPESTATUS[0]}
+    [ "$rcp" = 0 ] && [ ! -s pe.txt ] || { badp=$((badp + 1)); echo "   '$o | $rd': exit $rcp, stderr: $(head -c 80 pe.txt)"; }
+  done
+done
+[ "$badp" = 0 ] && ok "$nump commands cut off by a closed pipe: exit 0, nothing on stderr, no traceback, no CRASH record" || bad "closed pipe ($badp of $nump)"
+"$bin" --more 0 --every 5000 > pv.txt 2>&1; grep -q '^import OK: 4 entities, 115 ticks verified' pv.txt && ! grep -q '^CRASH' debug.txt && [ ! -e last_error.txt ] && ok "the run that lost its reader finished and saved: the diaries replay (100 + 3 x 5 ticks), no last_error.txt" || bad "run after a closed pipe"
+"$bin" --govern > g1.txt 2>&1; [ -n "$(tail -n 1 g1.txt)" ] && ok "a view ends with its last line (no extra blank line the runtime used to add at exit)" || bad "trailing blank line"
+unset DIARY_HOME
+
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="
 [ "$fails" = 0 ]

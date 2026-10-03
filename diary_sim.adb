@@ -1,4 +1,4 @@
---  Version: 0.026
+--  Version: 0.027
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -27,8 +27,8 @@ pragma Interrupt_State (SIGTERM, USER);
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
-     Ada.Exceptions, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
-     GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Chess, Sim_Games, Sim_Menu, Sim_Quit, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Util, Sim_World;
+     Ada.Exceptions, Ada.Finalization, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
+     GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Chess, Sim_Games, Sim_Menu, Sim_Quit, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Util, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
 
 procedure Diary_Sim is
@@ -41,11 +41,48 @@ procedure Diary_Sim is
    package Con is
       procedure Put_Line (S : String);
       procedure Put (S : String);
+      function Is_Dead return Boolean;
    end Con;
    package body Con is
-      procedure Put_Line (S : String) is begin TIO.Put_Line (Sim_World.Show (S)); end Put_Line;
-      procedure Put (S : String) is begin TIO.Put (Sim_World.Show (S)); end Put;
+      Dead : Boolean := False;   --  stdout is a closed pipe (| head): the rest of the output is dropped, the files are still written
+      procedure Put_Line (S : String) is
+      begin
+         if not Dead then TIO.Put_Line (Sim_World.Show (S)); end if;
+      exception
+         when others => Dead := True;   --  EPIPE: Device_Error
+      end Put_Line;
+      --  A text ending in a line feed is written as Put + New_Line: the runtime would otherwise think the line is unfinished and
+      --  write one more line feed when it closes stdout (a write to a closed pipe at exit).
+      procedure Put (S : String) is
+         Shown : constant String := Sim_World.Show (S);
+      begin
+         if Dead then return; end if;
+         if Shown'Length > 0 and then Shown (Shown'Last) = ASCII.LF then
+            TIO.Put (Shown (Shown'First .. Shown'Last - 1));
+            TIO.New_Line;
+         else
+            TIO.Put (Shown);
+         end if;
+      exception
+         when others => Dead := True;
+      end Put;
+      function Is_Dead return Boolean is (Dead);
    end Con;
+
+   --  A closed pipe (| head, a view command): leave quietly, without the traceback the runtime raises while it flushes and closes
+   --  a dead stdout.  The last statement of the program (this object is finalized first) flushes; if that fails, nobody reads.
+   type Pipe_Guard is new Ada.Finalization.Limited_Controlled with null record;
+   overriding procedure Finalize (G : in out Pipe_Guard);
+   procedure Finalize (G : in out Pipe_Guard) is
+      pragma Unreferenced (G);
+   begin
+      if not Con.Is_Dead then TIO.Flush; end if;
+      if Con.Is_Dead then GNAT.OS_Lib.OS_Exit (0); end if;
+   exception
+      when others => GNAT.OS_Lib.OS_Exit (0);
+   end Finalize;
+   Guard : Pipe_Guard;
+   pragma Unreferenced (Guard);
 
    type State is record
       Energy, Mood, Location : Integer;   --  ranges: data/limits.txt; location: office lab cafe home
@@ -55,7 +92,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.026";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.027";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk

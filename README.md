@@ -735,6 +735,8 @@ frames innermost first, then the raw `GNAT.Traceback.Symbolic` text) and prints 
 same to the console, at most 15 lines. Built with `-g -bargs -E` (see Makefile).
 `--crash-at=T` forces a failure in tick T (only for a tick not yet on disk) to show it.
 A stored-diary drift or a bad diary is NOT a crash: no traceback block, no `last_error.txt` (see Resume).
+A closed pipe is not a crash either: `make govern | head -3`, `--help | head`, `make run | head -5` end quietly (exit 0, no traceback, no
+`last_error.txt`); the rest of the output is dropped and a run still writes and saves everything (`Con` in `diary_sim.adb`).
 After a crash just run again: the diaries are flushed after every event. The
 console shows at most 15 lines of the error block, then `wrote last_error.txt, please
 paste it` and `back up diaries/ before the next run`.
