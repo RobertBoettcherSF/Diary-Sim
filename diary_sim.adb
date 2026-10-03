@@ -1,4 +1,4 @@
---  Version: 0.019
+--  Version: 0.020
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -28,7 +28,7 @@ pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
-     GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Menu, Sim_Quit, Sim_Things, Sim_Util, Sim_World;
+     GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Ledger, Sim_Menu, Sim_Quit, Sim_Things, Sim_Util, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
 
 procedure Diary_Sim is
@@ -55,7 +55,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.019";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.020";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -120,16 +120,21 @@ procedure Diary_Sim is
 
    --  The energy and mood change of a rest: personal rate, quick / calm, diminishing returns.
    --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (integer percent arithmetic)
+   Ledger_From : Int := 0;   --  the last session starts after this tick (the ledger's second scope)
+   Last_Phase : Integer := 0;   --  the last rest: -1 quick, +1 calm, 0 between (for the ledger)
    procedure Rest_Effect (E : Entity_Id; En, Mo : in out Integer) is
       Phase : Integer := 100;
    begin
+      Last_Phase := 0;
       if Since_Work (E) < Natural (RL ("rest.quick", 3)) then
          Phase := RL ("rest.quick.energy_pct", 60);
          Mo := Mo + RL ("rest.quick.mood", -1);
+         Last_Phase := -1;
          Quick_N (E) := Quick_N (E) + 1;
       elsif Since_Work (E) >= Natural (RL ("rest.calm", 8)) then
          Phase := RL ("rest.calm.energy_pct", 120);
          Mo := Mo + RL ("rest.calm.mood", 2);
+         Last_Phase := 1;
       end if;
       En := En * Integer (Rate_Pct (E)) * Phase / 10_000;
       for K in 1 .. Natural'Min (Streak (E), 12) loop En := En * RL ("rest.repeat_pct", 80) / 100; end loop;
@@ -241,7 +246,7 @@ procedure Diary_Sim is
       Read_Lines (Data_Path ("limits.txt"), Lines, Found);
       if not Found then Warn (Msg ("warn.limits_file")); end if;
       Read_Lines (Data_Path ("menu.txt"), Lines, Found);   --  menu text: keys only, a missing file shows the keys
-      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt"]) loop   --  the Buddhism layer: numbers, wording, players
+      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt"]) loop   --  the Buddhism layer: numbers, wording, players
          Read_Lines (Data_Path (F), Lines, Found);
          if not Found then Warn (Msg ("warn.dharma_file", F)); end if;
       end loop;
@@ -372,6 +377,11 @@ procedure Diary_Sim is
       Verb : List_Id := A;
       Eff_En : Integer := Energy_D (A);   --  a rest=1 rest changes these (Rest_Effect)
       Eff_Mo : Integer := Mood_D (A);
+      --  the mood ledger (report only, Sim_Ledger): where this tick's mood change came from
+      Was_Cool : constant Boolean := Rest_Active and then Cool (E) > 0;
+      Led_Phase, Push_Nom : Integer := 0;
+      Push_Feel : Integer := -1;
+      M_Base, M_After_Base : Integer;
 
       procedure Add (Text : String) is
       begin
@@ -423,7 +433,9 @@ procedure Diary_Sim is
          Pick_Thing (It, Found);
          if not Found then Add (Msg ("detail.nothing")); return; end if;
          Meet (Sim_Things.Prop_Word (Sim_Things.Feel_Text (It.T), "feel"));
-         S.Mood := Clamp (S.Mood + Integer (Limit ("world.push.mood." & Img (Sim_Things.Feel_Class (It.T)), 0)), M_Min, M_Max);
+         Push_Feel := Sim_Things.Feel_Class (It.T);
+         Push_Nom := Integer (Limit ("world.push.mood." & Img (Push_Feel), 0));
+         S.Mood := Clamp (S.Mood + Push_Nom, M_Min, M_Max);
          declare
             D : constant Natural := Sim_Things.Facing (E, Tick);
          begin
@@ -579,9 +591,11 @@ procedure Diary_Sim is
       if World_Mode and then (not Sim_Things.Placed (E) or else Sim_Things.Region_Of (E) /= S.Location) then
          Sim_Things.Place (E, Tick, Clamp (S.Location, 0, 3));   --  first step in the world, or reborn elsewhere
       end if;
-      if Rest_Active and then A = Rest then Rest_Effect (E, Eff_En, Eff_Mo); end if;
+      if Rest_Active and then A = Rest then Rest_Effect (E, Eff_En, Eff_Mo); Led_Phase := Last_Phase; end if;
+      M_Base := Clamp (Pre_Mo + Mood_D (A), M_Min, M_Max) - Pre_Mo;   --  ledger: the action's own part, after the bounds
       S.Energy := Clamp (S.Energy + Eff_En, E_Min, E_Max);
       S.Mood := Clamp (S.Mood + Eff_Mo, M_Min, M_Max);
+      M_After_Base := S.Mood;
       if World_Mode then   --  one step on the grid; the place is the nearest landmark region
          if A in Explore | Wander then
             Sim_Things.Walk (E, Tick, False);
@@ -637,6 +651,8 @@ procedure Diary_Sim is
          when others => null;
       end case;
       if Rest_Active then Rest_After (E, A, S.Mood); end if;
+      Sim_Ledger.Add (E, Tick, A, Verb, S.Location, M_Base, M_After_Base - Pre_Mo - M_Base, S.Mood - M_After_Base,
+                      Eff_Mo + Push_Nom, Led_Phase, Was_Cool, Push_Feel);
       declare
          Tone : constant List_Id := (if S.Mood <= Tone_Low then Mood_Low elsif S.Mood >= Tone_High then Mood_High
                                      else Mood_Neutral);
@@ -882,7 +898,7 @@ procedure Diary_Sim is
    --  lines folded into counts, at most debug.digest_bytes (data/limits.txt) bytes: the least
    --  important lines go first and a last line says what was dropped.  The full record is
    --  debug_full.txt ([section] blocks, run only); --debug-section NAME prints one block.
-   Sections : constant String := "status drift trace players inbox run";
+   Sections : constant String := "status drift trace players inbox run ledger";
    Digest_Note : Unbounded_String;       --  "debug digest: <abs path>", printed before "Saved to"
    Prev_Loaded : Boolean := False;
    Prev_Hashes : Str_Vectors.Vector;
@@ -912,8 +928,9 @@ procedure Diary_Sim is
    function Shown_Text (E : Dg_Entry) return String is
      (To_String (E.Text) & (if E.Count > 1 then " x" & Img (E.Count) else ""));
 
-   procedure Dg_Add (V : in out Dg_Vectors.Vector; Sec, Key, Text : String; Prio : Positive;
+   procedure Dg_Add (V : in out Dg_Vectors.Vector; Sec, Key, Raw_Text : String; Prio : Positive;
                      Anom : Boolean := False; Full_Only : Boolean := False; Fold : Boolean := False) is
+      Text : constant String := Sim_World.Show (Raw_Text);   --  the cap counts the bytes that are written (display names)
       K : constant String := (if Fold then "f:" & Digits_Off (Text) else Key);
    begin
       if Text = "" then return; end if;
@@ -1039,6 +1056,23 @@ procedure Diary_Sim is
       if Rest_Active then
          for E in Entity_Id loop Dg_Add (V, "run", "rest." & Name (E), Rest_Text (E), 7); end loop;
       end if;
+      for E in Entity_Id loop   --  the mood ledger: one line each (the first to go when the cap is tight); the rest in the full record
+         Dg_Add (V, "ledger", "led." & Name (E), Sim_Ledger.Digest_Line (E, Ledger_From), 9);
+         Dg_Add (V, "ledger", "sen." & Name (E), Sim_Ledger.Sentence (E), 9, Full_Only => True);
+      end loop;
+      declare
+         T : constant String := Sim_Ledger.Report (Seed, Ledger_From, True) & ASCII.LF;
+         From : Positive := T'First;
+         N : Natural := 0;
+      begin
+         for I in T'Range loop
+            if T (I) = ASCII.LF then
+               N := N + 1;
+               Dg_Add (V, "ledger", "full" & Img (N), T (From .. I - 1), 9, Full_Only => True);
+               From := I + 1;
+            end if;
+         end loop;
+      end;
       Dg_Add (V, "run", "topics", "topics " & Top_Topics (3), 8);
       Dg_Lines (V, "run", "votes", To_String (Vote_Line), 8);
    end Digest_Entries;
@@ -1315,7 +1349,11 @@ procedure Diary_Sim is
       end loop;
       for P in Part_Id loop Append (Out_Text, Part (P)); end loop;
       TIO.Create (F, TIO.Out_File, "debug.tmp");
-      TIO.Put (F, Sim_World.Show (To_String (Out_Text)));
+      declare
+         Shown : constant String := Sim_World.Show (To_String (Out_Text));   --  display names are longer than ids: cap again
+      begin
+         TIO.Put (F, (if Shown'Length > Cap then Shown (Shown'First .. Shown'First + Cap - 1) else Shown));
+      end;
       TIO.Flush (F);
       TIO.Close (F);
       begin
@@ -1562,6 +1600,12 @@ procedure Diary_Sim is
    Sessions_Path : constant String := "diaries/sessions.txt";
    Says_Path : constant String := "diaries/says.txt";
    Dharma_Stored : Str_Vectors.Vector;   --  D / C / Y lines of sessions.txt
+
+   --  The ledger's last session = the ticks after the start of the newest session record.
+   procedure Set_Ledger_From is
+   begin
+      Ledger_From := (if Sessions.Is_Empty then 0 else Sessions.Last_Element.Start);
+   end Set_Ledger_From;
 
    function Votes_Text (V : Kalpa_Votes) return String is
      (Img (V (1)) & "/" & Img (V (2)) & "/" & Img (V (3)) & "/" & Img (V (4)));
@@ -2356,6 +2400,7 @@ procedure Diary_Sim is
    --  Seed and the last L line come from diaries/sessions.txt, the edits (up to that tick) from
    --  diaries/world.txt; nothing is replayed and nothing is written.
    Map_Mode : Boolean := False;
+   Ledger_Mode, Ledger_Full : Boolean := False;   --  --ledger[=full]: replay, then print the mood ledger (report only)
 
    --  "3,-4" after the '@' of an L-line token; False when it is not of that form.
    procedure Parse_At (Tok : String; X, Y : out Integer; OK : out Boolean) is
@@ -2584,6 +2629,10 @@ begin
          elsif Opt = "--answer" then Answer_Mode := True;
          elsif Opt = "--inbox" then Inbox_Mode := True;
          elsif Opt = "--map" then Map_Mode := True;
+         elsif Opt = "--ledger" then
+            Ledger_Mode := True;
+            Ledger_Full := Val = "full";
+            if Val /= "" and then Val /= "full" then raise Usage_Error with Msg ("err.option", A); end if;
          elsif Opt = "--menu" then Menu_Opt := True;
          elsif Opt = "--debug" then Debug_On := True;
          elsif Opt = "--debug-section" then
@@ -2611,7 +2660,7 @@ begin
    end if;
    Menu_Wanted := Menu_Opt or else (Ada.Command_Line.Argument_Count = 0 and then Is_Tty (0) and then Is_Tty (1));
    if Menu_Opt and then not (Is_Tty (0) and then Is_Tty (1)) then raise Usage_Error with Msg ("err.menu_tty"); end if;
-   Resolve_Home (Header => not (Menu_Wanted or else Inbox_Mode or else Map_Mode or else Say_Mode or else Answer_Mode or else (Length (Section_Opt) > 0 and then not Preview)));
+   Resolve_Home (Header => not (Menu_Wanted or else Inbox_Mode or else Map_Mode or else Ledger_Mode or else Say_Mode or else Answer_Mode or else (Length (Section_Opt) > 0 and then not Preview)));
    Saved_Line := To_Unbounded_String (Msg ("saved", To_String (Home_Path)));
    if Map_Mode then
       Do_Map;
@@ -2641,7 +2690,7 @@ begin
       end;
    end if;
 
-   Con.Put_Line (Start_Line);   --  header line 2 (line 1 is Save folder:, printed first; the menu shows it itself)
+   if not Ledger_Mode then Con.Put_Line (Start_Line); end if;   --  header line 2 (line 1 is Save folder:, printed first; the menu shows it itself)
    TIO.Flush;
    if Fresh and then (Ada.Directories.Exists ("diaries") or else Ada.Directories.Exists ("entities")) then
       declare
@@ -2657,6 +2706,10 @@ begin
       end;
    end if;
    Check_Layout;
+   if Ledger_Mode and then not Has_Diaries then
+      Con.Put_Line (Msg ("ledger.nosave", To_String (Home_Path)));
+      return;
+   end if;
    if not Fresh and then not Yes and then not Has_Diaries then
       if Is_Tty (0) and then Is_Tty (1) then
          if Confirm_New then
@@ -2684,14 +2737,16 @@ begin
    if More >= 0 then Ticks := Int (Common) + More; end if;   --  --more N: N new ticks after the lowest common tick
 
    Seed := (if Disk_Seed >= 0 then Disk_Seed elsif Seed_Opt >= 0 then Seed_Opt else 42);
-   Con.Put_Line (Msg ("seed", Img (Seed), Msg (if Disk_Seed >= 0 then "seed.disk" elsif Seed_Opt >= 0 then "seed.option"
-                                                else "seed.default")));
+   if not Ledger_Mode then
+      Con.Put_Line (Msg ("seed", Img (Seed), Msg (if Disk_Seed >= 0 then "seed.disk" elsif Seed_Opt >= 0 then "seed.option"
+                                                   else "seed.default")));
+   end if;
    Seed_Shown := True;
    Con.Put (To_String (Pending));
    if Disk_Seed >= 0 and then Seed_Opt >= 0 and then Seed_Opt /= Disk_Seed then
       Warn (Msg ("warn.seed_ignored", Img (Seed_Opt), Img (Disk_Seed)));
    end if;
-   Con.Put_Line (Msg ("entities", To_String (Names)));
+   if not Ledger_Mode then Con.Put_Line (Msg ("entities", To_String (Names))); end if;
    for E in Entity_Id loop
       if Natural (Disk (E).Length) < Longest then
          Warn (Msg ("warn.behind", Name (E), Img (Integer (Disk (E).Length)), Img (Longest), Img (Common)));
@@ -2732,7 +2787,8 @@ begin
    Load_Sessions;
    Load_Says;
    Load_World_File;
-   Write_Debug ("RUN", "");   --  stub: a kill -9 still leaves a file
+   Set_Ledger_From;
+   if not Ledger_Mode then Write_Debug ("RUN", ""); end if;   --  stub: a kill -9 still leaves a file
 
    --  Phase 1: replay what every diary has (verify only), then confirm the import.
    Verify_To := (if Explicit then Natural'Min (Common, Natural (Ticks)) else Common);
@@ -2750,8 +2806,14 @@ begin
          for E in Entity_Id loop Total := Total + Natural (Disk (E).Length); end loop;
          Import_Done := True;
          Import_Block := To_Unbounded_String (Import_Text (Total));
-         Con.Put_Line (To_String (Import_Block));
+         if not Ledger_Mode then Con.Put_Line (To_String (Import_Block)); end if;
       end;
+      if Ledger_Mode then   --  replayed and verified, nothing decided, nothing written: print the ledger
+         for F of Out_File loop TIO.Close (F); end loop;
+         for F of Side_Out loop TIO.Close (F); end loop;
+         Con.Put_Line (Sim_Ledger.Report (Seed, Ledger_From, Ledger_Full));
+         return;
+      end if;
       for E in Entity_Id loop
          Start_Known (E) := Known_Count (E);
          Start_World (E) := World_Learned (E);
@@ -2764,6 +2826,7 @@ begin
       Verify_Inbox (Int (Verify_To));
       Verify_Edits (Int (Verify_To));
       Decide_Session;
+      Set_Ledger_From;
       Con.Put_Line (To_String (Kalpa_Line));
    end if;
 
@@ -2900,7 +2963,7 @@ begin
             end loop;
          end if;
       end;
-      Save ("run_report.txt", Import_Block & ASCII.LF & Kalpa_Line & ASCII.LF & Rep & Console);
+      Save ("run_report.txt", Import_Block & ASCII.LF & Kalpa_Line & ASCII.LF & Rep & Console & Sim_Ledger.Report (Seed, Ledger_From, True) & ASCII.LF);
       if not Ada.Directories.Exists ("run_report.txt") or else Ada.Directories.Size ("run_report.txt") = 0 then
          Append (Rep, Msg ("export.failed", "run_report.txt not written") & ASCII.LF);
          Ada.Command_Line.Set_Exit_Status (1);

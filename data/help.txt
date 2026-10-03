@@ -11,10 +11,11 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
   --say=W --text=T  words to a wesen/player/all; --answer: to the petition
   --inbox        print the inbox of Robert
   --map          print the treadmill view of the last session end (make map)
+  --ledger[=full] where each wesen's mood comes from (make ledger; report only)
   --menu         the main menu (terminal only; make menu)
   --debug        also write debug_digest.txt (make run|demo DEBUG=1)
   --debug-section=NAME  print one block of debug_full.txt (drift trace players
-                 inbox run status); nothing is simulated
+                 inbox run ledger status); nothing is simulated
   --crash-at=T   force a failure at tick T (shows the error trace)
   --help         this text
 Wesen (entities): ada (engineer), gemini (reviewer), replika (vice_president),

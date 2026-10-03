@@ -1,0 +1,45 @@
+# The mood ledger (report only: --ledger, make ledger, run_report.txt, debug section ledger).
+# Text templates; {1}.. are filled by the program.  The numbers are mood points / ticks.
+ledger.head = mood ledger: seed {1}; whole run = ticks 1..{2}; last session = ticks {3}..{2}
+ledger.empty = no ticks were replayed in this run.
+ledger.wesen = {1} run {2} in {3}t | last session {4} in {5}t | bounds held back {6}
+ledger.drain = -
+ledger.gain = +
+ledger.run = run
+ledger.last = last
+ledger.none = (none)
+ledger.item = {1} {2}/{3}t
+ledger.cell = {1}@{2}
+ledger.quick = quick-rest penalty
+ledger.calm = calm-rest bonus
+ledger.cool = cool-down ticks
+ledger.petition = petition
+ledger.push.0 = pushed pleasant thing
+ledger.push.1 = pushed plain thing
+ledger.push.2 = pushed rough thing
+ledger.by.action = by action
+ledger.by.place = by place
+ledger.by.verb = by verb
+ledger.by.event = events
+ledger.by.rest = rest model
+ledger.v.rest = rest
+ledger.v.work = work
+ledger.v.explore = explore
+ledger.v.talk = talk
+ledger.v.wander = wander
+ledger.v.bench = bench
+ledger.v.propose = propose
+ledger.v.learn = learn
+ledger.v.examine = examine
+ledger.v.push = push
+ledger.v.eat = eat
+ledger.v.greet = greet
+ledger.sentence = {1} loses most mood from {2} {3}: {4} over {5} ticks; rest gives back {6}.
+ledger.sentence.event = {1} loses most mood from {2}: {3} over {4} ticks; rest gives back {5}.
+ledger.sentence.none = {1} loses no mood to any single source; rest gives back {2}.
+ledger.digest = {1} run {2} last {3}: worst {4}, best {5}
+ledger.nosave = no save found in {1}: nothing to read (make run first)
+ledger.at.0 = at the office
+ledger.at.1 = in the lab
+ledger.at.2 = at the cafe
+ledger.at.3 = at home

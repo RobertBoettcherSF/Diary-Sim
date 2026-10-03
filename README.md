@@ -193,6 +193,24 @@ keeps the old behaviour byte for byte.
   recovery rate, cool-down length, cool-downs taken, rests cut short and quick rests (counted since the model began).
   Changing a `rest.*` number needs `--fresh` or gives DRIFT, like every other rule number.
 
+## The mood ledger (`make ledger`, `--ledger`; report only)
+
+Why does a wesen's mood sit where it sits? `make ledger` (`bin/diary_sim --ledger`; `FULL=1` or `--ledger=full` adds the
+breakdown) replays and verifies the save like every run, then prints per wesen: the headline (mood change over the
+whole run and over the last session, and how much a bound -100 / +100 swallowed), the top 3 DRAINS and top 3 GAINS
+(action at place, with mood points / ticks) for both scopes, and one plain sentence, for example
+`Lemma loses most mood from work at home: -228 over 57 ticks; rest gives back +142.` The same text ends
+`run_report.txt`; the debug digest has a section `ledger` (one line per wesen when the 1500-byte cap has room, the
+whole ledger in `debug_full.txt`: `make run SECTION=ledger`). Wording: `data/ledger.txt`; names: `data/names.txt`.
+
+It is derived while the replay runs (every run replays ticks 1..N) and nothing is stored or hashed: no action weight,
+dice or diary byte changes, old and new sessions replay identically. The mood change of every tick is split into
+parts that add up exactly to the change in the diary: the action's own mood (by action and place), the rest model
+(quick-rest penalty / calm-rest bonus), and the feel of a pushed thing (pleasant / plain / rough). The full form also
+sums by action, by place and by diary verb (examine / push / eat / greet included), shows events (petitions, pushed
+things) and the cool-down ticks. There is no quarrel source in this simulation, so none is listed; clashes of the
+Buddhism layer do not touch mood. `scripts/checks.sh` (scenario 29) compares the ledger with the mood changes of the diaries.
+
 ## The debug digest (`DEBUG=1`, `--debug`)
 
 `debug.txt` (always written, <= 1500 bytes) is unchanged. For a compact file to attach to chat:

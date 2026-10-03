@@ -571,7 +571,7 @@ cp diaries/sessions.txt ss.bak; sum_before=$(cksum < diaries/sessions.txt)
 "$gb" --debug-section players > g4.txt 2>&1; rc4=$?
 [ $rc4 = 0 ] && [ "$(head -1 g4.txt)" = "section players" ] && grep -q '^players: iris attn' g4.txt && [ "$(head -1 debug_digest.txt)" = "section players" ] && [ "$sum_before" = "$(cksum < diaries/sessions.txt)" ] && ! grep -q '^import' g4.txt \
   && ok "--debug-section players: only that block of debug_full.txt, printed and written; nothing is simulated" || bad "debug-section"
-"$gb" --debug-section nosuch > g5.txt 2>&1; rc5=$?; [ $rc5 = 2 ] && grep -q 'unknown --debug-section nosuch (one of: status drift trace players inbox run)' g5.txt && ok "unknown section: usage error, exit 2, the list of sections" || bad "unknown section"
+"$gb" --debug-section nosuch > g5.txt 2>&1; rc5=$?; [ $rc5 = 2 ] && grep -q 'unknown --debug-section nosuch (one of: status drift trace players inbox run ledger)' g5.txt && ok "unknown section: usage error, exit 2, the list of sections" || bad "unknown section"
 sed -i '/^S1 /s/votes=[0-9]*/votes=7/' diaries/sessions.txt; "$gb" --more 0 --debug > g6.txt 2>&1
 head -1 debug_digest.txt | grep -q '^DRIFT v' && sed -n 2p debug_digest.txt | grep -q '^error: sessions.txt S1' && "$gb" --debug-section drift 2> /dev/null | grep -q '^error: sessions.txt S1' && ok "DRIFT: line 1 DRIFT, the one thing wrong on line 2; section drift has it" || bad "drift digest"
 cp ss.bak diaries/sessions.txt; "$gb" --more 10 --crash-at 255 --debug > g7.txt 2>&1
@@ -678,6 +678,38 @@ mm() { grep -o '"mood":-\?[0-9]*' "$1/diaries/ada.jsonl" | cut -d: -f2 | awk '{ 
 a_on=$(mm "$w/rs/h"); mkdir -p "$w/rs/o/h2"; DIARY_HOME="$w/rs/o/h2" "$fb" --seed 42 --ticks 2000 --yes --every 100000 > /dev/null 2>&1; a_off=$(mm "$w/rs/o/h2")
 echo "   ada mean mood over 2000 ticks: rest model $a_on, without $a_off"
 [ "$a_on" -gt "$a_off" ] && ok "ada's mean mood is higher with the rest model than without it" || bad "ada mood $a_on vs $a_off"
+unset DIARY_HOME
+
+echo "== 29. mood ledger (report only): sums equal the diary's mood changes, nothing is stored or changed =="
+rm -rf "$w/lg"; mkdir -p "$w/lg"; cd "$w/lg" || exit 1; export DIARY_HOME="$w/lg"
+"$bin" --seed 42 --ticks 300 --yes --every 5000 > l1.txt 2>&1; "$bin" --more 300 --every 5000 > l2.txt 2>&1
+before=$(snap .); sz=$(find . -type f -printf '%p %s\n' | sort | cksum)
+"$bin" --ledger=full > led.txt 2>&1; rc=$?; "$bin" --ledger > led_short.txt 2>&1
+[ $rc = 0 ] && [ "$before" = "$(snap .)" ] && [ "$sz" = "$(find . -type f -printf '%p %s\n' | grep -v 'led' | sort | cksum)" ] && ok "--ledger replays and verifies, prints, and writes nothing (diaries, sessions, every file size unchanged)" || bad "ledger changed files"
+[ "$(awk 'length > 79' led.txt led_short.txt | wc -l)" = 0 ] && grep -q '^mood ledger: seed 42; whole run = ticks 1..600; last session = ticks 301..600' led.txt && [ "$(wc -l < led_short.txt)" -le 40 ] && ok "80 columns at most, header names the scopes (whole run 1..600, last session 301..600), short form fits a screen" || bad "ledger layout"
+good=1
+for e in ada gemini replika robert; do
+  want=$(awk -F'"mood":|,"location"' '/}}$/ { n++; if (n == 300) b = $2; last = $2 } END { print last + 0, last - b }' diaries/$e.jsonl)
+  got=$(awk -v n=$e '$1 == n && $2 == "run" { print $3 + 0, $9 + 0 }' led.txt)
+  sums=$(awk -v n=$e '/^[a-z]+ +run / { cur = ($1 == n) } cur && /^  by (action|place|verb) / { sec = $2 } cur && /^  (events|rest model) / { sec = "" } cur && sec != "" { while (match($0, /[-+]?[0-9]+\/[0-9]+t/)) { t = substr($0, RSTART, RLENGTH); sub(/\/.*/, "", t); S[sec] += t; $0 = substr($0, RSTART + RLENGTH) } } END { print S["action"] + 0, S["place"] + 0, S["verb"] + 0 }' led.txt)
+  run_net=${want%% *}; [ "$got" = "$want" ] && [ "$sums" = "$run_net $run_net $run_net" ] || { good=0; echo "   $e: diary $want, ledger $got, sums $sums"; }
+done
+[ $good = 1 ] && ok "per wesen: the ledger's whole-run and last-session net equal the diary's mood change, and by action / place / verb each add up to it" || bad "ledger sums differ from the diary"
+good=1
+for e in ada gemini replika robert; do
+  d=$(awk -F'"t":"|","text"|"mood":|,"location"' '/}}$/ { m = $4; v[$2] += m - prev; c[$2]++; prev = m } END { for (k in v) print k, v[k] + 0, c[k] }' diaries/$e.jsonl | sort)
+  l=$(awk -v n=$e '/^[a-z]+ +run / { cur = ($1 == n) } cur && /^  by verb / { sec = 1 } cur && /^  events / { sec = 0 } cur && sec { while (match($0, /[a-z]+ [-+]?[0-9]+\/[0-9]+t/)) { t = substr($0, RSTART, RLENGTH); $0 = substr($0, RSTART + RLENGTH); split(t, a, /[ \/]/); sub(/t$/, "", a[3]); print a[1], a[2] + 0, a[3] } }' led.txt | sort)
+  [ "$d" = "$l" ] || { good=0; echo "   $e verbs differ"; }
+done
+[ $good = 1 ] && ok "by verb: every diary verb (rest, work, ..., examine, push, eat, greet) has exactly the ledger's sum and tick count" || bad "ledger verbs"
+grep -q '^  rest model .*quick-rest penalty -[0-9]*/[0-9]*t' led.txt && grep -q '^  - run ' led.txt && grep -q '^  + last ' led.txt && [ "$(grep -c ' loses most mood from ' led.txt)" = 4 ] && ok "top drains and gains for both scopes, the rest-model line and one sentence per wesen" || bad "ledger lines"
+"$bin" --ledger=full > led2.txt 2>&1; cmp -s led.txt led2.txt && ok "the same replay prints the same ledger" || bad "ledger not deterministic"
+"$w/nm/a/bin/diary_sim" --ledger > led_n.txt 2>&1; grep -q '^Lemma  ' led_n.txt && grep -q 'Lemma loses most mood from' led_n.txt && ! grep -q '^ada' led_n.txt && [ "$(awk 'length > 79' led_n.txt | wc -l)" = 0 ] && ok "display names from data/names.txt (Lemma ...), still within 79 columns" || bad "ledger names"
+"$bin" --more 20 --every 5000 --debug > l3.txt 2>&1
+sz_d=$(wc -c < debug.txt); sz_g=$(wc -c < debug_digest.txt); "$w/nm/a/bin/diary_sim" --more 0 --every 5000 --debug > l3n.txt 2>&1; sz_dn=$(wc -c < debug.txt); sz_gn=$(wc -c < debug_digest.txt)
+grep -q '^mood ledger: seed 42' run_report.txt && grep -q '^\[ledger\]' debug_full.txt && "$bin" --debug-section ledger | grep -q '^section ledger' && [ "$sz_d" -le 1500 ] && [ "$sz_g" -le 1500 ] && [ "$sz_dn" -le 1500 ] && [ "$sz_gn" -le 1500 ] && ok "run_report.txt carries the ledger, the digest section 'ledger' is in debug_full.txt (--debug-section ledger), debug.txt and the digest stay <= 1500 B (with the identity ids and with the longer display names)" || bad "ledger in reports"
+"$bin" --ledger=bogus > l4.txt 2>&1; [ $? = 2 ] && ok "--ledger=bogus: usage error (exit 2)" || bad "ledger usage"
+rm -rf "$w/lg/e"; mkdir -p "$w/lg/e"; DIARY_HOME="$w/lg/e" "$bin" --ledger > l5.txt 2>&1; grep -q 'no save found' l5.txt && [ -z "$(ls -A "$w/lg/e")" ] && ok "--ledger without a save: says so, writes nothing" || bad "ledger without save"
 unset DIARY_HOME
 
 rm -rf "$w"

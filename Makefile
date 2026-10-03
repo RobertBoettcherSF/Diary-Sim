@@ -1,4 +1,4 @@
-# Version: 0.013
+# Version: 0.014
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -21,6 +21,9 @@
 # make inbox      print the inbox: the reports of the players to Robert (newest 40 lines)
 # make map        print the treadmill view: for each wesen its position, nearest landmark, biome and a
 #                 5x5 window of its surroundings, as of the end of the last saved session (read-only)
+# make ledger    print the mood ledger (report only): per wesen the top 3 drains and gains of mood, whole run and last
+#                 session, one sentence each (FULL=1: also by action, place, verb, event, rest model); replays and
+#                 verifies the save, writes nothing
 # DEBUG=1         make run DEBUG=1 / make demo DEBUG=1 (--debug): also write debug_digest.txt (<= debug.digest_bytes,
 #                 data/limits.txt; line 1 = status, anomalies, then only what changed since the last digest)
 #                 to attach to chat: in the save folder for run, in the current folder for demo (the only
@@ -30,7 +33,7 @@
 GNATMAKE ?= gnatmake
 FLAGS = -g -O1 -fno-inline -gnatwa -gnat2022 -gnata
 
-.PHONY: all version-check portable run play menu demo check clean say answer inbox map
+.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger
 export WESEN PLAYER TEXT AS
 
 EVERY ?= 100
@@ -41,7 +44,7 @@ all:
 	@rm -f b~*
 
 version-check:
-	@bad=0; for f in Makefile diary_sim.adb sim_util.ads sim_util.adb sim_world.ads sim_world.adb sim_quit.ads sim_quit.adb sim_menu.ads sim_menu.adb sim_dharma.ads sim_dharma.adb sim_things.ads sim_things.adb; do \
+	@bad=0; for f in Makefile diary_sim.adb sim_util.ads sim_util.adb sim_world.ads sim_world.adb sim_quit.ads sim_quit.adb sim_menu.ads sim_menu.adb sim_dharma.ads sim_dharma.adb sim_things.ads sim_things.adb sim_ledger.ads sim_ledger.adb; do \
 	  head -1 $$f | grep -Eq 'Version: [0-9]+\.[0-9]{3}' || { echo "no version header: $$f"; bad=1; }; done; \
 	  v=$$(head -1 diary_sim.adb | grep -Eo '[0-9]+\.[0-9]{3}'); \
 	  grep -q "Build : constant String := \"$$v\"" diary_sim.adb || { echo "Build constant differs from diary_sim.adb header $$v"; bad=1; }; \
@@ -72,6 +75,9 @@ inbox: all
 
 map: all
 	bin/diary_sim --map
+
+ledger: all
+	bin/diary_sim --ledger$(if $(FULL),=full)
 
 check: version-check all
 	scripts/checks.sh
