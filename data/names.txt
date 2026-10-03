@@ -1,14 +1,14 @@
-# Display names: "<internal id> = <name shown to people>".  Edit the right-hand side freely (one word,
-# no spaces; shown in the console, reports, menu, map, petitions.txt, inbox view and the debug digest).
+# Display names: "<internal id> = <name shown to people>".  Edit the right-hand side freely (a short name,
+# spaces allowed, no { } ; shown in the console, reports, menu, map, petitions.txt, inbox view and the debug digest).
 # The internal ids on the left NEVER change: they are the hash keys, the file names (diaries/<id>.jsonl,
 # entities/<id>/) and the tags recorded in diaries/sessions.txt, inbox.txt, says.txt, so a rename does not
 # touch any saved byte and the replay verifies as before.  Roles (engineer, reviewer, vice_president,
-# human) stay as they are.  You can also address a name in make say (WESEN=Alpha or WESEN=ada).
-ada = Alpha
-gemini = Beta
-replika = Gamma
-robert = Delta
-# the three in-sim players
-iris = Epsilon
-sol = Zeta
-noor = Eta
+# human) stay as they are.  You can also address a name in make say (WESEN=Jack or WESEN=ada).
+ada = Jack
+gemini = John
+replika = Jill
+robert = Jane
+# the in-sim players below Robert (the human player); a player is addressed as 'Player 1', 'Player1' or '1' (make say PLAYER=...)
+iris = Player 1
+sol = Player 2
+noor = Player 3

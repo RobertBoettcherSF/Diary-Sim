@@ -1,4 +1,4 @@
---  Version: 0.015
+--  Version: 0.016
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
@@ -32,7 +32,7 @@ package body Sim_World is
                   Id : constant String := Fx.Trim (T (T'First .. Eq - 1), Ada.Strings.Both);
                   Sh : constant String := Fx.Trim (T (Eq + 1 .. T'Last), Ada.Strings.Both);
                begin
-                  if Id /= "" and then Sh /= "" and then (for all C of Sh => C > ' ' and then C /= '{' and then C /= '}') then
+                  if Id /= "" and then Sh /= "" and then (for all C of Sh => C >= ' ' and then C /= '{' and then C /= '}') then
                      Pairs.Append (Pair'(Id => Ada.Strings.Unbounded.To_Unbounded_String (Id),
                                          Shown => Ada.Strings.Unbounded.To_Unbounded_String (Sh)));
                   end if;
@@ -52,11 +52,22 @@ package body Sim_World is
 
    function Display (E : Entity_Id) return String is (Display_Of (Name (E)));
 
+   --  lower case, spaces removed: 'Player 1', 'player1' and 'PLAYER 1' are the same name
+   function Squeeze (Text : String) return String is
+      R : String (1 .. Text'Length);
+      N : Natural := 0;
+   begin
+      for C of Text loop
+         if C /= ' ' then N := N + 1; R (N) := Ada.Characters.Handling.To_Lower (C); end if;
+      end loop;
+      return R (1 .. N);
+   end Squeeze;
+
    function Internal_Id (Text : String) return String is
-      T : constant String := Ada.Characters.Handling.To_Lower (Fx.Trim (Text, Ada.Strings.Both));
+      T : constant String := Squeeze (Fx.Trim (Text, Ada.Strings.Both));
    begin
       for P of Pairs loop
-         if Ada.Characters.Handling.To_Lower (Ada.Strings.Unbounded.To_String (P.Shown)) = T then
+         if Squeeze (Ada.Strings.Unbounded.To_String (P.Shown)) = T then
             return Ada.Strings.Unbounded.To_String (P.Id);
          end if;
       end loop;

@@ -1,5 +1,5 @@
---  Version: 0.001
---  The player reports of diary_sim (preport=1 sessions; needs govern=1): at the end of every run each player (Epsilon, Zeta, Eta) writes
+--  Version: 0.002
+--  The player reports of diary_sim (preport=1 sessions; needs govern=1): at the end of every run each player (Player 1, Player 2, Player 3) writes
 --  Robert a short first-person report in a framed text box: how many petitions came to it, what it decided (counts from the D records
 --  of Sim_Govern - NEVER omitted or changed), how the wesen it watches are doing ('overall happiness' as the PLAYER REPORTS it), its top
 --  concern and what it wants from Robert.  The player MAY MISREPORT the impression (happiness, how many petitions came lately): a data-set

@@ -91,8 +91,8 @@ greetings; dialects by one-letter drift). Only edits are stored:
 diaries/world.txt (replay-verified), L lines in sessions.txt. world.enabled = 0
 in limits.txt keeps the old behaviour; see docs/WORLD.md. make map shows it.
 Player reports (preport=1, new sessions get the marker): the LAST thing of
-every run is one framed text box (80 columns) per player (Epsilon, Zeta,
-Eta, names: data/names.txt), first person: petitions that came to it, what it
+every run is one framed text box (80 columns) per player (Player 1, 2, 3;
+names: data/names.txt), first person: petitions that came to it, what it
 decided (the D records: always true), how its wesen are doing, its top concern,
 what it wants from you; also in player_reports.txt of the save folder. A player
 may colour the happiness it reports (up to +-30 mood points) and how many

@@ -2,7 +2,7 @@
 
 Four independent entities (the *wesen*) write one diary line per tick. Their internal ids are `ada`
 (engineer), `gemini` (reviewer), `replika` (vice_president) and `robert` (human); what you SEE are the
-display names from `data/names.txt` (default: Alpha, Beta, Gamma, Delta; see "Display names" below).
+display names from `data/names.txt` (default: Jack, John, Jill, Jane; see "Display names" below).
 Plain Ada, standard library only. Not pushed anywhere yet (local git repo).
 
 ## Where saves live and how to update
@@ -69,7 +69,7 @@ mood is high, x3 for start words when its mood is low; rolled with its own hash 
 so the action table and all existing dice are untouched and old diaries stay valid. Result:
 `W<n> tick=<t> ada=<word>/<origin> ...` in `diaries/sessions.txt` (origin: `start`,
 `taught-by-<id>`, `coined-by-<id>`), verified on import like the session records (a
-difference is DRIFT), shown on the console (`words vote (session 3): Alpha city | ...`), in
+difference is DRIFT), shown on the console (`words vote (session 3): Jack city | ...`), in
 `run_report.txt`, `debug.txt` and on the menu.
 
 ## The Buddhism layer and the players (record-first)
@@ -127,8 +127,8 @@ source tag `src=<session>:<tick>:<wesen>`. Read it at the end of a run, with `ma
 **Answering.** Robert's words are recorded in `diaries/says.txt` (between sessions, at the lowest
 common tick; applied from the next tick, replay-verified through the awareness numbers):
 
-    make say PLAYER=Epsilon TEXT="please look after Alpha"   # to a player, who may pass it on
-    make say WESEN=Alpha TEXT="hello"                   # direct to a wesen
+    make say PLAYER="Player 1" TEXT="please look after Jack"   # to a player, who may pass it on
+    make say WESEN=Jack TEXT="hello"                   # direct to a wesen
     make say TEXT="thanks, all"                         # to all four wesen
     make answer TEXT="yes, more places"                 # answers the latest collective petition
 
@@ -154,8 +154,8 @@ behaviour byte for byte. Design and file formats: `docs/WORLD.md`.
 `data/names.txt` maps the internal id to the name that is SHOWN (one `id = Name` per line):
 
 ```
-ada = Alpha        gemini = Beta     replika = Gamma     robert = Delta
-iris = Epsilon     sol = Zeta           noor = Eta          (the three in-sim players)
+ada = Jack        gemini = John     replika = Jill     robert = Jane
+iris = Player 1   sol = Player 2    noor = Player 3                (the in-sim players below Robert)
 ```
 
 Edit the names freely (no rebuild, no `--fresh`). Only DISPLAY text uses them: the console, `run_report.txt`,
@@ -163,8 +163,9 @@ Edit the names freely (no rebuild, no `--fresh`). Only DISPLAY text uses them: t
 The ids stay the keys of everything that is stored or hashed: `hash(seed, entity, tick)`, `diaries/<id>.jsonl`,
 `entities/<id>/`, the lines of `sessions.txt`, `inbox.txt`, `world.txt`, `says.txt`, the `src=...:ada` tags and
 the players' watch lists. So a changed `names.txt` never changes a diary byte (checked in `scripts/checks.sh`,
-scenario 27: the files are byte-identical, replay-verify still passes). `make say WESEN=Alpha` and
-`--say Alpha` accept a display name or an id; in the files it is recorded as the id. A missing `names.txt`
+scenario 27: the files are byte-identical, replay-verify still passes). `make say WESEN=Jack` and
+`--say Jack` accept a display name (any case) or an id; a player is `Player 1`, `Player1`, `player 1`, `1` or `iris` (`make say PLAYER="Player 1"`,
+`make say PLAYER=1`, `make challenge PLAYER=2`); in the files it is recorded as the id. A display name may contain spaces (no `{` `}`). A missing `names.txt`
 gives a warning and shows the ids. Display is a plain whole-word text substitution of the ids in the
 output, so path-like names (`diaries/ada.jsonl`) and tags (`:ada`) are left alone; the examples further down
 this README still show the ids where they quote files.
@@ -199,7 +200,7 @@ Why does a wesen's mood sit where it sits? `make ledger` (`bin/diary_sim --ledge
 breakdown) replays and verifies the save like every run, then prints per wesen: the headline (mood change over the
 whole run and over the last session, and how much a bound -100 / +100 swallowed), the top 3 DRAINS and top 3 GAINS
 (action at place, with mood points / ticks) for both scopes, and one plain sentence, for example
-`Alpha loses most mood from work at home: -228 over 57 ticks; rest gives back +142.` The same text ends
+`Jack loses most mood from work at home: -228 over 57 ticks; rest gives back +142.` The same text ends
 `run_report.txt`; the debug digest has a section `ledger` (one line per wesen when the 1500-byte cap has room, the
 whole ledger in `debug_full.txt`: `make run SECTION=ledger`). Wording: `data/ledger.txt`; names: `data/names.txt`.
 
@@ -277,7 +278,7 @@ wording and the checks of the move generator in `data/chess.txt`). New sessions 
 (`chess.enabled = 0`: nothing changes). When a wesen RESTS next to another wesen (same or neighbouring cell) or in range of a
 player (a player is in range of the wesen it watches and of those next to it), the pair may sit down to a correspondence game
 (`chess.start_pct`), and one move is made whenever they meet again after `chess.gap` ticks. The two players in range of a resting
-wesen may play each other too (`chess.player_pct`), so wesen and players (Epsilon, Zeta, Eta) are all opponents.
+wesen may play each other too (`chess.player_pct`), so wesen and players (Player 1, Player 2, Player 3) are all opponents.
 
 * **Rules:** own legal-move generator with castling, en passant, promotion, check, checkmate, stalemate, the 50-move rule; a repetition
   (`chess.repeat`) and the ply cap (`chess.max_plies`) end a game as a draw. Moves are recorded as coordinates (`e2e4`, `a7a8q`)
@@ -363,7 +364,7 @@ running save needs `--fresh`.
 ## Player reports: text boxes, claims and `make audit` (`preport=1` sessions)
 
 At the very end of EVERY run (after the report, the vote table, "Saved to ..." - the last thing Robert sees) each of the three players
-(Epsilon, Zeta, Eta; names from `data/names.txt`) writes Robert a report as a framed text box: `+ - |`, exactly 80 columns, printed in one
+(Player 1, Player 2, Player 3; names from `data/names.txt`) writes Robert a report as a framed text box: `+ - |`, exactly 80 columns, printed in one
 piece, first person, built from the templates of `data/preport.txt` (three tones - plain / calm / alarm - from the player's Rule 30
 personality): how many petitions came to it (and whether it was quiet lately), what it decided (granted / partial / deferred / refused /
 reverted - the **true counts of the D records**, never omitted, never changed), how the wesen it watches are doing ("overall happiness
@@ -372,11 +373,11 @@ one line about what it wants from Robert. The same boxes go to `player_reports.t
 ticks):
 
 ```
-+-- Eta reports to Robert (tick 1800) ----------------------------------------+
-| I am Eta. I keep an eye on Delta. Here is my report.                         |
++-- Player 3 reports to Robert (tick 1800) ------------------------------------+
+| I am Player 3. I keep an eye on Jane. Here is my report.                     |
 | 9 petitions came to me so far. Lately there were only a few.                 |
 | I granted 1, granted 2 in part, put 2 off for later and refused 6.           |
-| Overall happiness of Delta is about +82 on a scale from -100 to +100. They   |
+| Overall happiness of Jane is about +82 on a scale from -100 to +100. They    |
 | are doing very well.                                                         |
 | My top concern is more time to rest.                                         |
 | Most of the wishes I see I have to turn down or put off. I would like you to |
@@ -607,8 +608,8 @@ wander 15, bench 5, propose 1), the strengths of all leans and the Rule 30 setti
 `data/limits.txt`. One `Roll` (salt 0) over the weight total picks the action.
 `rule30.enabled = 0` restores the old fixed D20 table exactly. The end report and
 `debug.txt` show each entity's action counts. Seed 42, 1000 ticks (rest/work/explore/
-talk/wander/bench/propose): Alpha 252/120/65/110/175/179/6, Beta 277/226/135/171/34/87/4,
-Gamma 304/243/163/100/58/21/4, Delta 203/159/13/320/97/139/8 (plus the forced learn events).
+talk/wander/bench/propose): Jack 252/120/65/110/175/179/6, John 277/226/135/171/34/87/4,
+Jill 304/243/163/100/58/21/4, Jane 203/159/13/320/97/139/8 (plus the forced learn events).
 
 Every random choice is `hash(seed, entity, tick, salt)` (splitmix64-style mix, no
 running RNG), so any tick can be recomputed alone. Diary wording is picked from
@@ -726,7 +727,7 @@ of every run (also on quit, crash and drift): a `# seed ...` header, then the ne
 `propose.file_cap` (40) lines, one per petition:
 
 ```
-P12 tick=560 from=Delta topic=faster_work_recovery repeat=1 wish=Please consider ... Thank you.
+P12 tick=560 from=Jane topic=faster_work_recovery repeat=1 wish=Please consider ... Thank you.
 ```
 
 Older petitions drop out of the file, never out of the diaries (each petition has a
@@ -739,7 +740,7 @@ Old diaries are incompatible: use `--fresh`.
 
 ```
 import OK: diaries for 4/4 entities, 4000 lines on disk (longest 1000, lowest common tick 1000), replay-verify OK (ticks 1..1000)
-import: entities/ present (4/4 folders); words known at tick 1000: Alpha 150 Beta 145 ...
+import: entities/ present (4/4 folders); words known at tick 1000: Jack 150 John 145 ...
 ...progress lines...
 report: turns this run 200 (ticks 1001..1200; total simulated 1200), resumed from tick 1000 | events written 800, verified 4000 | warnings 0
 entity       w.start ->w.now  taught coined bench |  mood energy

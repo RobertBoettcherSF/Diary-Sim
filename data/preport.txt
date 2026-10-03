@@ -51,7 +51,7 @@ audit.hint = make challenge PLAYER=<name> lowers the standing of a player whose 
 # make challenge
 challenge.ok = {1}: {2} challenged for its misreports; its standing with its wesen drops by {3} from tick {4}.
 challenge.nolie = {1} has no misreport left to challenge (make audit shows them).
-challenge.noplayer = no such player: {1} (use Epsilon, Zeta or Eta).
+challenge.noplayer = no such player: {1} (use Player 1, Player 2 or Player 3).
 challenges.header = # Q<n> tick=<T> player=<id> by=<who>  (Robert's input: a lie of that player was caught; applied after tick T, its standing drops a little)
 err.preport = preports.txt {1} differs from the replay: {2}
 err.preport_in = challenges.txt {1} cannot be applied: that player had no misreport left to challenge at that tick

@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Containers.Vectors, Ada.Strings.Fixed, Ada.Strings.Unbounded, Interfaces;
@@ -148,11 +148,25 @@ package body Sim_Dharma is
         & (if Bar > 0 then Fx.Trim (G (Bar + 1 .. G'Last), Ada.Strings.Both) else G);
    end Player_Info;
 
+   --  A player by id (iris), display name ('Player 1', any case, with or without the space) or number ('1').
    function Find_Player (Text : String) return Natural is
-      T : constant String := Ada.Characters.Handling.To_Lower (Fx.Trim (Text, Ada.Strings.Both));
+      function Squeeze (S : String) return String is
+         R : String (1 .. S'Length);
+         N : Natural := 0;
+      begin
+         for C of S loop
+            if C /= ' ' then N := N + 1; R (N) := Ada.Characters.Handling.To_Lower (C); end if;
+         end loop;
+         return R (1 .. N);
+      end Squeeze;
+      T : constant String := Squeeze (Text);
    begin
       for P in Player_Id loop
-         if Ada.Characters.Handling.To_Lower (Player_Name (P)) = T then return Natural (P); end if;
+         if Squeeze (Player_Name (P)) = T or else Squeeze (Sim_World.Show (Player_Name (P))) = T
+           or else T = Img (Integer (P)) or else T = "player" & Img (Integer (P))
+         then
+            return Natural (P);
+         end if;
       end loop;
       return 0;
    end Find_Player;
