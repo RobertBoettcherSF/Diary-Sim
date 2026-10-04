@@ -626,6 +626,48 @@ another.
 * **Not done / defaults:** the verdict has no effect on the petitions themselves, only on standing, trust and mood; a trial runs in
   one tick (its games are played at once, not over many ticks); sessions that began before `trial=1` keep their old rules.
 
+## Records, dictionary, announcements and `make divergence` (`records=1` sessions)
+
+The raw side of the game is written to files, so you can set it against what the players tell you (`sim_records.ads/.adb`; numbers
+`rec.*` and `records.enabled` in `data/limits.txt`, wording in `data/records.txt`). New sessions of a save with `govern=1` carry
+`records=1` (`records.enabled = 0`: nothing changes, older sessions replay byte for byte as before, no `--fresh` needed). All four files
+are record lines that every replay computes again (Sim_Store, own hash salts 14000 .. 14399): a changed, removed or invented line is DRIFT.
+
+* **`diaries/votes.txt`**, one line per vote: `V<n> t=<tick> s=<session> voter=<id> kind=<kind> subj=<id> choice=<c> w=<weight>`.
+  Kinds: `petition` (a player decides a petition, the D record: `w` = its trust in the wesen, `st` = its standing with it, `of` = the
+  wesen), `trial` (a losing party adheres or refuses), `length` (the vote of each wesen for the length of a new session), `favourite`
+  (the word vote at the end of a session), `collective` (the wesen's votes on the collective petition), `advice` (the proposals and
+  decisions for the next run) and `word` (a player on a proposed word: `w` = its chance to say yes).
+* **`diaries/petitions.txt`**, one line per petition that got its answer: `P<n> t=<answer> s=<session> filed=<tick> wesen=<id>
+  topic=<topic> lever=<lever> req=<what was asked> player=<id> out=grant|partial|refuse why=<reason code>` (deferred ones appear when
+  they are finally answered; a veto of Robert stays in `govern.txt`). Not to be confused with `petitions.txt` in the save folder,
+  the readable list of the filed wishes.
+* **Words and the dictionary** (`diaries/dictionary.txt`): a wesen that coins a word proposes it (`slot=coined`); a wesen that files
+  a petition may also propose a made-up name of 2 or 3 syllables for a word it knows (`rec.prop_pct`, `slot=name`). At the end of a
+  session the players vote on at most `rec.words_per_session` (6) of them: a majority of the players agrees (a tie is rejected), at most
+  `rec.agree_cap` (3) per session. `L<n> t= s= st=A|R word= slot= mean= by= prop= yes= no= ann= why=`: A = agreed, R = rejected (with
+  `why`: split, tie, cap). The wesen's own vocabulary is never changed: the dictionary is the OFFICIAL list. `make dictionary` shows
+  it against the base vocabulary of `data/vocab.txt`.
+* **Announcements** (`diaries/announcements.txt`): a wesen that files a petition may tell everybody what it expects (`rec.ann_pct`), or
+  announce a proposed word (`rec.word_ann_pct`); a player may announce its main concern at the end of a session (`rec.pann_pct`).
+  `A<n> t= s= by= kind=wish|word|player topic= heard= mood= cost= react=ok|counter`. It raises awareness: each other wesen hears it
+  (`rec.ann_hear_pct`) and its mood moves toward the speaker's by at most `rec.ann_mood` points (a line in its diary), for
+  `rec.ann_window` ticks the deciding players add `rec.ann_vote` points to a petition of the same topic, a word that was announced
+  gets `rec.word_ann_vote` more yes-chance. The price: the speaker loses `rec.ann_cost` standing with its watching player, and with
+  `rec.ann_counter_pct` there is a counter-reaction (`react=counter`): `rec.ann_counter` points against its own petitions of that topic.
+* **`make divergence`** (`--divergence`): per session and player, what the player CLAIMED in its report to Robert (the P lines of
+  `preports.txt`: claim, truth, gap) next to what it did (grants, partial, deferred, refusals counted from the votes) and its yes/no
+  on the new words, then the growth of the dictionary per session (decided, agreed, rejected, running total). Replay-verified, writes
+  nothing. The end box of a session has at most one line about the words and announcements.
+* **The odd words in the word vote** (`Adam 4815`, `Ruth waitbrokenbroken`): two causes in the old rules. (1) The chess moves of a
+  game are made words (a coordinate move and its numeric notation) and become part of a wesen's vocabulary; the favourite-word vote
+  counted them like any other word. (2) A coined word is two known words run together, and a coined word could be joined again with
+  its own part (`waitbroken` + `broken`). In `records=1` sessions the word vote and the coinage leave out words that are not made of
+  the letters a .. z and never join a word with one that contains it or is contained in it (`Sim_World.Set_Clean`); older sessions keep
+  their rules, because their dice are part of the saved record.
+* **Not done:** an agreed word is not taught to anybody, it only grows the dictionary; the claims of the players about their
+  counts are always true (built from the D records), so the divergence is in the happiness they claim.
+
 ## The debug digest (`DEBUG=1`, `--debug`)
 
 `debug.txt` (always written, <= 1500 bytes) is unchanged. For a compact file to attach to chat:
@@ -1082,6 +1124,6 @@ paste it` and `back up diaries/ before the next run`.
 vocabulary, Rule 30 personality, bench kernels, votes and summary text), `sim_util.ads/.adb` (hash rolls,
 line parsing, data-file helpers), `data/words.txt`, `data/topics.txt` (petition topics), `data/limits.txt`,
 `data/messages.txt` (all console wording), `data/kalpas.txt` (session length votes), `data/menu.txt` (menu text, title, tagline), `data/fonts.txt` (title letters), `data/vocab.txt`, `data/help.txt`, `sim_dharma.ads/.adb` (karma, rebirth, unrest, ladder, awareness, players, inbox), `sim_things.ads/.adb` (the treadmill world), `data/things.txt` (its lists), `docs/WORLD.md`, `data/karma.txt` (numbers), `data/dharma.txt` (wording, flavour labels), `data/players.txt` (the three players),
-`sim_next.ads/.adb` + `data/ticks.txt` (the advice for the next run), `sim_visit.ads/.adb` + `data/visit.txt` (the visit: watch and talk), `sim_trial.ads/.adb` + `data/trial.txt` (trial by chess), `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
+`sim_next.ads/.adb` + `data/ticks.txt` (the advice for the next run), `sim_visit.ads/.adb` + `data/visit.txt` (the visit: watch and talk), `sim_trial.ads/.adb` + `data/trial.txt` (trial by chess), `sim_records.ads/.adb` + `data/records.txt` (votes, petitions, dictionary, announcements), `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
 `Version:` header (`make version-check`); a touched file goes up by 0.001. V&V is
 suspended: no new test suites, `scripts/checks.sh` must keep passing.

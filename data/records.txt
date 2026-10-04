@@ -1,0 +1,17 @@
+# Records (records=1 sessions, see README "Records, dictionary, announcements"): the wording.  The numbers (rec.*) are in data/limits.txt.
+# Changing a number of a running save changes the votes of later sessions only if it is used there; the record lines are replay-checked
+# (a changed number of an old session needs --fresh or keeps the old numbers).
+# the one line of a player in its box ({1} player, {2} words agreed, {3} turned down, {4} announcements this session)
+rec.box = {1}: words agreed {2}, turned down {3}; announced {4}.
+rec.none = no records yet (they start with a session marked records=1: make run).
+rec.div.head = Players: official report vs raw records (claim = what Robert was told)
+rec.div.cols = sess player     claim  true   gap |  grant part defer refuse | words y/n
+rec.dict.head = Dictionary growth (base {1} words of data/vocab.txt, never changed)
+rec.dict.cols = sess  decided  agreed  rejected   total
+rec.div.sum = {1}
+rec.dict.sum = words: {1}
+rec.dict.none = no word proposed yet.
+err.records = {1} differs from the replay: {2}
+# a line of the diary when a wesen heard what the others announced (mood moves a few points toward the speaker)
+detail.rec.up = heard what a neighbour expects, which lifted the mood a little
+detail.rec.down = heard what a neighbour expects, which weighed on the mood a little

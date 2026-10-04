@@ -378,3 +378,43 @@ trial.win_trust = 1
 trial.win_mood = 1
 trial.loss_mood = -1
 trial.refuse_stand = 2
+
+# Records (records=1 sessions; needs govern=1, see README "Records, dictionary, announcements"): votes.txt, petitions.txt, dictionary.txt and
+# announcements.txt in diaries/.  A word proposal comes from a coined word, or with the chance prop_pct from a wesen that files a petition (a
+# made-up name of 2 or 3 syllables for a word it knows, at most prop_max_len letters); at most prop_cap wait.  At the end of a session the
+# players vote on at most words_per_session of them (a majority of the players; a tie is rejected); at most agree_cap are agreed per session.
+# A player says yes with the chance word_base + warmth * word_warm / 100 - (brevity - 50) * word_strict / 100 + (trust - 50) * word_trust / 100
+# - word_len per letter above 6 (+ word_ann_vote when the proposer announced the word, + coin_bonus for a coined word), kept in 5 .. 95.
+records.enabled = 1
+rec.prop_pct = 30
+rec.prop_cap = 12
+rec.prop_max_len = 12
+rec.words_per_session = 6
+rec.agree_cap = 3
+rec.word_base = 45
+rec.word_warm = 40
+rec.word_strict = 30
+rec.word_trust = 40
+rec.word_len = 4
+rec.word_ann_vote = 12
+rec.coin_bonus = 10
+rec.word_ann_pct = 20
+# Announcements: a wesen that files a petition tells everybody with the chance ann_pct.  Each other wesen hears it with ann_hear_pct and its
+# mood moves toward the speaker's by (mood / 40) points, at most ann_mood.  For ann_window ticks the deciding players add ann_vote points
+# (at most ann_vote_max) to the score of a petition of the same topic.  The speaker pays ann_cost standing and with ann_counter_pct a
+# counter-reaction: ann_counter points less on its own petitions of that topic.  A player announces its main concern at the end of a
+# session with pann_pct; its wesen pay ann_cost standing (twice on a counter-reaction) and it adds pann_commit points to its own decisions.
+rec.ann_pct = 20
+rec.ann_hear_pct = 80
+rec.ann_mood = 2
+rec.ann_window = 150
+rec.ann_vote = 6
+rec.ann_vote_max = 12
+rec.ann_cost = 1
+rec.ann_counter_pct = 25
+rec.ann_counter = 15
+rec.pann_pct = 30
+rec.pann_commit = 8
+# make divergence / make dictionary: how many sessions / dictionary lines are shown
+rec.div_sessions = 6
+rec.dict_rows = 14

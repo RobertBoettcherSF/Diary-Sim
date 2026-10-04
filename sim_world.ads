@@ -1,4 +1,4 @@
---  Version: 0.013
+--  Version: 0.014
 --  The shared world of diary_sim: the four entities, the vocabulary (base
 --  words, who knows what, coined words), the bench kernels and the final votes.
 --  One world per run; Init rebuilds it from scratch, so a replay from tick 1
@@ -145,6 +145,12 @@ package Sim_World is
    --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (weight sums, cumulative pick)
    procedure Use_Word (E : Entity_Id; W : Positive; Amount : Positive := 1);
    function Favourite (Seed : Int; E : Entity_Id; Tick : Int; Mood : Integer) return Natural;
+   --  records=1 sessions: the word vote and the coinage leave out words that are no words (the numeric chess moves, "4815", "e2e4")
+   --  and never run a coined word together with its own part ("waitbroken" + "broken"); off in older sessions (their dice stay valid).
+   procedure Set_Clean (On : Boolean);
+   function Is_Clean return Boolean;
+   function Plain (W : Positive) return Boolean;               --  only the letters a .. z
+   function Overlaps (A, B : Positive) return Boolean;         --  one text contains the other
 
    --  ---- bench ------------------------------------------------------------
    --  A built-in integer kernel with a fixed step budget.  Steps, result and

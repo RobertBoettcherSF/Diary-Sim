@@ -1,4 +1,4 @@
-# Version: 0.028
+# Version: 0.029
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -31,6 +31,9 @@
 #                 verifies the save, writes nothing).  make perft: the move generator checks (data/chess.txt), no save needed
 # make trials    print the trials (trial=1 sessions: disputes settled with chess games, T lines of diaries/trials.txt; display names;
 #                 replays and verifies the save, writes nothing)
+# make divergence  the players' reports against the raw records (records=1 sessions): claim, truth, grants and refusals counted from
+#                 diaries/votes.txt, yes/no on new words, and the growth of the dictionary per session; read-only, replay-verified
+# make dictionary  the official word list (diaries/dictionary.txt: words the wesen proposed and the players voted), read-only
 # make screens   print the text screens of the wesen as of the end of the replay (screen=1 sessions: words known, things examined,
 #                 words seen on others' screens; pinned *, unknown ?) and the notes lying on things; read-only, replay-verified
 # make robot     print the robot (robot=1 sessions): position, battery, its 5x5 camera view, who steers it, the last commands;
@@ -71,7 +74,7 @@ OPT ?= -O0
 JOBS ?= -j0
 FLAGS = -g $(OPT) -gnatwa -gnat2022 -gnata $(JOBS)
 
-.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials small footprint
+.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary small footprint
 export WESEN PLAYER TEXT AS
 
 EVERY ?= 100
@@ -86,7 +89,7 @@ all:
 	@rm -f b~*
 
 version-check:
-	@bad=0; for f in Makefile diary_sim.adb sim_util.ads sim_util.adb sim_world.ads sim_world.adb sim_quit.ads sim_quit.adb sim_menu.ads sim_menu.adb sim_dharma.ads sim_dharma.adb sim_things.ads sim_things.adb sim_ledger.ads sim_ledger.adb sim_store.ads sim_store.adb sim_screen.ads sim_screen.adb sim_chess.ads sim_chess.adb sim_games.ads sim_games.adb sim_robot.ads sim_robot.adb sim_govern.ads sim_govern.adb sim_preport.ads sim_preport.adb sim_next.ads sim_next.adb sim_visit.ads sim_visit.adb sim_trial.ads sim_trial.adb; do \
+	@bad=0; for f in Makefile diary_sim.adb sim_util.ads sim_util.adb sim_world.ads sim_world.adb sim_quit.ads sim_quit.adb sim_menu.ads sim_menu.adb sim_dharma.ads sim_dharma.adb sim_things.ads sim_things.adb sim_ledger.ads sim_ledger.adb sim_store.ads sim_store.adb sim_screen.ads sim_screen.adb sim_chess.ads sim_chess.adb sim_games.ads sim_games.adb sim_robot.ads sim_robot.adb sim_govern.ads sim_govern.adb sim_preport.ads sim_preport.adb sim_next.ads sim_next.adb sim_visit.ads sim_visit.adb sim_trial.ads sim_trial.adb sim_records.ads sim_records.adb; do \
 	  head -1 $$f | grep -Eq 'Version: [0-9]+\.[0-9]{3}' || { echo "no version header: $$f"; bad=1; }; done; \
 	  v=$$(head -1 diary_sim.adb | grep -Eo '[0-9]+\.[0-9]{3}'); \
 	  grep -q "Build : constant String := \"$$v\"" diary_sim.adb || { echo "Build constant differs from diary_sim.adb header $$v"; bad=1; }; \
@@ -126,6 +129,12 @@ elo: all
 
 trials: all
 	bin/diary_sim --trials
+
+divergence: all
+	bin/diary_sim --divergence
+
+dictionary: all
+	bin/diary_sim --dictionary
 
 perft: all
 	bin/diary_sim --perft

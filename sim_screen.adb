@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 --  See sim_screen.ads.
 pragma Ada_2022;
 
@@ -209,6 +209,7 @@ package body Sim_Screen is
       Done := False;
       if (if Scoin_On then Ses_Coined (Who) >= Natural (Coin_Cap_S) else Int (Coined_Total) >= Cap_V) or else Text'Length < 3 or else Text'Length > 24
         or else (for some C of Text => C = ' ') or else Find (Text) /= 0
+        or else (Is_Clean and then not (Plain (A) and then Plain (B)))   --  records=1: no chess move is blended into a word
       then
          return;
       end if;

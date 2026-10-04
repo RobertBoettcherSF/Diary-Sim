@@ -20,6 +20,8 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
   --next         the advice for the next run: wesen, players (make next)
   --next-ticks   the advised ticks, a bare number (nextticks.use=1; make run)
   --trials       the trials (trial=1 sessions; make trials)
+  --divergence   players' reports vs the raw votes; dictionary growth
+  --dictionary   the official word list the players voted (make dictionary)
   --visit=WHO    stand next to one wesen, watch and talk (make visit WHO=ada)
   --visit-script=F  commands for --visit from a file (else stdin)
   --challenge=P  a caught lie lowers a player's standing (make challenge)
@@ -144,6 +146,11 @@ a further match of 3, then 5, ... (odd) until decided; past trial.max_games a
 Rule 30 coin. A losing wesen adheres with trial.adhere_pct (less unrest, more
 standing), else "refused the trial" and pays standing. Small effects. T lines
 of diaries/trials.txt, replay-verified. trial.enabled = 0: no trials.
+Records (records=1 session; needs govern): diaries/votes.txt, petitions.txt,
+dictionary.txt, announcements.txt, replay-verified. Wesen propose words, the
+players vote (majority, caps per session), agreed words go to the dictionary;
+wesen and players may announce what they expect (awareness against standing).
+make divergence: claims vs raw votes. make dictionary. records.enabled=0: off.
 Size (make footprint, make small): bin/diary_sim (-g -O0) is ~9 MB, of which
 ~4 MB is debug info and symbols. make small builds bin/diary_sim_small (-Os,
 no -g, gc-sections, stripped): ~2.9 MB, same output. See README, Footprint.

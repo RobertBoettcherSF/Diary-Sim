@@ -1,10 +1,11 @@
---  Version: 0.006
+--  Version: 0.007
 --  See sim_govern.ads.
 pragma Ada_2022;
 
 with Ada.Containers.Vectors;
 with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded;
+with Sim_Records;
 
 package body Sim_Govern is
 
@@ -257,7 +258,8 @@ package body Sim_Govern is
             Brev : constant Integer := Brev_Of (Pl);
             Attn : constant Integer := Attn_Of (Pl);
             Score : constant Integer := Base + Warm * Gen_W / 100 - (Brev - 50) * Strict_W / 100 + (Trust (E) - 50) * Trust_W / 100
-                                        - Attn * Attn_W / 100 + Integer'Max (0, -P.Mood) * Mood_W / 100;
+                                        - Attn * Attn_W / 100 + Integer'Max (0, -P.Mood) * Mood_W / 100
+                                        + Sim_Records.Shift (E, Topic, Tick);   --  records=1: what was announced (0 otherwise)
             Pct : constant Integer := Integer'Max (5, Integer'Min (95, Score));
             R : constant Integer := Roll (Seed_V, Eid, Tick, 9700 + P.Defers, 100);
             Step : constant Integer := Step_Of (V);

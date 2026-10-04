@@ -913,8 +913,8 @@ oob=$(grep '^D[0-9]' diaries/govern.txt | grep -v 'lever=- ' | awk -v f="$w/gv/d
 [ "$oob" = 0 ] && ok "no lever ever leaves its bounds, no change is bigger than one step (data/govern.txt)" || bad "bounds ($oob)"
 dfr=$(grep '^D[0-9].* kind=defer ' diaries/govern.txt | wc -l); bk=0
 grep '^D[0-9].* kind=defer ' diaries/govern.txt | while read -r key tk pet rest; do :; done
-for u in $(grep '^D[0-9].* kind=defer ' diaries/govern.txt | sed -E 's/.* pet=(P[0-9]+) .* until=([0-9]+).*/\1:\2/'); do p=${u%%:*}; t=${u##*:}; grep -q "^D[0-9]* t=$t pet=$p " diaries/govern.txt || bk=$((bk + 1)); done
-[ "$dfr" -ge 1 ] && [ "$bk" = 0 ] && ok "a deferred petition comes back at the tick the record names ($dfr deferrals)" || bad "defer ($dfr $bk)"
+for u in $(grep '^D[0-9].* kind=defer ' diaries/govern.txt | sed -E 's/.* pet=(P[0-9]+) .* until=([0-9]+).*/\1:\2/'); do p=${u%%:*}; t=${u##*:}; [ "$t" -le 600 ] || continue; grep -q "^D[0-9]* t=$t pet=$p " diaries/govern.txt || bk=$((bk + 1)); done
+[ "$dfr" -ge 1 ] && [ "$bk" = 0 ] && ok "a deferred petition comes back at the tick the record names (before the run ends; $dfr deferrals)" || bad "defer ($dfr $bk)"
 "$gvb" --govern > gv1.txt 2>&1; rc=$?
 [ $rc = 0 ] && [ "$(grep -cE '[0-9]+ petitions seen, [0-9]+ granted, [0-9]+ partial, [0-9]+ deferred, [0-9]+ refused' gv1.txt)" = 3 ] && grep -q 'trust' gv1.txt && grep -q '^last decisions' gv1.txt && [ "$(awk 'length > 79' gv1.txt | wc -l)" = 0 ] \
   && ok "--govern: counter line per player ('N petitions seen, N granted, N partial, N deferred, N refused'), trust, standing, levers, last decisions (<= 79 columns)" || bad "--govern view ($rc)"
@@ -1443,6 +1443,63 @@ done
 [ -s "$w/sm/a/out.txt" ] && cmp -s "$w/sm/a/out.txt" "$w/sm/b/out.txt" && cmp -s "$w/sm/a/files.txt" "$w/sm/b/files.txt" && grep -q '^T[0-9]' "$w/sm/a/out.txt" && ok "the small binary gives the same console output and byte-identical diaries / entities / reports as the dev build ($(wc -l < "$w/sm/a/files.txt") files compared; trials, Elo, governance included)" || bad "small vs dev output"
 ( cd "$w/sm/src" && make footprint > "$w/sm/fp.txt" 2>&1 ); grep -q '^source  : ' "$w/sm/fp.txt" && grep -q '^data    : ' "$w/sm/fp.txt" && grep -q '^binary  : bin/diary_sim_small ' "$w/sm/fp.txt" && grep -q '^units   : ' "$w/sm/fp.txt" && grep -q '^runtime : ' "$w/sm/fp.txt" && ok "make footprint prints source, data, binary (stripped / debug share), per-unit and runtime sizes" || bad "footprint"
 grep -q '^## Footprint' "$root/README.md" && grep -q 'make small' "$root/README.md" && grep -q 'make small' "$root/Makefile" && ok "README has a Footprint section with the size table and make small" || bad "footprint docs"
+
+echo "== 46. records (records=1): votes, petitions, dictionary, announcements; clean word vote; make divergence; marker off = nothing =="
+rm -rf "$w/rc"; mkdir -p "$w/rc"
+rc_run() {   # rc_run NAME 'sed expr on limits.txt' [ticks]: a fresh save of seed 42 (govern=1), proposals made likely
+  mkdir -p "$w/rc/$1/bin" "$w/rc/$1/h"; cp "$bin" "$w/rc/$1/bin/"; cp -r "$idata" "$w/rc/$1/data"
+  sed -i 's/^govern.enabled = .*/govern.enabled = 1/; s/^rec.prop_pct = .*/rec.prop_pct = 70/; s/^rec.ann_pct = .*/rec.ann_pct = 50/; s/^trial.enabled = .*/trial.enabled = 0/' "$w/rc/$1/data/limits.txt"
+  [ -n "$2" ] && sed -i "$2" "$w/rc/$1/data/limits.txt"
+  ( cd "$w/rc/$1/h" || exit 1; export DIARY_HOME="$w/rc/$1/h"; "$w/rc/$1/bin/diary_sim" --seed 42 --ticks "${3:-300}" --yes --every 5000 > run.txt 2>&1 )
+}
+rc_run main ''
+( cd "$w/rc/main/h" && export DIARY_HOME="$w/rc/main/h" && "$w/rc/main/bin/diary_sim" --more 300 --every 5000 > run2.txt 2>&1 && "$w/rc/main/bin/diary_sim" --more 300 --every 5000 > run3.txt 2>&1 )
+cd "$w/rc/main/h" || exit 1; export DIARY_HOME="$w/rc/main/h"
+nm=$(grep -c '^S[0-9].* records=1' diaries/sessions.txt); nv=$(grep -c '^V[0-9]' diaries/votes.txt); np=$(grep -c '^P[0-9]' diaries/petitions.txt)
+[ "$nm" = 3 ] && [ "$nv" -ge 20 ] && [ "$np" -ge 3 ] && head -1 diaries/votes.txt | grep -q '^# seed 42$' && ok "new sessions carry records=1 ($nm); $nv vote lines and $np petition lines were written" || bad "records files ($nm, $nv, $np)"
+bad_v=$(grep '^V[0-9]' diaries/votes.txt | awk '{ ok = 1; split("t s voter kind subj choice w", k, " "); for (i = 1; i <= 7; i++) if (index($0, " " k[i] "=") == 0) ok = 0; if (!ok) bad++ } END { print bad + 0 }')
+[ "$bad_v" = 0 ] && ok "every vote line has t, s, voter, kind, subj, choice, w" || bad "vote fields ($bad_v)"
+nd=$(grep -c '^D[0-9].* kind=\(grant\|partial\|defer\|refuse\) ' diaries/govern.txt); nvp=$(grep -c ' kind=petition ' diaries/votes.txt)
+nfin=$(grep '^D[0-9].* kind=\(grant\|partial\|refuse\) ' diaries/govern.txt | sed -E 's/.* pet=(P[0-9]+) .*/\1/' | sort -u | wc -l)
+[ "$nd" = "$nvp" ] && [ "$nfin" = "$np" ] && ok "every decision of a player is a vote ($nvp) and every answered petition one petitions.txt line ($np)" || bad "votes against D lines ($nd, $nvp, $nfin, $np)"
+bad_d=$(grep '^L[0-9]' diaries/dictionary.txt | awk '{ for (i = 1; i <= NF; i++) { split($i, kv, "="); v[kv[1]] = kv[2] }
+  n = v["yes"] + v["no"]; if (v["st"] == "A" && v["yes"] * 2 <= n) bad++; if (v["st"] == "R" && v["why"] == "split" && v["yes"] * 2 >= n) bad++
+  if (v["st"] == "R" && v["why"] == "tie" && v["yes"] * 2 != n) bad++; if (n < 3) bad++; if (v["word"] !~ /^[a-z]+$/) bad++ } END { print bad + 0 }')
+nl=$(grep -c '^L[0-9]' diaries/dictionary.txt)
+[ "$nl" -ge 2 ] && [ "$bad_d" = 0 ] && ok "$nl proposed words voted by the players: agreed only with a majority, a tie is rejected, words are letters only" || bad "dictionary ($nl, $bad_d)"
+cap=$(sed -n 's/^rec.agree_cap = \([0-9]*\).*/\1/p' "$w/rc/main/data/limits.txt"); wcap=$(sed -n 's/^rec.words_per_session = \([0-9]*\).*/\1/p' "$w/rc/main/data/limits.txt")
+mx_a=$(grep '^L[0-9].* st=A ' diaries/dictionary.txt | sed -E 's/.* s=([0-9]+) .*/\1/' | sort | uniq -c | awk 'BEGIN { m = 0 } { if ($1 > m) m = $1 } END { print m }')
+mx_l=$(grep '^L[0-9]' diaries/dictionary.txt | sed -E 's/.* s=([0-9]+) .*/\1/' | sort | uniq -c | awk 'BEGIN { m = 0 } { if ($1 > m) m = $1 } END { print m }')
+[ "$mx_a" -le "$cap" ] && [ "$mx_l" -le "$wcap" ] && ok "growth is bounded per session: at most $mx_a agreed (cap $cap) and $mx_l voted (cap $wcap)" || bad "caps ($mx_a $cap $mx_l $wcap)"
+na=$(grep -c '^A[0-9]' diaries/announcements.txt)
+bad_a=$(grep '^A[0-9]' diaries/announcements.txt | awk '{ ok = 1; split("t s by kind topic heard mood cost react", k, " "); for (i = 1; i <= 9; i++) if (index($0, " " k[i] "=") == 0) ok = 0; if (!ok) bad++ } END { print bad + 0 }')
+[ "$na" -ge 2 ] && [ "$bad_a" = 0 ] && grep -q ' kind=wish ' diaries/announcements.txt && grep -q ' cost=[1-9]' diaries/announcements.txt && ok "$na announcements, each with who, what, how many heard, the mood it moved and the standing it cost" || bad "announcements ($na, $bad_a)"
+dig=$(grep '^W[0-9]' diaries/sessions.txt | sed -E 's/^W[0-9]+ tick=[0-9]+ //' | tr ' ' '\n' | sed -E 's/^[a-z]+=//; s#/.*##' | grep -c '[0-9]')
+[ "$dig" = 0 ] && ok "the favourite words of records sessions are words (no numeric chess moves, no digits)" || bad "digit words in the vote ($dig)"
+grep -E '^\| ' run3.txt | awk 'length($0) > 80 { bad++ } END { exit bad > 0 }' && ok "the end box stays within 80 columns" || bad "box wider than 80"
+"$w/rc/main/bin/diary_sim" --divergence > dv.txt 2>&1; rc1=$?
+[ $rc1 = 0 ] && grep -q '^sess player' dv.txt && grep -q '^sess  decided  agreed' dv.txt && [ "$(awk 'length($0) > 80' dv.txt | wc -l)" = 0 ] && grep -c '^   [0-9] ' dv.txt | grep -q '^[1-9]' && ok "make divergence prints claim, truth, gap, grants and refusals, words yes/no and the dictionary growth (within 80 columns)" || bad "--divergence ($rc1)"
+"$w/rc/main/bin/diary_sim" --dictionary > dc.txt 2>&1; rc2=$?
+[ $rc2 = 0 ] && head -1 dc.txt | grep -q '^Dictionary growth (base [0-9]* words' && [ "$(grep -c '^L[0-9]' dc.txt)" -ge 2 ] && ok "make dictionary lists the official words against the base vocabulary" || bad "--dictionary ($rc2)"
+"$w/rc/main/bin/diary_sim" --more 0 --every 5000 > r1.txt 2>&1; head -1 debug.txt | grep -q '^OK' && ok "the save replays and verifies all four files" || bad "records replay"
+cp -r diaries "$w/rc/diaries.bak"
+sed -i '0,/ kind=petition .* choice=refuse /s// kind=petition subj=P1 choice=grant /' diaries/votes.txt; sed -i '0,/choice=refuse/s//choice=grant/' diaries/votes.txt
+"$w/rc/main/bin/diary_sim" --more 0 --every 5000 > r2.txt 2>&1; rc3=$?
+[ $rc3 != 0 ] && grep -q 'votes.txt V[0-9]* differs from the replay' r2.txt && ok "a changed vote is DRIFT" || bad "vote tamper ($rc3)"
+rm -rf diaries; cp -r "$w/rc/diaries.bak" diaries; sed -i '0,/^L1 /{/^L1 /d}' diaries/dictionary.txt
+"$w/rc/main/bin/diary_sim" --more 0 --every 5000 > r3.txt 2>&1; rc4=$?
+[ $rc4 != 0 ] && grep -q 'dictionary.txt L1 differs from the replay' r3.txt && ok "a removed dictionary line is DRIFT" || bad "dictionary tamper ($rc4)"
+rm -rf diaries; cp -r "$w/rc/diaries.bak" diaries; echo "A99 t=5 s=1 by=ada kind=wish topic=x heard=0 mood=0 cost=0 react=ok" >> diaries/announcements.txt
+"$w/rc/main/bin/diary_sim" --more 0 --every 5000 > r4.txt 2>&1; rc5=$?
+[ $rc5 != 0 ] && grep -q 'announcements.txt A99 differs from the replay' r4.txt && ok "an invented announcement is DRIFT" || bad "announcement tamper ($rc5)"
+rm -rf diaries; cp -r "$w/rc/diaries.bak" diaries
+rc_run off 's/^records.enabled = .*/records.enabled = 0/' 300
+( cd "$w/rc/off/h" && export DIARY_HOME="$w/rc/off/h" && "$w/rc/off/bin/diary_sim" --more 300 --every 5000 > run2.txt 2>&1 )
+[ ! -e "$w/rc/off/h/diaries/votes.txt" ] && [ ! -e "$w/rc/off/h/diaries/dictionary.txt" ] && ! grep -q 'records=1' "$w/rc/off/h/diaries/sessions.txt" && ok "records.enabled = 0: no marker, none of the four files" || bad "marker off"
+sed -i 's/^records.enabled = .*/records.enabled = 1/' "$w/rc/off/data/limits.txt"
+( cd "$w/rc/off/h" && export DIARY_HOME="$w/rc/off/h" && "$w/rc/off/bin/diary_sim" --more 300 --every 5000 > run3.txt 2>&1; echo "rc=$?" >> run3.txt; "$w/rc/off/bin/diary_sim" --more 0 --every 5000 > run4.txt 2>&1; echo "rc=$?" >> run4.txt )
+[ "$(grep -c '^S[0-9].* records=1' "$w/rc/off/h/diaries/sessions.txt")" = 1 ] && [ "$(grep -c '^S[0-9]' "$w/rc/off/h/diaries/sessions.txt")" = 3 ] && grep -q '^rc=0' "$w/rc/off/h/run3.txt" && grep -q '^rc=0' "$w/rc/off/h/run4.txt" && [ -s "$w/rc/off/h/diaries/votes.txt" ] && ok "an existing save picks it up at its next new session (no --fresh): sessions 1-2 as before, session 3 has records=1, all replays verify" || bad "marker on for an old save"
+grep -q '^## Records, dictionary' "$root/README.md" && grep -q 'make divergence' "$root/README.md" && grep -q 'make divergence' "$root/Makefile" && grep -q -- '--divergence' "$root/data/help.txt" && ok "README, Makefile and --help mention records, make divergence and make dictionary" || bad "docs for records"
 
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="

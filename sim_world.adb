@@ -1,4 +1,4 @@
---  Version: 0.017
+--  Version: 0.018
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
@@ -780,13 +780,29 @@ package body Sim_World is
 
    --  ---- favourite word ----------------------------------------------------------------
 
+   Clean_On : Boolean := False;
+   procedure Set_Clean (On : Boolean) is begin Clean_On := On; end Set_Clean;
+   function Is_Clean return Boolean is (Clean_On);
+   function Plain (W : Positive) return Boolean is
+      T : constant String := To_String (Table (W).Text);
+   begin
+      return T'Length > 0 and then (for all C of T => C in 'a' .. 'z');
+   end Plain;
+   function Overlaps (A, B : Positive) return Boolean is
+      Ta : constant String := To_String (Table (A).Text);
+      Tb : constant String := To_String (Table (B).Text);
+   begin
+      return Ada.Strings.Fixed.Index (Ta, Tb) > 0 or else Ada.Strings.Fixed.Index (Tb, Ta) > 0;
+   end Overlaps;
+
    function Favourite (Seed : Int; E : Entity_Id; Tick : Int; Mood : Integer) return Natural is
       Tone_Hi : constant Integer := Integer (Limit ("mood.tone_high", 34));
       Tone_Lo : constant Integer := Integer (Limit ("mood.tone_low", -34));
-      function Weight (W : Positive) return Positive is
+      function Weight (W : Positive) return Natural is
          F : constant Natural := (if W <= Natural (Freq (E).Length) then Freq (E).Element (W) else 0);
          Is_Start : constant Boolean := Origin (E, W) = "start";
       begin
+         if Clean_On and then not Plain (W) then return 0; end if;   --  records=1: a chess move is no favourite word
          return (1 + F) * (if Mood >= Tone_Hi and then not Is_Start then 3
                            elsif Mood <= Tone_Lo and then Is_Start then 3 else 1);
       end Weight;
