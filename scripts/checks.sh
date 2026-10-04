@@ -4,6 +4,7 @@
 # folders (words, bench), summary, crash then resume, start_percent, petitions,
 # make run, kalpa sessions (vote, median, resume, explicit, drift).
 # Usage: scripts/checks.sh [BIN]     (works in a scratch directory)
+export DIARY_VERBOSE=1   # the scenarios read the whole report on the console as before; scenario 48 tests the short form (env -u)
 export DIARY_HOME=.   # every scenario saves in its own current directory (the default is ../diary-data, see scenario 22)
 exec < /dev/null   # never a terminal: the 'no previous diary' question is not asked (see scenario 20)
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -137,7 +138,7 @@ cd "$w/base" || exit 1
 grep -q 'import OK: 4 entities, 1000 ticks verified, continuing from 1001 (4000 lines on disk, longest 1000)' again.txt \
   && grep -q 'entities/ present (4/4' again.txt && grep -q 'turns this run 200' again.txt && grep -q 'resumed from tick 1000' again.txt \
   && grep -q 'export OK: diaries/ 4 files, 4800 lines' again.txt && ok "resumed run: import OK with the right numbers, report, export OK" || bad "resumed-run lines"
-cmp <(sed -n '/^report:/,/^export OK/p' again.txt) <(sed -n '/^report:/,/^export OK/p' run_report.txt) && grep -q '^import OK' run_report.txt && ok "run_report.txt holds the same import/report lines" || bad "run_report.txt differs"
+cmp <(sed -n '/^report:/,/^export OK/p' again.txt) <(sed -n '/^report:/,/^export OK/p' run_report.txt | grep -v '^== ') && grep -q '^import OK' run_report.txt && ok "run_report.txt holds the same import/report lines" || bad "run_report.txt differs"
 [ "$(wc -l < again.txt)" -le 77 ] && ok "console output $(wc -l < again.txt) lines (<= 77, with the treadmill block and the robot / governance off line)" || bad "console output too long"
 rm -rf entities; "$bin" --ticks=1200 | grep -q 'entities/ rebuilt (4 of 4' && ok "missing entities/ reported as rebuilt" || bad "no rebuilt message"
 fresh_copy; sed -i '300s/"text":"[a-z]/"text":"X/' diaries/robert.jsonl
@@ -1438,7 +1439,7 @@ for d in a b; do
   cp -r "$idata" "$w/sm/$d/data"; sed -i 's/^chess.enabled = .*/chess.enabled = 1/; s/^govern.enabled = .*/govern.enabled = 1/; s/^trial.enabled = .*/trial.enabled = 1/; s/^screen.enabled = .*/screen.enabled = 1/; s/^robot.enabled = .*/robot.enabled = 1/' "$w/sm/$d/data/limits.txt"
   x="$w/sm/$d/bin/diary_sim"; [ $d = b ] && x="$w/sm/$d/bin/diary_sim_small"
   mkdir -p "$w/sm/$d/h"; ( cd "$w/sm/$d" && export DIARY_HOME="$w/sm/$d/h" && { "$x" --seed 42 --ticks 400 --yes --every 5000; "$x" --more 200 --every 5000; "$x" --trials; "$x" --elo; "$x" --govern; "$x" --more 0 --every 5000 --debug-section run; } 2>&1 | sed "s#$w/sm/$d/h#H#g" > "$w/sm/$d/out.txt" )
-  ( cd "$w/sm/$d/h" && find . -type f | sort | while read -r f; do case $f in ./debug*|./last*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done > "$w/sm/$d/files.txt" )
+  ( cd "$w/sm/$d/h" && find . -type f | sort | while read -r f; do case $f in ./debug*|./last*|./run_report*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done > "$w/sm/$d/files.txt" )
 done
 [ -s "$w/sm/a/out.txt" ] && cmp -s "$w/sm/a/out.txt" "$w/sm/b/out.txt" && cmp -s "$w/sm/a/files.txt" "$w/sm/b/files.txt" && grep -q '^T[0-9]' "$w/sm/a/out.txt" && ok "the small binary gives the same console output and byte-identical diaries / entities / reports as the dev build ($(wc -l < "$w/sm/a/files.txt") files compared; trials, Elo, governance included)" || bad "small vs dev output"
 ( cd "$w/sm/src" && make footprint > "$w/sm/fp.txt" 2>&1 ); grep -q '^source  : ' "$w/sm/fp.txt" && grep -q '^data    : ' "$w/sm/fp.txt" && grep -q '^binary  : bin/diary_sim_small ' "$w/sm/fp.txt" && grep -q '^units   : ' "$w/sm/fp.txt" && grep -q '^runtime : ' "$w/sm/fp.txt" && ok "make footprint prints source, data, binary (stripped / debug share), per-unit and runtime sizes" || bad "footprint"
@@ -1554,6 +1555,48 @@ sed -i 's/^govern.enabled = .*/govern.enabled = 1/; s/^trial.enabled = .*/trial.
 ( cd "$w/rq/q0/h" || exit 1; export DIARY_HOME="$w/rq/q0/h"; "$w/rq/q0/bin/diary_sim" --seed 42 --ticks 300 --yes --every 5000 > r1.txt 2>&1; "$w/rq/q0/bin/diary_sim" --more 300 --every 5000 > r2.txt 2>&1 )
 [ "$(grep -c '^S[0-9].* records=1' "$w/rq/q0/h/diaries/sessions.txt")" = 2 ] && ! grep -q 'records=2' "$w/rq/q0/h/diaries/sessions.txt" && [ ! -e "$w/rq/q0/h/diaries/ballots.txt" ] && ok "rec.quality = 0: sessions stay records=1 (the earlier rules), no ballots" || bad "rec.quality = 0"
 grep -q 'rec.quality' "$root/data/limits.txt" && grep -q 'rec.mean_cooldown' "$root/data/limits.txt" && grep -q 'records=2' "$root/README.md" && grep -q 'records=2' "$root/data/help.txt" && ok "README, --help and data/limits.txt describe records=2, rec.quality and rec.mean_cooldown" || bad "docs for records=2"
+
+echo "== 48. console: short form by default, complete run_report.txt, @@TRACE marker, VERBOSE=1 = the old output, make report =="
+rm -rf "$w/sh"; mkdir -p "$w/sh/bin"; cp "$bin" "$w/sh/bin/"; cp -r "$root/data" "$w/sh/data"
+sh_run() {   # sh_run HOME 'env prefix' args...: the same two sessions (seed 42, 300 + 200 ticks)
+  h=$1; pre=$2; shift 2; mkdir -p "$w/sh/$h"
+  ( cd "$w/sh/$h" || exit 1; export DIARY_HOME="$w/sh/$h/save"; env -u DIARY_VERBOSE $pre "$w/sh/bin/diary_sim" --seed 42 --ticks 300 --yes --every 100 "$@" > c1.txt 2>&1
+    env -u DIARY_VERBOSE $pre "$w/sh/bin/diary_sim" --more 200 --every 100 "$@" > c2.txt 2>&1 )
+}
+sh_run short DIARY_NOP=1
+sh_run flag DIARY_NOP=1 --verbose
+sh_run envv DIARY_VERBOSE=1
+cd "$w/sh/short" || exit 1
+tl=$(sed -n '/^report: /,$p' c1.txt | wc -l); tl2=$(sed -n '/^report: /,$p' c2.txt | wc -l)
+grep -q '^entity .*mood energy' c1.txt && [ "$(grep -c '^\(Adam\|Eve\|Abel\|Ruth\) .* | ' c1.txt)" -ge 4 ] && grep -q '^petitions [0-9]* filed' c1.txt && grep -q '^session 1 ' c1.txt && grep -q '^+-- The players report' c1.txt \
+  && tail -1 c1.txt | grep -q '^Full report: .*run_report.txt  (make run VERBOSE=1 or make report to print it)$' && ! grep -q '^chess games\|^treadmill\|^recovery since\|^screens (' c1.txt \
+  && [ "$tl" -le 45 ] && [ "$tl2" -le 45 ] && ok "default console: entity table, petitions, session lines, the players' boxes, the pointer last; $tl lines after 'report:' (<= 45), no chess/treadmill/recovery/screens blocks" || bad "default tail ($tl $tl2)"
+mk1=$(grep -c '^@@TRACE ' c1.txt); mk2=$(grep -c '^@@SECTIONS ' c1.txt)
+pat='^@@TRACE build=[0-9]+\.[0-9]{3} seed=[0-9]+ session=[0-9]+ ticks=[0-9]+\.\.[0-9]+ anomalies=(none|[0-9]+\[[^] ]*\]) files=[^ ]+$'
+c_ok=1; for f in c1.txt save/run_report.txt; do grep -E "$pat" "$f" > /dev/null || c_ok=0; grep -E '^@@SECTIONS ([a-z]+=[0-9]+,)*[a-z]+=[0-9]+$' "$f" > /dev/null || c_ok=0; done
+head -1 save/run_report.txt | grep -q '^@@TRACE ' && sed -n 2p save/run_report.txt | grep -q '^@@SECTIONS ' && diff <(grep '^@@' c2.txt) <(head -2 save/run_report.txt) > /dev/null
+[ "$mk1" = 1 ] && [ "$mk2" = 1 ] && [ "$c_ok" = 1 ] && [ $? = 0 ] && ok "@@TRACE (build seed session ticks anomalies files) and @@SECTIONS are one parseable line each, the same on the console and as the first two lines of run_report.txt" || bad "marker ($mk1 $mk2 $c_ok)"
+badsec=0; for pr in $(sed -n 2p save/run_report.txt | sed 's/^@@SECTIONS //; s/,/ /g'); do n=${pr%%=*}; l=${pr##*=}; [ "$(sed -n "${l}p" save/run_report.txt)" = "== $n ==" ] || badsec=$((badsec + 1)); done
+nsec=$(sed -n 2p save/run_report.txt | tr ',' '\n' | wc -l); nh=$(grep -c '^== [a-z]* ==$' save/run_report.txt)
+[ "$badsec" = 0 ] && [ "$nsec" = "$nh" ] && [ "$nsec" -ge 12 ] && ok "section headers: every '== name ==' line is where @@SECTIONS says ($nsec sections)" || bad "sections ($badsec $nsec $nh)"
+# complete: everything the verbose console prints is in run_report.txt, and so is every line of the short form
+sed -n '/^report: /,$p' ../flag/c2.txt | sed 's#/sh/[a-z]*/#/sh/X/#g' > "$w/sh/vtail.txt"; grep -v '^== \|^@@' save/run_report.txt | sed 's#/sh/[a-z]*/#/sh/X/#g' > "$w/sh/rr.txt"
+miss=$(grep -vxF -f "$w/sh/rr.txt" "$w/sh/vtail.txt" | grep -v '^$' | wc -l); miss2=$(sed -n '/^report: /,$p' c2.txt | grep -v '^@@\|^Full report: ' | grep -vxF -f "$w/sh/rr.txt" | grep -v '^$' | wc -l)
+vl=$(wc -l < "$w/sh/vtail.txt")
+[ "$miss" = 0 ] && [ "$miss2" = 0 ] && [ "$vl" -gt 100 ] && grep -q '^== chess ==' save/run_report.txt && grep -q '^== ledger ==' save/run_report.txt && ok "run_report.txt is complete: every line of the verbose console ($vl lines) and of the short form is in it" || bad "run_report.txt incomplete ($miss $miss2 $vl)"
+# --verbose and DIARY_VERBOSE=1 print the old whole report; the simulation is untouched by any of it
+nrm() { sed 's#/sh/[a-z]*/#/sh/X/#g' "$1"; }
+sums() { ( cd "$1/save" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./debug*|./last*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
+diff <(nrm ../flag/c1.txt) <(nrm ../envv/c1.txt) > /dev/null && diff <(nrm ../flag/c2.txt) <(nrm ../envv/c2.txt) > /dev/null && grep -q '^chess games' ../flag/c1.txt && grep -q '^treadmill' ../flag/c1.txt && grep -q '^please attach debug.txt' ../flag/c1.txt && ! grep -q '^@@TRACE\|^Full report:' ../flag/c1.txt \
+  && ok "--verbose = DIARY_VERBOSE=1: the whole report as before (no marker, no pointer), $vl lines after 'report:'" || bad "verbose output"
+sums "$w/sh/short" > "$w/sh/s1.txt"; sums "$w/sh/flag" > "$w/sh/s2.txt"; sums "$w/sh/envv" > "$w/sh/s3.txt"
+[ -s "$w/sh/s1.txt" ] && cmp -s "$w/sh/s1.txt" "$w/sh/s2.txt" && cmp -s "$w/sh/s1.txt" "$w/sh/s3.txt" && ok "diaries, entities, summary and petition files are byte for byte the same in the short, --verbose and DIARY_VERBOSE runs ($(wc -l < "$w/sh/s1.txt") files)" || bad "saves differ"
+[ -s save/run_report_prev.txt ] && head -1 save/run_report_prev.txt | grep -q 'session=1 ' && head -1 save/run_report.txt | grep -q 'session=2 ' && ok "the previous report is kept as run_report_prev.txt (session 1) beside the new one (session 2)" || bad "run_report_prev.txt"
+( export DIARY_HOME="$w/sh/short/save"; env -u DIARY_VERBOSE "$w/sh/bin/diary_sim" --report > rep.txt 2>&1; rcr=$?; cmp -s rep.txt save/run_report.txt && [ "$rcr" = 0 ] ) && ok "--report prints the last run_report.txt unchanged" || bad "--report"
+( mkdir -p "$w/sh/empty"; export DIARY_HOME="$w/sh/empty/none"; env -u DIARY_VERBOSE "$w/sh/bin/diary_sim" --report > rep2.txt 2>&1; [ $? = 2 ] && grep -q 'no run_report.txt' rep2.txt ) && ok "--report without a run says so (exit 2)" || bad "--report without a run"
+anom=$(head -1 save/run_report.txt | sed -E 's/.* anomalies=([^ ]*) .*/\1/')
+[ "$anom" != none ] && echo "$anom" | grep -Eq '^[0-9]+\[(energy<25|mood<-50|warnings|export-failed)' && ok "anomalies are listed as information ($anom): energy below 25, mood below -50, warnings, a failed export" || bad "anomalies ($anom)"
+grep -q 'make report' "$root/Makefile" && grep -q 'VERBOSE' "$root/Makefile" && grep -q -- '--verbose' "$root/data/help.txt" && grep -q -- '--report' "$root/data/help.txt" && grep -q '@@TRACE' "$root/README.md" && grep -q 'report.warn_energy' "$root/data/limits.txt" && ok "README, Makefile, --help and data/limits.txt describe the short console, VERBOSE=1, make report and the marker" || bad "docs for the report"
 
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="

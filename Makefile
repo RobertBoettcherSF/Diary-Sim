@@ -1,4 +1,4 @@
-# Version: 0.030
+# Version: 0.031
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -9,6 +9,10 @@
 #                 session length (data/kalpas.txt, median); SEED only matters when there
 #                 are no diaries yet, default 42; without diaries a terminal is asked first, YES=1 answers
 #                 yes, see README)
+#                 The console shows a SHORT form (entity table, petitions, session lines, the players' boxes, a @@TRACE marker and the
+#                 path of the full report); run_report.txt in the save folder always has everything.  VERBOSE=1 (or --verbose, or
+#                 DIARY_VERBOSE=1 in the environment) prints it all as before.
+# make report     print the last run_report.txt of the save folder (the full report, with `== name ==` headers and the @@TRACE marker)
 # make play       the same as make run
 # make menu       build, then the main menu (needs a terminal): Conway intro, DIARY title, New Game /
 #                 Load Game / Inbox / Settings / Quit.  The bare program on a terminal does the same.
@@ -75,7 +79,7 @@ OPT ?= -O0
 JOBS ?= -j0
 FLAGS = -g $(OPT) -gnatwa -gnat2022 -gnata $(JOBS)
 
-.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots small footprint
+.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report small footprint
 export WESEN PLAYER TEXT AS
 
 EVERY ?= 100
@@ -100,7 +104,7 @@ portable:
 	scripts/portable_check.sh
 
 run: all
-	bin/diary_sim $(if $(SECTION),--debug-section $(SECTION),$(if $(TICKS),--more $(TICKS),$$(bin/diary_sim --next-ticks 2>/dev/null | tail -n 1 | grep -E '^[0-9]+$$' | sed 's/^/--more /')) --every $(EVERY) $(if $(SEED),--seed $(SEED),) $(if $(YES),--yes,) $(if $(DEBUG),--debug,))
+	bin/diary_sim $(if $(SECTION),--debug-section $(SECTION),$(if $(TICKS),--more $(TICKS),$$(bin/diary_sim --next-ticks 2>/dev/null | tail -n 1 | grep -E '^[0-9]+$$' | sed 's/^/--more /')) --every $(EVERY) $(if $(SEED),--seed $(SEED),) $(if $(YES),--yes,) $(if $(DEBUG),--debug,) $(if $(VERBOSE),--verbose,))
 
 play: run
 
@@ -139,6 +143,9 @@ dictionary: all
 
 ballots: all
 	bin/diary_sim --ballots
+
+report: all
+	bin/diary_sim --report
 
 perft: all
 	bin/diary_sim --perft
@@ -186,4 +193,4 @@ footprint:
 	@scripts/footprint.sh
 
 clean:
-	rm -rf obj obj_small bin diaries diaries_old_* entities summary.txt summary.jsonl run_report.txt debug.txt debug.tmp debug_digest.txt debug_digest.prev debug_full.txt last_error.txt
+	rm -rf obj obj_small bin diaries diaries_old_* entities summary.txt summary.jsonl run_report.txt run_report_prev.txt debug.txt debug.tmp debug_digest.txt debug_digest.prev debug_full.txt last_error.txt

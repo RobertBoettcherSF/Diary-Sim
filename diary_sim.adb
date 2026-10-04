@@ -1,4 +1,4 @@
---  Version: 0.037
+--  Version: 0.038
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -27,7 +27,7 @@ pragma Interrupt_State (SIGTERM, USER);
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
-     Ada.Exceptions, Ada.Finalization, Ada.Strings.Fixed, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
+     Ada.Exceptions, Ada.Finalization, Ada.Strings.Fixed, Ada.Streams.Stream_IO, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
      GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Records, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Trial, Sim_Util, Sim_Visit, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
 
@@ -92,7 +92,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.037";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.038";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -129,6 +129,8 @@ procedure Diary_Sim is
    Inbox_Bad : Boolean := False;   --  inbox.txt differs from the replay: it is left as it is
    Debug_On : Boolean := False;                            --  --debug: write debug_digest.txt (make run DEBUG=1)
    Section_Opt : Unbounded_String;                         --  --debug-section NAME
+   Verbose : Boolean := False;                             --  --verbose / DIARY_VERBOSE=1 / make run VERBOSE=1: the whole report on the console as before
+   Report_Mode : Boolean := False;                         --  --report / make report: print the last run_report.txt of the save folder
    Menu_Opt : Boolean := False;                            --  --menu: show the main menu (make menu)
    Say_Mode, Answer_Mode, Inbox_Mode : Boolean := False;   --  --say / --answer / --inbox
    Say_To, Say_Text, Say_By, Grant_Opt : Unbounded_String;
@@ -1506,6 +1508,36 @@ procedure Diary_Sim is
       if Length (Digest_Note) > 0 then Con.Put_Line (To_String (Digest_Note)); end if;
       Con.Put_Line (To_String (Saved_Line));
    end Put_Saved;
+
+   --  --report: print run_report.txt of the save folder (the complete report of the last run); nothing is simulated.
+   procedure Print_Report is
+      F : Ada.Streams.Stream_IO.File_Type;
+   begin
+      if not Ada.Directories.Exists ("run_report.txt") then
+         TIO.Put_Line (TIO.Standard_Error, Msg ("report.none", Ada.Directories.Full_Name ("run_report.txt")));
+         Ada.Command_Line.Set_Exit_Status (2);
+         return;
+      end if;
+      Ada.Streams.Stream_IO.Open (F, Ada.Streams.Stream_IO.In_File, "run_report.txt");
+      declare
+         Text : String (1 .. Natural (Ada.Streams.Stream_IO.Size (F)));
+      begin
+         String'Read (Ada.Streams.Stream_IO.Stream (F), Text);
+         Ada.Streams.Stream_IO.Close (F);
+         if Text'Length > 0 then
+            begin
+               --  a text ending in a line feed is written as Put + New_Line (see Con.Put)
+               if Text (Text'Last) = ASCII.LF then
+                  TIO.Put (Text (Text'First .. Text'Last - 1)); TIO.New_Line;
+               else
+                  TIO.Put (Text);
+               end if;
+            exception
+               when others => null;   --  stdout is a closed pipe (| head)
+            end;
+         end if;
+      end;
+   end Print_Report;
 
    --  --debug-section NAME on a saved run (nothing is simulated): print that block of debug_full.txt
    --  and write it to debug_digest.txt.
@@ -4307,6 +4339,8 @@ begin
             return;
          elsif Opt = "--fresh" then Fresh := True;
          elsif Opt = "--yes" then Yes := True;
+         elsif Opt = "--verbose" then Verbose := True;
+         elsif Opt = "--report" then Report_Mode := True;
          elsif Opt = "--home" then Home_Opt := To_Unbounded_String (Val);
          elsif Opt = "--preview" then Preview := True;
          elsif Opt = "--say" then Say_Mode := True; Say_To := To_Unbounded_String (Val);
@@ -4388,11 +4422,14 @@ begin
    end if;
    Menu_Wanted := Menu_Opt or else (Ada.Command_Line.Argument_Count = 0 and then Is_Tty (0) and then Is_Tty (1));
    if Menu_Opt and then not (Is_Tty (0) and then Is_Tty (1)) then raise Usage_Error with Msg ("err.menu_tty"); end if;
-   Resolve_Home (Header => not (Menu_Wanted or else Inbox_Mode or else Map_Mode or else Ledger_Mode or else Grant_Mode or else Veto_Mode or else Challenge_Mode or else Next_Ticks_Mode or else Say_Mode or else Answer_Mode or else (Length (Section_Opt) > 0 and then not Preview)));
+   Resolve_Home (Header => not (Menu_Wanted or else Inbox_Mode or else Map_Mode or else Ledger_Mode or else Grant_Mode or else Veto_Mode or else Challenge_Mode or else Next_Ticks_Mode or else Say_Mode or else Answer_Mode or else Report_Mode or else (Length (Section_Opt) > 0 and then not Preview)));
    Saved_Line := To_Unbounded_String (Msg ("saved", To_String (Home_Path)));
    if Map_Mode then
       Do_Map;
       Con.Put_Line (To_String (Saved_Line));
+      return;
+   elsif Report_Mode then   --  make report: the last run_report.txt as it is (already in display names)
+      Print_Report;
       return;
    elsif Inbox_Mode then
       Con.Put (Inbox_Page);
@@ -4649,6 +4686,12 @@ begin
 
    declare
       Console, Text, Json, Rep, Fails : Unbounded_String;
+      Marks : Str_Vectors.Vector;   --  "name:offset in Rep": where each section of the report starts (the headers of run_report.txt)
+      Brief_A, Brief_B, Brief_C : Natural := 0;   --  Rep offsets for the short console form: the entity table ends at Brief_A, the action table at Brief_B, the session lines at Brief_C
+      procedure Mark (Name : String) is
+      begin
+         Marks.Append (Name & ":" & Img (Length (Rep)));
+      end Mark;
       D_Files, D_Lines, E_Files, N, Js_Lines : Natural := 0;
       procedure Save (File : String; Content : Unbounded_String) is
          F : TIO.File_Type;
@@ -4658,6 +4701,78 @@ begin
          TIO.Flush (F);
          TIO.Close (F);
       end Save;
+      Show_All : constant Boolean := Verbose or else GNAT.OS_Lib.Getenv ("DIARY_VERBOSE").all = "1";   --  the whole report on the console
+      Trace_Text : Unbounded_String;                                                               --  the @@TRACE marker block (2 lines)
+
+      --  run_report.txt: ALWAYS the complete report (the previous one is kept as run_report_prev.txt), in sections with "== name ==" header
+      --  lines and, on the first two lines, the @@TRACE marker (build, seed, session, ticks, anomalies, files) and @@SECTIONS (name=line of
+      --  the headers), so that grep finds what it needs.  The anomalies are information only (data/limits.txt report.warn_*): nothing in
+      --  the simulation reads them.  The console shows the same marker in its short form.
+      procedure Report_Out is
+         Body_T, Index, Anom, Boxes_T : Unbounded_String;
+         Ln : Natural := 3;   --  the next line of run_report.txt (the marker takes lines 1 and 2)
+         Items : Str_Vectors.Vector;
+         procedure Sect (Name, Text : String) is
+            Lf : Natural := 0;
+         begin
+            if Text'Length = 0 then return; end if;
+            Append (Index, (if Length (Index) > 0 then "," else "") & Name & "=" & Img (Ln));
+            Append (Body_T, "== " & Name & " ==" & ASCII.LF & Text);
+            for C of Text loop if C = ASCII.LF then Lf := Lf + 1; end if; end loop;
+            if Text (Text'Last) /= ASCII.LF then Append (Body_T, ASCII.LF); Lf := Lf + 1; end if;
+            Ln := Ln + 1 + Lf;
+         end Sect;
+      begin
+         Sect ("import", To_String (Import_Block) & ASCII.LF & To_String (Kalpa_Line) & ASCII.LF);
+         for I in 1 .. Natural (Marks.Length) loop
+            declare
+               M : constant String := Marks (I);
+               Cut : constant Natural := Fx.Index (M, ":");
+               From : constant Natural := Natural'Value (M (Cut + 1 .. M'Last));
+               N_M : constant String := (if I < Natural (Marks.Length) then Marks (I + 1) else "");
+               To : constant Natural := (if N_M = "" then Length (Rep) else Natural'Value (N_M (Fx.Index (N_M, ":") + 1 .. N_M'Last)));
+            begin
+               if To > From then Sect (M (M'First .. Cut - 1), To_String (Unbounded_Slice (Rep, From + 1, To))); end if;
+            end;
+         end loop;
+         Sect ("votes", To_String (Console));
+         Sect ("ledger", Sim_Ledger.Report (Seed, Ledger_From, True) & ASCII.LF);
+         Append (Boxes_T, Msg ("debug.attach") & ASCII.LF);
+         Append (Boxes_T, Msg ("pet.file", Img (Integer'Min (Petition_Total, Integer (Limit ("propose.file_cap", 40)))),
+                               Img (Petition_Total), Ada.Directories.Full_Name ("petitions.txt")) & ASCII.LF);
+         Append (Boxes_T, Msg ("pet.attach") & ASCII.LF);
+         Append (Boxes_T, To_String (Saved_Line) & ASCII.LF);
+         if Preport_Active then Append (Boxes_T, Sim_Preport.Boxes (Ticks, Mood_Now, Pets_Now, Next_Extra (Ticks)));
+         elsif Next_Active then for X of Next_Extra (Ticks) loop Append (Boxes_T, X & ASCII.LF); end loop; end if;
+         Sect ("tail", To_String (Boxes_T));
+         for E in Entity_Id loop   --  anomalies: information only
+            if Int (St (E).Energy) < Limit ("report.warn_energy", 25) then Items.Append ("energy<" & Img (Limit ("report.warn_energy", 25)) & ":" & Sim_World.Show (Name (E))); end if;
+            if Int (St (E).Mood) < Limit ("report.warn_mood", -50) then Items.Append ("mood<" & Img (Limit ("report.warn_mood", -50)) & ":" & Sim_World.Show (Name (E))); end if;
+         end loop;
+         if Warnings > 0 then Items.Append ("warnings:" & Img (Warnings)); end if;
+         if Length (Fails) > 0 then Items.Append ("export-failed"); end if;
+         if Items.Is_Empty then
+            Anom := To_Unbounded_String ("none");
+         else
+            Anom := To_Unbounded_String (Img (Natural (Items.Length)) & "[");
+            for I in 1 .. Natural'Min (3, Natural (Items.Length)) loop Append (Anom, (if I > 1 then "," else "") & Items (I)); end loop;
+            Append (Anom, "]");
+         end if;
+         Trace_Text := To_Unbounded_String
+           ("@@TRACE build=" & Build & " seed=" & Img (Seed) & " session=" & Img (Session_N) & " ticks=" & Img (Int'Min (Int (Common) + 1, Ticks)) & ".." & Img (Ticks)
+            & " anomalies=" & To_String (Anom) & " files=run_report.txt,debug.txt,summary.txt,summary.jsonl,petitions.txt,diaries/,entities/"
+            & (if Preport_Active then ",player_reports.txt" else "") & (if Ada.Directories.Exists ("run_report.txt") then ",run_report_prev.txt" else "") & ASCII.LF
+            & "@@SECTIONS " & To_String (Index) & ASCII.LF);
+         begin
+            if Ada.Directories.Exists ("run_report.txt") then
+               if Ada.Directories.Exists ("run_report_prev.txt") then Ada.Directories.Delete_File ("run_report_prev.txt"); end if;
+               Ada.Directories.Copy_File ("run_report.txt", "run_report_prev.txt");
+            end if;
+         exception
+            when others => null;   --  the previous report is a nicety
+         end;
+         Save ("run_report.txt", Trace_Text & Body_T);
+      end Report_Out;
    begin
       Summarize (Seed, Ticks, Votes_Of, Console, Text, Json);
       Save ("summary.txt", Text);
@@ -4678,18 +4793,23 @@ begin
       Rep := To_Unbounded_String (Msg ("report.head", Img (Int'Max (0, Ticks - Int (Common))), Img (Int'Min (Int (Common) + 1, Ticks)),
                                        Img (Ticks), Img (Common), Img (Written), Img (Verified),
                                        Img (Warnings)) & ASCII.LF & Msg ("report.cols") & ASCII.LF);
+      Marks.Append ("report:0");
       for E in Entity_Id loop
          Append (Rep, Fx.Head (Name (E), 10) & Fx.Tail (Img (Start_Known (E)), 8) & " ->" & Fx.Tail (Img (Known_Count (E)), 6)
                  & Fx.Tail (Img (Run_Learn (E)), 9) & Fx.Tail (Img (Run_Coin (E)), 7) & Fx.Tail (Img (Run_Bench_N (E)), 6)
                  & " | " & Fx.Tail (Sgn (Int (St (E).Mood)), 5) & Fx.Tail (Img (St (E).Energy), 7)
                  & Fx.Tail (Img (Petitions_Of (E)), 5) & ASCII.LF);
       end loop;
+      Brief_A := Length (Rep);
+      Mark ("actions");
       Append (Rep, Msg ("report.mixcols") & ASCII.LF);
       for E in Entity_Id loop
          Append (Rep, Fx.Head (Name (E), 10));
          for A in Action loop Append (Rep, Fx.Tail (Img (Act_Count (E, A)), (if A in Explore | Propose then 8 else 7))); end loop;
          Append (Rep, ASCII.LF);
       end loop;
+      Brief_B := Length (Rep);
+      Mark ("petitions");
       declare
          Per : Unbounded_String;
       begin
@@ -4698,30 +4818,38 @@ begin
          end loop;
          Append (Rep, Msg ("report.pet", Img (Petition_Total), To_String (Per), Top_Topics (3)) & ASCII.LF);
       end;
+      Mark ("session");
       Since_Head := To_Unbounded_String (Since_Text);
       Append (Rep, Since_Head);
+      Brief_C := Length (Rep);
       if World_Active then   --  the treadmill: where the wesen are and what lies around them
+         Mark ("treadmill");
          Append (Rep, Msg ("map.head", Img (Ticks)) & ASCII.LF);
          for L of Sim_Things.Treadmill_Now loop Append (Rep, L & ASCII.LF); end loop;
       end if;
       if Rest_Active then   --  recovery: rate, cool-downs taken, rests cut short
+         Mark ("recovery");
          Append (Rep, Msg ("rest.head") & ASCII.LF);
          for E in Entity_Id loop Append (Rep, Rest_Text (E) & ASCII.LF); end loop;
       end if;
       if Screen_Active then   --  the screens: shown / left / read, and the words they taught and coined
+         Mark ("screens");
          Append (Rep, Msg ("screen.rep") & ASCII.LF);
          for E in Entity_Id loop Append (Rep, Sim_Screen.Summary (E) & ASCII.LF); end loop;
       end if;
       if Chess_Active then   --  chess: ratings and results per competitor, then every game with its moves
+         Mark ("chess");
          Append (Rep, Msg ("chess.rep") & ASCII.LF);
          for C in Sim_Games.Comp_Id loop Append (Rep, Sim_Games.Summary (C) & ASCII.LF); end loop;
          Append (Rep, Msg ("chess.head") & ASCII.LF);
          for L of Sim_Games.Report (True) loop Append (Rep, Game_Names (L) & ASCII.LF); end loop;
       end if;
       if Robot_Active then   --  the robot: state, commands and errors per wesen
+         Mark ("robot");
          for L of Sim_Robot.Report loop Append (Rep, L & ASCII.LF); end loop;
       end if;
       if Govern_Active then   --  the players' decisions: counts per player, trust and standing, the last decisions
+         Mark ("governance");
          Append (Rep, Msg ("govern.rep") & ASCII.LF);
          for P in Sim_Dharma.Player_Id range 1 .. Sim_Dharma.Last_Player loop
             Append (Rep, Msg ("govern.player", Sim_Dharma.Player_Name (P), Sim_Govern.Counter_Line (P)) & ASCII.LF);
@@ -4741,20 +4869,25 @@ begin
          end;
       end if;
       if not Grant_Report.Is_Empty then   --  granted petitions and the recovery rates they changed
+         Mark ("grants");
          Append (Rep, Msg ("grant.head") & ASCII.LF);
          for L of Grant_Report loop Append (Rep, L & ASCII.LF); end loop;
       end if;
+      Mark ("words");
       if Length (Words_Text) > 0 then Append (Rep, To_String (Words_Text) & ASCII.LF); end if;
+      Mark ("dharma");
       for L of Sim_Dharma.Table_Lines loop Append (Rep, L & ASCII.LF); end loop;
       for L of Sim_Dharma.Since_Lines loop Append (Rep, L & ASCII.LF); end loop;
       if not Sim_Dharma.Table_Lines.Is_Empty then
          Append (Rep, Msg ("since.players", Sim_Dharma.Address_Counts (Int (Common))) & ASCII.LF);
       end if;
       if not Sim_Dharma.Latest_Report.Is_Empty then
+         Mark ("inbox");
          Append (Rep, Msg ("inbox.head", Img (Integer (Sim_Dharma.Latest_Report.Length)), Img (Sim_Dharma.Inbox_Count)) & ASCII.LF);
          for L of Sim_Dharma.Latest_Report loop Append (Rep, L & ASCII.LF); end loop;
          Append (Rep, Msg ("inbox.answer") & ASCII.LF);
       end if;
+      Mark ("export");
       if Length (Fails) = 0 then
          Export_Line := To_Unbounded_String
            (Msg ("report.export", Img (D_Files), Img (D_Lines), Img (E_Files),
@@ -4783,7 +4916,7 @@ begin
          end if;
       end;
       if Preport_Active then Save ("player_reports.txt", To_Unbounded_String (Sim_Preport.Boxes (Ticks, Mood_Now, Pets_Now, Next_Extra (Ticks)))); end if;
-      Save ("run_report.txt", Import_Block & ASCII.LF & Kalpa_Line & ASCII.LF & Rep & Console & Sim_Ledger.Report (Seed, Ledger_From, True) & ASCII.LF);
+      Report_Out;
       if not Ada.Directories.Exists ("run_report.txt") or else Ada.Directories.Size ("run_report.txt") = 0 then
          Append (Rep, Msg ("export.failed", "run_report.txt not written") & ASCII.LF);
          Ada.Command_Line.Set_Exit_Status (1);
@@ -4793,15 +4926,26 @@ begin
          Con.Put_Line (Msg ("visit.done", Name (Visit_E), Img (Sim_Visit.Commands), Sgn (Int (Sim_Visit.Bond_Of (Visit_E)))));
       end if;
       Write_Debug ((if Length (Fails) = 0 then "OK" else "DRIFT"), (if Length (Fails) = 0 then "" else "error: " & To_String (Export_Line)));
-      Con.Put (To_String (Rep));
-      Con.Put (To_String (Console));
-      Con.Put_Line (Msg ("debug.attach"));
-      Con.Put_Line (Msg ("pet.file", Img (Integer'Min (Petition_Total, Integer (Limit ("propose.file_cap", 40)))),
-                         Img (Petition_Total), Ada.Directories.Full_Name ("petitions.txt")));
-      Con.Put_Line (Msg ("pet.attach"));
-      Put_Saved;
-      if Preport_Active then Put_Frames (Sim_Preport.Boxes (Ticks, Mood_Now, Pets_Now, Next_Extra (Ticks)));
-      elsif Next_Active then for X of Next_Extra (Ticks) loop Con.Put_Line (Sim_World.Show (X)); end loop; end if;   --  the last thing Robert sees: the boxes of the players
+      if Show_All then   --  --verbose: everything, as before
+         Con.Put (To_String (Rep));
+         Con.Put (To_String (Console));
+         Con.Put_Line (Msg ("debug.attach"));
+         Con.Put_Line (Msg ("pet.file", Img (Integer'Min (Petition_Total, Integer (Limit ("propose.file_cap", 40)))),
+                            Img (Petition_Total), Ada.Directories.Full_Name ("petitions.txt")));
+         Con.Put_Line (Msg ("pet.attach"));
+         Put_Saved;
+         if Preport_Active then Put_Frames (Sim_Preport.Boxes (Ticks, Mood_Now, Pets_Now, Next_Extra (Ticks)));
+         elsif Next_Active then for X of Next_Extra (Ticks) loop Con.Put_Line (Sim_World.Show (X)); end loop; end if;   --  the last thing Robert sees: the boxes of the players
+      else   --  the short form: entity table, petitions, session lines, the boxes of the players, the marker, the pointer to the full report
+         Con.Put (To_String (Unbounded_Slice (Rep, 1, Brief_A)));
+         Con.Put (To_String (Unbounded_Slice (Rep, Brief_B + 1, Brief_C)));
+         if Length (Fails) > 0 then Con.Put_Line (To_String (Export_Line)); end if;
+         if Length (Digest_Note) > 0 then Con.Put_Line (To_String (Digest_Note)); end if;
+         if Preport_Active then Put_Frames (Sim_Preport.Boxes (Ticks, Mood_Now, Pets_Now, Next_Extra (Ticks)));
+         elsif Next_Active then for X of Next_Extra (Ticks) loop Con.Put_Line (Sim_World.Show (X)); end loop; end if;
+         Con.Put (To_String (Trace_Text));
+         Con.Put_Line (Msg ("report.full", Ada.Directories.Full_Name ("run_report.txt")));
+      end if;
    end;
 exception
    when E : Usage_Error =>

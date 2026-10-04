@@ -29,6 +29,8 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
   --screens      the wesen's text screens after the replay (make screens)
   --ledger[=full] where each wesen's mood comes from (make ledger; report only)
   --menu         the main menu (terminal only; make menu)
+  --verbose      the whole report on the console (see below; DIARY_VERBOSE=1)
+  --report       print the last run_report.txt of the save folder (make report)
   --debug        also write debug_digest.txt (make run|demo DEBUG=1)
   --debug-section=NAME  print one block of debug_full.txt (drift trace players
                  inbox run ledger preport status); nothing is simulated
@@ -52,7 +54,12 @@ verifies the stored lines (ts ignored), then appends the rest.
 Working folder entities/<id>/: words.txt, bench.txt (NOT a VM).
 Start: 'import OK / FAILED' says what was read from disk. End: a report
 (turns, words, benches, petitions), 'export OK' (files re-read and counted),
-run_report.txt (long), summary.txt/.jsonl, a vote table.
+run_report.txt (the complete report), summary.txt/.jsonl, a vote table.
+The console shows a short form: entity table, petitions, session lines, the
+players' boxes, an @@TRACE marker (build seed session ticks anomalies files
+sections) and "Full report: <path>". --verbose (make run VERBOSE=1, or
+DIARY_VERBOSE=1) prints everything; --report (make report) prints the last
+run_report.txt (sections as "== name ==", previous run: run_report_prev.txt).
 debug.txt (<= 1500 bytes) is written on EVERY exit; attach it to chat messages.
 Ctrl-C / SIGTERM stop cleanly after the current tick (exit 130, status QUIT).
 Old diaries (before this version) are incompatible: use --fresh.

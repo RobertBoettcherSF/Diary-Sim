@@ -431,3 +431,8 @@ rec.pann_commit = 8
 # make divergence / make dictionary: how many sessions / dictionary lines are shown
 rec.div_sessions = 6
 rec.dict_rows = 14
+
+# The @@TRACE marker (run_report.txt, short console form): anomalies are INFORMATION ONLY, nothing in the simulation reads them.
+# A wesen with energy below warn_energy or mood below warn_mood at the end of the run is listed (with warnings > 0 and a failed export).
+report.warn_energy = 25
+report.warn_mood = -50

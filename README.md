@@ -72,6 +72,28 @@ so the action table and all existing dice are untouched and old diaries stay val
 difference is DRIFT), shown on the console (`words vote (session 3): Adam city | ...`), in
 `run_report.txt`, `debug.txt` and on the menu.
 
+## The console and `run_report.txt` (`make report`, `VERBOSE=1`)
+
+A run writes the complete report to `run_report.txt` in the save folder (always; the previous one is kept as `run_report_prev.txt`)
+and shows only the end of it on the console: the progress lines, `report:` with the entity table, the petitions line, the per-wesen
+session lines, the players' report boxes, the `@@TRACE` marker and the path (`Full report: <path>  (make run VERBOSE=1 or make report to
+print it)`); about 40 lines. `make run VERBOSE=1` (`--verbose`, or `DIARY_VERBOSE=1` in the environment, which the checks use) prints
+everything as before, `make report` (`--report`) prints the last `run_report.txt`. Nothing but console and report text changes: the
+diaries, entities and summary files are byte for byte the same.
+
+* **Sections:** `run_report.txt` has a header line `== name ==` before each block (import, report, actions, petitions, session,
+  treadmill, recovery, screens, chess, robot, governance, grants, words, dharma, inbox, export, votes, ledger, tail), so
+  `grep -n '^== ' run_report.txt` is an index.
+* **Marker** (for people and for tools; the idea of the stack trace in `last_error.txt`): two lines, the first two of `run_report.txt` and the
+  last two before the pointer on the console:
+
+      @@TRACE build=0.038 seed=42 session=2 ticks=301..500 anomalies=2[mood<-50:Adam,energy<25:Ruth] files=run_report.txt,debug.txt,...
+      @@SECTIONS import=3,report=7,actions=14,petitions=20,session=22,treadmill=28,recovery=39,screens=45,chess=55,robot=97,...
+
+  `anomalies` is `none` or `count[first three]`: energy below `report.warn_energy` (25) or mood below `report.warn_mood` (-50) at the end
+  of the run, `warnings:n`, `export-failed`. It is information only; nothing in the simulation reads it (`data/limits.txt`).
+  `@@SECTIONS` gives the line of each header in `run_report.txt`.
+
 ## The Buddhism layer and the players (record-first)
 
 Everything below is **recorded, not acted on**: none of it changes the action table or any
@@ -1111,8 +1133,8 @@ export OK: diaries/ 4 files, 4800 lines | entities/ 8 files | summary.txt .. B, 
 * `RUN` status = an in-progress stub, written at the start and refreshed every
   `--every` ticks. `SIGKILL` cannot be caught in plain Ada, so after a `kill -9` or a
   power cut the stub is what remains (it shows the last refresh).
-* Normal run: `run_report.txt` is the long version (import + report + export + vote
-  table; overwritten every run). Paste it if asked.
+* Normal run: `run_report.txt` is the complete report (see "The console and run_report.txt");
+  the previous one is kept as `run_report_prev.txt`. Paste it if asked.
 * Crash or error: `last_error.txt` (the console says `wrote last_error.txt, please
   paste it`).
 * **Back up `diaries/` between tests.** That folder is all that is needed:
