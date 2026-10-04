@@ -49,7 +49,7 @@ else about it. Robert's second wish is in section 6: "The Wesen should be able t
 * **Salt ranges.** Used so far: 9820 .. 9824, 9900 .. 9999 (incl. trial 9960 .. 9979), LIFE 10000 .. 10699, MYTH 11000 .. 12999, being model
   13000 .. 13999, records 14000 .. 14399, companies, positions, exhaustion 15000 .. 15399. **This file: 16000 .. 16999** (checked free in the
   code): slow 16000 .. 16099, mix 16100 .. 16299, prune 16300 .. 16399 (no dice, reserved), ponder 16400 .. 16599, notes 16600 .. 16899,
-  control 16900 .. 16999, **vocabulary condensing 19900 .. 19999 (section 12)**. Reserved for the postponed byte predictor: 17000 .. 17999. **Phase B (voices and chat): 18000 .. 18499** (voices 18000 .. 18099, chat answers 18100 .. 18299, check numbers of the chat lines 18400 .. 18499); not used by anything here.
+  control 16900 .. 16999, **vocabulary condensing 19900 .. 19999 (section 12)**, **evolution of words and chess 20000 .. 20999 (`docs/EVOLVE.md`)**. Reserved for the postponed byte predictor: 17000 .. 17999. **Phase B (voices and chat): 18000 .. 18499** (voices 18000 .. 18099, chat answers 18100 .. 18299, check numbers of the chat lines 18400 .. 18499); not used by anything here.
 
 ## 2. Slow core, fast skills (`slow=1`)
 **Idea:** the things that make a wesen *who it is* change at a fraction (default 1/10) of the rate of the things it *knows and feels today*.
@@ -216,7 +216,7 @@ a factor of ten with synonyms. The read-only report `make wordstat` (`--wordstat
 | never used again after learning | 21 % / 16 % / 26 % / 14 % (19 % of all words; chess tokens 13 %, start words 40 %) |
 
 * **What the words mean.** 58 % of all words (12,605 of 21,414; 1,661 different moves, each as a coordinate string and as a number string) mean one thing: "a chess move (coordinate or numeric notation)". The rest are
-  the 282 base words, made-up names of things (meaning stored by the world: taste, quality, social, feel), words that were taught or read, and 627 blends of two words. The dictionary is a separate list: it holds 85 agreed new names for base words, but they are not in any word list; only eight word texts coincide (see the dictionary section of `make wordstat`).
+  the 282 base words, made-up names of things (meaning stored by the world: taste, quality, social, feel), words that were taught or read, and 627 blends of two words. The dictionary is a separate list: it holds 85 agreed new names for base words, but they are not in any word list; only eight word texts coincide (see the wordstat dictionary section, and EVOLVE.md).
 * **Where they come from.** Every chess move a wesen plays while resting (`diary_sim.adb`, rest -> `Sim_Games.Turn`) makes two words, the move string and its numeric string (`Sim_Things.Prop_Word`, text `chess.word`); the player and the
   partner both learn them as `world` words, and lessons and screens then spread them (of the 12,605 tokens: 6,309 met in the world, 5,140 taught, 1,156 read on a screen). They are never *used* much: they sit on screens
   (a screen is a small list of words) and are shown again, which is why 87 % count as "used again". The **biggest source is the chess moves**; without them a wesen knows about 2,200 words, and about 1,600 if the 2,275 words that

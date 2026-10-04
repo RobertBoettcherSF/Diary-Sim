@@ -1352,6 +1352,7 @@ Design documents (proposals, nothing built unless the README says so above): `do
 companies and positions, exhaustion, life support, leisure, the one being model), `docs/MYTH.md` (creation myths of the players),
 `docs/LEARN.md` (slow core, mixed study, dictionary pruning, pondering, notebooks and study; the byte-level predictor is postponed).
 `docs/PORTALS.md` (settings per player, 12 wesen, portals and journeys, the farm's flower market, the island, the Accounting ledger, stories; design only).
+`docs/EVOLVE.md` (evolutionary pressure: word fitness, upkeep, retirement and mutants; chess weight tables learned from results; design only).
 
 `Version:` header (`make version-check`); a touched file goes up by 0.001. V&V is
 suspended: no new test suites, `scripts/checks.sh` must keep passing.

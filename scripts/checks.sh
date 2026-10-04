@@ -1984,7 +1984,8 @@ ngot=$(row 'announcements of all kinds')
   && ok "--wordstat: dictionary figures equal an independent count (decided/agreed/rejected/announced $dgot; announcements of all kinds $ngot); the agreed row counts same-text coincidences only ($agot)" \
   || bad "wordstat dictionary ('$dgot' vs '$dexp', same text $agot vs $aexp, announcements $ngot vs $nexp)"
 grep -q 'make wordstat' "$root/Makefile" && grep -q '^wordstat: all' "$root/Makefile" && grep -q -- '--wordstat' "$root/data/help.txt" && grep -q 'make wordstat' "$root/README.md" && grep -q 'wordstat.stem_min' "$root/data/limits.txt" && grep -q 'Condensing the vocabulary' "$root/docs/LEARN.md" \
-  && ok "README, Makefile, --help, data/limits.txt and docs/LEARN.md describe the vocabulary report" || bad "wordstat docs"
+  && grep -q 'Why the dictionary and the vocabulary differ' "$root/docs/EVOLVE.md" && grep -q '20000 .. 20999' "$root/docs/LEARN.md" && grep -q '20000 .. 20999' "$root/docs/PORTALS.md" && grep -q 'docs/EVOLVE.md' "$root/README.md" && ! grep -q '—' "$root/docs/EVOLVE.md" \
+  && ok "README, Makefile, --help, data/limits.txt and docs/LEARN.md describe the vocabulary report; docs/EVOLVE.md (salts 20000 .. 20999 noted in LEARN.md and PORTALS.md) is in the README" || bad "wordstat docs"
 cd "$w" || exit 1
 
 
