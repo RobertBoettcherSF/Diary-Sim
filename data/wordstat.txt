@@ -1,4 +1,4 @@
-# Version: 0.001
+# Version: 0.002
 # The vocabulary report (make wordstat, --wordstat, Sim_Wordstat): read-only, counts over entities/<id>/words.txt and the diaries.
 # "key = text".  {1}.. are filled in; labels in the tables are cut to 36 letters.  Nothing here changes a diary.
 # upper length of each length class (12 classes, the last one is open)
@@ -28,11 +28,23 @@ wordstat.k.chess = chess move, coordinates (e2e4)
 wordstat.k.number = chess move, numbers (5755)
 wordstat.k.other = other
 wordstat.sec.use = Meaning and use after learning:
-wordstat.l.agreed = agreed meaning (dictionary st=A)
+wordstat.l.agreed = same text as an agreed word
+wordstat.l.agreed_after = of those, learned after the vote
 wordstat.l.described = meaning given by the world
 wordstat.l.used = used again after learning
 wordstat.l.unused = never used again
 wordstat.l.unused_pct = never used again, percent
+wordstat.sec.dict = Dictionary (diaries/dictionary.txt, voted by the players; a list of its own):
+wordstat.d.decided = entries decided
+wordstat.d.agreed = agreed (st=A)
+wordstat.d.name = of those: a new name for a base word
+wordstat.d.coined = of those: a coined blend
+wordstat.d.means = different meanings agreed
+wordstat.d.rejected = rejected (st=R)
+wordstat.d.ann = entries announced (ann=1)
+wordstat.d.annfile = announcements of all kinds (announcements.txt)
+wordstat.d.vocab = In the word lists of the wesen (entities/*/words.txt):
+wordstat.d.note = An agreed name is only a dictionary entry: the program does not put it into any word list. A word list holds the same letters only when the world minted them later, by chance, for another thing, so the agreed meaning is not the meaning of that word.
 wordstat.sec.kinduse = Use by kind (all wesen together):
 wordstat.kinduse.head = kind                                 words   used  never  never %
 wordstat.kinduse.row = {1}{2}{3}{4}{5}

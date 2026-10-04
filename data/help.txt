@@ -51,8 +51,9 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
 --chatlog      the last lines of diaries/chat.txt (make chatlog; read-only)
 --wordstat     the vocabulary report: words known by kind (start, world,
                taught, screen, coined, chess coordinates, chess numbers), used
-               again or not, agreed meanings, lengths, prefix/suffix variants
-               and a conclusion (make wordstat; data/wordstat.txt; read-only)
+               again or not, the dictionary (agreed, rejected, announced),
+               lengths, prefix/suffix variants, a conclusion (make wordstat;
+               data/wordstat.txt; read-only)
 --voices       the four wesen messages the night header shows (make voices;
                data/voices.txt; read-only)
 --verify       replay the whole history from the files and compare it with

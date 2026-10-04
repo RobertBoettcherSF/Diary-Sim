@@ -266,9 +266,14 @@ the same save always gives the same report. Wording is in `data/wordstat.txt`, t
 in `data/limits.txt`.
 * **By kind** (every word counted once, chess and number tokens first): start words, names of things met in the world, taught in lessons, read on
   a screen, coined or blended, chess move as coordinates (`e2e4`), chess move as numbers (`5755`), other.
-* **Meaning and use:** words with an agreed meaning in the dictionary (`st=A`), words the world described, and how many words were **used again**
+* **Meaning and use:** words the world described, and how many words were **used again**
   after the tick they were learned (a screen action by that wesen: show, read, pin, command, leave, blend; a dictionary proposal; a favourite
   vote; a petition; a notebook line) against never used again, in total and by kind.
+* **Dictionary** (`diaries/dictionary.txt`, a list of its own): entries decided, **agreed** (`st=A`; of them new names for a base word and coined blends;
+  different meanings), **rejected** (`st=R`), entries announced (`ann=1`) and the lines of `announcements.txt`, which are announcements of **all** kinds
+  (the `announced` figure of `make dictionary` is that count, not a word count). An agreed name stays a dictionary entry: it is **not** put into a
+  word list (see "Not done" under the dictionary). The row "same text as an agreed word" counts words in `entities/*/words.txt` that happen to have the
+  same letters (minted later by the world for another thing); that is a coincidence, not the agreed meaning, and the report says so.
 * **Length** (all words, and without the chess and number tokens), the **number of different chess/number tokens**, and how many words are an
   exact **prefix or suffix variant** of another word the same wesen knows (a stem of at least `wordstat.stem_min` letters).
 * **Conclusion:** one paragraph that names the biggest source and what the vocabulary would be without the tokens and with the variants folded.

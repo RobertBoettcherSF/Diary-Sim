@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  See sim_wordstat.ads.  Read-only counting over strings; no I/O here.
 pragma Ada_2022;
 
@@ -27,6 +27,7 @@ package body Sim_Wordstat is
    package Id_Maps is new Ada.Containers.Hashed_Maps (Positive, Positive, Id_Hash, "=");
    package Text_Maps is new Ada.Containers.Indefinite_Hashed_Maps (String, Positive, Ada.Strings.Hash, "=");
    package Text_Sets is new Ada.Containers.Indefinite_Hashed_Sets (String, Ada.Strings.Hash, "=");
+   package Tick_Maps is new Ada.Containers.Indefinite_Hashed_Maps (String, Natural, Ada.Strings.Hash, "=");
 
    type Ent_Data is record
       Words   : Word_Vectors.Vector;
@@ -35,7 +36,7 @@ package body Sim_Wordstat is
    end record;
 
    Ents : array (1 .. Max_Ent) of Ent_Data;
-   Agreed_Set : Text_Sets.Set;
+   Agreed_Set : Tick_Maps.Map;   --  agreed text -> tick of the first agreement
    Min_Stem : Natural := 3;
    Class_Edges : Edge_Array := [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15];
 
@@ -107,9 +108,9 @@ package body Sim_Wordstat is
       if E <= Max_Ent and then Ents (E).By_Text.Contains (Text) then Mark (E, Ents (E).By_Text (Text), Tick); end if;
    end Seen_Text;
 
-   procedure Agree (Text : String) is
+   procedure Agree (Text : String; Tick : Natural) is
    begin
-      if Text /= "" and then not Agreed_Set.Contains (Text) then Agreed_Set.Insert (Text); end if;
+      if Text /= "" and then not Agreed_Set.Contains (Text) then Agreed_Set.Insert (Text, Tick); end if;
    end Agree;
 
    function Result (E : Natural) return Stat is
@@ -128,7 +129,10 @@ package body Sim_Wordstat is
                R.Total := R.Total + 1;
                R.Known (W.K) := R.Known (W.K) + 1;
                if W.Used then R.Used := R.Used + 1; R.Used_Kind (W.K) := R.Used_Kind (W.K) + 1; end if;
-               if Agreed_Set.Contains (T) then R.Agreed := R.Agreed + 1; end if;
+               if Agreed_Set.Contains (T) then
+                  R.Agreed := R.Agreed + 1;
+                  if W.Tick >= Agreed_Set (T) then R.Agreed_After := R.Agreed_After + 1; end if;
+               end if;
                if W.Described then R.Described := R.Described + 1; end if;
                R.Len (Bucket_Of (T'Length)) := R.Len (Bucket_Of (T'Length)) + 1;
                if W.K not in Chess | Number then R.Len_Plain (Bucket_Of (T'Length)) := R.Len_Plain (Bucket_Of (T'Length)) + 1; end if;

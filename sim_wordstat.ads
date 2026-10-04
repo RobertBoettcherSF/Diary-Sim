@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  The vocabulary report (make wordstat, --wordstat): READ-ONLY.  The caller feeds the lines of entities/<id>/words.txt and of the diaries
 --  (screens, votes, petitions, dictionary) in; this package sorts every known word of every wesen into one kind (start, world, taught,
 --  screen, coined, chess coordinate, number, other), decides whether it was used again after it was learned, whether the dictionary agreed
@@ -25,7 +25,8 @@ package Sim_Wordstat is
       Used_Kind   : Kind_Counts := [others => 0];   --  seen again after being learned
       Token_From  : Kind_Counts := [others => 0];   --  chess and number tokens, by the way they were learned (Start .. Other)
       Used        : Natural := 0;
-      Agreed      : Natural := 0;   --  the dictionary agreed a meaning (st=A) for this word text
+      Agreed      : Natural := 0;   --  words whose TEXT is also an agreed dictionary word (the dictionary is a separate list: see Agree)
+      Agreed_After : Natural := 0;  --  of those, learned after the agreement (the text was minted later by chance)
       Described   : Natural := 0;   --  learned from the world with a meaning attached
       Len         : Len_Counts := [others => 0];
       Len_Plain   : Len_Counts := [others => 0];   --  the same without the chess and number tokens
@@ -48,7 +49,9 @@ package Sim_Wordstat is
    --  The wesen used the word again (a screen action, a vote, a petition, the dictionary, a notebook): counts only after the learning tick.
    procedure Seen_Id (E : Positive; Id : Positive; Tick : Natural);
    procedure Seen_Text (E : Positive; Text : String; Tick : Natural);
-   procedure Agree (Text : String);   --  the dictionary agreed a meaning for this word
+   --  The dictionary agreed a meaning for the word text at Tick.  Agreed names are NOT added to the wesen's word lists by the program; a word list
+   --  only holds such a text if the world minted the same letters later.
+   procedure Agree (Text : String; Tick : Natural);
    function Result (E : Natural) return Stat;   --  E = 0: all wesen together
    function Bucket_Of (Length : Natural) return Positive;
 

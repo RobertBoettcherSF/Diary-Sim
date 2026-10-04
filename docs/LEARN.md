@@ -1,5 +1,5 @@
 # Learning in the station: slow core, mixed study, pruning, pondering, notebooks (design only, nothing built)
-Version: 0.003
+Version: 0.004
 
 Status: **proposal for Robert**. No code for any of this exists yet; every number below is a *proposed default* that lives in `data/` when
 built, and every decision is open until Robert answers section 11. Style as `docs/LIFE.md`: what it is, what it is made of, what is recorded.
@@ -212,11 +212,11 @@ a factor of ten with synonyms. The read-only report `make wordstat` (`--wordstat
 | coined or blended | 120 / 126 / 155 / 226 |
 | **chess move as coordinates** (`e2e4`) | 1,603 / 1,588 / 1,571 / 1,540 |
 | **chess move as numbers** (`5755`) | 1,600 / 1,581 / 1,589 / 1,533 |
-| agreed meaning in the dictionary (`st=A`) | 4 / 2 / 1 / 1 (8 in all) |
+| same text as an agreed dictionary word (coincidence, not a meaning) | 4 / 2 / 1 / 1 (8 in all) |
 | never used again after learning | 21 % / 16 % / 26 % / 14 % (19 % of all words; chess tokens 13 %, start words 40 %) |
 
 * **What the words mean.** 58 % of all words (12,605 of 21,414; 1,661 different moves, each as a coordinate string and as a number string) mean one thing: "a chess move (coordinate or numeric notation)". The rest are
-  the 282 base words, made-up names of things (meaning stored by the world: taste, quality, social, feel), words that were taught or read, and 627 blends of two words. Only eight words have a meaning agreed in the dictionary.
+  the 282 base words, made-up names of things (meaning stored by the world: taste, quality, social, feel), words that were taught or read, and 627 blends of two words. The dictionary is a separate list: it holds 85 agreed new names for base words, but they are not in any word list; only eight word texts coincide (see the dictionary section of `make wordstat`).
 * **Where they come from.** Every chess move a wesen plays while resting (`diary_sim.adb`, rest -> `Sim_Games.Turn`) makes two words, the move string and its numeric string (`Sim_Things.Prop_Word`, text `chess.word`); the player and the
   partner both learn them as `world` words, and lessons and screens then spread them (of the 12,605 tokens: 6,309 met in the world, 5,140 taught, 1,156 read on a screen). They are never *used* much: they sit on screens
   (a screen is a small list of words) and are shown again, which is why 87 % count as "used again". The **biggest source is the chess moves**; without them a wesen knows about 2,200 words, and about 1,600 if the 2,275 words that
@@ -234,7 +234,7 @@ a factor of ten with synonyms. The read-only report `make wordstat` (`--wordstat
   `data/vocab.txt` and words with an open proposal are never dormant (as in section 4). Effect: the *active* vocabulary is about 500 per wesen (x10 against 5,353) while "ever known" keeps counting upward in the report. This one changes the dice pools, so it is
   new sessions only (marker `active=1`).
 * **(b) Synonym classes (display and later use).** A word gets a **canonical head** from (1) the agreed dictionary meaning (`st=A`: words with the same meaning are one class), then (2) shared parents of coined blends (`a+b` and `a+c` share `a`), then
-  (3) exact prefix/suffix variants. Aliases map to the head in reports and screens (a dictionary status `st=S word=<alias> head=<word>`, records=2). **The data say this saves little on its own:** only 8 meanings were ever agreed in 287 sessions, and the
+  (3) exact prefix/suffix variants. Aliases map to the head in reports and screens (a dictionary status `st=S word=<alias> head=<word>`, records=2). **The data say this saves little on its own:** the 85 agreed names are dictionary entries that no wesen ever learned (they are synonyms of base words, so they can only be classes if they are taught first), and the
   prefix/suffix variants are 26 % of the non-token words, so classes give about 1.3x on those. Keep it as a *view* of `make wordstat` (the variants line) until the dictionary has meaning to build classes on.
 
 **Recommended answer.** Do **(c) first** (one small step, removes 58 % of the words and a third of the screen traffic without touching anything the wesen say), then **(a) in two stages**: first as a report only (`make wordstat` shows the active count the

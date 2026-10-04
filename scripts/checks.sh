@@ -1972,6 +1972,17 @@ if [ -n "$sf2" ]; then
     && grep -q '^share: wordstat: The biggest source is ' share2.txt && ! ls "$w/nt/x2" | grep -qi 'ballot\|diaries\|jsonl\|words.txt' \
     && ok "make share: wordstat.txt is in the archive, its conclusion is in share_info.txt and on the console; still no diaries, entities or ballots" || bad "share wordstat ($(ls "$w/nt/x2" | tr '\n' ' '))"
 else bad "share wordstat: no archive ($(cat share2.txt))"; fi
+# the dictionary figures (a list of its own) equal an independent count of diaries/dictionary.txt; the agreed row is a text match only
+dfile="$ws/diaries/dictionary.txt"; [ -f "$dfile" ] || dfile=/dev/null
+dexp=$(awk '/^L[0-9]/ { d++; if ($0 ~ / st=A /) a++; if ($0 ~ / st=R /) r++; if ($0 ~ / ann=1 /) n++ } END { print d + 0, a + 0, r + 0, n + 0 }' "$dfile")
+dgot="$(row 'entries decided') $(row 'agreed (st=A)') $(row 'rejected (st=R)') $(row 'entries announced')"
+aexp=$(awk 'FNR == NR { if ($0 ~ /^L[0-9]/ && $0 ~ / st=A /) { for (i = 1; i <= NF; i++) if ($i ~ /^word=/) ag[substr($i, 6)] = 1 } ; next } !/^#/ && NF >= 4 && ($2 in ag) { k++ } END { print k + 0 }' "$dfile" "$ws"/entities/*/words.txt)
+agot=$(row 'same text as an agreed word')
+nexp=$(awk '/^A[0-9]/ { n++ } END { print n + 0 }' "$ws/diaries/announcements.txt" 2>/dev/null)
+ngot=$(row 'announcements of all kinds')
+[ "$dgot" = "$dexp" ] && [ "$agot" = "$aexp" ] && [ "$ngot" = "$nexp" ] && grep -q '^Dictionary (diaries/dictionary.txt' wsr.txt && grep -q 'only a dictionary entry' wsr.txt \
+  && ok "--wordstat: dictionary figures equal an independent count (decided/agreed/rejected/announced $dgot; announcements of all kinds $ngot); the agreed row counts same-text coincidences only ($agot)" \
+  || bad "wordstat dictionary ('$dgot' vs '$dexp', same text $agot vs $aexp, announcements $ngot vs $nexp)"
 grep -q 'make wordstat' "$root/Makefile" && grep -q '^wordstat: all' "$root/Makefile" && grep -q -- '--wordstat' "$root/data/help.txt" && grep -q 'make wordstat' "$root/README.md" && grep -q 'wordstat.stem_min' "$root/data/limits.txt" && grep -q 'Condensing the vocabulary' "$root/docs/LEARN.md" \
   && ok "README, Makefile, --help, data/limits.txt and docs/LEARN.md describe the vocabulary report" || bad "wordstat docs"
 cd "$w" || exit 1

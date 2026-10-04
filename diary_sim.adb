@@ -1,4 +1,4 @@
---  Version: 0.045
+--  Version: 0.046
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.045";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.046";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -1866,7 +1866,9 @@ procedure Diary_Sim is
       function Any_Of (S : Sim_Wordstat.Stat) return Natural is (S.Any_Var);
       procedure Row_Total is new Row (Total_Of);
       procedure Row_Distinct is new Row (Distinct_Of);
+      function Agreed_After_Of (S : Sim_Wordstat.Stat) return Natural is (S.Agreed_After);
       procedure Row_Agreed is new Row (Agreed_Of);
+      procedure Row_Agreed_After is new Row (Agreed_After_Of);
       procedure Row_Described is new Row (Described_Of);
       procedure Row_Used is new Row (Used_Of);
       procedure Row_Unused is new Row (Unused_Of);
@@ -1879,6 +1881,8 @@ procedure Diary_Sim is
 
       Edges : Sim_Wordstat.Edge_Array;
       Any_Words : Boolean := False;
+      Dict_Decided, Dict_Agreed, Dict_Rejected, Dict_Name, Dict_Coined, Dict_Ann, Ann_File : Natural := 0;
+      Dict_Means : Str_Vectors.Vector;
    begin
       for I in Edges'Range loop
          Edges (I) := Num (Msg ("wordstat.edge." & Img (I)));
@@ -1928,11 +1932,27 @@ procedure Diary_Sim is
                W : constant String := Token (L, "word");
                E : constant Natural := Ent_Of (Token (L, "by"));
                T : constant Natural := Num (Token (L, "t"));
+               St : constant String := Token (L, "st");
             begin
-               if Token (L, "st") = "A" then Sim_Wordstat.Agree (W); end if;
-               if E /= 0 then Texts (E, W, T); Texts (E, Token (L, "mean"), T); end if;
+               Dict_Decided := Dict_Decided + 1;
+               if St = "A" then
+                  Dict_Agreed := Dict_Agreed + 1;
+                  if Token (L, "slot") = "coined" then Dict_Coined := Dict_Coined + 1; else Dict_Name := Dict_Name + 1; end if;
+                  if not Dict_Means.Contains (Token (L, "mean")) then Dict_Means.Append (Token (L, "mean")); end if;
+                  Sim_Wordstat.Agree (W, T);
+               elsif St = "R" then
+                  Dict_Rejected := Dict_Rejected + 1;
+               end if;
+               if Token (L, "ann") = "1" then Dict_Ann := Dict_Ann + 1; end if;
+               --  the proposed text of a new name is not a word of any word list: only the meaning (a base word) counts as used
+               if E /= 0 then Texts (E, Token (L, "mean"), T); end if;
             end;
          end if;
+      end loop;
+      Lines.Clear;
+      Read_Lines ("diaries/announcements.txt", Lines, Found);
+      for L of Lines loop
+         if L'Length > 1 and then L (L'First) = 'A' then Ann_File := Ann_File + 1; end if;
       end loop;
       Lines.Clear;
       Read_Lines ("diaries/votes.txt", Lines, Found);
@@ -1979,11 +1999,28 @@ procedure Diary_Sim is
       end loop;
       TIO.New_Line;
       Put (Msg ("wordstat.sec.use"));
-      Row_Agreed ("  " & Msg ("wordstat.l.agreed"));
       Row_Described ("  " & Msg ("wordstat.l.described"));
       Row_Used ("  " & Msg ("wordstat.l.used"));
       Row_Unused ("  " & Msg ("wordstat.l.unused"));
       Row_Unused_Pct ("  " & Msg ("wordstat.l.unused_pct"));
+      TIO.New_Line;
+      Put (Msg ("wordstat.sec.dict"));
+      for Item of Str_Vectors.Vector'(
+        [Msg ("wordstat.d.decided") & "|" & Img (Dict_Decided), Msg ("wordstat.d.agreed") & "|" & Img (Dict_Agreed),
+         Msg ("wordstat.d.name") & "|" & Img (Dict_Name), Msg ("wordstat.d.coined") & "|" & Img (Dict_Coined),
+         Msg ("wordstat.d.means") & "|" & Img (Natural (Dict_Means.Length)), Msg ("wordstat.d.rejected") & "|" & Img (Dict_Rejected),
+         Msg ("wordstat.d.ann") & "|" & Img (Dict_Ann), Msg ("wordstat.d.annfile") & "|" & Img (Ann_File)])
+      loop
+         declare
+            Bar : constant Natural := Fx.Index (Item, "|");
+         begin
+            Put ("  " & Pad_R (Item (Item'First .. Bar - 1), Name_W - 2 + Cell_W * Natural (Entity_Id'Last)) & Pad_L (Item (Bar + 1 .. Item'Last), Total_W));
+         end;
+      end loop;
+      Put (Msg ("wordstat.d.vocab"));
+      Row_Agreed ("  " & Msg ("wordstat.l.agreed"));
+      Row_Agreed_After ("  " & Msg ("wordstat.l.agreed_after"));
+      for L of Sim_Voice.Wrap (Msg ("wordstat.d.note"), 77) loop Put ("  " & L); end loop;
       TIO.New_Line;
       Put (Msg ("wordstat.sec.kinduse"));
       Put (Msg ("wordstat.kinduse.head"));
