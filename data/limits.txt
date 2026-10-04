@@ -404,6 +404,14 @@ rec.word_ann_pct = 20
 # mean_cooldown sessions.
 rec.quality = 1
 rec.mean_cooldown = 3
+# Alternatives and the secret ballot (records=2): with the chance alt_pct a proposing wesen names a meaning that already waits for a form,
+# at most alt_max forms per meaning.  Each player picks a form: a die of 1 .. 100 + (trust - 50) * ballot_trust / 100 - ballot_len per
+# letter above 5; the plurality wins, a tie is broken by a seeded die.  make ballots shows the last ballot_rows ballots (you only).
+rec.alt_max = 3
+rec.alt_pct = 35
+rec.ballot_trust = 40
+rec.ballot_len = 3
+rec.ballot_rows = 5
 # Announcements: a wesen that files a petition tells everybody with the chance ann_pct.  Each other wesen hears it with ann_hear_pct and its
 # mood moves toward the speaker's by (mood / 40) points, at most ann_mood.  For ann_window ticks the deciding players add ann_vote points
 # (at most ann_vote_max) to the score of a petition of the same topic.  The speaker pays ann_cost standing and with ann_counter_pct a

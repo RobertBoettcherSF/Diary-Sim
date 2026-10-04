@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  The raw records of diary_sim (records=1 sessions; needs govern=1): WHAT WAS VOTED, WHAT WAS ASKED, which words were agreed, what was
 --  announced.  Four record files in diaries/, all derived from the replay and compared with it by diary_sim through Sim_Store (a changed,
 --  invented or removed line is DRIFT; own hash salts 14000 .. 14399):
@@ -16,6 +16,10 @@
 --  chance for its own petitions of that topic).  Every chance and number is in data/limits.txt (rec.*), the wording in data/records.txt.
 --  Sessions marked records=2 add quality rules (the meaning of a proposal is a base word of data/vocab.txt, never a coined word; a meaning
 --  already agreed or pending is not proposed again, a rejected one only after rec.mean_cooldown sessions).
+--  Secret ballot (records=2): up to rec.alt_max forms may wait for the same meaning (a wesen names a meaning that already waits for a name,
+--  rec.alt_pct); the players pick one form each (plurality, a tie by a seeded die), then the usual yes/no on the winner.  The picks and
+--  tallies are in diaries/ballots.txt (B<n>) only: no wesen or player text, report box, divergence or dictionary shows them (the
+--  dictionary has the winning form; the losing forms are never written elsewhere).  Ballot salts 14360 .. 14379.
 --  Records sessions also keep the word vote clean (Sim_World.Set_Clean: no chess moves as favourite words, no coined word that
 --  contains its own part).  Pure functions of (seed, wesen/player, tick, salts) and of the replayed state; nothing runs without records=1.
 --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (bounded integer arithmetic, hash dice, record parsing)
@@ -57,10 +61,11 @@ package Sim_Records is
    function Take_Cost (E : Entity_Id) return Natural;    --  standing E's watching player lost by announcing, handed over once
 
    --  The new lines since the last call (the caller compares / appends them).
-   procedure Drain (Votes, Pets, Dict, Notes : in out Str_Vectors.Vector);   --  Notes: the announcements
+   procedure Drain (Votes, Pets, Dict, Notes, Ballots : in out Str_Vectors.Vector);   --  Notes: the announcements; Ballots: diaries/ballots.txt
 
    function Box_Line (Players : Positive) return String;      --  one line of a player about this session, "" if nothing happened
    function Divergence return Str_Vectors.Vector;             --  make divergence: official reports against the raw records
+   function Ballots return Str_Vectors.Vector;                --  make ballots: the secret ballots (the Ground only)
    function Dictionary return Str_Vectors.Vector;             --  make dictionary: the official word list
    function Counts return String;                              --  "3 agreed, 2 rejected, 1 waiting, 4 announced" (all sessions)
 

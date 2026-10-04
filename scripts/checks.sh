@@ -1527,10 +1527,32 @@ dup=$(grep '^L[0-9]' diaries/dictionary.txt | awk '{ for (i = 1; i <= NF; i++) {
 tie_bad=$(grep '^L[0-9]' diaries/dictionary.txt | awk '{ for (i = 1; i <= NF; i++) { if ($i ~ /^yes=/) y = substr($i, 5); if ($i ~ /^no=/) n = substr($i, 4); if ($i ~ /^st=/) st = substr($i, 4) } if (y == n && st != "R") bad++ } END { print bad + 0 }')
 ties=$(grep -c ' why=tie' diaries/dictionary.txt)
 [ "$dup" = 0 ] && [ "$tie_bad" = 0 ] && [ "$ties" -ge 1 ] && ok "no meaning twice in one session; a tie (2/2) is always rejected ($ties ties in this save)" || bad "dup/tie ($dup $tie_bad)"
+# secret ballot (several forms for one meaning): B lines in diaries/ballots.txt only
+nb=$(grep -c '^B[0-9]' diaries/ballots.txt 2>/dev/null)
+bad_b=$(grep '^B[0-9]' diaries/ballots.txt | awk '{ for (i = 1; i <= NF; i++) { if ($i ~ /^alts=/) a = substr($i, 6); if ($i ~ /^win=/) wn = substr($i, 5); if ($i ~ /^tally=/) t = substr($i, 7); if ($i ~ /^tie=/) te = substr($i, 5) }
+  na = split(a, al, ","); ok = 0; for (i = 1; i <= na; i++) if (al[i] == wn) ok = 1; if (!ok || na < 2 || na > 3) bad++
+  nt = split(t, tl, ","); sum = 0; top = 0; for (i = 1; i <= nt; i++) { split(tl[i], kv, ":"); sum += kv[2]; if (kv[2] > top) top = kv[2] }
+  tops = 0; for (i = 1; i <= nt; i++) { split(tl[i], kv, ":"); if (kv[2] == top) tops++ }
+  if (sum != 4 || (te == 1) != (tops > 1)) bad++ } END { print bad + 0 }')
+nwin=0; for b in $(grep '^B[0-9]' diaries/ballots.txt | sed -E 's/^B[0-9]+ t=[0-9]+ s=([0-9]+) mean=([^ ]+) .* win=([a-z]+) .*/\1:\2:\3/'); do s_=${b%%:*}; r_=${b#*:}; m_=${r_%%:*}; w_=${r_##*:}; grep -q " s=$s_ st=[AR] word=$w_ slot=[a-z]* mean=$m_ " diaries/dictionary.txt && nwin=$((nwin + 1)); done
+[ "$nb" -ge 3 ] && [ "$bad_b" = 0 ] && [ "$nwin" = "$nb" ] && head -1 diaries/ballots.txt | grep -q '^# seed 42$' && ok "secret ballots: $nb B lines (2 or 3 forms for a meaning, every player's pick, tally sums to the players, a die only on a tie); the winner is the form that went to the yes/no vote and into the dictionary" || bad "ballots ($nb $bad_b $nwin)"
+leak=0
+for b in $(grep '^B[0-9]' diaries/ballots.txt | sed -E 's/.* alts=([a-z,]*) .* win=([a-z]*) .*/\1:\2/'); do alts=${b%%:*}; win=${b##*:}; for a in ${alts//,/ }; do [ "$a" = "$win" ] && continue; if grep -rlw -- "$a" . "$w/rq/"*.out 2>/dev/null | grep -qv 'ballots.txt'; then leak=$((leak + 1)); fi; done; done
+grep -rl ' picks=' . 2>/dev/null | grep -qv 'ballots.txt' && leak=$((leak + 1))
+for o in --divergence --dictionary --inbox --govern --audit --robot; do "$w/rq/bin/diary_sim" $o > "$w/rq/view.out" 2>&1; grep -q ' picks=\|^B[0-9]' "$w/rq/view.out" && leak=$((leak + 1)); done
+grep -q 'kind=ballot' diaries/votes.txt && leak=$((leak + 1))
+[ "$nb" -ge 3 ] && [ "$leak" = 0 ] && ok "the ballot is secret: no losing form and no pick appears in any other file or player-visible view (diaries, votes, announcements, inbox, divergence, dictionary, govern, audit)" || bad "ballot leaks ($leak)"
+"$w/rq/bin/diary_sim" --ballots > "$w/rq/bal.out" 2>&1; nbw=$(awk 'length > 80' "$w/rq/bal.out" | wc -l)
+grep -q '^B[0-9]' diaries/ballots.txt && grep -q '^Secret ballots' "$w/rq/bal.out" && [ "$nbw" = 0 ] && grep -q ' -> ' "$w/rq/bal.out" && ok "make ballots (--ballots) shows the last ballots to Robert: forms, tally, winner, who picked what (<= 80 columns)" || bad "--ballots view ($nbw)"
+cp -r diaries "$w/rq/diaries.bak"; l=$(grep -m1 '^B2 ' diaries/ballots.txt | sed -E 's/ win=[a-z]+/ win=zzz/'); sed -i "s/^B2 .*/$l/" diaries/ballots.txt
+"$w/rq/bin/diary_sim" --more 0 --every 5000 > "$w/rq/t1.out" 2>&1; rct=$?
+[ "$rct" != 0 ] && grep -q 'ballots.txt B2 differs from the replay' "$w/rq/t1.out" && ok "a changed ballot line is DRIFT (replay-verified like the other records)" || bad "ballot tamper ($rct)"
+rm -rf diaries; cp -r "$w/rq/diaries.bak" diaries; rm -rf "$w/rq/diaries.bak"
+grep -q 'make ballots' "$root/README.md" && grep -q 'make ballots' "$root/Makefile" && grep -q -- '--ballots' "$root/data/help.txt" && grep -q 'rec.alt_max' "$root/data/limits.txt" && ok "README, Makefile, --help and data/limits.txt describe the secret ballot (make ballots, rec.alt_max)" || bad "docs for ballots"
 rm -rf "$w/rq/q0"; mkdir -p "$w/rq/q0/bin" "$w/rq/q0/h"; cp "$bin" "$w/rq/q0/bin/"; cp -r "$idata" "$w/rq/q0/data"
 sed -i 's/^govern.enabled = .*/govern.enabled = 1/; s/^trial.enabled = .*/trial.enabled = 0/; s/^rec.quality = .*/rec.quality = 0/' "$w/rq/q0/data/limits.txt"
 ( cd "$w/rq/q0/h" || exit 1; export DIARY_HOME="$w/rq/q0/h"; "$w/rq/q0/bin/diary_sim" --seed 42 --ticks 300 --yes --every 5000 > r1.txt 2>&1; "$w/rq/q0/bin/diary_sim" --more 300 --every 5000 > r2.txt 2>&1 )
-[ "$(grep -c '^S[0-9].* records=1' "$w/rq/q0/h/diaries/sessions.txt")" = 2 ] && ! grep -q 'records=2' "$w/rq/q0/h/diaries/sessions.txt" && ok "rec.quality = 0: sessions stay records=1 (the earlier rules)" || bad "rec.quality = 0"
+[ "$(grep -c '^S[0-9].* records=1' "$w/rq/q0/h/diaries/sessions.txt")" = 2 ] && ! grep -q 'records=2' "$w/rq/q0/h/diaries/sessions.txt" && [ ! -e "$w/rq/q0/h/diaries/ballots.txt" ] && ok "rec.quality = 0: sessions stay records=1 (the earlier rules), no ballots" || bad "rec.quality = 0"
 grep -q 'rec.quality' "$root/data/limits.txt" && grep -q 'rec.mean_cooldown' "$root/data/limits.txt" && grep -q 'records=2' "$root/README.md" && grep -q 'records=2' "$root/data/help.txt" && ok "README, --help and data/limits.txt describe records=2, rec.quality and rec.mean_cooldown" || bad "docs for records=2"
 
 rm -rf "$w"

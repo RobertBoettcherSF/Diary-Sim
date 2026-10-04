@@ -1,4 +1,4 @@
-# Version: 0.029
+# Version: 0.030
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -33,6 +33,7 @@
 #                 replays and verifies the save, writes nothing)
 # make divergence  the players' reports against the raw records (records=1 sessions): claim, truth, grants and refusals counted from
 #                 diaries/votes.txt, yes/no on new words, and the growth of the dictionary per session; read-only, replay-verified
+# make ballots     the secret ballots on alternative word forms (diaries/ballots.txt), for Robert only, read-only
 # make dictionary  the official word list (diaries/dictionary.txt: words the wesen proposed and the players voted), read-only
 # make screens   print the text screens of the wesen as of the end of the replay (screen=1 sessions: words known, things examined,
 #                 words seen on others' screens; pinned *, unknown ?) and the notes lying on things; read-only, replay-verified
@@ -74,7 +75,7 @@ OPT ?= -O0
 JOBS ?= -j0
 FLAGS = -g $(OPT) -gnatwa -gnat2022 -gnata $(JOBS)
 
-.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary small footprint
+.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots small footprint
 export WESEN PLAYER TEXT AS
 
 EVERY ?= 100
@@ -135,6 +136,9 @@ divergence: all
 
 dictionary: all
 	bin/diary_sim --dictionary
+
+ballots: all
+	bin/diary_sim --ballots
 
 perft: all
 	bin/diary_sim --perft

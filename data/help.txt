@@ -153,6 +153,9 @@ wesen and players may announce what they expect (awareness against standing).
 make divergence: claims vs raw votes. make dictionary. records.enabled=0: off.
 records=2 session: a meaning is a base word, never repeated while agreed,
 pending or recently rejected (rec.mean_cooldown). rec.quality=0: records=1.
+Secret ballot (records=2): up to rec.alt_max forms per meaning, the players
+pick one (plurality, die on a tie); only Robert sees it: diaries/ballots.txt,
+make ballots (--ballots). Players, reports, dictionary never show it.
 Size (make footprint, make small): bin/diary_sim (-g -O0) is ~9 MB, of which
 ~4 MB is debug info and symbols. make small builds bin/diary_sim_small (-Os,
 no -g, gc-sections, stripped): ~2.9 MB, same output. See README, Footprint.

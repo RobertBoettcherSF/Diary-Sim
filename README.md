@@ -653,6 +653,14 @@ are record lines that every replay computes again (Sim_Store, own hash salts 140
   `data/vocab.txt` (a coined word contributes the two base words it was made of), never a coined word (`mukuki = rugu` came from
   naming a coined word). A meaning is not put to a vote again while it is agreed or already pending, and a rejected meaning may come
   back only after `rec.mean_cooldown` (3) sessions (`brown` three times, `greasy` twice before). Ties stay rejected.
+* **Secret ballot** (`records=2`; `diaries/ballots.txt`, `make ballots` / `--ballots`): with the chance `rec.alt_pct` (35) a wesen names
+  a meaning that already waits for a form, so up to `rec.alt_max` (3) forms compete for one meaning. At the end of the session each
+  player picks one form (a die plus its trust in the proposer, less for long forms: `rec.ballot_trust`, `rec.ballot_len`), the plurality
+  wins, a tie is broken by a seeded die, then the usual yes/no on the winner. `B<n> t= s= mean= alts=a,b,c picks=iris:a,sol:b,.. tally=a:2,b:1,c:0 win=a tie=0|1`.
+  The ballot is SECRET: only Robert (the Ground) sees it, in that file and with `make ballots` (the last `rec.ballot_rows` ballots). No
+  wesen or player text, report box, `make divergence`, `votes.txt`, announcements or the dictionary show who picked what or the tallies
+  or the losing forms; `dictionary.txt` has the winning form only, and only the winner of a word is announced. The file is replay-verified
+  like the other records (a changed line is DRIFT).
 * **Announcements** (`diaries/announcements.txt`): a wesen that files a petition may tell everybody what it expects (`rec.ann_pct`), or
   announce a proposed word (`rec.word_ann_pct`); a player may announce its main concern at the end of a session (`rec.pann_pct`).
   `A<n> t= s= by= kind=wish|word|player topic= heard= mood= cost= react=ok|counter`. It raises awareness: each other wesen hears it

@@ -15,3 +15,6 @@ err.records = {1} differs from the replay: {2}
 # a line of the diary when a wesen heard what the others announced (mood moves a few points toward the speaker)
 detail.rec.up = heard what a neighbour expects, which lifted the mood a little
 detail.rec.down = heard what a neighbour expects, which weighed on the mood a little
+rec.bal.head = Secret ballots (only you see them; diaries/ballots.txt)
+rec.bal.none = no ballot yet (a ballot is held when several forms wait for one meaning).
+rec.bal.sum = ballots: {1}, decided by the die: {2}

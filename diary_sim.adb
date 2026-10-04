@@ -1,4 +1,4 @@
---  Version: 0.036
+--  Version: 0.037
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -92,7 +92,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.036";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.037";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -209,8 +209,9 @@ procedure Diary_Sim is
    Pets_Path : constant String := "diaries/petitions.txt";
    Dict_Path : constant String := "diaries/dictionary.txt";
    Anns_Path : constant String := "diaries/announcements.txt";
-   Votes_Store, Pets_Store, Dict_Store, Anns_Store : Sim_Store.Store;
-   Rec_View, Dict_View : Boolean := False;
+   Bals_Path : constant String := "diaries/ballots.txt";   --  records=2: the secret ballots, read by the Ground only (make ballots)
+   Votes_Store, Pets_Store, Dict_Store, Anns_Store, Bals_Store : Sim_Store.Store;
+   Rec_View, Dict_View, Bal_View : Boolean := False;
    Visit_Path : constant String := "diaries/visit.txt";
    Visit_Store : Sim_Store.Store;
    type Visit_In is record
@@ -1932,7 +1933,7 @@ procedure Diary_Sim is
 
    --  records=1: the new lines of Sim_Records are compared with the record files (appended where they are new: Write).
    procedure Flush_Records (Write : Boolean) is
-      Vs, Ps, Ds, Ns : Str_Vectors.Vector;
+      Vs, Ps, Ds, Ns, Bs : Str_Vectors.Vector;
       Can : constant Boolean := Write and then not Preview and then not Ledger_Mode;
       procedure One (S : in out Sim_Store.Store; Lines : Str_Vectors.Vector; File : String) is
          Result : Sim_Store.Status;
@@ -1948,11 +1949,12 @@ procedure Diary_Sim is
          end loop;
       end One;
    begin
-      Sim_Records.Drain (Vs, Ps, Ds, Ns);
+      Sim_Records.Drain (Vs, Ps, Ds, Ns, Bs);
       One (Votes_Store, Vs, "votes.txt");
       One (Pets_Store, Ps, "petitions.txt");
       One (Dict_Store, Ds, "dictionary.txt");
       One (Anns_Store, Ns, "announcements.txt");
+      One (Bals_Store, Bs, "ballots.txt");
    end Flush_Records;
 
    procedure Verify_Records (Upto : Int) is
@@ -1968,6 +1970,7 @@ procedure Diary_Sim is
       One (Pets_Store, "petitions.txt");
       One (Dict_Store, "dictionary.txt");
       One (Anns_Store, "announcements.txt");
+      One (Bals_Store, "ballots.txt");
    end Verify_Records;
 
    --  Every decision of a player (also a refusal), veto and approval is a D line in diaries/govern.txt: replay-verified.
@@ -4321,6 +4324,7 @@ begin
          elsif Opt = "--trials" then Ledger_Mode := True; Trial_View := True;
          elsif Opt = "--divergence" then Ledger_Mode := True; Rec_View := True;
          elsif Opt = "--dictionary" then Ledger_Mode := True; Dict_View := True;
+         elsif Opt = "--ballots" then Ledger_Mode := True; Bal_View := True;
          elsif Opt = "--next" then Ledger_Mode := True; Next_View := True;
          elsif Opt = "--next-ticks" then Next_Ticks_Mode := True;
          elsif Opt = "--visit" then Visit_Mode := True; Visit_Opt := To_Unbounded_String (Val);
@@ -4551,6 +4555,7 @@ begin
    Sim_Store.Open (Pets_Store, Pets_Path, "# seed " & Img (Seed));
    Sim_Store.Open (Dict_Store, Dict_Path, "# seed " & Img (Seed));
    Sim_Store.Open (Anns_Store, Anns_Path, "# seed " & Img (Seed));
+   Sim_Store.Open (Bals_Store, Bals_Path, "# seed " & Img (Seed));
    Sim_Store.Open (Visit_Store, Visit_Path, "# seed " & Img (Seed));
    Load_Visit;
    Load_Challenges;
@@ -4578,7 +4583,7 @@ begin
       if Ledger_Mode then   --  replayed and verified, nothing decided, nothing written: print the ledger
          for F of Out_File loop TIO.Close (F); end loop;
          for F of Side_Out loop TIO.Close (F); end loop;
-         if Elo_View then Con.Put (Elo_Text); elsif Govern_View then Con.Put (Govern_Text); elsif Audit_View then Con.Put (Audit_Text); elsif Next_View then Con.Put (Next_Text); elsif Trial_View then Con.Put (Trials_Text); elsif Rec_View then Con.Put (Lines_Text (Sim_Records.Divergence)); elsif Dict_View then Con.Put (Lines_Text (Sim_Records.Dictionary)); elsif Robot_View then Con.Put (Robot_Text); elsif Screens_View then Con.Put (Screens_Text); else Con.Put_Line (Sim_Ledger.Report (Seed, Ledger_From, Ledger_Full)); end if;
+         if Elo_View then Con.Put (Elo_Text); elsif Govern_View then Con.Put (Govern_Text); elsif Audit_View then Con.Put (Audit_Text); elsif Next_View then Con.Put (Next_Text); elsif Trial_View then Con.Put (Trials_Text); elsif Rec_View then Con.Put (Lines_Text (Sim_Records.Divergence)); elsif Dict_View then Con.Put (Lines_Text (Sim_Records.Dictionary)); elsif Bal_View then Con.Put (Lines_Text (Sim_Records.Ballots)); elsif Robot_View then Con.Put (Robot_Text); elsif Screens_View then Con.Put (Screens_Text); else Con.Put_Line (Sim_Ledger.Report (Seed, Ledger_From, Ledger_Full)); end if;
          return;
       end if;
       for E in Entity_Id loop

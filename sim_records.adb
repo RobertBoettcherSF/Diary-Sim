@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  See sim_records.ads.
 pragma Ada_2022;
 
@@ -22,7 +22,7 @@ package body Sim_Records is
    Sess_N : Natural := 0;
    Scan_Init : Boolean := False;
    Last_Scan : Natural := 0;
-   V_N, A_N, L_N : Natural := 0;
+   V_N, A_N, L_N, B_N : Natural := 0;
    Voted_N, Agreed_N : Natural := 0;               --  words voted / agreed in the current session
    Ses_Agreed, Ses_Rejected, Ses_Ann : Natural := 0;
 
@@ -56,8 +56,8 @@ package body Sim_Records is
 
    Mood_P : array (Entity_Id) of Integer := [others => 0];
    Cost_P : array (Entity_Id) of Natural := [others => 0];
-   Votes_Out, Pets_Out, Dict_Out, Anns_Out : Str_Vectors.Vector;
-   Votes_All, Pets_All, Dict_All, Anns_All : Str_Vectors.Vector;
+   Votes_Out, Pets_Out, Dict_Out, Anns_Out, Bals_Out : Str_Vectors.Vector;
+   Votes_All, Pets_All, Dict_All, Anns_All, Bals_All : Str_Vectors.Vector;
 
    function L (Key : String; D : Integer) return Integer is (Integer (Limit (Key, Int (D))));
 
@@ -114,12 +114,12 @@ package body Sim_Records is
    begin
       Seed_V := Seed;
       Is_Active := False; Is_Quality := False; Sess_N := 0; Scan_Init := False; Last_Scan := 0;
-      V_N := 0; A_N := 0; L_N := 0; Voted_N := 0; Agreed_N := 0;
+      V_N := 0; A_N := 0; L_N := 0; B_N := 0; Voted_N := 0; Agreed_N := 0;
       Ses_Agreed := 0; Ses_Rejected := 0; Ses_Ann := 0;
       Pending.Clear; Anns.Clear; Sess_List.Clear;
       Mood_P := [others => 0]; Cost_P := [others => 0];
-      Votes_Out.Clear; Pets_Out.Clear; Dict_Out.Clear; Anns_Out.Clear;
-      Votes_All.Clear; Pets_All.Clear; Dict_All.Clear; Anns_All.Clear;
+      Votes_Out.Clear; Pets_Out.Clear; Dict_Out.Clear; Anns_Out.Clear; Bals_Out.Clear;
+      Votes_All.Clear; Pets_All.Clear; Dict_All.Clear; Anns_All.Clear; Bals_All.Clear;
    end Init;
 
    procedure Begin_Session (N : Positive; Start : Int; On : Boolean; Quality : Boolean := False) is
@@ -279,10 +279,10 @@ package body Sim_Records is
    end Is_Known_Text;
 
    --  records=2: a meaning that is agreed, pending, or was rejected less than rec.mean_cooldown sessions ago is not put to a vote
-   function Mean_Blocked (Mean : String) return Boolean is
+   function Mean_Blocked (Mean : String; With_Pending : Boolean := True) return Boolean is
       Cool : constant Natural := Natural (L ("rec.mean_cooldown", 3));
    begin
-      for P of Pending loop if To_String (P.Mean) = Mean then return True; end if; end loop;
+      if With_Pending then for P of Pending loop if To_String (P.Mean) = Mean then return True; end if; end loop; end if;
       for D of Dict_All loop
          if Tok (D, "mean") = Mean then
             if Tok (D, "st") = "A" or else Natural (Num (Tok (D, "s"))) + Cool > Sess_N then return True; end if;
@@ -303,15 +303,22 @@ package body Sim_Records is
       return (if Plus = 0 then Is_Base (Mean) else Is_Base (Mean (Mean'First .. Plus - 1)) and then Is_Base (Mean (Plus + 1 .. Mean'Last)));
    end Base_Pair;
 
+   function Alt_Count (Mean : String) return Natural is   --  records=2: the forms waiting for the same meaning
+      N : Natural := 0;
+   begin
+      for P of Pending loop if To_String (P.Mean) = Mean then N := N + 1; end if; end loop;
+      return N;
+   end Alt_Count;
+
    procedure Add_Prop (Text, Mean : String; Slot : Positive; By : Entity_Id; Tick : Int; Salt : Natural) is
    begin
       if Natural (Pending.Length) >= Natural (L ("rec.prop_cap", 12)) or else Is_Known_Text (Text) then return; end if;
-      if Is_Quality and then (not Base_Pair (Mean) or else Mean_Blocked (Mean)) then return; end if;
+      if Is_Quality and then (not Base_Pair (Mean) or else Mean_Blocked (Mean, False) or else Alt_Count (Mean) >= Natural (L ("rec.alt_max", 3))) then return; end if;
       declare
          Ann : constant Boolean := Roll (Seed_V, Positive (By), Tick, 14004 + Salt mod 30, 100) <= L ("rec.word_ann_pct", 20);
       begin
          Pending.Append (Prop_Rec'(Text => To_Unbounded_String (Text), Mean => To_Unbounded_String (Mean), Slot => Slot, By => By, At_T => Tick, Ann => Ann));
-         if Ann then Announce (By, Tick, 3, Text, 0); end if;
+         if Ann and then not Is_Quality then Announce (By, Tick, 3, Text, 0); end if;   --  records=2: only the winning form is announced (secret ballot)
       end;
    end Add_Prop;
 
@@ -341,7 +348,7 @@ package body Sim_Records is
             declare
                W : constant Positive := (Start - 1 + I) mod N + 1;
             begin
-               if Knows (E, W) and then Plain (W) and then (not Is_Quality or else (W <= Base_Count and then not Mean_Blocked (Word (W)))) then return W; end if;
+               if Knows (E, W) and then Plain (W) and then (not Is_Quality or else (W <= Base_Count and then not Mean_Blocked (Word (W), False))) then return W; end if;
             end;
          end loop;
       end;
@@ -357,16 +364,122 @@ package body Sim_Records is
             Syl : constant Positive := 1 + Roll (Seed_V, Positive (E), Tick, 14011, 2);   --  2 or 3 syllables
             Text : Unbounded_String;
             Mean : constant Natural := Pick_Known (E, Tick);
+            Alt : Unbounded_String;   --  records=2: sometimes a wesen names a meaning that already waits for a name (an alternative)
          begin
+            if Is_Quality and then Roll (Seed_V, Positive (E), Tick, 14060, 100) <= L ("rec.alt_pct", 35) then
+               declare
+                  Open : Natural := 0;
+               begin
+                  for P of Pending loop if Alt_Count (To_String (P.Mean)) < Natural (L ("rec.alt_max", 3)) then Open := Open + 1; end if; end loop;
+                  if Open > 0 then
+                     declare
+                        Pick : Positive := Roll (Seed_V, Positive (E), Tick, 14061, Open);
+                     begin
+                        for P of Pending loop
+                           if Alt_Count (To_String (P.Mean)) < Natural (L ("rec.alt_max", 3)) then
+                              if Pick = 1 then Alt := P.Mean; exit; end if;
+                              Pick := Pick - 1;
+                           end if;
+                        end loop;
+                     end;
+                  end if;
+               end;
+            end if;
             for I in 1 .. Syl loop
                Append (Text, Ada.Characters.Handling.To_Lower (Sim_Things.Blend_Syllable (E, Tick, 14200 + 50 * I)));
             end loop;
-            if Mean > 0 and then Length (Text) in 3 .. L ("rec.prop_max_len", 12) and then (for all C of To_String (Text) => C in 'a' .. 'z') then
+            if Length (Alt) > 0 and then Length (Text) in 3 .. L ("rec.prop_max_len", 12) and then (for all C of To_String (Text) => C in 'a' .. 'z') then
+               Add_Prop (To_String (Text), To_String (Alt), 2, E, Tick, 7);
+            elsif Mean > 0 and then Length (Text) in 3 .. L ("rec.prop_max_len", 12) and then (for all C of To_String (Text) => C in 'a' .. 'z') then
                Add_Prop (To_String (Text), Word (Mean), 2, E, Tick, 7);
             end if;
          end;
       end if;
    end Note_Petition;
+
+   --  ---- the secret ballot (records=2): several forms for one meaning --------------------------------------------------------
+   --  Every player picks one form (a dice score plus its trust in the proposer, less for long forms), the plurality wins, a tie is broken
+   --  by a seeded die.  The line goes to diaries/ballots.txt ONLY (the Ground reads it with make ballots); nothing else shows it.
+   procedure Ballot (Group : Prop_Vectors.Vector; Tick : Int; K : Positive; Trust : Trust_Array; Winner : out Positive) is
+      Np : constant Positive := Positive (Sim_Dharma.Last_Player);
+      Na : constant Positive := Positive (Group.Length);
+      Tally : array (1 .. Na) of Natural := [others => 0];
+      Picks, Alts, Tl : Unbounded_String;
+      Top, Tied : Natural := 0;
+   begin
+      for Pl in 1 .. Np loop
+         declare
+            Pid : constant Sim_Dharma.Player_Id := Sim_Dharma.Player_Id (Pl);
+            Best : Positive := 1;
+            Best_S : Integer := Integer'First;
+         begin
+            for A in 1 .. Na loop
+               declare
+                  P : constant Prop_Rec := Group (A);
+                  Tr : constant Integer := (if Sim_Dharma.Watcher (P.By) = Pid then Trust (P.By) else 50);
+                  Sc : constant Integer :=
+                    Roll (Seed_V, 200 + 10 * K + Pl, Tick, 14360 + A, 100) + (Tr - 50) * L ("rec.ballot_trust", 40) / 100
+                    - Integer'Max (0, Length (P.Text) - 5) * L ("rec.ballot_len", 3);
+               begin
+                  if Sc > Best_S then Best := A; Best_S := Sc; end if;
+               end;
+            end loop;
+            Tally (Best) := Tally (Best) + 1;
+            Append (Picks, (if Pl > 1 then "," else "") & Sim_Dharma.Player_Name (Pid) & ":" & To_String (Group (Best).Text));
+         end;
+      end loop;
+      for A in 1 .. Na loop
+         Append (Alts, (if A > 1 then "," else "") & To_String (Group (A).Text));
+         Append (Tl, (if A > 1 then "," else "") & To_String (Group (A).Text) & ":" & Img (Tally (A)));
+         if Tally (A) > Top then Top := Tally (A); end if;
+      end loop;
+      for A in 1 .. Na loop if Tally (A) = Top then Tied := Tied + 1; end if; end loop;
+      Winner := 1;
+      if Tied = 1 then
+         for A in 1 .. Na loop if Tally (A) = Top then Winner := A; end if; end loop;
+      else
+         declare
+            Pick : Positive := Roll (Seed_V, 200 + 10 * K, Tick, 14370, Tied);
+         begin
+            for A in 1 .. Na loop
+               if Tally (A) = Top then
+                  if Pick = 1 then Winner := A; exit; end if;
+                  Pick := Pick - 1;
+               end if;
+            end loop;
+         end;
+      end if;
+      B_N := B_N + 1;
+      declare
+         Line : constant String := "B" & Img (B_N) & " t=" & Img (Tick) & " s=" & Img (Sess_N) & " mean=" & To_String (Group (1).Mean)
+                                   & " alts=" & To_String (Alts) & " picks=" & To_String (Picks) & " tally=" & To_String (Tl)
+                                   & " win=" & To_String (Group (Winner).Text) & " tie=" & (if Tied > 1 then "1" else "0");
+      begin
+         Bals_Out.Append (Line);
+         Bals_All.Append (Line);
+      end;
+   end Ballot;
+
+   --  The next proposal to be put to the vote: records=2 gathers all forms of its meaning and lets the players choose among them.
+   procedure Take_Next (Tick : Int; K : Positive; Trust : Trust_Array; Chosen : out Prop_Rec) is
+      First : constant Prop_Rec := Pending.First_Element;
+      Group : Prop_Vectors.Vector;
+      Rest : Prop_Vectors.Vector;
+      W : Positive := 1;
+   begin
+      Pending.Delete_First;
+      Chosen := First;
+      if not Is_Quality then return; end if;
+      Group.Append (First);
+      for P of Pending loop
+         if P.Mean = First.Mean then Group.Append (P); else Rest.Append (P); end if;
+      end loop;
+      Pending := Rest;
+      if Natural (Group.Length) > 1 then
+         Ballot (Group, Tick, K, Trust, W);
+         Chosen := Group (W);
+      end if;
+   end Take_Next;
 
    --  ---- the end of a session -----------------------------------------------------------------------------------------------
    procedure Vote_Words (Tick : Int; Trust : Trust_Array) is
@@ -379,18 +492,22 @@ package body Sim_Records is
          begin
             Pending.Clear;
             for P of Waiting loop
-               if Base_Pair (To_String (P.Mean)) and then not Mean_Blocked (To_String (P.Mean)) then Pending.Append (P); end if;
+               if Base_Pair (To_String (P.Mean)) and then not Mean_Blocked (To_String (P.Mean), False) then Pending.Append (P); end if;
             end loop;
          end;
       end if;
       while not Pending.Is_Empty and then K < Natural (L ("rec.words_per_session", 6)) loop
          declare
-            P : constant Prop_Rec := Pending.First_Element;
+            Chosen : Prop_Rec;
+         begin
+            Take_Next (Tick, K + 1, Trust, Chosen);
+            declare
+            P : constant Prop_Rec := Chosen;
             Txt : constant String := To_String (P.Text);
             Yes : Natural := 0;
             Subj : constant String := "L" & Img (L_N + 1);
          begin
-            Pending.Delete_First;
+            if Is_Quality and then P.Ann then Announce (P.By, Tick, 3, Txt, 0); end if;   --  records=2: only the winning form is announced
             K := K + 1;
             for Pl in 1 .. Np loop
                declare
@@ -421,6 +538,7 @@ package body Sim_Records is
                if Agree then Agreed_N := Agreed_N + 1; Ses_Agreed := Ses_Agreed + 1; else Ses_Rejected := Ses_Rejected + 1; end if;
                Dict_Out.Append (Line);
                Dict_All.Append (Line);
+            end;
             end;
          end;
       end loop;
@@ -487,12 +605,13 @@ package body Sim_Records is
       Players_Announce (Tick, Concern);
    end Session_End;
 
-   procedure Drain (Votes, Pets, Dict, Notes : in out Str_Vectors.Vector) is
+   procedure Drain (Votes, Pets, Dict, Notes, Ballots : in out Str_Vectors.Vector) is
    begin
       Votes.Append (Votes_Out); Votes_Out.Clear;
       Pets.Append (Pets_Out); Pets_Out.Clear;
       Dict.Append (Dict_Out); Dict_Out.Clear;
       Notes.Append (Anns_Out); Anns_Out.Clear;
+      Ballots.Append (Bals_Out); Bals_Out.Clear;
    end Drain;
 
    --  ---- views ---------------------------------------------------------------------------------------------------------------
@@ -510,8 +629,18 @@ package body Sim_Records is
       return N;
    end Count_Dict;
 
+   function Waiting return Natural is   --  proposals waiting for a vote (records=2: one per meaning: the forms stay secret)
+      Seen : Str_Vectors.Vector;
+   begin
+      if not Is_Quality then return Natural (Pending.Length); end if;
+      for P of Pending loop
+         if not Seen.Contains (To_String (P.Mean)) then Seen.Append (To_String (P.Mean)); end if;
+      end loop;
+      return Natural (Seen.Length);
+   end Waiting;
+
    function Counts return String is
-     (Img (Count_Dict ("A")) & " agreed, " & Img (Count_Dict ("R")) & " rejected, " & Img (Natural (Pending.Length)) & " waiting, "
+     (Img (Count_Dict ("A")) & " agreed, " & Img (Count_Dict ("R")) & " rejected, " & Img (Waiting) & " waiting, "
       & Img (Natural (Anns_All.Length)) & " announced");
 
    function Session_Of (T : Int) return Natural is   --  the session that ends at or contains tick T
@@ -652,6 +781,50 @@ package body Sim_Records is
       R.Append (Msg ("rec.div.sum", Counts));
       return R;
    end Divergence;
+
+   --  make ballots: the Ground only
+   function Ballots return Str_Vectors.Vector is
+      R : Str_Vectors.Vector;
+      Keep : constant Natural := Natural (L ("rec.ballot_rows", 5));
+      Ties : Natural := 0;
+   begin
+      for B of Bals_All loop if Tok (B, "tie") = "1" then Ties := Ties + 1; end if; end loop;
+      R.Append (Msg ("rec.bal.head"));
+      if Bals_All.Is_Empty then
+         R.Append (Msg ("rec.bal.none"));
+         return R;
+      end if;
+      R.Append (Msg ("rec.bal.sum", Img (Natural (Bals_All.Length)), Img (Ties)));
+      for I in Natural'Max (1, Natural (Bals_All.Length) - Keep + 1) .. Natural (Bals_All.Length) loop
+         declare
+            B : constant String := Bals_All (I);
+            Pk : constant String := Tok (B, "picks");
+            Line : Unbounded_String;
+            N : Positive := 1;
+         begin
+            R.Append (Pad_Right (B (B'First .. Fx.Index (B, " ") - 1), 5) & "s" & Tok (B, "s") & " = " & Tok (B, "mean") & ": " & Tok (B, "tally")
+                      & " -> " & Tok (B, "win") & (if Tok (B, "tie") = "1" then " (die)" else ""));
+            while Part (Pk, N, ',') /= "" loop
+               declare
+                  Pair : constant String := Part (Pk, N, ',');
+               begin
+                  declare
+                     Item : constant String := Show (Part (Pair, 1, ':')) & " " & Part (Pair, 2, ':');
+                  begin
+                     if Length (Line) > 0 and then Length (Line) + Item'Length + 2 > 72 then
+                        R.Append ("     " & To_String (Line) & ",");
+                        Line := Null_Unbounded_String;
+                     end if;
+                     Append (Line, (if Length (Line) > 0 then ", " else "") & Item);
+                  end;
+               end;
+               N := N + 1;
+            end loop;
+            R.Append ("     " & To_String (Line));
+         end;
+      end loop;
+      return R;
+   end Ballots;
 
    function Dictionary return Str_Vectors.Vector is
       R : Str_Vectors.Vector;
