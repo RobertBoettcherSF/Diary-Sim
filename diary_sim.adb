@@ -1,4 +1,4 @@
---  Version: 0.040
+--  Version: 0.041
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -92,11 +92,12 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.040";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.041";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
    Fresh, Seed_Shown : Boolean := False;
+   T_Run : constant Ada.Calendar.Time := Ada.Calendar.Clock;   --  the start of this run (trend.txt: how long the session took)
    Self_Exe : constant String := Exe_Path;       --  this executable, absolute, fixed before any cd (make night starts it once per session)
    Src_Root : constant String := Project_Root;   --  the source folder, fixed before any cd
    Home_Opt, Home_Path : Unbounded_String;      --  --home DIR / the save folder in use
@@ -1540,6 +1541,39 @@ procedure Diary_Sim is
         and then L (L'First + 13) = ':' and then L (L'First + 16) = ':' and then Dig (1) and then Dig (4) and then Dig (6) and then Dig (9)
         and then Dig (12) and then Dig (15) and then Dig (18) and then Dig (19) and then L (L'First + 19) = ' ';
    end Is_Stamp;
+
+   --  The bytes of all files below Dir (trend.txt, the timer of make night).  A file that vanishes while counting is skipped.
+   function Folder_Bytes (Dir : String) return Int is
+      Total : Int := 0;
+      S : Ada.Directories.Search_Type;
+      E : Ada.Directories.Directory_Entry_Type;
+   begin
+      Ada.Directories.Start_Search (S, Dir, "", [Ada.Directories.Directory | Ada.Directories.Ordinary_File => True, others => False]);
+      while Ada.Directories.More_Entries (S) loop
+         Ada.Directories.Get_Next_Entry (S, E);
+         begin
+            if Ada.Directories.Simple_Name (E) /= "." and then Ada.Directories.Simple_Name (E) /= ".." then
+               if Ada.Directories.Kind (E) in Ada.Directories.Directory then
+                  Total := Total + Folder_Bytes (Ada.Directories.Full_Name (E));
+               else
+                  Total := Total + Int (Ada.Directories.Size (E));
+               end if;
+            end if;
+         exception
+            when others => null;   --  an entry that vanished (a .tmp renamed) is skipped
+         end;
+      end loop;
+      Ada.Directories.End_Search (S);
+      return Total;
+   exception
+      when others => return Total;
+   end Folder_Bytes;
+
+   function Tenths_Text (D : Duration) return String is   --  "8.1"
+      T : constant Natural := Natural (Duration'Max (0.0, D) * 10);
+   begin
+      return Img (T / 10) & "." & Img (T mod 10);
+   end Tenths_Text;
 
    procedure Append_Log (Label, Text : String) is
       Old : Str_Vectors.Vector;
@@ -4454,39 +4488,16 @@ procedure Diary_Sim is
       Done_N : Natural := 0;
       First_S, Last_S, Last_Tick : Natural := 0;
       Last_Line : Unbounded_String;
+      Tty_Out : constant Boolean := Is_Tty (1);   --  a terminal: the timer header is repainted in place (ANSI cursor home); else plain lines
+      Size0, Size_Now : Int := 0;
+      Base_S, Base_T : Natural := 0;               --  the sessions and ticks the save had at the start
+      Cur_Tick, Cur_Goal : Natural := 0;           --  the tick of the session in progress (its progress lines), 0 while it replays
+      Sess_Total, Last_Dur : Duration := 0.0;      --  wall time of the finished sessions / of the last one
+      S_Start : Ada.Calendar.Time := T0;
+      Recent : Str_Vectors.Vector;                 --  the status lines of the sessions (shown below the header on a terminal)
       N_Args : Natural := 0;
-      Args : GNAT.OS_Lib.Argument_List (1 .. 12);
+      Args : GNAT.OS_Lib.Argument_List (1 .. 16);
       RC : Integer := 0;
-
-      protected Job is
-         procedure Start;
-         procedure Finish (Code : Integer);
-         function Done return Boolean;
-         function Code return Integer;
-      private
-         Is_Done : Boolean := False;
-         Rc_V : Integer := 0;
-      end Job;
-      protected body Job is
-         procedure Start is begin Is_Done := False; Rc_V := 0; end Start;
-         procedure Finish (Code : Integer) is begin Rc_V := Code; Is_Done := True; end Finish;
-         function Done return Boolean is (Is_Done);
-         function Code return Integer is (Rc_V);
-      end Job;
-
-      task type Runner is
-         entry Go;
-      end Runner;
-      task body Runner is
-         OK : Boolean;
-         Code : Integer;
-      begin
-         accept Go;
-         GNAT.OS_Lib.Spawn (Self_Exe, Args (1 .. N_Args), "night_console.txt", OK, Code, True);
-         Job.Finish (if OK then Code else -1);   --  OK only says that the program could be started
-      exception
-         when others => Job.Finish (-1);
-      end Runner;
 
       procedure Arg (Text : String) is
       begin
@@ -4549,18 +4560,124 @@ procedure Diary_Sim is
          return "";
       end Last_Trend;
 
+      --  ---- the timer header ----------------------------------------------------------------------------------------------------
+      function Elapsed return Duration is (Ada.Calendar."-" (Ada.Calendar.Clock, T0));
+
+      function Hms (D : Duration) return String is
+         T : constant Natural := Natural (Duration'Max (0.0, D));
+      begin
+         return Img (T / 3600) & "h" & Fx.Tail (Img (T mod 3600 / 60), 2, '0') & "m" & Fx.Tail (Img (T mod 60), 2, '0') & "s";
+      end Hms;
+
+      function Size_Text (B : Int) return String is
+        (if B < 1024 then Img (B) & " B" elsif B < 1_048_576 then Img (B / 1024) & " KB"
+         else Img (B / 1_048_576) & "." & Img (B * 10 / 1_048_576 mod 10) & " MB");
+
+      function Left_Text return String is   --  time to the nearest limit, from the average session so far
+         Best : Duration := 0.0;
+         Have : Boolean := False;
+      begin
+         if Max_Secs > 0.0 then Best := Max_Secs - Elapsed; Have := True; end if;
+         if Max_S > 0 and then Done_N > 0 then
+            declare
+               L : constant Duration := (Sess_Total / Done_N) * Natural'Max (0, Natural (Max_S) - Done_N);
+            begin
+               if not Have or else L < Best then Best := L; end if;
+               Have := True;
+            end;
+         end if;
+         return (if Have then Hms (Best) else "-");
+      end Left_Text;
+
+      function Ticks_Per_Sec return String is
+        (if Sess_Total > 0.0 and then Done_N > 0 then Img (Natural (Float (Done_N) * Float (Per) / Float (Sess_Total))) else "-");
+
+      function Avg_Text return String is (if Done_N > 0 then Tenths_Text (Sess_Total / Done_N) & " s" else "-");
+
+      function Growth_Text return String is
+        ((if Size_Now >= Size0 then "+" else "-") & Size_Text (abs (Size_Now - Size0)));
+
+      function Limits_Text return String is
+        (Msg ("night.lim", (if Max_Secs = 0.0 then Msg ("night.none") else Hms (Max_Secs)), (if Max_S = 0 then Msg ("night.none") else Img (Max_S))));
+
+      procedure Refresh is   --  the size of the save folder and the tick of the session in progress
+         Cons : Str_Vectors.Vector;
+         Found : Boolean;
+      begin
+         Size_Now := Folder_Bytes (".");
+         Cur_Tick := 0;
+         Read_Lines ("night_console.txt", Cons, Found);
+         for I in reverse 1 .. Natural (Cons.Length) loop
+            declare
+               Ln : constant String := Cons (I);
+            begin
+               if Ln'Length > 5 and then Ln (Ln'First .. Ln'First + 4) = "tick " and then Fx.Index (Ln, "/") > 0 then
+                  declare
+                     Sl : constant Positive := Fx.Index (Ln, "/");
+                     Sp : constant Natural := Fx.Index (Ln, " ", Sl);
+                  begin
+                     Cur_Tick := Natural'Value (Ln (Ln'First + 5 .. Sl - 1));
+                     Cur_Goal := Natural'Value (Ln (Sl + 1 .. (if Sp = 0 then Ln'Last else Sp - 1)));
+                  end;
+                  exit;
+               end if;
+            exception
+               when others => null;   --  a line being written
+            end;
+         end loop;
+      end Refresh;
+
+      --  One piece, written with one call: home, the lines (each cleared to its end), clear below.
+      procedure Paint (Running : Boolean) is
+         R : Unbounded_String;
+         Folder : constant String := To_String (Home_Path);
+         procedure L (T : String) is begin Append (R, T & ASCII.ESC & "[K" & ASCII.LF); end L;
+      begin
+         Append (R, ASCII.ESC & "[H");
+         L (Msg ("night.t.1", Local_Stamp, Hms (Elapsed)));
+         L (Msg ("night.t.2", Limits_Text, Left_Text));
+         L (Msg ("night.t.3", Size_Text (Size_Now), Growth_Text));
+         L (Msg ("night.t.path", Fx.Tail (Folder, Natural'Min (Folder'Length, 76))));
+         L (Msg ("night.t.4", (if not Running then Msg ("night.t.idle") elsif Cur_Tick > 0
+                               then Msg ("night.t.run", Img (Base_S + Done_N + 1), Img (Cur_Tick), Img (Cur_Goal)) else Msg ("night.t.replay", Img (Base_S + Done_N + 1)))));
+         L (Msg ("night.t.5", Img (Done_N), (if Done_N > 0 then Tenths_Text (Last_Dur) & " s" else "-"), Avg_Text, Ticks_Per_Sec));
+         L (Msg ("night.t.6", To_String (Last_Line)));
+         L (Msg (if Quit_Key then "night.q" else "night.keys"));
+         L ("");
+         for I in Natural'Max (1, Natural (Recent.Length) - 7) .. Natural (Recent.Length) loop L (Recent (I)); end loop;
+         Append (R, ASCII.ESC & "[J");
+         Con.Put (To_String (R));
+         TIO.Flush;
+      end Paint;
+
       Box : Str_Vectors.Vector;
       Wide : Natural := 0;
    begin
       if not Ada.Directories.Exists (Self_Exe) then raise Usage_Error with Msg ("night.err.exe", Self_Exe); end if;
+      Arg ("-c");   --  sh runs the session and leaves its exit status in night_rc.txt: the driver polls that file (a blocking wait would stop the timer)
+      Arg ("""$0"" ""$@"" > night_console.txt 2>&1; echo $? > night_rc.tmp; mv night_rc.tmp night_rc.txt");
+      Arg (Self_Exe);
       Arg ("--home"); Arg (To_String (Home_Path));
       Arg ("--more"); Arg (Img (Per));
-      Arg ("--every"); Arg (Img (if Every > 0 then Every else 100));
+      Arg ("--every"); Arg (Img (Int'Max (1, Per / 10)));   --  progress lines for the timer; they change no file that is verified
       Arg ("--yes");
       if Seed_Opt >= 0 then Arg ("--seed"); Arg (Img (Seed_Opt)); end if;
+      Size0 := Folder_Bytes (".");
+      Size_Now := Size0;
+      Save_Counts (Base_S, Base_T);
+      declare
+         L0 : constant String := Last_Trend;
+      begin
+         if L0 /= "" then Last_Line := To_Unbounded_String (Compact (L0)); end if;
+      end;
+      if Tty_Out then
+         Con.Put (ASCII.ESC & "[2J");
+         Paint (False);
+      else
       Con.Put_Line (Msg ("night.start", Img (Per), (if Max_S = 0 then Msg ("night.none") else Img (Max_S)),
                          (if Max_Secs = 0.0 then Msg ("night.none") else To_String (if Length (Night_Hours) > 0 then Night_Hours else To_Unbounded_String (Img (Limit ("night.max_hours", 12)))))));
       Con.Put_Line (Msg (if Interactive then "night.keys" else "night.nokeys"));
+      end if;
       TIO.Flush;
       Append_Log ("NIGHT", "start: session_ticks=" & Img (Per) & " max_sessions=" & Img (Max_S) & " keys=" & (if Interactive then "q" else "none") & ASCII.LF);
       loop
@@ -4572,17 +4689,44 @@ procedure Diary_Sim is
          end if;
          exit when Length (Why) > 0;
          declare
-            Run : Runner;
+            Pid : GNAT.OS_Lib.Process_Id;
+            OK : Boolean;
+            Tick_N, Grace : Natural := 0;
          begin
-            Job.Start;
-            Run.Go;
-            while not Job.Done loop
-               Poll;
-               if Quit_Key and then not Said_Q then Con.Put_Line (Msg ("night.q")); TIO.Flush; Said_Q := True; end if;
-               delay 0.2;
-            end loop;
+            if Ada.Directories.Exists ("night_rc.txt") then Ada.Directories.Delete_File ("night_rc.txt"); end if;
+            S_Start := Ada.Calendar.Clock;
+            Cur_Tick := 0;
+            Pid := GNAT.OS_Lib.Non_Blocking_Spawn ("/bin/sh", Args (1 .. N_Args));
+            RC := -1;
+            if GNAT.OS_Lib.Pid_To_Integer (Pid) > 0 then
+               while not Ada.Directories.Exists ("night_rc.txt") loop
+                  Poll;
+                  if Quit_Key and then not Said_Q then
+                     if not Tty_Out then Con.Put_Line (Msg ("night.q")); TIO.Flush; end if;
+                     Said_Q := True;
+                  end if;
+                  delay 0.2;
+                  Tick_N := Tick_N + 1;
+                  if Tty_Out and then Tick_N mod 5 = 0 then Refresh; Paint (True); end if;   --  about once a second
+                  if Sim_Quit.Requested then Grace := Grace + 1; end if;
+                  exit when Grace > 150;   --  Ctrl-C and 30 s without an answer: give up
+               end loop;
+               if Ada.Directories.Exists ("night_rc.txt") then
+                  declare
+                     Rc_Lines : Str_Vectors.Vector;
+                     Found : Boolean;
+                  begin
+                     Read_Lines ("night_rc.txt", Rc_Lines, Found);
+                     RC := (if Found and then not Rc_Lines.Is_Empty then Integer'Value (Fx.Trim (Rc_Lines.First_Element, Ada.Strings.Both)) else -1);
+                     GNAT.OS_Lib.Wait_Process (Pid, OK);   --  the shell is finishing: reap it
+                     Ada.Directories.Delete_File ("night_rc.txt");
+                  exception
+                     when others => RC := -1;
+                  end;
+               end if;
+            end if;
+            Last_Dur := Ada.Calendar."-" (Ada.Calendar.Clock, S_Start);
          end;
-         RC := Job.Code;
          if RC /= 0 then
             declare
                Dbg : Str_Vectors.Vector;
@@ -4594,6 +4738,8 @@ procedure Diary_Sim is
             exit;
          end if;
          Done_N := Done_N + 1;
+         Sess_Total := Sess_Total + Last_Dur;
+         if Tty_Out then Refresh; end if;
          declare
             L : constant String := Last_Trend;
             Now : constant String := Local_Stamp;
@@ -4603,14 +4749,22 @@ procedure Diary_Sim is
                Last_S := Natural'Value (Token (L, "session"));
                Last_Tick := Natural'Value (Token (L, "tick"));
                Last_Line := To_Unbounded_String (Compact (L));
-               Con.Put_Line (Msg ("night.status", Token (L, "session"), Token (L, "tick"), Now (12 .. 19), Compact (L)));
+               Recent.Append (Msg ("night.status", Token (L, "session"), Token (L, "tick"), Now (12 .. 19), Compact (L)));
             else
-               Con.Put_Line (Msg ("night.nostatus", Img (Done_N)));
+               Recent.Append (Msg ("night.nostatus", Img (Done_N)));
             end if;
-            TIO.Flush;
+            if Tty_Out then
+               Paint (False);
+            else   --  plain lines: the status line and, below it, the timer figures
+               Con.Put_Line (Recent.Last_Element);
+               Size_Now := Folder_Bytes (".");
+               Con.Put_Line (Msg ("night.plain", Hms (Elapsed), Size_Text (Size_Now), Growth_Text, Avg_Text, Ticks_Per_Sec, Left_Text));
+               TIO.Flush;
+            end if;
          end;
       end loop;
       if Length (Why) = 0 then Why := To_Unbounded_String ("error"); end if;
+      if Tty_Out then Refresh; Paint (False); end if;
       if RC /= 0 then   --  the stop of a session: what its console said (the DRIFT text)
          declare
             Cons : Str_Vectors.Vector;
@@ -4625,6 +4779,8 @@ procedure Diary_Sim is
       Box.Append (Msg ("night.box.why", Msg ("night.why." & To_String (Why))));
       Box.Append (Msg ("night.box.sessions", Img (Done_N), Img (First_S), Img (Last_S), Img (Last_Tick)));
       Box.Append (Msg ("night.box.time", Elapsed_Text (Ada.Calendar."-" (Ada.Calendar.Clock, T0))));
+      Size_Now := Folder_Bytes (".");
+      Box.Append (Msg ("night.box.speed", Avg_Text, Ticks_Per_Sec, Size_Text (Size_Now), Growth_Text));
       if Length (Last_Line) > 0 then Box.Append (Msg ("night.box.last", To_String (Last_Line))); end if;
       Box.Append (Msg ("night.box.files"));
       for L of Box loop Wide := Natural'Max (Wide, L'Length); end loop;
@@ -5126,7 +5282,7 @@ begin
                   Append (Wo, (if E = Entity_Id'First then "" else ",") & Img (Known_Count (E)));
                   Append (Pe, (if E = Entity_Id'First then "" else ",") & Img (Petitions_Of (E)));
                end loop;
-               Append_Trend ("T session=" & Img (Session_N) & " tick=" & Img (Ticks) & " time=" & Local_Stamp & " mood=" & To_String (Mo)
+               Append_Trend ("T session=" & Img (Session_N) & " tick=" & Img (Ticks) & " time=" & Local_Stamp & " elapsed=" & Tenths_Text (Ada.Calendar."-" (Ada.Calendar.Clock, T_Run)) & " size=" & Img (Folder_Bytes (".")) & " mood=" & To_String (Mo)
                              & " energy=" & To_String (En) & " words=" & To_String (Wo) & " pets=" & To_String (Pe) & Sim_Records.Trend
                              & " trials=" & Img (Sim_Trial.Count) & " anomalies=" & Img (Natural (Items.Length)));
             end;

@@ -1627,16 +1627,17 @@ env -u DIARY_VERBOSE "$nb" --continuous --home "$w/nt/night" --session-ticks 60 
 mkdir -p "$w/nt/hand"; for k in 1 2 3; do env -u DIARY_VERBOSE "$nb" --home "$w/nt/hand" --seed 42 --more 60 --every 100 --yes > /dev/null 2>&1; done
 ns=$(grep -c '^s[0-9]* t[0-9]* [0-9][0-9]:[0-9][0-9]:[0-9][0-9] | ' night.txt); nlines=$(wc -l < night.txt)
 [ "$rcn" = 0 ] && [ "$ns" = 3 ] && grep -q '^night run: sessions of 60 ticks; max sessions: 3; max hours: 12' night.txt && grep -q '^+-- night run finished' night.txt && grep -q '^| stopped: the number of sessions was reached' night.txt \
-  && ! grep -q '^@@\|Full report\|^report:\|^treadmill' night.txt && [ "$nlines" -le 14 ] && grep -v '^Save folder\|^Saved to' night.txt | awk 'length > 79 { n++ } END { exit n > 0 }' \
-  && ok "make night, no terminal, MAX_SESSIONS=3: one status line per session (3), a final box, no report spam ($nlines lines, <= 79 columns), exit 0" || bad "night console ($rcn $ns $nlines)"
+  && ! grep -q '^@@\|Full report\|^report:\|^treadmill' night.txt && [ "$nlines" -le 24 ] && [ "$(grep -c "^  [0-9]h[0-9][0-9]m[0-9][0-9]s | .* KB (+.* KB) | .*/session | .* tick/s | left " night.txt)" = 3 ] && grep -v '^Save folder\|^Saved to' night.txt | awk 'length > 79 { n++ } END { exit n > 0 }' \
+  && ok "make night, no terminal, MAX_SESSIONS=3: one status line per session (3) with its timer line (elapsed, save folder size and growth, seconds per session, ticks per second, time left), a final box, no report spam ($nlines lines, <= 79 columns), exit 0" || bad "night console ($rcn $ns $nlines)"
 nsums() { ( cd "$1" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./run_log*|./trend*|./night_console*|./debug*|./last*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
 nsums "$w/nt/night" > ns1.txt; nsums "$w/nt/hand" > ns2.txt
 [ -s ns1.txt ] && cmp -s ns1.txt ns2.txt && ok "three night sessions are byte for byte three hand-made --more 60 runs (diaries, entities, summary, records: $(wc -l < ns1.txt) files)" || bad "night differs from hand runs"
-nt="$w/nt/night/trend.txt"; tp='^T session=[0-9]+ tick=[0-9]+ time=[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} mood=(-?[0-9]+,){3}-?[0-9]+ energy=([0-9]+,){3}[0-9]+ words=([0-9]+,){3}[0-9]+ pets=([0-9]+,){3}[0-9]+ grant=([0-9]+,){3}[0-9]+ refuse=([0-9]+,){3}[0-9]+ agreed=[0-9]+ rejected=[0-9]+ trials=[0-9]+ anomalies=[0-9]+$'
-nt_ok=1; [ "$(grep -c '^T ' "$nt")" = 3 ] && [ "$(grep -cE "$tp" "$nt")" = 3 ] || nt_ok=0; head -1 "$nt" | grep -q '^# trend v1, one line per session, wesen in the order Adam,Eve,Abel,Ruth' || nt_ok=0
+nt="$w/nt/night/trend.txt"; tp='^T session=[0-9]+ tick=[0-9]+ time=[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} elapsed=[0-9]+\.[0-9] size=[0-9]+ mood=(-?[0-9]+,){3}-?[0-9]+ energy=([0-9]+,){3}[0-9]+ words=([0-9]+,){3}[0-9]+ pets=([0-9]+,){3}[0-9]+ grant=([0-9]+,){3}[0-9]+ refuse=([0-9]+,){3}[0-9]+ agreed=[0-9]+ rejected=[0-9]+ trials=[0-9]+ anomalies=[0-9]+$'
+nt_ok=1; [ "$(grep -c '^T ' "$nt")" = 3 ] && [ "$(grep -cE "$tp" "$nt")" = 3 ] || nt_ok=0; head -1 "$nt" | grep -q '^# trend v1, one line per session: time (local), elapsed .* wesen in the order Adam,Eve,Abel,Ruth: mood' || nt_ok=0
 [ "$(grep '^T ' "$nt" | sed -E 's/^T session=([0-9]+) tick=([0-9]+) .*/\1:\2/' | tr '\n' ' ')" = "1:60 2:120 3:180 " ] || nt_ok=0
-diff <(sed 's/ time=[^ ]* [^ ]*//' "$nt") <(sed 's/ time=[^ ]* [^ ]*//' "$w/nt/hand/trend.txt") > /dev/null || nt_ok=0
-[ "$nt_ok" = 1 ] && ok "trend.txt: a legend line, then one fixed key=value line per session (session tick time mood energy words pets grant refuse agreed rejected trials anomalies); a normal run writes the same lines" || bad "trend.txt ($nt_ok)"
+diff <(sed 's/ time=[^ ]* [^ ]* elapsed=[^ ]* size=[^ ]*//' "$nt") <(sed 's/ time=[^ ]* [^ ]* elapsed=[^ ]* size=[^ ]*//' "$w/nt/hand/trend.txt") > /dev/null || nt_ok=0
+sz=($(grep '^T ' "$nt" | sed -E 's/.* size=([0-9]+) .*/\1/')); [ "${sz[0]}" -gt 0 ] && [ "${sz[0]}" -lt "${sz[1]}" ] && [ "${sz[1]}" -lt "${sz[2]}" ] || nt_ok=0
+[ "$nt_ok" = 1 ] && ok "trend.txt: a legend line, then one fixed key=value line per session (session tick time elapsed size mood energy words pets grant refuse agreed rejected trials anomalies); a normal run writes the same lines" || bad "trend.txt ($nt_ok)"
 rl="$w/nt/night/run_log.txt"
 [ "$(grep -c ' RUN$' "$rl")" = 3 ] && grep -q '^[0-9-]* [0-9:]* NIGHT$' "$rl" && grep -q '^start: session_ticks=60 max_sessions=3 keys=none$' "$rl" && grep -q '^stop: reason=max_sessions sessions=3 last_session=3 tick=180 elapsed=0h0[0-9]m$' "$rl" \
   && ok "run_log.txt: a timestamped RUN entry per session and NIGHT start / stop entries (reason, sessions, last tick, elapsed)" || bad "night run_log.txt"
@@ -1662,7 +1663,7 @@ exe, home = sys.argv[1:3]
 pid, fd = pty.fork()
 if pid == 0:
     os.chdir("/")
-    os.execv(exe, [exe, "--continuous", "--home", home, "--session-ticks", "150", "--max-sessions", "40", "--seed", "42"])
+    os.execv(exe, [exe, "--continuous", "--home", home, "--session-ticks", "3000", "--max-sessions", "40", "--seed", "42"])
 out = b""; sent = False; t0 = time.time()
 while time.time() - t0 < 120:
     r, _, _ = select.select([fd], [], [], 0.2)
@@ -1675,7 +1676,7 @@ while time.time() - t0 < 120:
         os.write(fd, b"q"); sent = True
 sys.stdout.write(out.decode("utf-8", "replace"))
 PY
-  qn=$(grep -c 's[0-9]* t[0-9]' q.txt); [ "$qn" -ge 1 ] && [ "$qn" -le 3 ] && grep -q 'stopped: you pressed q' q.txt && [ -s "$w/nt/q/trend.txt" ] && grep -q 'reason=q ' "$w/nt/q/run_log.txt" && ok "q on a terminal (no Enter): the session in progress finishes (sessions: $qn of 40), then the night run stops cleanly" || bad "q key ($qn)"
+  qn=$(grep -c ' RUN$' "$w/nt/q/run_log.txt"); [ "$qn" -ge 1 ] && [ "$qn" -le 12 ] && grep -q 'stopped: you pressed q' q.txt && grep -q 'diary-sim night run | 20' q.txt && grep -q ' save folder .* since the start' q.txt && grep -q ' now: session [0-9]*, ' q.txt && grep -q ' done: [0-9]* sessions | last ' q.txt && [ -s "$w/nt/q/trend.txt" ] && grep -q 'reason=q ' "$w/nt/q/run_log.txt" && ok "q on a terminal (no Enter): the session in progress finishes (sessions: $qn of 40), then the night run stops cleanly; on a terminal the timer header is repainted in place" || bad "q key ($qn)"
 else ok "q key: skipped (no python3 for a pseudo terminal)"; fi
 # make share
 sd="$w/nt/out"; mkdir -p "$sd"; ( export DIARY_HOME="$w/nt/night" SHARE_DIR="$sd"; "$root/scripts/share.sh" "$nb" > share.txt 2>&1 ); sf=$(ls "$sd"/share-* 2> /dev/null | head -1)

@@ -111,8 +111,8 @@ For a run you leave alone and read in the morning, and for the loop *Robert runs
 
 * **`make night`** (`bin/diary_sim --continuous [--session-ticks N] [--max-sessions N] [--max-hours H]`, defaults `night.session_ticks`,
   `night.max_sessions`, `night.max_hours` in `data/limits.txt`; 0 means no limit, `H` may have decimals) runs normal sessions back to back.
-  Every session is a run of the program with `--more N` (its console goes to `night_console.txt` in the save folder, overwritten each
-  time), so each one is exactly what `make run TICKS=N` typed by hand would give: own session, own markers, replay-verified, the same bytes
+  Every session is a run of the program with `--more N`, started through `/bin/sh` (its console goes to `night_console.txt` in the save
+  folder, overwritten each time; its exit status to `night_rc.txt`, which the timer polls so that it keeps running during the session), so each one is exactly what `make run TICKS=N` typed by hand would give: own session, own markers, replay-verified, the same bytes
   in diaries, entities and records (a check compares three night sessions with three hand-made ones). The price: each session replays the
   history first, so the sessions get slower as the save grows (about a millisecond per tick). There is no 'Next run' advice loop: the
   length is `SESSION_TICKS`, and no question is asked. It continues an existing save or starts a new one (`SEED=`); it cannot be combined
@@ -122,8 +122,17 @@ For a run you leave alone and read in the morning, and for the loop *Robert runs
   `MAX_HOURS` (checked between sessions, so a session may end a little after it), and on Ctrl-C or SIGTERM (a session in progress is
   stopped at once and a rerun resumes; the exit status is 130). Without a terminal on stdin (a pipe, `nohup`, cron) the keyboard is not
   read and only the limits and signals stop it, so give `MAX_SESSIONS` or `MAX_HOURS` then.
-* **Console:** a first line (what and how to stop, two lines), ONE line per session (`s17 t5100 02:31:05 | Adam -3/80 Eve 12/60 Abel 5/55 Ruth -20/20`:
-  session, tick, local time, mood/energy of each wesen) and a final box (why it stopped, sessions, time, last values). The full report of
+* **Console, plain (no terminal on stdout, e.g. a file):** two lines at the start, then per session ONE status line
+  (`s17 t5100 02:31:05 | Adam -3/80 Eve 12/60 Abel 5/55 Ruth -20/20`: session, tick, local time, mood/energy of each wesen) with a timer
+  line below it (`  0h12m05s | 4.2 MB (+310 KB) | 8.1 s/session | 58 tick/s | left 11h47m00s`), and a final box (why it stopped, sessions,
+  time, seconds per session, ticks per second, save folder size and growth, last values).
+* **Console, on a terminal: the timer header.** The screen is cleared once; then about once per second the header is repainted in place
+  (ANSI cursor home, the whole block written with one call, so it does not flicker): the local date and time, the time elapsed, the limits
+  and the estimated time left to the nearest one (from the average session), the size of the save folder and its growth since the start,
+  the session in progress with its tick (or 'replaying the history first'), sessions done, the time of the last finished session, the average
+  seconds per session and ticks per second, the mood/energy of the four wesen as of the last finished session, and the key hint; below it the
+  status lines of the last 8 sessions. The final box follows. The header is written by the driver only (the sessions run in their own
+  processes), so it changes no simulation file and costs a directory listing per second. The full report of
   the last session is in `run_report.txt` (the one before in `run_report_prev.txt`) and `run_log.txt` has a timestamped `RUN` entry per
   session plus `NIGHT` entries for the start and the stop (`start: ...`, `stop: reason=q sessions=14 last_session=30 tick=9000
   elapsed=2h10m`; reasons `q`, `signal`, `max_sessions`, `max_hours`, `drift`, `error`). `report.log_keep` is 500 so a night does not
@@ -131,9 +140,10 @@ For a run you leave alone and read in the morning, and for the loop *Robert runs
 * **`trend.txt`** (save folder; every run that adds ticks appends one line, `make night` or not; `report.trend_keep` = 2000 lines stay;
   `make trend` shows the last `report.trend_tail` = 40). First line a `#` legend, then one line per finished session, fixed order:
 
-      T session=3 tick=180 time=2026-10-04 12:14:43 mood=-24,51,67,63 energy=71,49,78,37 words=183,193,189,205 pets=1,1,1,1 grant=1,0,0,1 refuse=0,1,1,0 agreed=0 rejected=2 trials=2 anomalies=0
+      T session=3 tick=180 time=2026-10-04 12:14:43 elapsed=0.4 size=623374 mood=-24,51,67,63 energy=71,49,78,37 words=183,193,189,205 pets=1,1,1,1 grant=1,0,0,1 refuse=0,1,1,0 agreed=0 rejected=2 trials=2 anomalies=0
 
-  `mood`, `energy`, `words` (known words) and `pets` (petitions filed so far) have one number per wesen in the order of the legend
+  `elapsed` is the wall time of that run in seconds (the replay of the history included), `size` the bytes of all files in the save folder
+  at that moment (so growth per session is a difference). `mood`, `energy`, `words` (known words) and `pets` (petitions filed so far) have one number per wesen in the order of the legend
   (Adam,Eve,Abel,Ruth); `grant` and `refuse` one number per player (1 to 4): the petition votes so far, counted from the raw
   `votes.txt`, not from the players' reports (zeros in sessions without `records`); `agreed` and `rejected`: dictionary words so far;
   `trials`: chess trials so far; `anomalies`: the number of entries of the `@@TRACE` anomalies (energy below `report.warn_energy`, mood
