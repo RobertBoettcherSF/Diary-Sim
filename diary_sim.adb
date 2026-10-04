@@ -1,4 +1,4 @@
---  Version: 0.038
+--  Version: 0.039
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -26,7 +26,7 @@ pragma Interrupt_State (SIGINT, USER);
 pragma Interrupt_State (SIGTERM, USER);
 pragma Ada_2022;
 
-with Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
+with Ada.Calendar, Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Finalization, Ada.Strings.Fixed, Ada.Streams.Stream_IO, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
      GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Records, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Trial, Sim_Util, Sim_Visit, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
@@ -92,7 +92,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.038";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.039";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -130,6 +130,7 @@ procedure Diary_Sim is
    Debug_On : Boolean := False;                            --  --debug: write debug_digest.txt (make run DEBUG=1)
    Section_Opt : Unbounded_String;                         --  --debug-section NAME
    Verbose : Boolean := False;                             --  --verbose / DIARY_VERBOSE=1 / make run VERBOSE=1: the whole report on the console as before
+   Runlog_Mode : Boolean := False;                         --  --runlog / make runlog: the last lines of run_log.txt
    Report_Mode : Boolean := False;                         --  --report / make report: print the last run_report.txt of the save folder
    Menu_Opt : Boolean := False;                            --  --menu: show the main menu (make menu)
    Say_Mode, Answer_Mode, Inbox_Mode : Boolean := False;   --  --say / --answer / --inbox
@@ -1508,6 +1509,73 @@ procedure Diary_Sim is
       if Length (Digest_Note) > 0 then Con.Put_Line (To_String (Digest_Note)); end if;
       Con.Put_Line (To_String (Saved_Line));
    end Put_Saved;
+
+   --  run_log.txt (save folder): technical metadata of the runs, kept OFF the console.  One entry per run (and per DRIFT stop), appended,
+   --  each starting with a LOCAL time stamp "YYYY-MM-DD HH:MM:SS LABEL" (Ada.Calendar).  The stamp lives only here: no replay-verified file,
+   --  no diary and no summary ever has a clock in it.  Only the last report.log_keep entries stay.  The log is a nicety: no error stops a run.
+   function Local_Stamp return String is
+      Y : Ada.Calendar.Year_Number;
+      Mo : Ada.Calendar.Month_Number;
+      D : Ada.Calendar.Day_Number;
+      Sec : Ada.Calendar.Day_Duration;
+      function P2 (N : Natural) return String is (Fx.Tail (Img (N), 2, '0'));
+   begin
+      Ada.Calendar.Split (Ada.Calendar.Clock, Y, Mo, D, Sec);
+      declare
+         T : constant Natural := Natural'Min (86_399, Natural (Integer'Max (0, Integer (Sec - 0.5))));
+      begin
+         return Img (Natural (Y)) & "-" & P2 (Natural (Mo)) & "-" & P2 (Natural (D)) & " " & P2 (T / 3600) & ":" & P2 (T mod 3600 / 60) & ":" & P2 (T mod 60);
+      end;
+   end Local_Stamp;
+
+   function Is_Stamp (L : String) return Boolean is
+      function Dig (I : Positive) return Boolean is (L (L'First + I - 1) in '0' .. '9');
+   begin
+      return L'Length >= 20 and then L (L'First + 4) = '-' and then L (L'First + 7) = '-' and then L (L'First + 10) = ' '
+        and then L (L'First + 13) = ':' and then L (L'First + 16) = ':' and then Dig (1) and then Dig (4) and then Dig (6) and then Dig (9)
+        and then Dig (12) and then Dig (15) and then Dig (18) and then Dig (19) and then L (L'First + 19) = ' ';
+   end Is_Stamp;
+
+   procedure Append_Log (Label, Text : String) is
+      Old : Str_Vectors.Vector;
+      Found : Boolean;
+      Entries, Seen : Natural := 0;
+      Keep : constant Natural := Natural (Int'Max (1, Limit ("report.log_keep", 200)));
+      F : TIO.File_Type;
+   begin
+      Read_Lines ("run_log.txt", Old, Found);
+      for L of Old loop if Is_Stamp (L) then Entries := Entries + 1; end if; end loop;
+      TIO.Create (F, TIO.Out_File, "run_log.txt.tmp");
+      for L of Old loop
+         if Is_Stamp (L) then Seen := Seen + 1; end if;
+         if Seen > 0 and then Seen + Keep - 1 > Entries then TIO.Put_Line (F, L); end if;   --  the last Keep - 1 entries stay
+      end loop;
+      TIO.Put (F, Local_Stamp & " " & Label & ASCII.LF & (if Text'Length > 0 and then Text (Text'Last) = ASCII.LF then Text (Text'First .. Text'Last - 1) else Text));
+      TIO.Close (F);   --  Text_IO ends the last line itself
+      if Ada.Directories.Exists ("run_log.txt") then Ada.Directories.Delete_File ("run_log.txt"); end if;
+      Ada.Directories.Rename ("run_log.txt.tmp", "run_log.txt");
+   exception
+      when others => null;
+   end Append_Log;
+
+   --  --runlog: the last report.log_tail lines of run_log.txt
+   procedure Print_Runlog is
+      Lines : Str_Vectors.Vector;
+      Found : Boolean;
+      Tail : constant Natural := Natural (Int'Max (1, Limit ("report.log_tail", 40)));
+   begin
+      Read_Lines ("run_log.txt", Lines, Found);
+      if not Found or else Lines.Is_Empty then
+         TIO.Put_Line (TIO.Standard_Error, Msg ("runlog.none", Ada.Directories.Full_Name ("run_log.txt")));
+         Ada.Command_Line.Set_Exit_Status (2);
+         return;
+      end if;
+      begin
+         for I in Natural'Max (1, Natural (Lines.Length) - Tail + 1) .. Natural (Lines.Length) loop TIO.Put_Line (Lines (I)); end loop;
+      exception
+         when others => null;   --  stdout is a closed pipe (| head)
+      end;
+   end Print_Runlog;
 
    --  --report: print run_report.txt of the save folder (the complete report of the last run); nothing is simulated.
    procedure Print_Report is
@@ -3886,6 +3954,16 @@ procedure Diary_Sim is
       end if;
       if Import_Done then Write_Petitions; end if;
       Write_Debug ("DRIFT", "error: " & Message & (if Built'Length > 0 then ASCII.LF & Msg ("drift.cause", Built) else ""));
+      if Drift then   --  a DRIFT stop writes no report: its time stamped entry in run_log.txt says why
+         declare
+            Flat : String := Message;
+         begin
+            for C of Flat loop if C = ASCII.LF then C := '|'; end if; end loop;
+            Append_Log ("DRIFT", "@@TRACE build=" & Build & " seed=" & Img (Seed) & " result=DRIFT" & ASCII.LF & "reason: " & Flat & ASCII.LF
+                        & (if Built'Length > 0 then "build: " & To_String (Disk_Build) & " on disk, " & Build & " now" & ASCII.LF else "")
+                        & "debug: " & Ada.Directories.Full_Name ("debug.txt") & ASCII.LF);
+         end;
+      end if;
       Con.Put_Line (Msg ("debug.attach"));
       Put_Saved;
       Ada.Command_Line.Set_Exit_Status (1);
@@ -4341,6 +4419,7 @@ begin
          elsif Opt = "--yes" then Yes := True;
          elsif Opt = "--verbose" then Verbose := True;
          elsif Opt = "--report" then Report_Mode := True;
+         elsif Opt = "--runlog" then Runlog_Mode := True;
          elsif Opt = "--home" then Home_Opt := To_Unbounded_String (Val);
          elsif Opt = "--preview" then Preview := True;
          elsif Opt = "--say" then Say_Mode := True; Say_To := To_Unbounded_String (Val);
@@ -4422,11 +4501,14 @@ begin
    end if;
    Menu_Wanted := Menu_Opt or else (Ada.Command_Line.Argument_Count = 0 and then Is_Tty (0) and then Is_Tty (1));
    if Menu_Opt and then not (Is_Tty (0) and then Is_Tty (1)) then raise Usage_Error with Msg ("err.menu_tty"); end if;
-   Resolve_Home (Header => not (Menu_Wanted or else Inbox_Mode or else Map_Mode or else Ledger_Mode or else Grant_Mode or else Veto_Mode or else Challenge_Mode or else Next_Ticks_Mode or else Say_Mode or else Answer_Mode or else Report_Mode or else (Length (Section_Opt) > 0 and then not Preview)));
+   Resolve_Home (Header => not (Menu_Wanted or else Inbox_Mode or else Map_Mode or else Ledger_Mode or else Grant_Mode or else Veto_Mode or else Challenge_Mode or else Next_Ticks_Mode or else Say_Mode or else Answer_Mode or else Report_Mode or else Runlog_Mode or else (Length (Section_Opt) > 0 and then not Preview)));
    Saved_Line := To_Unbounded_String (Msg ("saved", To_String (Home_Path)));
    if Map_Mode then
       Do_Map;
       Con.Put_Line (To_String (Saved_Line));
+      return;
+   elsif Runlog_Mode then   --  make runlog: the last lines of run_log.txt
+      Print_Runlog;
       return;
    elsif Report_Mode then   --  make report: the last run_report.txt as it is (already in display names)
       Print_Report;
@@ -4772,6 +4854,7 @@ begin
             when others => null;   --  the previous report is a nicety
          end;
          Save ("run_report.txt", Trace_Text & Body_T);
+         Append_Log ("RUN", To_String (Trace_Text) & "report: " & Ada.Directories.Full_Name ("run_report.txt") & ASCII.LF);
       end Report_Out;
    begin
       Summarize (Seed, Ticks, Votes_Of, Console, Text, Json);
@@ -4936,15 +5019,13 @@ begin
          Put_Saved;
          if Preport_Active then Put_Frames (Sim_Preport.Boxes (Ticks, Mood_Now, Pets_Now, Next_Extra (Ticks)));
          elsif Next_Active then for X of Next_Extra (Ticks) loop Con.Put_Line (Sim_World.Show (X)); end loop; end if;   --  the last thing Robert sees: the boxes of the players
-      else   --  the short form: entity table, petitions, session lines, the boxes of the players, the marker, the pointer to the full report
+      else   --  the short form: entity table, petitions, session lines, the boxes of the players (no marker and no pointer: the technical lines are in run_log.txt)
          Con.Put (To_String (Unbounded_Slice (Rep, 1, Brief_A)));
          Con.Put (To_String (Unbounded_Slice (Rep, Brief_B + 1, Brief_C)));
          if Length (Fails) > 0 then Con.Put_Line (To_String (Export_Line)); end if;
          if Length (Digest_Note) > 0 then Con.Put_Line (To_String (Digest_Note)); end if;
          if Preport_Active then Put_Frames (Sim_Preport.Boxes (Ticks, Mood_Now, Pets_Now, Next_Extra (Ticks)));
          elsif Next_Active then for X of Next_Extra (Ticks) loop Con.Put_Line (Sim_World.Show (X)); end loop; end if;
-         Con.Put (To_String (Trace_Text));
-         Con.Put_Line (Msg ("report.full", Ada.Directories.Full_Name ("run_report.txt")));
       end if;
    end;
 exception

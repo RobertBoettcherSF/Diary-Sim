@@ -1439,7 +1439,7 @@ for d in a b; do
   cp -r "$idata" "$w/sm/$d/data"; sed -i 's/^chess.enabled = .*/chess.enabled = 1/; s/^govern.enabled = .*/govern.enabled = 1/; s/^trial.enabled = .*/trial.enabled = 1/; s/^screen.enabled = .*/screen.enabled = 1/; s/^robot.enabled = .*/robot.enabled = 1/' "$w/sm/$d/data/limits.txt"
   x="$w/sm/$d/bin/diary_sim"; [ $d = b ] && x="$w/sm/$d/bin/diary_sim_small"
   mkdir -p "$w/sm/$d/h"; ( cd "$w/sm/$d" && export DIARY_HOME="$w/sm/$d/h" && { "$x" --seed 42 --ticks 400 --yes --every 5000; "$x" --more 200 --every 5000; "$x" --trials; "$x" --elo; "$x" --govern; "$x" --more 0 --every 5000 --debug-section run; } 2>&1 | sed "s#$w/sm/$d/h#H#g" > "$w/sm/$d/out.txt" )
-  ( cd "$w/sm/$d/h" && find . -type f | sort | while read -r f; do case $f in ./debug*|./last*|./run_report*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done > "$w/sm/$d/files.txt" )
+  ( cd "$w/sm/$d/h" && find . -type f | sort | while read -r f; do case $f in ./debug*|./last*|./run_report*|./run_log*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done > "$w/sm/$d/files.txt" )
 done
 [ -s "$w/sm/a/out.txt" ] && cmp -s "$w/sm/a/out.txt" "$w/sm/b/out.txt" && cmp -s "$w/sm/a/files.txt" "$w/sm/b/files.txt" && grep -q '^T[0-9]' "$w/sm/a/out.txt" && ok "the small binary gives the same console output and byte-identical diaries / entities / reports as the dev build ($(wc -l < "$w/sm/a/files.txt") files compared; trials, Elo, governance included)" || bad "small vs dev output"
 ( cd "$w/sm/src" && make footprint > "$w/sm/fp.txt" 2>&1 ); grep -q '^source  : ' "$w/sm/fp.txt" && grep -q '^data    : ' "$w/sm/fp.txt" && grep -q '^binary  : bin/diary_sim_small ' "$w/sm/fp.txt" && grep -q '^units   : ' "$w/sm/fp.txt" && grep -q '^runtime : ' "$w/sm/fp.txt" && ok "make footprint prints source, data, binary (stripped / debug share), per-unit and runtime sizes" || bad "footprint"
@@ -1556,7 +1556,7 @@ sed -i 's/^govern.enabled = .*/govern.enabled = 1/; s/^trial.enabled = .*/trial.
 [ "$(grep -c '^S[0-9].* records=1' "$w/rq/q0/h/diaries/sessions.txt")" = 2 ] && ! grep -q 'records=2' "$w/rq/q0/h/diaries/sessions.txt" && [ ! -e "$w/rq/q0/h/diaries/ballots.txt" ] && ok "rec.quality = 0: sessions stay records=1 (the earlier rules), no ballots" || bad "rec.quality = 0"
 grep -q 'rec.quality' "$root/data/limits.txt" && grep -q 'rec.mean_cooldown' "$root/data/limits.txt" && grep -q 'records=2' "$root/README.md" && grep -q 'records=2' "$root/data/help.txt" && ok "README, --help and data/limits.txt describe records=2, rec.quality and rec.mean_cooldown" || bad "docs for records=2"
 
-echo "== 48. console: short form by default, complete run_report.txt, @@TRACE marker, VERBOSE=1 = the old output, make report =="
+echo "== 48. console: short form by default (no markers, no pointer), run_report.txt complete, run_log.txt entries, VERBOSE=1 = the old output, make report, make runlog =="
 rm -rf "$w/sh"; mkdir -p "$w/sh/bin"; cp "$bin" "$w/sh/bin/"; cp -r "$root/data" "$w/sh/data"
 sh_run() {   # sh_run HOME 'env prefix' args...: the same two sessions (seed 42, 300 + 200 ticks)
   h=$1; pre=$2; shift 2; mkdir -p "$w/sh/$h"
@@ -1569,24 +1569,33 @@ sh_run envv DIARY_VERBOSE=1
 cd "$w/sh/short" || exit 1
 tl=$(sed -n '/^report: /,$p' c1.txt | wc -l); tl2=$(sed -n '/^report: /,$p' c2.txt | wc -l)
 grep -q '^entity .*mood energy' c1.txt && [ "$(grep -c '^\(Adam\|Eve\|Abel\|Ruth\) .* | ' c1.txt)" -ge 4 ] && grep -q '^petitions [0-9]* filed' c1.txt && grep -q '^session 1 ' c1.txt && grep -q '^+-- The players report' c1.txt \
-  && tail -1 c1.txt | grep -q '^Full report: .*run_report.txt  (make run VERBOSE=1 or make report to print it)$' && ! grep -q '^chess games\|^treadmill\|^recovery since\|^screens (' c1.txt \
-  && [ "$tl" -le 45 ] && [ "$tl2" -le 45 ] && ok "default console: entity table, petitions, session lines, the players' boxes, the pointer last; $tl lines after 'report:' (<= 45), no chess/treadmill/recovery/screens blocks" || bad "default tail ($tl $tl2)"
-mk1=$(grep -c '^@@TRACE ' c1.txt); mk2=$(grep -c '^@@SECTIONS ' c1.txt)
+  && ! grep -q '^@@\|^Full report\|run_report.txt\|run_log.txt' c1.txt c2.txt && tail -1 c1.txt | grep -q '[^ ]' && ! grep -q '^chess games\|^treadmill\|^recovery since\|^screens (' c1.txt \
+  && [ "$tl" -le 45 ] && [ "$tl2" -le 45 ] && ok "default console: entity table, petitions, session lines, the players' boxes, no @@ marker and no pointer; $tl lines after 'report:' (<= 45), no chess/treadmill/recovery/screens blocks" || bad "default tail ($tl $tl2)"
 pat='^@@TRACE build=[0-9]+\.[0-9]{3} seed=[0-9]+ session=[0-9]+ ticks=[0-9]+\.\.[0-9]+ anomalies=(none|[0-9]+\[[^] ]*\]) files=[^ ]+$'
-c_ok=1; for f in c1.txt save/run_report.txt; do grep -E "$pat" "$f" > /dev/null || c_ok=0; grep -E '^@@SECTIONS ([a-z]+=[0-9]+,)*[a-z]+=[0-9]+$' "$f" > /dev/null || c_ok=0; done
-head -1 save/run_report.txt | grep -q '^@@TRACE ' && sed -n 2p save/run_report.txt | grep -q '^@@SECTIONS ' && diff <(grep '^@@' c2.txt) <(head -2 save/run_report.txt) > /dev/null
-[ "$mk1" = 1 ] && [ "$mk2" = 1 ] && [ "$c_ok" = 1 ] && [ $? = 0 ] && ok "@@TRACE (build seed session ticks anomalies files) and @@SECTIONS are one parseable line each, the same on the console and as the first two lines of run_report.txt" || bad "marker ($mk1 $mk2 $c_ok)"
+c_ok=1; grep -E "$pat" save/run_report.txt > /dev/null || c_ok=0; sed -n 2p save/run_report.txt | grep -E '^@@SECTIONS ([a-z]+=[0-9]+,)*[a-z]+=[0-9]+$' > /dev/null || c_ok=0
+head -1 save/run_report.txt | grep -q '^@@TRACE ' && sed -n 2p save/run_report.txt | grep -q '^@@SECTIONS ' || c_ok=0
+[ "$c_ok" = 1 ] && ok "@@TRACE (build seed session ticks anomalies files) and @@SECTIONS are one parseable line each, lines 1-2 of run_report.txt (not on the console)" || bad "marker ($c_ok)"
+# run_log.txt: one entry per run, a local time stamp first, then the two marker lines and the path of the report
+nst=$(grep -c '^[0-9]\{4\}-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9] RUN$' save/run_log.txt); nl=$(wc -l < save/run_log.txt)
+sfx=$(date +%F); l_ok=1; [ "$(sed -n 1p save/run_log.txt | cut -c1-10)" = "$sfx" ] || [ "$(sed -n 1p save/run_log.txt | cut -c1-10)" = "$(date -d yesterday +%F)" ] || l_ok=0
+[ "$(sed -n 2p save/run_log.txt)" != "" ] && [ "$(sed -n 5p save/run_log.txt | cut -c21-23)" = RUN ] || l_ok=0
+{ sed -n 2,3p save/run_log.txt; sed -n 6,7p save/run_log.txt; } > "$w/sh/lg.txt"; sed -n 2p "$w/sh/lg.txt" | grep -q '^@@SECTIONS ' && sed -n 4p "$w/sh/lg.txt" | grep -q '^@@SECTIONS ' || l_ok=0
+sed -n 4p save/run_log.txt | grep -q "^report: .*/save/run_report.txt$" && sed -n 8p save/run_log.txt | grep -q "^report: .*/save/run_report.txt$" || l_ok=0
+cmp -s <(sed -n 6,7p save/run_log.txt) <(head -2 save/run_report.txt) || l_ok=0
+[ "$nst" = 2 ] && [ "$nl" = 8 ] && [ "$l_ok" = 1 ] && ok "run_log.txt: one entry per run (2), each 'YYYY-MM-DD HH:MM:SS RUN', the @@TRACE and @@SECTIONS lines (the same as run_report.txt lines 1-2) and 'report: <path>'" || bad "run_log.txt ($nst $nl $l_ok)"
+# the clock is only in run_log.txt: no replay-verified file has the date in it
+! grep -rl "$(date +%Y-%m-%d)" save --include='*.txt' 2> /dev/null | grep -v 'run_log.txt\|debug\|last_error' | grep -q . && ok "the time stamp is only in run_log.txt (no entity, summary, report or diary-record file carries it; only the jsonl "ts" fields, as before)" || bad "clock in a sim file"
 badsec=0; for pr in $(sed -n 2p save/run_report.txt | sed 's/^@@SECTIONS //; s/,/ /g'); do n=${pr%%=*}; l=${pr##*=}; [ "$(sed -n "${l}p" save/run_report.txt)" = "== $n ==" ] || badsec=$((badsec + 1)); done
 nsec=$(sed -n 2p save/run_report.txt | tr ',' '\n' | wc -l); nh=$(grep -c '^== [a-z]* ==$' save/run_report.txt)
 [ "$badsec" = 0 ] && [ "$nsec" = "$nh" ] && [ "$nsec" -ge 12 ] && ok "section headers: every '== name ==' line is where @@SECTIONS says ($nsec sections)" || bad "sections ($badsec $nsec $nh)"
 # complete: everything the verbose console prints is in run_report.txt, and so is every line of the short form
 sed -n '/^report: /,$p' ../flag/c2.txt | sed 's#/sh/[a-z]*/#/sh/X/#g' > "$w/sh/vtail.txt"; grep -v '^== \|^@@' save/run_report.txt | sed 's#/sh/[a-z]*/#/sh/X/#g' > "$w/sh/rr.txt"
-miss=$(grep -vxF -f "$w/sh/rr.txt" "$w/sh/vtail.txt" | grep -v '^$' | wc -l); miss2=$(sed -n '/^report: /,$p' c2.txt | grep -v '^@@\|^Full report: ' | grep -vxF -f "$w/sh/rr.txt" | grep -v '^$' | wc -l)
+miss=$(grep -vxF -f "$w/sh/rr.txt" "$w/sh/vtail.txt" | grep -v '^$' | wc -l); miss2=$(sed -n '/^report: /,$p' c2.txt | grep -vxF -f "$w/sh/rr.txt" | grep -v '^$' | wc -l)
 vl=$(wc -l < "$w/sh/vtail.txt")
 [ "$miss" = 0 ] && [ "$miss2" = 0 ] && [ "$vl" -gt 100 ] && grep -q '^== chess ==' save/run_report.txt && grep -q '^== ledger ==' save/run_report.txt && ok "run_report.txt is complete: every line of the verbose console ($vl lines) and of the short form is in it" || bad "run_report.txt incomplete ($miss $miss2 $vl)"
 # --verbose and DIARY_VERBOSE=1 print the old whole report; the simulation is untouched by any of it
 nrm() { sed 's#/sh/[a-z]*/#/sh/X/#g' "$1"; }
-sums() { ( cd "$1/save" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./debug*|./last*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
+sums() { ( cd "$1/save" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./run_log*|./debug*|./last*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
 diff <(nrm ../flag/c1.txt) <(nrm ../envv/c1.txt) > /dev/null && diff <(nrm ../flag/c2.txt) <(nrm ../envv/c2.txt) > /dev/null && grep -q '^chess games' ../flag/c1.txt && grep -q '^treadmill' ../flag/c1.txt && grep -q '^please attach debug.txt' ../flag/c1.txt && ! grep -q '^@@TRACE\|^Full report:' ../flag/c1.txt \
   && ok "--verbose = DIARY_VERBOSE=1: the whole report as before (no marker, no pointer), $vl lines after 'report:'" || bad "verbose output"
 sums "$w/sh/short" > "$w/sh/s1.txt"; sums "$w/sh/flag" > "$w/sh/s2.txt"; sums "$w/sh/envv" > "$w/sh/s3.txt"
@@ -1594,9 +1603,22 @@ sums "$w/sh/short" > "$w/sh/s1.txt"; sums "$w/sh/flag" > "$w/sh/s2.txt"; sums "$
 [ -s save/run_report_prev.txt ] && head -1 save/run_report_prev.txt | grep -q 'session=1 ' && head -1 save/run_report.txt | grep -q 'session=2 ' && ok "the previous report is kept as run_report_prev.txt (session 1) beside the new one (session 2)" || bad "run_report_prev.txt"
 ( export DIARY_HOME="$w/sh/short/save"; env -u DIARY_VERBOSE "$w/sh/bin/diary_sim" --report > rep.txt 2>&1; rcr=$?; cmp -s rep.txt save/run_report.txt && [ "$rcr" = 0 ] ) && ok "--report prints the last run_report.txt unchanged" || bad "--report"
 ( mkdir -p "$w/sh/empty"; export DIARY_HOME="$w/sh/empty/none"; env -u DIARY_VERBOSE "$w/sh/bin/diary_sim" --report > rep2.txt 2>&1; [ $? = 2 ] && grep -q 'no run_report.txt' rep2.txt ) && ok "--report without a run says so (exit 2)" || bad "--report without a run"
+( export DIARY_HOME="$w/sh/short/save"; env -u DIARY_VERBOSE "$w/sh/bin/diary_sim" --runlog > rl.txt 2>&1; rcl=$?; cmp -s rl.txt save/run_log.txt && [ "$rcl" = 0 ] ) && ok "--runlog (make runlog) prints run_log.txt (here 8 lines, at most 40)" || bad "--runlog"
+( export DIARY_HOME="$w/sh/empty/none"; env -u DIARY_VERBOSE "$w/sh/bin/diary_sim" --runlog > rl2.txt 2>&1; [ $? = 2 ] && grep -q 'no run_log.txt' rl2.txt ) && ok "--runlog without a run says so (exit 2)" || bad "--runlog without a run"
+# growth cap: report.log_keep entries stay; make runlog shows the last report.log_tail lines
+rm -rf "$w/sh/cap"; mkdir -p "$w/sh/cap/bin"; cp "$bin" "$w/sh/cap/bin/"; cp -r "$root/data" "$w/sh/cap/data"; sed -i 's/^report.log_keep = .*/report.log_keep = 3/; s/^report.log_tail = .*/report.log_tail = 5/' "$w/sh/cap/data/limits.txt"
+( cd "$w/sh/cap" || exit 1; export DIARY_HOME="$w/sh/cap/save"; env -u DIARY_VERBOSE bin/diary_sim --seed 42 --ticks 100 --yes --every 100 > c.txt 2>&1; for n in 20 20 20 20; do env -u DIARY_VERBOSE bin/diary_sim --more $n --every 100 > c.txt 2>&1; done; env -u DIARY_VERBOSE bin/diary_sim --runlog > rl.txt 2>&1 )
+cs=$(grep -c ' RUN$' "$w/sh/cap/save/run_log.txt"); first=$(head -1 "$w/sh/cap/save/run_log.txt" | grep -c ' RUN$')
+[ "$cs" = 3 ] && [ "$first" = 1 ] && [ "$(wc -l < "$w/sh/cap/save/run_log.txt")" = 12 ] && [ "$(wc -l < "$w/sh/cap/rl.txt")" = 5 ] && grep -q 'ticks=141\.\.160' "$w/sh/cap/save/run_log.txt" && ! grep -q 'ticks=1\.\.100' "$w/sh/cap/save/run_log.txt" && ok "run_log.txt keeps the last report.log_keep entries (3 of 5 runs, the oldest dropped); --runlog shows the last report.log_tail lines (5)" || bad "log cap ($cs $first)"
+# a DRIFT stop writes no report, but a time stamped entry with its reason
+rm -rf "$w/sh/dr"; mkdir -p "$w/sh/dr"; cp -r "$w/sh/short/save" "$w/sh/dr/save"; cp "$w/sh/short/save/run_log.txt" "$w/sh/dr/log_before.txt"
+( cd "$w/sh/dr" || exit 1; export DIARY_HOME="$w/sh/dr/save"; sed -i '/^S1 /s/votes=[0-9]*/votes=7/' save/diaries/sessions.txt; env -u DIARY_VERBOSE "$w/sh/bin/diary_sim" --more 10 --every 100 > c.txt 2>&1; echo $? > rc.txt )
+dn=$(grep -c ' DRIFT$' "$w/sh/dr/save/run_log.txt")
+[ "$(cat "$w/sh/dr/rc.txt")" = 1 ] && [ "$dn" = 1 ] && [ "$(grep -c ' RUN$' "$w/sh/dr/save/run_log.txt")" = 2 ] && grep -q '^[0-9]\{4\}-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9] DRIFT$' "$w/sh/dr/save/run_log.txt" \
+  && grep -q '^reason: .*sessions.txt S1' "$w/sh/dr/save/run_log.txt" && grep -q '^@@TRACE build=.* result=DRIFT$' "$w/sh/dr/save/run_log.txt" && ! grep -q '^@@' "$w/sh/dr/c.txt" && ok "a DRIFT stop appends a time stamped DRIFT entry (reason, build, debug.txt path) to run_log.txt; the earlier entries stay; nothing technical on the console" || bad "DRIFT entry ($dn)"
 anom=$(head -1 save/run_report.txt | sed -E 's/.* anomalies=([^ ]*) .*/\1/')
 [ "$anom" != none ] && echo "$anom" | grep -Eq '^[0-9]+\[(energy<25|mood<-50|warnings|export-failed)' && ok "anomalies are listed as information ($anom): energy below 25, mood below -50, warnings, a failed export" || bad "anomalies ($anom)"
-grep -q 'make report' "$root/Makefile" && grep -q 'VERBOSE' "$root/Makefile" && grep -q -- '--verbose' "$root/data/help.txt" && grep -q -- '--report' "$root/data/help.txt" && grep -q '@@TRACE' "$root/README.md" && grep -q 'report.warn_energy' "$root/data/limits.txt" && ok "README, Makefile, --help and data/limits.txt describe the short console, VERBOSE=1, make report and the marker" || bad "docs for the report"
+grep -q 'make runlog' "$root/Makefile" && grep -q -- '--runlog' "$root/data/help.txt" && grep -q 'run_log.txt' "$root/README.md" && grep -q 'report.log_keep' "$root/data/limits.txt" && grep -q 'make report' "$root/Makefile" && grep -q 'VERBOSE' "$root/Makefile" && grep -q -- '--verbose' "$root/data/help.txt" && grep -q -- '--report' "$root/data/help.txt" && grep -q '@@TRACE' "$root/README.md" && grep -q 'report.warn_energy' "$root/data/limits.txt" && ok "README, Makefile, --help and data/limits.txt describe the short console, VERBOSE=1, make report and the marker" || bad "docs for the report"
 
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="

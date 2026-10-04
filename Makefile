@@ -1,4 +1,4 @@
-# Version: 0.031
+# Version: 0.032
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -9,10 +9,12 @@
 #                 session length (data/kalpas.txt, median); SEED only matters when there
 #                 are no diaries yet, default 42; without diaries a terminal is asked first, YES=1 answers
 #                 yes, see README)
-#                 The console shows a SHORT form (entity table, petitions, session lines, the players' boxes, a @@TRACE marker and the
-#                 path of the full report); run_report.txt in the save folder always has everything.  VERBOSE=1 (or --verbose, or
+#                 The console shows a SHORT form (entity table, petitions, session lines, the players' boxes; it ends there, no
+#                 marker and no path); run_report.txt in the save folder always has everything and run_log.txt gets one time
+#                 stamped entry per run (the @@TRACE and @@SECTIONS lines and the path of the report).  VERBOSE=1 (or --verbose, or
 #                 DIARY_VERBOSE=1 in the environment) prints it all as before.
 # make report     print the last run_report.txt of the save folder (the full report, with `== name ==` headers and the @@TRACE marker)
+# make runlog     show the last 40 lines of run_log.txt (one entry per run and per DRIFT stop, newest last)
 # make play       the same as make run
 # make menu       build, then the main menu (needs a terminal): Conway intro, DIARY title, New Game /
 #                 Load Game / Inbox / Settings / Quit.  The bare program on a terminal does the same.
@@ -79,7 +81,7 @@ OPT ?= -O0
 JOBS ?= -j0
 FLAGS = -g $(OPT) -gnatwa -gnat2022 -gnata $(JOBS)
 
-.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report small footprint
+.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog small footprint
 export WESEN PLAYER TEXT AS
 
 EVERY ?= 100
@@ -146,6 +148,9 @@ ballots: all
 
 report: all
 	bin/diary_sim --report
+
+runlog: all
+	bin/diary_sim --runlog
 
 perft: all
 	bin/diary_sim --perft

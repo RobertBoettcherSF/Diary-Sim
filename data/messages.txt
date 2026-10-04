@@ -61,7 +61,7 @@ report.export = export OK: diaries/ {1} files, {2} lines | entities/ {3} files |
 export.failed = export FAILED:{1}
 crash.paste = wrote last_error.txt, please paste it (short version: attach debug.txt)
 crash.backup = back up diaries/ before the next run
-report.full = Full report: {1}  (make run VERBOSE=1 or make report to print it)
+runlog.none = no run_log.txt in {1}: make run first
 report.none = no run_report.txt in {1}: make run first
 debug.attach = please attach debug.txt (max 1500 bytes) to your message; run_report.txt is the long version
 debug.ticks = ticks {1}..{2} ({3} this run), resumed from {4}

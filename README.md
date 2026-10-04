@@ -72,22 +72,28 @@ so the action table and all existing dice are untouched and old diaries stay val
 difference is DRIFT), shown on the console (`words vote (session 3): Adam city | ...`), in
 `run_report.txt`, `debug.txt` and on the menu.
 
-## The console and `run_report.txt` (`make report`, `VERBOSE=1`)
+## The console, `run_report.txt` and `run_log.txt` (`make report`, `make runlog`, `VERBOSE=1`)
 
 A run writes the complete report to `run_report.txt` in the save folder (always; the previous one is kept as `run_report_prev.txt`)
 and shows only the end of it on the console: the progress lines, `report:` with the entity table, the petitions line, the per-wesen
-session lines, the players' report boxes, the `@@TRACE` marker and the path (`Full report: <path>  (make run VERBOSE=1 or make report to
-print it)`); about 40 lines. `make run VERBOSE=1` (`--verbose`, or `DIARY_VERBOSE=1` in the environment, which the checks use) prints
+session lines, the players' report boxes (and 'Next run' advice); about 40 lines. It ends there: no marker line and no technical
+metadata. `make run VERBOSE=1` (`--verbose`, or `DIARY_VERBOSE=1` in the environment, which the checks use) prints
 everything as before, `make report` (`--report`) prints the last `run_report.txt`. Nothing but console and report text changes: the
 diaries, entities and summary files are byte for byte the same.
 
 * **Sections:** `run_report.txt` has a header line `== name ==` before each block (import, report, actions, petitions, session,
   treadmill, recovery, screens, chess, robot, governance, grants, words, dharma, inbox, export, votes, ledger, tail), so
   `grep -n '^== ' run_report.txt` is an index.
-* **Marker** (for people and for tools; the idea of the stack trace in `last_error.txt`): two lines, the first two of `run_report.txt` and the
-  last two before the pointer on the console:
+* **`run_log.txt`** (save folder, next to `run_report.txt`; `make runlog` shows its last 40 lines): one entry appended per run, each starting
+  with a local time stamp (`YYYY-MM-DD HH:MM:SS RUN`, from `Ada.Calendar`), then the `@@TRACE` line, the `@@SECTIONS` line and
+  `report: <path of run_report.txt>`. A DRIFT stop (which writes no report) appends `YYYY-MM-DD HH:MM:SS DRIFT` with `@@TRACE ... result=DRIFT`,
+  `reason:` and the `debug.txt` path. Only the last `report.log_keep` (200) entries stay (`data/limits.txt`; `report.log_tail` = 40 lines for
+  `make runlog`). The clock is only in this file: diaries, entities, summaries and the report carry no time of day, so they stay byte for
+  byte reproducible.
+* **Marker** (for people and for tools; the idea of the stack trace in `last_error.txt`): two lines, the first two of `run_report.txt` and
+  the two lines of each `run_log.txt` entry, never on the console unless `VERBOSE=1` shows the report:
 
-      @@TRACE build=0.038 seed=42 session=2 ticks=301..500 anomalies=2[mood<-50:Adam,energy<25:Ruth] files=run_report.txt,debug.txt,...
+      @@TRACE build=0.039 seed=42 session=2 ticks=301..500 anomalies=2[mood<-50:Adam,energy<25:Ruth] files=run_report.txt,debug.txt,...
       @@SECTIONS import=3,report=7,actions=14,petitions=20,session=22,treadmill=28,recovery=39,screens=45,chess=55,robot=97,...
 
   `anomalies` is `none` or `count[first three]`: energy below `report.warn_energy` (25) or mood below `report.warn_mood` (-50) at the end
