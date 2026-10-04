@@ -1,12 +1,15 @@
-# Life in the station: roles, life support, leisure (design only, nothing built)
+# Life in the station: roles, companies, life support, leisure (design only, nothing built)
+Version: 0.003
 
 Status: **proposal for Robert**. No code for any of this exists yet; every number below is a *proposed default* that
-lives in `data/` when built, and every decision is open until Robert answers section 9 (and 6.9). Style as `docs/WORLD.md`: what it is,
+lives in `data/` when built, and every decision is open until Robert answers section 9 (and 6.9), except the exhaustion rule (2.6), which is a rule. Style as `docs/WORLD.md`: what it is,
 what it is made of, what is recorded. (`docs/MVP.md` does not exist in this tree; this follows `docs/WORLD.md`.)
+Amendment of Robert (this version): each player owns a **company** with departments; players create **positions** that wesen fill; the
+"hard work" the wesen petition about becomes the terms of a position; energy and exhaustion tracking is a **hard constraint** (2.4 to 2.6).
 
 ## Contents
 1. Where we start (facts of the present build)
-2. Roles and population (`roles=1`)
+2. Roles and population (`roles=1`), companies, departments and positions (`company=1`, 2.4), the exhaustion rule (`exhaust=1`, 2.6)
 3. Life support: water, air, temperature, power, maybe food (`life=1`)
 4. Leisure and spare time (`leisure=1`)
 5. How the three interlock
@@ -26,7 +29,7 @@ what it is made of, what is recorded. (`docs/MVP.md` does not exist in this tree
   a session marker (`chess=1`) and "marker off = byte-identical".
 * Robert's save: tick 3400, session 10, v0.034. All three features would start with the **next new session**, no `--fresh`.
 
-## 2. Roles and population (`roles=1`)
+## 2. Roles, population, companies and exhaustion (`roles=1`, `company=1`, `exhaust=1`)
 
 ### 2.1 Roles are data (`data/roles.txt`)
 A role = id, display word, what it does (a *shift duty* or none), how many are *needed* for N wesen, and a lean on the action table.
@@ -48,11 +51,15 @@ Proposed set (13; the first four exist today as words):
 A role changes only **weights** (`role.<id>.lean.<action> = +n`, same device as the rest model's `Work_Pct`), never the dice
 themselves: the wesen still chooses by hash dice, so a water engineer works more but is not a robot. A role also gives the
 duty a *quota*: `duty.ticks` of the day (3.2) it will do the maintenance job if it is not too tired.
+With companies (2.4) a role is the **qualification** a position asks for: `data/roles.txt` rows get a `dept` link (water engineer, air
+technician, power operator, heating keeper, caretaker -> maintenance; cook, librarian / host, masseur -> hospitality), and the title of the
+position a wesen holds is what the texts call its role (6.7 `{role_word}`). A wesen without a position keeps the role it has.
 
 ### 2.2 Vacancy, then birth
 * Each session boundary (the `E` of the end report, before the next session's tick 1) a **vacancy list** is computed from data:
   for every role, `needed(population) - filled`. Needs come from the services (3) and the leisure sites that exist (4), so the
-  list is a pure function of the replayed state.
+  list is a pure function of the replayed state. **Open positions (2.4) count as vacancies** of the role their department links to (so a
+  player that opens positions it cannot fill lets the station grow, inside the same birth rule).
 * **Birth rule** (`pop.birth_*`): at most `pop.births_per_session` (1) wesen are born per session boundary, only if
   (a) a vacancy exists, (b) beds `<` housing (`pop.beds`, data: 6 at the start, more when a *home* cell is added), (c) every
   service has headroom: `load <= capacity * pop.headroom_pct` (3.1), (d) `pop.cooldown` sessions since the last birth. Which
@@ -75,9 +82,82 @@ duty a *quota*: `duty.ticks` of the day (3.2) it will do the maintenance job if 
 * **Retires** after `pop.service_sessions` (e.g. 25) sessions of service: a slot-age rule, same record, gentle.
 * **Dies:** by age, accident or disease under the being model (6.5, `bio=1`); or, without it, only if `life.lethal = 1` (default 0) and a service has been `out` for `life.lethal_ticks` while the wesen's energy
   is 0: a record `R<n> ... cause=<water|air|heat>`. Not in the first steps (question 3).
-* **After leaving:** diary file stays (history), entry stays in the roster as `gone` (the ledger, Elo list and trial lines keep
+* **After leaving:** a held position is released (`O` kind=left, 2.4); diary file stays (history), entry stays in the roster as `gone` (the ledger, Elo list and trial lines keep
   their name), the chess Elo of a gone wesen is frozen, its open petitions are closed as `lapsed`, its watcher is freed, its
   beds/duty are freed. Ids and slot numbers are never given again.
+
+### 2.4 Companies, departments and positions (`company=1`; amendment of Robert)
+Robert: *"The Players each have companies. They create Positions which Wesen can fill. That would be the 'hard work' they are discussing. Each
+would have a different department as in warehousing and acquisition etc."*
+* **A company per player.** Each of the four players owns exactly one company (a name from `data/companies.txt`, planned: one row per
+  owner id with 3 or 4 name candidates, e.g. placeholder names such as "Harbour Works" or "Lantern Supply", Robert replaces them freely).
+  A company is a stored fact like a birth: a record `Q<n>` in `diaries/companies.txt` (`Sim_Store`, replay-verified): `Q1 t= id=<company>
+  owner=iris name=... depts=warehousing,records,hospitality h=`. It is part of the player's being record (`roles`, 6.1).
+* **Departments.** `data/departments.txt` (planned) lists the departments of the world, each with id, display word, a linked role (2.1),
+  the skill kind a position there asks for, and default energy cost, pay and hours. Proposed list (placeholders): **warehousing,
+  acquisition, maintenance, records, hospitality**, plus a few more (workshop, kitchen, transport) so that the mixes can differ. At
+  genesis each company gets **3 to 5 departments** (`company.depts_min = 3`, `company.depts_max = 5`) picked from the list by `Pick60`; the four mixes must be
+  **distinct** (a re-roll up to `company.reroll` times, then a forced swap of one department), so every player's "hard work" sounds different.
+* **A Position** is a job slot in one department of one company: `department, title (data list per department), skill need (kind + minimum
+  0 .. 100), energy cost per shift (bounded, 3 .. 40), pay (credits per shift, 0 .. 5, the spare-time credits of 4.3), hours (shift length in
+  ticks and shifts per day, 2.5)`. A player **creates** positions at a session boundary (`company.positions_per_session`, default 1; at most
+  `company.max_positions`, default 4 per company, so 16 positions can exist for at most 12 wesen and some stay open on purpose). What it opens
+  follows its company's departments, its traits and what its wesen petition about (2.5). Own salts **15000 .. 15399**.
+* **Wesen fill positions by application.** A wesen without one applies at the boundary (and when a position opens) with a hash roll weighted
+  by skill, energy, mood and the role it has; an application is a **petition-like line** in the petitions file already built
+  (`diaries/petitions.txt`: topic `apply_<department>`, lever `position`). The **player decides** (accept, defer, refuse) with the same
+  machinery as the four levers (trust, standing, personality, an announcement may weigh a little), and the decision is a vote line
+  (`votes.txt`, `kind=position`, the weight and standing as for petitions). The four-lever governance (`rate cool work quick`, `D` records)
+  **stays exactly as it is**; a position is a **fifth, separate decision type** (it creates or changes a job, not a global rule).
+* **Record of positions: `diaries/positions.txt`** (planned, `Sim_Store`, replay-verified, a changed, invented or removed line is DRIFT):
+  `O<n> t= s= pos=<id> company=<id> dept= title= kind=opened|applied|filled|declined|terms|left|closed player= wesen= need= cost= pay= hours= why=<reason code> h=`.
+  One line per event, so the whole life of a job can be read in order; the application and the decision also appear in the petitions and
+  votes files (one line each, same ids). `make divergence` gets a section for the positions (what the player reported against what it did).
+* **What a position does for the wesen:** while it holds one, a wesen's `Choose` is leaned to its shift (a *shift duty* as in 2.1: during
+  its shift ticks it works the position's task), it pays the position's **energy cost** per shift (through the one energy point of 2.6),
+  earns its pay, and the position's department output is counted (a number per day: items stored, items bought, repairs, records kept,
+  guests served; no trade between companies in the first release, question 16). A shift that cannot be worked (spent, 2.6) is a **missed
+  shift** in the `O` file and in the mood ledger, and the player's next report mentions it.
+* **Maintenance stays shared:** the jobs of the life services (3.2) go on the common board and may be taken by the holders of
+  *maintenance* positions of any company (a position there is where a "water engineer" is employed).
+
+### 2.5 The "hard work" petitions become terms of a position
+Today the wesen petition about rest and recovery: `more_rest` (lever `rate`) and `faster_work_recovery` (lever `cool`), decided as global
+offsets. Proposed (marker `company=1`): for a wesen that **holds a position** the same two topics name **the terms of that position**, which
+is what the players are "discussing":
+| petition topic | today (global lever) | with a position |
+|---|---|---|
+| `faster_work_recovery` (`cool`) | cool-down offset of everybody it governs | the position's **energy cost per shift** goes down one step, or its rest pause after the shift shortens |
+| `more_rest` (`rate`) | recovery rate offset | the position's **shift pattern**: fewer shifts per day, shorter shift, longer rest between |
+The decision is still grant / partial / defer / refuse by the same dice and reason codes; a grant changes the term by **one step** inside
+bounds in `data/company.txt` (the same step-and-bounds device as `data/govern.txt`) and is written as a `D` record (as now, with the position id) **and** an
+`O` line `kind=terms` (old -> new). A wesen without a position still petitions the global levers, which keep working unchanged
+(off = byte-identical). The player's report (`preport=1`) names the position and the term ("Adam's night shift in warehousing now costs
+less"), and its honesty trait applies as to any claim; `make audit` compares claim and record.
+
+### 2.6 Exhaustion: energy is a hard constraint (`exhaust=1`; a rule, not a question)
+Robert: energy and exhaustion tracking is a **hard constraint**. It is therefore stated as a rule that every step keeps, not as an open question.
+* **One energy point.** Every change of a wesen's energy (work, chess, talk, a shift's cost, rest, petition effects) goes through **one**
+  procedure (planned `Sim_Rest.Spend` / `Recover`), so no activity can skip the tracking; a checks scenario compares the total of all changes with the stored energy.
+* **Named states with fixed thresholds** (`data/exhaustion.txt`; energy 0 .. 100 as in the rest model; these numbers are the rule's constants):
+
+  | state | energy | work, chess, talk | action choice |
+  |---|---|---|---|
+  | fresh | 50 .. 100 | normal | free |
+  | tired | 30 .. 49 | **worse**: work yield -15 %, chess: a weaker move is chosen with +15 points chance, talk: fewer words per exchange | free |
+  | spent | 10 .. 29 | **much worse**: work -35 %, chess weakening +35 points, talk halved | **a rest is forced** until energy >= `exhaust.resume` (45); no shift, no match, no talk start |
+  | collapsed | 0 .. 9 | none possible | forced rest as above, mood -2 per 10 ticks until resume |
+  The forced rest keeps a hysteresis: a wesen that fell below 30 returns to free choice only at `exhaust.resume`, not at 30, so it cannot flicker between states.
+* **Every crossing is logged.** A change of state is a record `X<n>` in `diaries/exhaustion.txt` (planned, `Sim_Store`, replay-verified):
+  `X1 t=412 s=2 id=gemini from=tired to=spent energy=27 cause=work pos=P3`; at most one line per wesen per tick; a changed, invented or removed
+  line is DRIFT. The mood ledger gets "exhausted" and "forced rest" sources; the end box may show one short line ("two wesen spent").
+* **Deterministic.** The thresholds and the effects have no dice (the chess weakening uses the existing seeded hash scheme, salt 15390
+  inside the company range), so the rule is a pure function of the replayed state. Marker `exhaust=1` on the `S` line, new sessions only (an existing
+  save gets it at the next new session, no `--fresh`), **off = byte-identical** (proved by `offcmp2`). It needs `rest=1` only, so it can ship
+  before the companies (section 7: X1).
+* **Positions obey it.** A position's `energy cost per shift` is paid through the same point; a shift is worked only if the wesen is
+  `fresh` or `tired` at its start; a position whose cost would push its holder below `spent` every day shows up as a petition topic (2.5)
+  and as a number in `make divergence` (shifts missed against what the player reported).
 
 ## 3. Life support: water, air, temperature, power, (food) (`life=1`)
 
@@ -101,7 +181,8 @@ A job = `(service, kind, ticks, effect)`: *inspect* (reveals wear), *service* (w
 board (`diaries/life.txt` `J<n>` lines: opened, taken, done). A wesen on shift **takes a job with the hash roll
 `hash(seed, wesen, tick, 10230)` against `skill`** (skill 0 .. 100, grows by +1 per finished job, 3.4); a vacant role means nobody takes
 it and wear grows: *that is how a vacancy hurts*, and it feeds the vacancy list of 2.2. The day: `day.length = 24` ticks (pure data,
-only used by roles/life/leisure so old output is untouched); a shift is `shift.ticks` of it.
+only used by roles/life/leisure so old output is untouched); a shift is `shift.ticks` of it. With companies (2.4) the shift is the one of the
+position a wesen holds; the maintenance jobs are taken by holders of maintenance positions.
 
 ### 3.3 Failure events
 Per service per tick: failure chance `fail_pct = base + wear * k` (hash 10260). A failure is a record `F<n>` (`diaries/life.txt`):
@@ -167,7 +248,7 @@ open; with the role vacant the site is closed and its price listed as a *vacancy
 
 ### 4.3 Credits (or not) and costs
 Proposed: **spare-time credits**, a small integer per wesen (0 .. 20), earned `+1` per finished shift and per finished maintenance
-job, spent at the price column. No trading, no savings beyond the cap (question 6). A site's host earns a credit per guest.
+job (with companies: the **pay** of the position it holds, 2.4), spent at the price column. No trading, no savings beyond the cap (question 6). A site's host earns a credit per guest.
 
 ### 4.4 Social effects and the ledger
 Shared activities add *bond* between participants (a number per pair, small, `L` lines) that makes talk and chess partners likelier
@@ -183,6 +264,9 @@ and softens trials (adherence +); skill grows per activity. The ledger adds a "l
 * **Leisure feeds the services:** a busy sauna raises Heat and Water load; the garden gives Food and Air back; a power operator
   on leisure leaves the board unstaffed -> wear -> failure. Rest/work stay the base: leisure is only a third choice.
 * **Governance and honesty** connect everything: the same D / trust / standing / misreport machinery, with new topics and one lever.
+* **Companies and exhaustion:** a position costs energy per shift (2.6), so the hard work of a company shows in the exhaustion log, in
+  the petitions for lower cost or fewer shifts (2.5) and in the players' reports; a company without maintenance staff leaves its services
+  to the others (3.2); open positions feed the vacancy list and so the birth rule (2.2).
 * **Trials** can start from a leisure dispute (queue for the last massage slot): the existing `trial.clash` pairs get topic pairs.
 
 ## 6. One being model (`bio=1`)
@@ -200,7 +284,7 @@ being record** and is never a fifth player.
 | `born` | rolled long before the run (a *negative* day) | backdated for the first four (adult), the birth tick for newborns | an absolute day number (6.3); **age is derived**, never stored |
 | `lifespan` | one of 50,000 .. 500,000 years (a roll, 6.2) | cap 125 years (hard, 6.5) | years, fixed at genesis |
 | `origin` | the myth home family, place, "made of" (MYTH.md 6.3: stored as a reference `myth=M<n>`, not copied) | a place word, a family word, parents or "made by" (an id or none) | words from data lists |
-| `roles` | its office (`players.txt`) + its domains (myth) | the current role and the role history (LIFE.md 2.1) | ids + ticks |
+| `roles` | its office (`players.txt`) + its domains (myth) + **its company** (`Q` id, LIFE.md 2.4) | the current role, **the position it holds** (`O` id: company, department, title) and the role history (LIFE.md 2.1, 2.4) | ids + ticks |
 | `traits` | Rule 30 bits: tone, brevity, warmth, **plus** curiosity, courage, patience, frailty (0 .. 100) | the same | numbers at genesis, a small overlay of events (+/- 15 at most) |
 | `beliefs` | a view of the Ground, of death, of the made (myth dimensions 10, 13, 14) | views of the players, of death, of work, of Robert | key = a word from a list (a few per being) |
 | `relations` | kin and rivals of the other players (MYTH.md 6.3), its watch list | kin, friends, rivals, teacher, watcher | id -> kind + strength; trust and standing stay in the `Y` lines |
@@ -231,7 +315,7 @@ lifespan (*young god* < 5 %, *in its prime* 5-70 %, *ancient*), small lean tweak
 Alternatives (real time = 8,760 ticks a year, or 100 ticks a year) are table values, not code (question 1).
 
 ### 6.4 Events change the record (`H` records)
-`H<n> t= id= kind= a= b= h=` in the same file, replay-verified. **Kinds** (data list): born, grew (stage), role taken / left, learned (a trait
+`H<n> t= id= kind= a= b= h=` in the same file, replay-verified. **Kinds** (data list): born, grew (stage), role taken / left, position taken / left (2.4), learned (a trait
 step), bond / fell out, belief shifted, ill / recovered, hurt / healed, scar, milestone (first chess win, a trial won or lost, a landmark),
 rise (a player gains a domain; a rival named), retired, died. Most events are **consequences of state already replayed** (a stage change from the age, a
 role from a vacancy, a milestone from a `C`/`T` record) and only *recorded*; **chance events** (illness, accident, drifting bonds, belief steps)
@@ -258,7 +342,7 @@ carries `h=` of its rendered text. A removed, edited or invented `H` line is DRI
   decisions, the median and the challenge logic assume four; a successor therefore **takes over the seat** (the slot and its id; the being, name and genesis are new, the old record is closed and kept in history) - to be tested before any hazard is turned on.
 
 ### 6.6 How it ties to LIFE.md and to the myth framework
-* **Roles and population (2):** the `roles` field *is* the role table of 2.1 for one being; the vacancy and the birth rule read age (arrival
+* **Roles, companies and population (2):** the `roles` field *is* the role table of 2.1 for one being, plus the company of a player and the position of a wesen (2.4); `O` lines are the facts, `H` the history; the vacancy and the birth rule read age (arrival
   at 16, retirement at about 65 instead of `pop.service_sessions`), health and role history; `B`/`R` stay the facts of who exists, `Z`/`H` the details.
 * **Life support (3):** a shortage raises the monthly disease and accident rolls and, through `health`, lowers the energy base a little (a
   condition word, not a new stat; 3.4 stays the rule).
@@ -309,7 +393,7 @@ Where each is used, and how (examples are invented wording):
 | B3 | health, mortality, accident, disease; wesen death + the `R` link (needs `roles=1`) | ~400 + 250 | 2 days | **M-H** (population dynamics, tuning) |
 | B4 | **text hooks** into reports, petitions, visit, chess/trial, myth lines (`data/biotext.txt`) | ~250 + 500 | 2 days | L-M (content volume) |
 | B5 | `make being` view (read-only); player hazard switch + succession (only after Robert's answer) | ~300 + 100 | 2 days | **H** (4-slot assumptions) |
-Total about 1,750 Ada + 1,400 data lines, ~9 days. `bio=1` on new sessions only; **marker off = byte-identical** (`offcmp2`), the old four keep their
+B1 now follows R1 directly and carries the company reference of each player (2.4). Total about 1,750 Ada + 1,400 data lines, ~9 days. `bio=1` on new sessions only; **marker off = byte-identical** (`offcmp2`), the old four keep their
 ids and files, 0 warnings on GNAT 14 and 12, README and `--help` updated at each step. Replay cost: one roll per being per month; 12 beings add well under 10 % to the time.
 
 ### 6.9 Open questions about the being model (recommended answer first)
@@ -338,22 +422,31 @@ lines; "time" = my working time incl. gates (full checks ~20 min, portable ~12 m
 | R2 | `roles=1` | `Entity_Id` -> `Max_Slots` with inert slots (a refactor with **no** change for 4 wesen: proved byte-identical), name pool, `B`/`R` records, births at the boundary, retire on liberation | ~900 + 150 | 2-3 days | **H** (touches every array) |
 | L1 | `life=1` | Water + Power: stock/cap/load/wear, jobs on a board, `make life`, ledger lines; no failures, no petitions | ~800 + 150 | 1.5 days | M |
 | L2 | `life=1` | Air + Temperature, failure events, effects on energy/mood, topics + `maintenance` lever, player clause and honesty, audit | ~900 + 120 | 2 days | M |
+| X1 | `exhaust=1` | the one energy point (`Spend` / `Recover`), the named states, forced rest, `X` records in `diaries/exhaustion.txt`, effects on work, chess, talk; needs only `rest=1`; ledger sources (2.6) | ~500 + 80 | 1.5 days | M (touches every energy change) |
+| C1 | `company=1` | `data/companies.txt`, `departments.txt`, `company.txt`; one company per player, distinct mixes of 3 to 5 departments, `Q` records, `make company` (read-only); no positions yet | ~400 + 150 | 1 day | L |
+| C2 | `company=1` | positions: `O` records, a player creates them at the boundary, wesen apply (petitions file), the player decides (votes file), shift duty and energy cost through X1, pay as credits, missed shifts | ~800 + 200 | 2-3 days | **M-H** (a fifth decision type) |
+| C3 | `company=1` | the `more_rest` / `faster_work_recovery` petitions become position terms (2.5), `D` + `O terms` lines, reports and `make audit` / `make divergence` sections, open positions in the vacancy list | ~400 + 100 | 1.5 days | M |
 | P1 | `leisure=1` | action `leisure`, budget, credits, free sites: park, library, games, music, garden; ledger | ~800 + 200 | 2 days | M |
 | P2 | `leisure=1` | priced sites needing services and hosts: baths, sauna, spa/massage, kitchen, gym, cinema, bar; booking queue; vacancies from sites feed R2 | ~900 + 200 | 2-3 days | M-H |
 | P3 | all | interlock checks, trials from leisure disputes, report wording, tuning of the numbers, README tour | ~300 + 100 | 1 day | L |
 
+**Order (Robert's amendment): roles + being record + companies and positions first:** R1, B1, X1, C1, C2, C3; then R2 (births), B2 to B5, L1, L2, P1, P2, P3.
+X1 comes before the companies because the exhaustion rule is a hard constraint and needs only `rest=1`; C1 needs R1 and B1 (the company is part of the
+player's record); C2 needs X1; C3 needs `govern=1` and C2; R2 reads open positions. Each step keeps off = byte-identical.
 The being model (section 6) has its own steps B1 to B5 (`bio=1`, ~1750 Ada + 1400 data lines, ~9 days); B1, B2 and B4 can start right after R1, B3 needs R2.
-Rough total without it: ~5000 lines of Ada, ~1000 of data, 2 weeks of steps. The small binary grows by ~0.5 MB (`make small`, today 2.8 MB).
+Rough total without it: ~6700 lines of Ada, ~1500 of data, 3 weeks of steps (X1 and C1 to C3 add ~2100 Ada and ~530 data lines, ~6 days). The small binary grows by ~0.5 MB (`make small`, today 2.8 MB).
 Dependencies: `life=1` needs `rest=1` + `world=1`; `leisure=1` needs `rest=1` + `world=1`; `roles=1` needs `world=1`; sites ignore a
-service need if `life=0`; the vacancy list ignores a site if `leisure=0`. R1 and L1 can be done in either order; R2 should come before P2.
+service need if `life=0`; the vacancy list ignores a site if `leisure=0`. R1 and L1 can be done in either order; R2 should come before P2. `company=1` needs `roles=1`, `govern=1` and `rest=1`; `exhaust=1` needs `rest=1`.
 
 ## 8. Rules every step keeps
 Plain Ada, standard library only; every number, word and table in `data/`; every roll is `hash(seed, entity, tick, salt)` with its own
-salt range (roles 10000 .. 10199, life 10200 .. 10399, leisure 10400 .. 10699); state is rebuilt by replay and the *records*
-(`B R J F V L` lines) are compared: changed / invented / removed = DRIFT; markers on the `S` line, new sessions only, removed
+salt range (roles 10000 .. 10199, life 10200 .. 10399, leisure 10400 .. 10699, companies, positions and exhaustion 15000 .. 15399; the records of the present
+build use 14000 .. 14399); state is rebuilt by replay and the *records*
+(`B R J F V L Q O X` lines; the letters are re-checked at build, each in its own file) are compared: changed / invented / removed = DRIFT; markers on the `S` line, new sessions only, removed
 marker = DRIFT; `--help` and README stay current; no new test suites (extend `scripts/checks.sh`); compact output
 (`debug.txt` <= 1500 bytes); version header on every file; 0 warnings (GNAT 14 and 12, -O0 and -O1); PROOF-LATER labels on the
-arithmetic. Display names only from `data/names.txt`.
+arithmetic. Display names only from `data/names.txt`; company and department words only from `data/companies.txt` and `data/departments.txt`.
+Energy is tracked through one point and every crossing of an exhaustion state is a record (2.6).
 
 ## 9. Open questions for Robert (recommended answer first)
 1. **How many wesen at most?** *Recommend:* 12 alive at once, 32 slot numbers in total (never reused), start with 4; a data limit
@@ -367,7 +460,7 @@ arithmetic. Display names only from `data/names.txt`.
 5. **Who watches the new ones?** *Recommend:* the player with the fewest wesen, ties by id; up to 4 per player; a player's decisions
    keep the same dice. (A fifth player stays out of scope.)
 6. **Credits, or time and energy only?** *Recommend:* start with time/energy only in P1 (free sites), add the 0 .. 20 credits in P2
-   when priced sites arrive; earned by shifts and jobs, no trade, no savings beyond the cap.
+   when priced sites arrive; earned by shifts and jobs (the pay of the position held, 2.4), no trade, no savings beyond the cap.
 7. **A "day" of 24 ticks?** *Recommend:* yes, `day.length` and `shift.ticks` in data, used only by roles/life/leisure, so a save
    without the markers is unchanged; session lengths (100 .. 1000) are then 4 .. 40 days.
 8. **A health value?** *Recommend:* no. Energy cap + mood + ledger lines carry all the effects; a health number would double
@@ -378,8 +471,23 @@ arithmetic. Display names only from `data/names.txt`.
     the players decide only the `maintenance` priority lever (small steps, bounds), through petitions as today.
 11. **Roles of the first four?** *Recommend:* assign by data at the first `roles=1` session without `--fresh`: Adam engineer ->
     power operator, Eve reviewer -> air technician, Abel vice_president -> caretaker, Ruth human -> water engineer (placeholders, change
-    in `data/roles.txt`); the old words stay as titles. Their ids, diaries and every old byte stay.
+    in `data/roles.txt`); the old words stay as titles. Their ids, diaries and every old byte stay. With companies the same four are the first holders of positions in their watcher's company (placeholders in data).
 12. **Names of the newborn?** *Recommend:* a pool of ~40 short names in `data/namepool.txt` (ids = lower case), picked by Rule 30,
     each used once; deities stay for the *players*, the wesen get ordinary short names. Robert may replace the pool freely.
+
+13. **Can a wesen hold two positions?** *Recommend:* no. One position at a time, full shift pattern (a part-time job is a position with fewer
+    hours); this keeps the energy cost and the exhaustion rule (2.6) simple and the reports readable.
+14. **Can a position be closed?** *Recommend:* yes: by its player at a boundary, or automatically after `company.idle_sessions` (3) sessions empty; the
+    holder is released (`O` kind=closed, then `left`) and becomes available; the title stays in the history of the company.
+15. **What happens to a wesen without a position?** *Recommend:* it keeps today's behaviour (base action table, role leans, global levers), earns no pay
+    and applies to open positions with the dice of 2.4; after `company.want_sessions` (4) sessions without work it may petition `want_work`.
+16. **Do companies trade?** *Recommend:* not in the first release. No goods and no credits move between companies; a department only counts its own
+    output (items stored, bought, kept). A `trade=1` marker (prices, stock between companies, acquisition buying from another) is a later step if Robert wants it.
+17. **May a wesen change company or quit?** *Recommend:* yes, at a boundary by an application to another company's position or a `resign` line, with a cooldown
+    (`company.move_cooldown`, 3 sessions), decided by both players' trust as for any application; no wesen is forced to move.
+18. **How many positions and companies?** *Recommend:* four companies (one per player, fixed), at most 4 positions each, 3 to 5 departments each; the
+    totals stay below the number of wesen so that work is scarce and the hard work is shared; the player's own wesen get a small preference.
+19. **Who decides the department mix and the titles?** *Recommend:* the genesis roll (distinct mixes, 2.4) from the data lists, so a mix is stable for a
+    company's life; Robert may edit the lists. Players only open or close positions inside their own mix.
 
 *End of the proposal; nothing here changes the program until the steps of section 7 (and 6.8) are started.*
