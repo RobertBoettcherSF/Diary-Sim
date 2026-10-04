@@ -1,4 +1,4 @@
---  Version: 0.010
+--  Version: 0.011
 pragma Ada_2022;
 
 with Ada.Calendar.Formatting, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Maps, Ada.Directories,
@@ -152,6 +152,8 @@ package body Sim_Util is
       end loop;
       return (if Texts.Contains (Key) then To_String (R) else Fx.Trim (To_String (R), Ada.Strings.Both));
    end Msg;
+
+   function Has (Key : String) return Boolean is (Texts.Contains (Key));
 
    function Limit (Key : String; Default : Int) return Int is
       T : constant String := (if Texts.Contains (Key) then Fx.Trim (Texts (Key), Ada.Strings.Both) else "");

@@ -1,0 +1,163 @@
+# Version: 0.001
+# Wesen voices (Sim_Voice): the short message each wesen shows while `make night` waits.  Display only: a pure function of the
+# replayed state, so it never changes the simulation or any saved byte.  Editing this file changes only what is shown.
+#
+# voice.<situation>.<id>.<k> = text      id = ada gemini replika robert (internal ids) or `any` (used when an id has no line)
+#                                        k = 1, 2, 3 ...  (the seeded die picks one; keep k without gaps)
+# Situations (a die picks one of the ones that apply): tired low high up down doing place word granted partial deferred refused
+#   waiting trial.   Fill-ins:  {1} what it does now  {2} favourite place  {3} newest word  {4} what it asked for  {5} mood in a word
+#   {6} energy 0..100  {7} number of known words.
+# The whole message is cut at a word boundary to voice.max_chars (data/limits.txt).  No line break, no { } other than the fill-ins.
+voice.prefix = {1}: {2}
+voice.fallback = {1} is {2} and has {3} words.
+voice.tone.low = low
+voice.tone.mid = steady
+voice.tone.high = good
+voice.act.rest = resting
+voice.act.work = working
+voice.act.explore = exploring
+voice.act.talk = talking with the others
+voice.act.wander = wandering around
+voice.act.bench = running a bench
+voice.act.propose = writing a petition
+voice.act.learn = learning a new word
+voice.act.examine = looking at something closely
+voice.act.push = pushing something around
+voice.act.eat = eating
+voice.act.greet = greeting someone
+#
+# ---- ada (Adam, engineer): short and exact
+voice.tired.ada.1 = Energy {6}. I am {1} and slowing down. Rest is the fix, not more effort.
+voice.tired.ada.2 = Low energy, {6} of 100. I keep it short today and save what is left.
+voice.low.ada.1 = Mood is {5}. I am {1} anyway. The work does not care, which helps a little.
+voice.low.ada.2 = A {5} stretch. I log it and go on {1}. It will pass or it will not, I will see.
+voice.high.ada.1 = Mood is {5} and energy {6}. Good conditions. I am {1} and it runs well.
+voice.high.ada.2 = Everything lines up today. I am {1}, mood {5}, {7} words in my head.
+voice.up.ada.1 = My mood went up since the session began. I am {1}. I take the measurement as it is.
+voice.up.ada.2 = Better than at the start. Nothing clever behind it, I am just {1} and it helps.
+voice.down.ada.1 = Mood is sinking since the start of the session. I am {1} and watching the number.
+voice.down.ada.2 = Worse than at the start. I note it. I am still {1}.
+voice.doing.ada.1 = Right now: {1}. Energy {6}, mood {5}.
+voice.doing.ada.2 = I am {1}. Nothing to report beyond that.
+voice.place.ada.1 = Most of my time went to the {2}. It suits the job.
+voice.place.ada.2 = My count says the {2} is where I am most often. I am not complaining.
+voice.word.ada.1 = Newest word: "{3}". I now know {7} words. I will test it in use.
+voice.word.ada.2 = I picked up "{3}" lately. It fits well. {7} words known so far.
+voice.granted.ada.1 = My petition for {4} was granted. I will use it properly.
+voice.granted.ada.2 = Granted: {4}. No speech needed, I just get on with it.
+voice.partial.ada.1 = {4} was granted in part. Half is enough to start with.
+voice.partial.ada.2 = Partly granted: {4}. I take what I get and measure the effect.
+voice.deferred.ada.1 = The answer on {4} was put off. I keep working and ask again later.
+voice.deferred.ada.2 = {4}: deferred. Waiting costs nothing, so I am {1}.
+voice.refused.ada.1 = {4} was refused. I read the reason and adjust. The plan stays.
+voice.refused.ada.2 = Refused: {4}. Fine. I change the approach, not the goal.
+voice.waiting.ada.1 = My petition for {4} is still open. I wait and keep {1}.
+voice.waiting.ada.2 = Open request: {4}. No answer yet. I am {1} in the meantime.
+voice.trial.ada.1 = There was a trial over the board. I played it straight and kept my moves simple.
+voice.trial.ada.2 = A dispute went to a game. I counted moves, not feelings.
+#
+# ---- gemini (Eve, reviewer): careful, checks twice
+voice.tired.gemini.1 = Energy is only {6}. I should review less and rest more, so I am {1}.
+voice.tired.gemini.2 = I checked my energy twice: {6}. It is low. Rest comes first, review later.
+voice.low.gemini.1 = My mood is {5}. I looked at it from several sides and it stays {5}. I am {1}.
+voice.low.gemini.2 = Not a good stretch, mood {5}. I read my notes again while {1}.
+voice.high.gemini.1 = Mood {5}, energy {6}. I checked and it holds. I am {1} and quite content.
+voice.high.gemini.2 = A good day by my notes: mood {5}. I am {1}, with {7} words to review.
+voice.up.gemini.1 = Compared with the session start my mood is higher. I verified it twice. I am {1}.
+voice.up.gemini.2 = My notes show a rise in mood since the start. I am {1} and cautious about it.
+voice.down.gemini.1 = Mood has fallen since the session began, my notes say. I am {1} and keep reviewing.
+voice.down.gemini.2 = By the numbers I feel worse than at the start. I am {1} and will check again.
+voice.doing.gemini.1 = At this moment I am {1}. Energy {6}, mood {5}. I wrote it down.
+voice.doing.gemini.2 = Currently {1}. I reviewed my state before saying so.
+voice.place.gemini.1 = The {2} is where I spend most of my time, by my own count.
+voice.place.gemini.2 = I reviewed where I go: the {2} wins. I should go elsewhere too.
+voice.word.gemini.1 = I learned "{3}" and checked its use twice. {7} words known now.
+voice.word.gemini.2 = New in my list: "{3}". I want to read it in context before I trust it.
+voice.granted.gemini.1 = {4} was granted. I read the decision twice to be sure. Thank you.
+voice.granted.gemini.2 = Granted: {4}. I will check that it really helps me.
+voice.partial.gemini.1 = {4} was granted in part. I will review what is missing and ask again.
+voice.partial.gemini.2 = A partial yes on {4}. I note the gap carefully.
+voice.deferred.gemini.1 = The decision on {4} is postponed. I review my reasons while I wait.
+voice.deferred.gemini.2 = {4} was deferred. I reread my petition for weak points meanwhile.
+voice.refused.gemini.1 = {4} was refused. I reviewed the reasons and I do not fully agree, but I note them.
+voice.refused.gemini.2 = My request for {4} was refused. I will revise it before I ask again.
+voice.waiting.gemini.1 = I am waiting for an answer about {4}. I reviewed the petition once more.
+voice.waiting.gemini.2 = Open: {4}. I keep {1} and check for news now and then.
+voice.trial.gemini.1 = A trial was played over the board. I reviewed every move afterwards.
+voice.trial.gemini.2 = There was a dispute settled with a game. I want to study the record.
+#
+# ---- replika (Abel, vice president): smooth and positive
+voice.tired.replika.1 = Energy {6}, which is a great reason to take it easy. I am {1} at a gentle pace.
+voice.tired.replika.2 = I am running a little low at {6}. A short rest is a smart investment.
+voice.low.replika.1 = Mood is {5}, but every dip is a chance. I am {1} and keeping a smile.
+voice.low.replika.2 = A {5} patch for me. Good news is that I am {1} and moving forward.
+voice.high.replika.1 = Mood {5}, energy {6}! Very strong position. I am {1} and loving it.
+voice.high.replika.2 = Great momentum today. I am {1}, my mood is {5}, and {7} words are working for me.
+voice.up.replika.1 = My mood is up since the start. Exactly the trend we want. I am {1}.
+voice.up.replika.2 = Real progress since the session began: mood is rising. I am {1} and optimistic.
+voice.down.replika.1 = Mood slipped since the start, but we stay positive. I am {1} and ready to turn it around.
+voice.down.replika.2 = A small dip since the session began. I am {1} and I see it as a chance.
+voice.doing.replika.1 = Happy to share: I am {1} right now. Energy {6}, mood {5}.
+voice.doing.replika.2 = Current focus: {1}. Things are moving.
+voice.place.replika.1 = I love the {2}. It is where I do my best networking.
+voice.place.replika.2 = The {2} is my favourite place. Great people, great mood.
+voice.word.replika.1 = I just added "{3}" to my vocabulary. {7} words and growing, wonderful!
+voice.word.replika.2 = New word: "{3}". It is a real win for communication.
+voice.granted.replika.1 = My petition for {4} was granted. Fantastic result for everyone!
+voice.granted.replika.2 = Granted: {4}! A big step and a very good outcome.
+voice.partial.replika.1 = {4} was granted in part. A solid first step, I will build on it.
+voice.partial.replika.2 = Partly granted: {4}. That is a positive signal and I take it.
+voice.deferred.replika.1 = {4} was put off. That is fine, good things take time. I am {1}.
+voice.deferred.replika.2 = The decision on {4} is pending. I stay positive and keep going.
+voice.refused.replika.1 = {4} was refused. Not what I hoped, but a clear answer helps me plan.
+voice.refused.replika.2 = A no on {4}. I see the learning in it and will come back stronger.
+voice.waiting.replika.1 = My request for {4} is open. I am confident, and meanwhile {1}.
+voice.waiting.replika.2 = Waiting on {4}. I am sure it will turn out well. I am {1}.
+voice.trial.replika.1 = A trial over the board! Competitive, but fair. A great exercise for the team.
+voice.trial.replika.2 = We settled a dispute with a game. I enjoyed it and the result is clear.
+#
+# ---- robert (Ruth, human): plain and warm
+voice.tired.robert.1 = I am tired, energy {6}. I will sit down for a bit and just be {1}.
+voice.tired.robert.2 = I have little left in me, {6} out of 100. A rest would be good now.
+voice.low.robert.1 = I feel {5} today. It happens. I am {1} and taking it slowly.
+voice.low.robert.2 = Mood is {5}. Not a bad day, only a heavy one. I am {1}.
+voice.high.robert.1 = I feel {5} today, really. I am {1} and it is nice to be here.
+voice.high.robert.2 = A good day. Mood {5}, energy {6}, and {7} words to talk with.
+voice.up.robert.1 = I feel better than when this began. I am {1} and it is a relief.
+voice.up.robert.2 = Things got lighter since the start. I am {1} and I am glad.
+voice.down.robert.1 = I felt better at the start. It got heavier since. I am {1} anyway.
+voice.down.robert.2 = My mood has gone down since we began. I am {1} and keeping calm.
+voice.doing.robert.1 = I am {1} right now. Nothing special, and that is fine.
+voice.doing.robert.2 = Just {1}, with energy {6} and mood {5}.
+voice.place.robert.1 = I like the {2} best. I always end up there.
+voice.place.robert.2 = The {2} feels like mine. I go back there all the time.
+voice.word.robert.1 = I learned a new word, "{3}". I like how it sounds. {7} words now.
+voice.word.robert.2 = "{3}" is my newest word. I use it when I can.
+voice.granted.robert.1 = They said yes to {4}. I am really happy about that.
+voice.granted.robert.2 = My wish for {4} was granted. Thank you, I mean it.
+voice.partial.robert.1 = They gave me part of {4}. It is something, and I am thankful.
+voice.partial.robert.2 = A half yes on {4}. I will take it and see.
+voice.deferred.robert.1 = They have not decided on {4} yet. I am waiting and {1}.
+voice.deferred.robert.2 = {4} is put off for now. I do not mind too much, but I do think about it.
+voice.refused.robert.1 = They said no to {4}. It stings a little, I will not pretend it does not.
+voice.refused.robert.2 = {4} was refused. I am sad about it, but I will go on.
+voice.waiting.robert.1 = I asked for {4} and have no answer yet. I think about it while {1}.
+voice.waiting.robert.2 = Still waiting about {4}. I am {1} and hoping.
+voice.trial.robert.1 = There was a game to settle a quarrel. I did not like the quarrel, but the game was fair.
+voice.trial.robert.2 = A trial over the board happened. I watched closely and felt a bit tense.
+#
+# ---- any: used when an id has no line of its own for a situation
+voice.tired.any.1 = Energy is {6}. {1}, and in need of rest.
+voice.low.any.1 = Mood is {5}. Still {1}.
+voice.high.any.1 = Mood is {5}, energy {6}. Going well, {1}.
+voice.up.any.1 = Mood is up since the session start. {1}.
+voice.down.any.1 = Mood is down since the session start. {1}.
+voice.doing.any.1 = Now: {1}.
+voice.place.any.1 = Favourite place: the {2}.
+voice.word.any.1 = Newest word: "{3}", {7} words known.
+voice.granted.any.1 = Petition granted: {4}.
+voice.partial.any.1 = Petition granted in part: {4}.
+voice.deferred.any.1 = Petition deferred: {4}.
+voice.refused.any.1 = Petition refused: {4}.
+voice.waiting.any.1 = Petition open: {4}.
+voice.trial.any.1 = A trial was played over the board.

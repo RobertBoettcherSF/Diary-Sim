@@ -160,6 +160,18 @@ For a run you leave alone and read in the morning, and for the loop *Robert runs
   (`s17 t5100 02:31:05 | Adam -3/80 Eve 12/60 Abel 5/55 Ruth -20/20`: session, tick, local time, mood/energy of each wesen) with a timer
   line below it (`  0h12m05s | 4.2 MB (+310 KB) | 8.1 s/session | 58 tick/s | left 11h47m00s`), and a final box (why it stopped, sessions,
   time, seconds per session, ticks per second, save folder size and growth, last values).
+* **The voices (`data/voices.txt`, `voice.*` in `data/limits.txt`, `voice_log.txt`, `make voices`).** While you wait, the header shows one
+  short message per wesen in its own voice (at most `voice.max_chars` = 150 characters including the name, wrapped to 2 lines of 77
+  columns), `voice.shown` (2) of them at a time, the next wesen every `voice.refresh_seconds` (4). Each message is built from the real
+  records of the replayed state: what it does now, its mood and energy, whether the mood rose or fell since the session began, its
+  favourite place, its newest learned or coined word, the outcome of its newest petition (granted, partly, put off, refused, still open),
+  what it asked for, and trials. The words come only from the templates of `data/voices.txt` (`voice.<situation>.<id>.<k>`, several per
+  wesen and situation; no wording in the program); a hash die of the seed, the wesen and the tick picks the situation and the template (salts
+  18000 .. 18099), so a message is a **pure function of the state and the tick** (no LLM, no random stream). It is display only: it
+  writes no diary and cannot change a single saved byte (`scripts/checks.sh` runs a night with the voices on and one with
+  `voice.enabled = 0` and compares every file). `voice_log.txt` of the save folder lists what was shown (`t=<tick> <message>`, newest
+  `voice.log_keep` lines); like `trend.txt` it is not verified and not needed. `make voices` (`--voices`) prints the four messages for the
+  last tick of the save, the same text on every run. Editing `data/voices.txt` changes only what is shown.
 * **Console, on a terminal: the timer header.** The screen is cleared once; then about once per second the header is repainted in place
   (ANSI cursor home, the whole block written with one call, so it does not flicker; 80 columns): the local date and time, the time
   elapsed, the limits and the estimated time left to the nearest one (from the average session), the size of the save folder and its growth
@@ -167,7 +179,7 @@ For a run you leave alone and read in the morning, and for the loop *Robert runs
   `verifying the whole history`), sessions done, the time of the last finished session, the average seconds per session; then a table,
   live (as of the tick being simulated): for the four wesen mood, energy, words, petitions; for the four players (3 or 4 in a session) the
   wesen each one watches, its mood, petitions granted/refused (the raw votes of `trend.txt`) and the stance (generous +, strict -); then
-  the key hint, and below it the status lines of the last 6 sessions. The final box follows. The header writes no simulation file and
+  the key hint, the **voices** (below), and the status lines of the last `night.recent` (2) sessions. The final box follows. The header writes no simulation file and
   costs a directory listing every few seconds. The full report of
   the last session is in `run_report.txt` (the one before in `run_report_prev.txt`) and `run_log.txt` has a timestamped `RUN` entry per
   session plus `NIGHT` entries for the start and the stop (`start: ...`, `stop: reason=q sessions=14 last_session=30 tick=9000
@@ -1257,7 +1269,7 @@ paste it` and `back up diaries/ before the next run`.
 vocabulary, Rule 30 personality, bench kernels, votes and summary text), `sim_util.ads/.adb` (hash rolls,
 line parsing, data-file helpers), `data/words.txt`, `data/topics.txt` (petition topics), `data/limits.txt`,
 `data/messages.txt` (all console wording), `data/kalpas.txt` (session length votes), `data/menu.txt` (menu text, title, tagline), `data/fonts.txt` (title letters), `data/vocab.txt`, `data/help.txt`, `sim_dharma.ads/.adb` (karma, rebirth, unrest, ladder, awareness, players, inbox), `sim_things.ads/.adb` (the treadmill world), `data/things.txt` (its lists), `docs/WORLD.md`, `data/karma.txt` (numbers), `data/dharma.txt` (wording, flavour labels), `data/players.txt` (the three players),
-`sim_next.ads/.adb` + `data/ticks.txt` (the advice for the next run), `sim_visit.ads/.adb` + `data/visit.txt` (the visit: watch and talk), `sim_trial.ads/.adb` + `data/trial.txt` (trial by chess), `sim_records.ads/.adb` + `data/records.txt` (votes, petitions, dictionary, announcements), `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
+`sim_next.ads/.adb` + `data/ticks.txt` (the advice for the next run), `sim_visit.ads/.adb` + `data/visit.txt` (the visit: watch and talk), `sim_voice.ads/.adb` + `data/voices.txt` (the wesen messages under the night header), `sim_trial.ads/.adb` + `data/trial.txt` (trial by chess), `sim_records.ads/.adb` + `data/records.txt` (votes, petitions, dictionary, announcements), `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
 Design documents (proposals, nothing built unless the README says so above): `docs/WORLD.md` (the treadmill world), `docs/LIFE.md` (roles,
 companies and positions, exhaustion, life support, leisure, the one being model), `docs/MYTH.md` (creation myths of the players),
 `docs/LEARN.md` (slow core, mixed study, dictionary pruning, pondering, notebooks and study; the byte-level predictor is postponed).

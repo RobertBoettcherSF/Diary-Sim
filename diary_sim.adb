@@ -1,4 +1,4 @@
---  Version: 0.042
+--  Version: 0.043
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -28,7 +28,7 @@ pragma Ada_2022;
 
 with Ada.Calendar, Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Finalization, Ada.Strings.Fixed, Ada.Streams.Stream_IO, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
-     GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Records, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Trial, Sim_Util, Sim_Visit, Sim_World;
+     GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Records, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Trial, Sim_Util, Sim_Visit, Sim_Voice, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
 
 procedure Diary_Sim is
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.042";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.043";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -174,6 +174,8 @@ procedure Diary_Sim is
    Grant_Mode : Boolean := False;   --  --grant P<n>
    Act_Count : array (Entity_Id, Action) of Natural := [others => [others => 0]];   --  all ticks replayed
    Last_Act : Action := Rest;
+   Voice_Act : array (Entity_Id) of List_Id := [others => Rest];   --  the latest verb and the newest learned or coined word of each wesen (display only: the voices)
+   Voice_Word : array (Entity_Id) of Natural := [others => 0];
    Votes_Of : All_Stats;
    --  The treadmill world (Sim_Things): on in sessions that carry world=1; Last_Verb is the last Step's verb
    --  (the base action, or Examine / Push / Eat / Greet); Verb_Count counts the verbs of all ticks replayed.
@@ -269,6 +271,7 @@ procedure Diary_Sim is
    Audit_View, Challenge_Mode : Boolean := False;   --  --audit / --challenge <player>
    Challenge_Opt : Unbounded_String;
    Verify_View : Boolean := False;               --  --verify (make verify): replay everything from the files, compare, print one line
+   Voices_View : Boolean := False;                 --  --voices / make voices: the four wesen messages at the last tick
    Elo_View, Perft_Mode : Boolean := False;      --  --elo (replay, then the ranking) / --perft (the move generator checks)
    Screens_View : Boolean := False;              --  --screens: replay, then show the screens (a view like --ledger)
    Rate_Pct, Load, Hist, Cool, Streak, Since_Work, Cool_N, Cut_N, Quick_N : array (Entity_Id) of Natural := [others => 0];
@@ -423,7 +426,7 @@ procedure Diary_Sim is
       Read_Lines (Data_Path ("limits.txt"), Lines, Found);
       if not Found then Warn (Msg ("warn.limits_file")); end if;
       Read_Lines (Data_Path ("menu.txt"), Lines, Found);   --  menu text: keys only, a missing file shows the keys
-      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt", "screens.txt", "chess.txt", "robot.txt", "govern.txt", "preport.txt", "ticks.txt", "visit.txt", "trial.txt", "records.txt"]) loop   --  the Buddhism layer: numbers, wording, players
+      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt", "screens.txt", "chess.txt", "robot.txt", "govern.txt", "preport.txt", "ticks.txt", "visit.txt", "voices.txt", "trial.txt", "records.txt"]) loop   --  the Buddhism layer: numbers, wording, players
          Read_Lines (Data_Path (F), Lines, Found);
          if not Found then Warn (Msg ("warn.dharma_file", F)); end if;
       end loop;
@@ -754,6 +757,7 @@ procedure Diary_Sim is
                      Use_Word (E, Pa);
                      Use_Word (E, Pb);
                      Learn_Word (E, W);
+                     Voice_Word (E) := W;
                      if Screen_Active then Sim_Screen.Note (E, W, "coined"); end if;
                      Ensure (E, Words_File, Words_Line (W, "coined", Tick, Parents (W)));
                      Add (Msg ("detail.coined", Text, Word (Pa), Word (Pb)));
@@ -805,6 +809,7 @@ procedure Diary_Sim is
          end if;
       end if;
       Last_Verb := Verb;
+      Voice_Act (E) := Verb;
       S.Location := Clamp (S.Location, 0, L_Max);
       case A is
          when Talk => Teach;
@@ -814,6 +819,7 @@ procedure Diary_Sim is
                W : constant Positive := Pending_Word (E);
             begin
                Learn_Word (E, W, Natural (Pending_From (E)));
+               Voice_Word (E) := W;
                Ensure (E, Words_File, Words_Line (W, "taught", Tick, Name (Pending_From (E))));
                Add (Msg ("detail.learned", Word (W), Name (Pending_From (E))));
                Pending_Word (E) := 0;
@@ -4633,6 +4639,128 @@ procedure Diary_Sim is
 
    --  The live columns of the header: four wesen (mood, energy, words, petitions), then four players (the wesen they watch, the mood
    --  of those, petitions granted / refused, stance).  Columns of 12, labels of 13: at most 62 columns.
+   --  ---- the voices of the wesen (Sim_Voice, data/voices.txt): display only, a pure function of the replayed state ---------------------
+   --  Nothing here writes to a diary or changes the simulation; voice_log.txt of the save folder is a log of what was shown (not verified).
+   Voice_On : Boolean := True;                  --  voices are shown (voice.enabled)
+   Voice_Cache, Voice_Logged : array (Entity_Id) of Unbounded_String;
+   Voice_Idx : Integer := -1;                   --  the rotation step of the cache (a new one every voice.refresh_seconds)
+   Voice_Log_N : Natural := 0;                  --  lines of voice_log.txt
+   Voice_Log_Path : constant String := "voice_log.txt";
+
+   --  The facts one wesen can say about itself, from the real records of the replayed state.
+   function Voice_Facts (E : Entity_Id; Change : Integer) return Sim_Voice.Facts is
+      F : Sim_Voice.Facts;
+      Fav : Natural := 0;
+      Fav_N : Int := 0;
+      Latest : Natural := 0;
+      Dec : constant String := (if Govern_Active then Sim_Govern.Last_Line_Of (E) else "");
+   begin
+      F.Id := To_Unbounded_String (Name (E));
+      F.Name := To_Unbounded_String (Sim_World.Display (E));
+      F.Act := To_Unbounded_String (Low (Voice_Act (E)));
+      F.Mood := St (E).Mood;
+      F.Energy := St (E).Energy;
+      F.Words := Known_Count (E);
+      F.Change := Change;
+      for L in 0 .. 3 loop
+         if Votes_Of (E) (L).N > Fav_N then Fav_N := Votes_Of (E) (L).N; Fav := L; end if;
+      end loop;
+      if Fav_N > 0 then F.Place := To_Unbounded_String (Msg ("loc." & Img (Fav))); end if;
+      if Voice_Word (E) > 0 then F.Word := To_Unbounded_String (Word (Voice_Word (E))); end if;
+      for N in reverse 1 .. Petition_Total loop
+         if Petition_From (N) = E then Latest := N; exit; end if;
+      end loop;
+      F.Open := (if Govern_Active then Sim_Govern.Open_Of (E) else Petitions_Of (E));
+      F.Outcome := To_Unbounded_String (Token (Dec, "kind"));
+      if Dec /= "" and then F.Open = 0 and then Topic_Id (Token (Dec, "topic")) > 0 then
+         F.Topic := To_Unbounded_String (Topic_Phrase (Topic_Id (Token (Dec, "topic"))));
+      elsif Latest > 0 then
+         F.Topic := To_Unbounded_String (Topic_Phrase (Topic_Id (Petition_Topic (Latest))));
+      end if;
+      F.Trials := (if Trial_Active then Sim_Trial.Count else 0);
+      return F;
+   exception
+      when Constraint_Error => return F;
+   end Voice_Facts;
+
+   function Voice_Text (E : Entity_Id; Tick : Int; Change : Integer) return String is
+     (Sim_Voice.Message (Voice_Facts (E, Change), Seed, Tick, Integer (E)));
+
+   procedure Voice_Log_Add (Line : String) is
+      F : TIO.File_Type;
+      Keep : constant Natural := Natural (Int'Max (10, Limit ("voice.log_keep", 500)));
+   begin
+      if Limit ("voice.log", 1) = 0 then return; end if;
+      begin
+         TIO.Open (F, TIO.Append_File, Voice_Log_Path);
+      exception
+         when TIO.Name_Error => TIO.Create (F, TIO.Out_File, Voice_Log_Path);
+      end;
+      TIO.Put_Line (F, Line);
+      TIO.Close (F);
+      Voice_Log_N := Voice_Log_N + 1;
+      if Voice_Log_N > 2 * Keep then   --  keep the newest voice.log_keep lines
+         declare
+            Lines : Str_Vectors.Vector;
+            Found : Boolean;
+         begin
+            Read_Lines (Voice_Log_Path, Lines, Found);
+            TIO.Create (F, TIO.Out_File, Voice_Log_Path);
+            for I in Natural'Max (1, Natural (Lines.Length) - Keep + 1) .. Natural (Lines.Length) loop TIO.Put_Line (F, Lines (I)); end loop;
+            TIO.Close (F);
+            Voice_Log_N := Natural'Min (Keep, Natural (Lines.Length));
+         end;
+      end if;
+   exception
+      when others => if TIO.Is_Open (F) then TIO.Close (F); end if;   --  a log that cannot be written never stops the run
+   end Voice_Log_Add;
+
+   --  A new rotation step every voice.refresh_seconds: the four messages are made again for the tick now (so a text stays for its step).
+   procedure Voice_Refresh (Elapsed : Duration) is
+      Step : constant Integer := Integer (Elapsed / Duration (Int'Max (1, Limit ("voice.refresh_seconds", 4))));
+      Shown : constant Natural := Natural (Int'Max (1, Int'Min (4, Limit ("voice.shown", 2))));
+   begin
+      if Step = Voice_Idx or else Cur_Tick = 0 then return; end if;
+      Voice_Idx := Step;
+      for E in Entity_Id loop
+         Voice_Cache (E) := To_Unbounded_String (Voice_Text (E, Cur_Tick, (if Night_Phase = 0 then 0 else St (E).Mood - Snap_Mood (E))));
+      end loop;
+      for J in 0 .. Shown - 1 loop
+         declare
+            E : constant Entity_Id := Entity_Id ((Voice_Idx + J) mod Integer (Entity_Id'Last) + 1);
+         begin
+            if Voice_Cache (E) /= Voice_Logged (E) then
+               Voice_Logged (E) := Voice_Cache (E);
+               Voice_Log_Add ("t=" & Img (Cur_Tick) & " " & To_String (Voice_Cache (E)));
+            end if;
+         end;
+      end loop;
+   end Voice_Refresh;
+
+   --  The voices region of the header: Shown messages of Rows lines each (padded, so the header keeps its height).
+   function Voice_Region (Shown, Rows : Natural) return Str_Vectors.Vector is
+      R : Str_Vectors.Vector;
+   begin
+      for J in 0 .. Shown - 1 loop
+         declare
+            V : Str_Vectors.Vector;
+         begin
+            if Voice_Idx >= 0 then
+               V := Sim_Voice.Fit (To_String (Voice_Cache (Entity_Id ((Voice_Idx + J) mod Integer (Entity_Id'Last) + 1))), 77, Positive'Max (1, Rows));
+            end if;
+            for K in 1 .. Rows loop R.Append (" " & (if K <= Natural (V.Length) then V (K) else "")); end loop;
+         end;
+      end loop;
+      return R;
+   end Voice_Region;
+
+   function Voices_Text return String is   --  --voices / make voices: the four messages at the last tick of the history
+      R : Unbounded_String;
+   begin
+      for E in Entity_Id loop Append (R, Voice_Text (E, Last_Done, 0) & ASCII.LF); end loop;
+      return To_String (R);
+   end Voices_Text;
+
    function Night_Table return Str_Vectors.Vector is
       R : Str_Vectors.Vector;
       Line : Unbounded_String;
@@ -4738,7 +4866,10 @@ procedure Diary_Sim is
       L (Msg ("night.t.5", Img (Night_Done), (if Night_Done > 0 then Tenths_Text (Last_Dur) & " s" else "-"), Avg_Text, Ticks_Per_Sec));
       for T of Tab loop L (" " & T); end loop;
       L (Msg (if Sim_Quit.Key_Q then (if Night_Phase = 0 then "night.q.replay" else "night.q") elsif Sim_Quit.Watching then "night.keys" else "night.nokeys"));
-      for I in Natural'Max (1, Natural (Recent.Length) - 5) .. Natural (Recent.Length) loop L (Recent (I)); end loop;
+      if Voice_On then
+         for T of Voice_Region (Natural (Int'Max (1, Int'Min (4, Limit ("voice.shown", 2)))), 2) loop L (T); end loop;
+      end if;
+      for I in Natural'Max (1, Natural (Recent.Length) - Natural (Int'Max (0, Limit ("night.recent", 2))) + 1) .. Natural (Recent.Length) loop L (Recent (I)); end loop;
       Append (R, ASCII.ESC & "[J");
       Con.Put_Now (To_String (R));
       Flush_Out;
@@ -4754,6 +4885,7 @@ procedure Diary_Sim is
          Last_Poll := Now;
          Sim_Quit.Poll;
       end if;
+      if Voice_On then Voice_Refresh (Now - Night_T0); end if;
       if (Sim_Quit.Key_Q or else Sim_Quit.Requested) and then not Q_Said then
          Q_Said := True;
          if Tty_Out then Paint; else Con.Put_Line_Now (Msg ((if Night_Phase = 0 then "night.q.replay" else "night.q"))); Flush_Out; end if;
@@ -4784,6 +4916,16 @@ procedure Diary_Sim is
          if L0 /= "" then Last_Line := To_Unbounded_String (Compact (L0)); end if;
       end;
       Sim_Quit.Watch_Keys (True);
+      Voice_On := Limit ("voice.enabled", 1) /= 0;
+      if Voice_On and then Ada.Directories.Exists (Voice_Log_Path) then
+         declare
+            Lines : Str_Vectors.Vector;
+            Found : Boolean;
+         begin
+            Read_Lines (Voice_Log_Path, Lines, Found);
+            Voice_Log_N := Natural (Lines.Length);
+         end;
+      end if;
       if Tty_Out then
          Con.Put_Now (ASCII.ESC & "[2J");
          Paint;
@@ -5069,6 +5211,7 @@ begin
          elsif Opt = "--perft" then Perft_Mode := True;
          elsif Opt = "--verify" then Ledger_Mode := True; Verify_View := True;
          elsif Opt = "--elo" then Ledger_Mode := True; Elo_View := True;
+         elsif Opt = "--voices" then Ledger_Mode := True; Voices_View := True;
          elsif Opt = "--govern" then Ledger_Mode := True; Govern_View := True;
          elsif Opt = "--veto" or else Opt = "--approve" then Veto_Mode := True; Veto_Approve := Opt = "--approve"; Veto_Opt := To_Unbounded_String (Val);
          elsif Opt = "--audit" then Ledger_Mode := True; Audit_View := True;
@@ -5373,7 +5516,7 @@ begin
             Verify_Records (Last_Done);
             Verify_Visit (Last_Done);
             Con.Put_Line (Msg ("verify.ok", Img (Verify_To), Img (Integer (Sessions.Length)), Tenths_Text (Ada.Calendar."-" (Ada.Calendar.Clock, T_Run))));
-         elsif Elo_View then Con.Put (Elo_Text); elsif Govern_View then Con.Put (Govern_Text); elsif Audit_View then Con.Put (Audit_Text); elsif Next_View then Con.Put (Next_Text); elsif Trial_View then Con.Put (Trials_Text); elsif Rec_View then Con.Put (Lines_Text (Sim_Records.Divergence)); elsif Dict_View then Con.Put (Lines_Text (Sim_Records.Dictionary)); elsif Bal_View then Con.Put (Lines_Text (Sim_Records.Ballots)); elsif Robot_View then Con.Put (Robot_Text); elsif Screens_View then Con.Put (Screens_Text); else Con.Put_Line (Sim_Ledger.Report (Seed, Ledger_From, Ledger_Full)); end if;
+         elsif Voices_View then Con.Put (Voices_Text); elsif Elo_View then Con.Put (Elo_Text); elsif Govern_View then Con.Put (Govern_Text); elsif Audit_View then Con.Put (Audit_Text); elsif Next_View then Con.Put (Next_Text); elsif Trial_View then Con.Put (Trials_Text); elsif Rec_View then Con.Put (Lines_Text (Sim_Records.Divergence)); elsif Dict_View then Con.Put (Lines_Text (Sim_Records.Dictionary)); elsif Bal_View then Con.Put (Lines_Text (Sim_Records.Ballots)); elsif Robot_View then Con.Put (Robot_Text); elsif Screens_View then Con.Put (Screens_Text); else Con.Put_Line (Sim_Ledger.Report (Seed, Ledger_From, Ledger_Full)); end if;
          return;
       end if;
       for E in Entity_Id loop

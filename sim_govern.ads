@@ -1,4 +1,4 @@
---  Version: 0.006
+--  Version: 0.007
 --  Governance of diary_sim (govern=1 sessions; needs rest=1): the players (Player 1, Player 2, Player 3) decide what happens to the
 --  petitions of the wesen they watch.  A SHORT WHITELIST of rule levers (data/govern.txt: recovery rate, cool-down length, the mood
 --  cost of work, the quick-rest energy) can each be moved a small step by a petition of the matching topic, never past its bounds.
@@ -51,6 +51,7 @@ package Sim_Govern is
    type Counts_T is array (1 .. 6) of Natural;
    function Counts_Of (P : Sim_Dharma.Player_Id) return Counts_T;
    function Top_Concern (P : Sim_Dharma.Player_Id) return String;
+   function Last_Line_Of (E : Entity_Id) return String;   --  the newest D line about a petition of E ("" before the first)
    function Open_Of (E : Entity_Id) return Natural;       --  petitions of E that wait for a decision (a deferred one counts too)
    function Deferred_Of (E : Entity_Id) return Natural;   --  ... of which already put off at least once
    --  Robert caught a player lying (make challenge): the player's standing with E drops by By points (never below 0).

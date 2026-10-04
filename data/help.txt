@@ -39,7 +39,10 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
                finishes first); Ctrl-C, SIGTERM, SIGHUP stop at the next
                tick; DRIFT, --max-sessions=N, --max-hours=H (decimals ok),
                --session-ticks=N (default 300) also stop it; on a
-               terminal a timer header with the wesen and the players
+               terminal a timer header with the wesen and the players, and
+               under it a message from each wesen in turn (voice.*)
+--voices       the four wesen messages the night header shows (make voices;
+               data/voices.txt; read-only)
 --verify       replay the whole history from the files and compare it with
                everything stored; one OK line (make verify; writes nothing)
   --debug        also write debug_digest.txt (make run|demo DEBUG=1)

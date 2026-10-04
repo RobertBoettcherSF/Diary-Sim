@@ -1,4 +1,4 @@
---  Version: 0.007
+--  Version: 0.008
 --  See sim_govern.ads.
 pragma Ada_2022;
 
@@ -419,6 +419,14 @@ package body Sim_Govern is
       & (if C (6) > 0 then Msg ("govern.counter.veto", Img (C (6))) else ""));
 
    function Counts_Of (P : Player_Id) return Counts_T is (Count_For (Player_Name (P)));
+
+   function Last_Line_Of (E : Entity_Id) return String is
+   begin
+      for I in reverse 1 .. Natural (Dec_Lines.Length) loop
+         if Tok (Dec_Lines (I), "wesen") = Name (E) then return Dec_Lines (I); end if;
+      end loop;
+      return "";
+   end Last_Line_Of;
 
    function Open_Of (E : Entity_Id) return Natural is
       N : Natural := 0;

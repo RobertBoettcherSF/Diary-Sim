@@ -1595,7 +1595,7 @@ vl=$(wc -l < "$w/sh/vtail.txt")
 [ "$miss" = 0 ] && [ "$miss2" = 0 ] && [ "$vl" -gt 100 ] && grep -q '^== chess ==' save/run_report.txt && grep -q '^== ledger ==' save/run_report.txt && ok "run_report.txt is complete: every line of the verbose console ($vl lines) and of the short form is in it" || bad "run_report.txt incomplete ($miss $miss2 $vl)"
 # --verbose and DIARY_VERBOSE=1 print the old whole report; the simulation is untouched by any of it
 nrm() { sed 's#/sh/[a-z]*/#/sh/X/#g' "$1"; }
-sums() { ( cd "$1/save" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./run_log*|./trend*|./night_console*|./debug*|./last*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
+sums() { ( cd "$1/save" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./run_log*|./trend*|./night_console*|./debug*|./last*|./voice_log*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
 diff <(nrm ../flag/c1.txt) <(nrm ../envv/c1.txt) > /dev/null && diff <(nrm ../flag/c2.txt) <(nrm ../envv/c2.txt) > /dev/null && grep -q '^chess games' ../flag/c1.txt && grep -q '^treadmill' ../flag/c1.txt && grep -q '^please attach debug.txt' ../flag/c1.txt && ! grep -q '^@@TRACE\|^Full report:' ../flag/c1.txt \
   && ok "--verbose = DIARY_VERBOSE=1: the whole report as before (no marker, no pointer), $vl lines after 'report:'" || bad "verbose output"
 sums "$w/sh/short" > "$w/sh/s1.txt"; sums "$w/sh/flag" > "$w/sh/s2.txt"; sums "$w/sh/envv" > "$w/sh/s3.txt"
@@ -1629,7 +1629,7 @@ ns=$(grep -c '^s[0-9]* t[0-9]* [0-9][0-9]:[0-9][0-9]:[0-9][0-9] | ' night.txt); 
 [ "$rcn" = 0 ] && [ "$ns" = 3 ] && grep -q '^night run: sessions of 60 ticks; max sessions: 3; max hours: 12' night.txt && grep -q '^+-- night run finished' night.txt && grep -q '^| stopped: the number of sessions was reached' night.txt \
   && ! grep -q '^@@\|Full report\|^report:\|^treadmill' night.txt && [ "$nlines" -le 24 ] && [ "$(grep -c "^  [0-9]h[0-9][0-9]m[0-9][0-9]s | .* KB (+.* KB) | .*/session | .* tick/s | left " night.txt)" = 3 ] && grep -v '^Save folder\|^Saved to' night.txt | awk 'length > 79 { n++ } END { exit n > 0 }' \
   && ok "make night, no terminal, MAX_SESSIONS=3: one status line per session (3) with its timer line (elapsed, save folder size and growth, seconds per session, ticks per second, time left), a final box, no report spam ($nlines lines, <= 79 columns), exit 0" || bad "night console ($rcn $ns $nlines)"
-nsums() { ( cd "$1" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./run_log*|./trend*|./night_console*|./debug*|./last*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
+nsums() { ( cd "$1" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./run_log*|./trend*|./night_console*|./debug*|./last*|./voice_log*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
 nsums "$w/nt/night" > ns1.txt; nsums "$w/nt/hand" > ns2.txt
 [ -s ns1.txt ] && cmp -s ns1.txt ns2.txt && ok "three night sessions are byte for byte three hand-made --more 60 runs (diaries, entities, summary, records: $(wc -l < ns1.txt) files)" || bad "night differs from hand runs"
 # make verify: OK on a night save; a changed diary line is DRIFT (exit 1); the night run against the same sessions by hand, run_report.txt included
@@ -1785,6 +1785,57 @@ if [ -n "$sf" ]; then
 else bad "share: no archive ($(cat share.txt))"; fi
 grep -q 'make night' "$root/Makefile" && grep -q 'make trend' "$root/Makefile" && grep -q 'make share' "$root/Makefile" && grep -q -- '--continuous' "$root/data/help.txt" && grep -q -- '--trend' "$root/data/help.txt" && grep -q 'make night' "$root/README.md" && grep -q 'trend.txt' "$root/README.md" && grep -q 'make share' "$root/README.md" \
   && grep -q 'night.max_hours' "$root/data/limits.txt" && grep -q 'report.trend_keep' "$root/data/limits.txt" && ok "README, Makefile, --help and data/limits.txt describe make night, make trend and make share" || bad "docs for night"
+# ---- B1: the voices of the wesen under the night header (Sim_Voice, data/voices.txt): display only, deterministic, <= 150 characters ----
+vh="$w/nt/vh"; env -u DIARY_VERBOSE "$nb" --home "$vh" --seed 42 --ticks 3000 --yes --every 100000 > /dev/null 2>&1
+env -u DIARY_VERBOSE "$nb" --voices --home "$vh" > vo1.txt 2>&1; env -u DIARY_VERBOSE "$nb" --voices --home "$vh" > vo2.txt 2>&1
+miss=0; for id in ada gemini replika robert; do for sit in tired low high up down doing place word granted partial deferred refused waiting trial; do
+  [ "$(grep -c "^voice\.$sit\.$id\.[0-9]* = " "$root/data/voices.txt")" -ge 2 ] || miss=$((miss + 1)); done; done
+[ "$(wc -l < vo1.txt)" = 4 ] && cmp -s vo1.txt vo2.txt && ! awk 'length($0) > 150 || length($0) < 10' vo1.txt | grep -q . && ! grep -q '[{}]\|\[voice' vo1.txt && grep -q '^[A-Za-z]*: ' vo1.txt && [ "$miss" = 0 ] \
+  && ok "--voices (make voices): one message per wesen (4), each <= 150 characters, no template left open, the same text on every run for the same state; data/voices.txt has >= 2 templates per wesen and situation (14 situations x 4)" || bad "voices ($miss missing templates; $(cat vo1.txt))"
+# display only: a night run with the voices on, and one with them off (and no log), write the same diaries; voice_log.txt lines are <= 150 characters; make verify ignores the log
+rm -rf "$w/nt/von" "$w/nt/voff"; cp -r "$vh" "$w/nt/von"; cp -r "$vh" "$w/nt/voff"; rm -rf "$w/nt/vd"; mkdir -p "$w/nt/vd/bin"; cp "$nb" "$w/nt/vd/bin/"; cp -r "$root/data" "$w/nt/vd/data"
+sed -i 's/^voice.enabled = .*/voice.enabled = 0/; s/^voice.log = .*/voice.log = 0/' "$w/nt/vd/data/limits.txt"
+env -u DIARY_VERBOSE "$nb" --continuous --home "$w/nt/von" --session-ticks 200 --max-sessions 2 --seed 42 < /dev/null > von.txt 2>&1
+( cd "$w/nt/vd" && env -u DIARY_VERBOSE bin/diary_sim --continuous --home "$w/nt/voff" --session-ticks 200 --max-sessions 2 --seed 42 < /dev/null > "$w/nt/voff.txt" 2>&1 )
+env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/von" > vov.txt 2>&1; rcvv=$?
+vn() { ( cd "$1" || exit 1; find . -type f ! -name 'voice_log.txt' ! -name 'run_*' ! -name 'trend.txt' ! -name 'night_*' ! -name 'debug.txt' ! -name 'last*' | sort | while read -r f; do case $f in *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^#' "$f" | cksum | sed "s#\$# $f#";; *) cksum < "$f" | sed "s#\$# $f#";; esac; done ); }
+vn "$w/nt/von" > vn1.txt; vn "$w/nt/voff" > vn2.txt
+if [ -s "$w/nt/von/voice_log.txt" ]; then vlong=$(sed 's/^t=[0-9]* //' "$w/nt/von/voice_log.txt" | awk 'length($0) > 150 || length($0) < 8' | wc -l); else vlong=-1; fi
+[ -s vn1.txt ] && cmp -s vn1.txt vn2.txt && [ "$vlong" = 0 ] && [ ! -e "$w/nt/voff/voice_log.txt" ] && [ "$rcvv" = 0 ] && grep -q '^verify: OK' vov.txt \
+  && ok "the voices are display only: diaries, entities and records of a night run are byte for byte the same with voice.enabled = 0 (no voice_log.txt then); voice_log.txt ($(wc -l < "$w/nt/von/voice_log.txt") lines, none over 150 characters) is not verified: make verify passes" || bad "voices display only ($vlong, rc $rcvv)"
+# on a terminal: the messages sit under the header, wrapped to <= 79 columns, the whole screen stays within 24 rows
+if command -v python3 > /dev/null 2>&1; then
+  cat > "$w/nt/ptyv.py" <<'PY'
+import os, pty, re, select, sys, time
+exe, home = sys.argv[1:3]
+pid, fd = pty.fork()
+if pid == 0:
+    os.chdir("/")
+    os.execv(exe, [exe, "--continuous", "--home", home, "--session-ticks", "100", "--max-sessions", "12", "--seed", "42"])
+out = b""; t0 = time.time(); sent = False
+while time.time() - t0 < 90:
+    r, _, _ = select.select([fd], [], [], 0.05)
+    if r:
+        try: d = os.read(fd, 65536)
+        except OSError: break
+        if not d: break
+        out += d
+    if not sent and out.count(b"\x1b[H") >= 3 and time.time() - t0 > 6:
+        os.write(fd, b"q"); sent = True
+try: os.waitpid(pid, 0)
+except ChildProcessError: pass
+frames = out.decode("utf-8", "replace").split("\x1b[H")
+frame = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", frames[-2] if len(frames) > 2 else frames[-1])
+rows = frame.rstrip("\n").split("\n")
+print("ROWS=%d" % len(rows)); print("WIDE=%d" % sum(1 for x in rows if len(x) > 79))
+print("VOICES=%d" % sum(1 for x in rows if re.match(r"^ (Adam|Eve|Abel|Ruth|ada|gemini|replika|robert): ", x)))
+PY
+  rm -rf "$w/nt/vp"; cp -r "$vh" "$w/nt/vp"; vfr=$(python3 "$w/nt/ptyv.py" "$nb" "$w/nt/vp" 2>&1)
+  vr=$(echo "$vfr" | sed -n 's/^ROWS=//p'); vw=$(echo "$vfr" | sed -n 's/^WIDE=//p'); vv=$(echo "$vfr" | sed -n 's/^VOICES=//p')
+  [ "${vr:-99}" -le 24 ] && [ "${vw:-1}" = 0 ] && [ "${vv:-0}" -ge 1 ] && ok "on a terminal the header shows the wesen messages ($vv name(s) shown), every line <= 79 columns, the screen $vr rows (<= 24)" || bad "voices on a terminal ($vfr)"
+else ok "voices on a terminal: skipped (no python3 for a pseudo terminal)"; fi
+grep -q 'voice.refresh_seconds' "$root/data/limits.txt" && grep -q 'voice.max_chars' "$root/data/limits.txt" && grep -q -- '--voices' "$root/data/help.txt" && grep -q 'make voices' "$root/Makefile" && grep -q 'voice_log.txt' "$root/README.md" \
+  && ok "README, Makefile, --help and data/limits.txt describe the voices (voice.*, make voices, voice_log.txt)" || bad "voices docs"
 cd "$w" || exit 1
 
 

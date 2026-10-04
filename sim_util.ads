@@ -1,4 +1,4 @@
---  Version: 0.010
+--  Version: 0.011
 --  Pure helpers of diary_sim: deterministic hash rolls and the diary line
 --  format (read side).  Standard library only.
 pragma Ada_2022;
@@ -25,6 +25,7 @@ package Sim_Util is
    --  A loaded text with {1}..{7} filled in and \n as line break; if the key
    --  is unknown (file missing) the key and the values.
    function Msg (Key : String; A1, A2, A3, A4, A5, A6, A7 : String := "") return String;
+   function Has (Key : String) return Boolean;   --  is the key loaded?
    function Limit (Key : String; Default : Int) return Int;   --  loaded whole number, signed
    procedure Set_Limit (Key : String; Value : Int);   --  this run only (the Settings menu); no file is written
    function Ends_With_Lf (File : String) return Boolean;
