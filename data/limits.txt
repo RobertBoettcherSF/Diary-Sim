@@ -483,3 +483,5 @@ chat.trend_step = 100
 chat.trend_max = 12
 chat.log_tail = 30
 voice.shown_chat = 1
+# The vocabulary report (make wordstat): shortest stem that makes a word a prefix or suffix variant of another word the wesen knows.
+wordstat.stem_min = 3

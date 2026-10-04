@@ -49,6 +49,10 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
 --chat-script=FILE  with --chat: lines "<ticks into the run> <text>" are
                typed by the script (tests); no pause, no pacing
 --chatlog      the last lines of diaries/chat.txt (make chatlog; read-only)
+--wordstat     the vocabulary report: words known by kind (start, world,
+               taught, screen, coined, chess coordinates, chess numbers), used
+               again or not, agreed meanings, lengths, prefix/suffix variants
+               and a conclusion (make wordstat; data/wordstat.txt; read-only)
 --voices       the four wesen messages the night header shows (make voices;
                data/voices.txt; read-only)
 --verify       replay the whole history from the files and compare it with

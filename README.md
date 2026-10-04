@@ -256,6 +256,27 @@ A line input under the voices, in `make night` on a terminal and in a session of
   (150), `chat.session_ticks`, `chat.tps`, `chat.trend_step`, `chat.trend_max`, `chat.log_tail`, and for the voices `voice.shown_chat`.
 * **Layout** (24 rows): header 6 + tables 10 + hint 1 + one voice (2 lines) + night status line 1 + chat window 2 + input line 1 + 1 free row.
 
+## The vocabulary report (`make wordstat`, `--wordstat`; read-only, also in `make share`)
+
+    make wordstat      # per wesen and total: how many words are known, and where they came from
+
+Why do the wesen know thousands of words? `make wordstat` counts it from the files (`entities/<id>/words.txt`, then `diaries/screens.txt`,
+`dictionary.txt`, `votes.txt`, `petitions.txt`, and the notebooks if a later build keeps them); it changes nothing and runs no simulation, so
+the same save always gives the same report. Wording is in `data/wordstat.txt`, the shortest stem for the prefix/suffix count is `wordstat.stem_min`
+in `data/limits.txt`.
+* **By kind** (every word counted once, chess and number tokens first): start words, names of things met in the world, taught in lessons, read on
+  a screen, coined or blended, chess move as coordinates (`e2e4`), chess move as numbers (`5755`), other.
+* **Meaning and use:** words with an agreed meaning in the dictionary (`st=A`), words the world described, and how many words were **used again**
+  after the tick they were learned (a screen action by that wesen: show, read, pin, command, leave, blend; a dictionary proposal; a favourite
+  vote; a petition; a notebook line) against never used again, in total and by kind.
+* **Length** (all words, and without the chess and number tokens), the **number of different chess/number tokens**, and how many words are an
+  exact **prefix or suffix variant** of another word the same wesen knows (a stem of at least `wordstat.stem_min` letters).
+* **Conclusion:** one paragraph that names the biggest source and what the vocabulary would be without the tokens and with the variants folded.
+* In a 287-session run of this build (seed 42, 86,100 ticks) each wesen knew about 5,400 words, 58 % of them chess moves: every move a wesen
+  plays while resting mints the move string and its numeric string as words that the partner then learns, and lessons and screens spread them.
+  Without them a wesen knows about 2,200 words; see `docs/LEARN.md` ("Condensing the vocabulary by an order of magnitude").
+* `make share` adds `wordstat.txt` to the archive and its conclusion to `share_info.txt` and to the console.
+
 ## The Buddhism layer and the players (record-first)
 
 Everything below is **recorded, not acted on**: none of it changes the action table or any
@@ -1321,7 +1342,7 @@ paste it` and `back up diaries/ before the next run`.
 vocabulary, Rule 30 personality, bench kernels, votes and summary text), `sim_util.ads/.adb` (hash rolls,
 line parsing, data-file helpers), `data/words.txt`, `data/topics.txt` (petition topics), `data/limits.txt`,
 `data/messages.txt` (all console wording), `data/kalpas.txt` (session length votes), `data/menu.txt` (menu text, title, tagline), `data/fonts.txt` (title letters), `data/vocab.txt`, `data/help.txt`, `sim_dharma.ads/.adb` (karma, rebirth, unrest, ladder, awareness, players, inbox), `sim_things.ads/.adb` (the treadmill world), `data/things.txt` (its lists), `docs/WORLD.md`, `data/karma.txt` (numbers), `data/dharma.txt` (wording, flavour labels), `data/players.txt` (the three players),
-`sim_next.ads/.adb` + `data/ticks.txt` (the advice for the next run), `sim_visit.ads/.adb` + `data/visit.txt` (the visit: watch and talk), `sim_voice.ads/.adb` + `data/voices.txt` (the wesen messages under the night header), `sim_chat.ads/.adb` + `data/chat.txt` (the chat), `sim_trial.ads/.adb` + `data/trial.txt` (trial by chess), `sim_records.ads/.adb` + `data/records.txt` (votes, petitions, dictionary, announcements), `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
+`sim_next.ads/.adb` + `data/ticks.txt` (the advice for the next run), `sim_visit.ads/.adb` + `data/visit.txt` (the visit: watch and talk), `sim_voice.ads/.adb` + `data/voices.txt` (the wesen messages under the night header), `sim_chat.ads/.adb` + `data/chat.txt` (the chat), `sim_wordstat.ads/.adb` + `data/wordstat.txt` (the vocabulary report), `sim_trial.ads/.adb` + `data/trial.txt` (trial by chess), `sim_records.ads/.adb` + `data/records.txt` (votes, petitions, dictionary, announcements), `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
 Design documents (proposals, nothing built unless the README says so above): `docs/WORLD.md` (the treadmill world), `docs/LIFE.md` (roles,
 companies and positions, exhaustion, life support, leisure, the one being model), `docs/MYTH.md` (creation myths of the players),
 `docs/LEARN.md` (slow core, mixed study, dictionary pruning, pondering, notebooks and study; the byte-level predictor is postponed).

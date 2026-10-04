@@ -1941,6 +1941,39 @@ PY
 else ok "chat on a terminal: skipped (no python3 for a pseudo terminal)"; fi
 grep -q 'make chat' "$root/Makefile" && grep -q 'make chatlog' "$root/Makefile" && grep -q -- '--chat' "$root/data/help.txt" && grep -q -- '--chatlog' "$root/data/help.txt" && grep -q 'chat.session_ticks' "$root/data/limits.txt" && grep -q 'diaries/chat.txt' "$root/README.md" \
   && grep -q '18000 .. 18499' "$root/docs/LEARN.md" && grep -q 'stty sane' "$root/README.md" && ok "README, Makefile, --help, data/limits.txt and docs/LEARN.md (salts 18000 .. 18499) describe the chat" || bad "chat docs"
+echo "== 50. make wordstat (--wordstat): the vocabulary report, read-only; also in make share =="
+cd "$w/nt" || exit 1
+ws="$w/nt/ws"; rm -rf "$ws"; cp -r "$vh" "$ws"
+sumf() { ( cd "$1" && find . -type f | sort | while read -r f; do cksum < "$f" | sed "s#\$# $f#"; done | cksum ); }
+s0=$(sumf "$ws")
+env -u DIARY_VERBOSE "$nb" --wordstat --home "$ws" > wsr.txt 2>&1; rcw=$?
+env -u DIARY_VERBOSE "$nb" --wordstat --home "$ws" > wsr2.txt 2>&1
+s1=$(sumf "$ws")
+exp=$(awk '!/^#/ && NF >= 4 { k = FILENAME SUBSEP $1; if (!(k in seen)) { seen[k] = 1; n++; if ($2 ~ /^[a-h][1-8][a-h][1-8][qrbn]?$/) c++; else if ($2 ~ /^[0-9]+$/) d++; else if ($3 == "start") st++ } } END { print n + 0, c + 0, d + 0, st + 0 }' "$ws"/entities/*/words.txt)
+row() { awk -v k="$1" 'index($0, k) > 0 { print $NF; exit }' wsr.txt; }
+got="$(row 'known words') $(row 'chess move, coordinates') $(row 'chess move, numbers') $(row 'start words')"
+ucnt=$(row 'used again after learning'); nuc=$(row 'never used again  '); tot=$(row 'known words')
+# the variants, counted again by awk for the first wesen (stems of at least 3 letters, chess and number tokens left out)
+va=$(awk '!/^#/ && NF >= 4 { if ($2 !~ /^[a-h][1-8][a-h][1-8][qrbn]?$/ && $2 !~ /^[0-9]+$/) w[$2] = 1 } END { for (x in w) { n = length(x); f = 0; for (l = 3; l < n && !f; l++) if ((substr(x, 1, l) in w) || (substr(x, n - l + 1) in w)) f = 1; v += f } print v + 0 }' "$ws/entities/ada/words.txt")
+vr=$(awk '/^  prefix or suffix variants/ { print $(NF-4); exit }' wsr.txt)
+[ "$rcw" = 0 ] && [ "$got" = "$(echo "$exp" | awk '{ print $1, $2, $3, $4 }')" ] && [ "$tot" -gt 100 ] && [ "$vr" = "$va" ] && [ "$s0" = "$s1" ] && cmp -s wsr.txt wsr2.txt \
+  && ! grep -q '\[wordstat\.' wsr.txt && [ "$(awk 'length > 79' wsr.txt | wc -l)" = 0 ] && grep -q '^By kind' wsr.txt && grep -q '^Meaning and use' wsr.txt && grep -q '^Use by kind' wsr.txt && grep -q '^Word length, all words' wsr.txt \
+  && grep -q '^Word length, without the chess' wsr.txt && grep -q '^Tokens and variants' wsr.txt && grep -q '^Conclusion:' wsr.txt && sed -n '/^Conclusion:/,$p' wsr.txt | grep -q 'The biggest source is ' \
+  && [ "$((ucnt + nuc))" = "$tot" ] \
+  && ok "--wordstat: $tot words known (start, chess coordinates, chess numbers and the total equal an independent awk count: $got), used + never used = known, prefix/suffix variants of the first wesen equal an independent count ($vr), every line <= 79 columns, same text on every run, the save folder byte for byte unchanged (read-only), conclusion names the biggest source" \
+  || bad "wordstat (rc $rcw, report '$got' vs awk '$exp', variants $vr vs $va, used $ucnt + $nuc vs $tot, before/after $s0 $s1)"
+mkdir -p "$w/nt/emptyws"; env -u DIARY_VERBOSE "$nb" --wordstat --home "$w/nt/emptyws" > wse.txt 2>&1; rce=$?
+[ "$rce" = 2 ] && grep -q 'no word lists yet' wse.txt && [ -z "$(find "$w/nt/emptyws" -name 'words.txt')" ] && ok "--wordstat on a folder without word lists: one clear line, exit 2, nothing created" || bad "wordstat empty ($rce: $(head -2 wse.txt))"
+sd2="$w/nt/out2"; rm -rf "$sd2"; mkdir -p "$sd2"; ( export DIARY_HOME="$ws" SHARE_DIR="$sd2"; "$root/scripts/share.sh" "$nb" > share2.txt 2>&1 ); sf2=$(ls "$sd2"/share-* 2> /dev/null | head -1)
+if [ -n "$sf2" ]; then
+  rm -rf "$w/nt/x2"; mkdir -p "$w/nt/x2"
+  case $sf2 in *.zip) python3 -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$sf2" "$w/nt/x2" 2> /dev/null || ( cd "$w/nt/x2" && unzip -q "$sf2" );; *) tar -xzf "$sf2" -C "$w/nt/x2";; esac
+  [ -s "$w/nt/x2/wordstat.txt" ] && grep -q '^Conclusion:' "$w/nt/x2/wordstat.txt" && grep -q '^wordstat: The biggest source is ' "$w/nt/x2/share_info.txt" && grep -q '^files: .*wordstat.txt' "$w/nt/x2/share_info.txt" \
+    && grep -q '^share: wordstat: The biggest source is ' share2.txt && ! ls "$w/nt/x2" | grep -qi 'ballot\|diaries\|jsonl\|words.txt' \
+    && ok "make share: wordstat.txt is in the archive, its conclusion is in share_info.txt and on the console; still no diaries, entities or ballots" || bad "share wordstat ($(ls "$w/nt/x2" | tr '\n' ' '))"
+else bad "share wordstat: no archive ($(cat share2.txt))"; fi
+grep -q 'make wordstat' "$root/Makefile" && grep -q '^wordstat: all' "$root/Makefile" && grep -q -- '--wordstat' "$root/data/help.txt" && grep -q 'make wordstat' "$root/README.md" && grep -q 'wordstat.stem_min' "$root/data/limits.txt" && grep -q 'Condensing the vocabulary' "$root/docs/LEARN.md" \
+  && ok "README, Makefile, --help, data/limits.txt and docs/LEARN.md describe the vocabulary report" || bad "wordstat docs"
 cd "$w" || exit 1
 
 

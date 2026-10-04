@@ -1,7 +1,8 @@
 #!/bin/sh
-# Version: 0.001
+# Version: 0.002
 # make share: ONE small archive of what Robert sends back for evaluation: trend.txt, run_log.txt, run_report.txt, run_report_prev.txt,
-# summary.txt, player_reports.txt, dictionary.txt (the public word list) and divergence.txt (the output of make divergence).
+# summary.txt, player_reports.txt, dictionary.txt (the public word list), divergence.txt (the output of make divergence) and wordstat.txt
+# (the output of make wordstat: the vocabulary by kind; its conclusion is also copied into share_info.txt and printed).
 # NOT in it: diaries/, entities/ and the secret ballots (diaries/ballots.txt).  zip if there is one, else tar.gz, else python3's zipfile.
 # Where: next to the save folder (its parent, e.g. ~/Downloads for ~/Downloads/diary-data), or SHARE_DIR=... ; the path and size are printed.
 exe=${1:-bin/diary_sim}
@@ -17,9 +18,11 @@ for f in trend.txt run_log.txt run_report.txt run_report_prev.txt summary.txt pl
 done
 [ -f "$folder/diaries/dictionary.txt" ] && cp "$folder/diaries/dictionary.txt" "$stage/dictionary.txt" && n=$((n + 1))
 if [ -d "$folder/diaries" ] && "$exe" --home "$folder" --divergence > "$stage/divergence.txt" 2>&1; then n=$((n + 1)); else rm -f "$stage/divergence.txt"; fi
+if [ -d "$folder/entities" ] && "$exe" --home "$folder" --wordstat > "$stage/wordstat.txt" 2>&1; then n=$((n + 1)); else rm -f "$stage/wordstat.txt"; fi
 [ "$n" -gt 0 ] || { echo "share: nothing to share in $folder: make run first" >&2; exit 1; }
 { echo "diary-sim share"; echo "made: $(date '+%Y-%m-%d %H:%M:%S') (local)"; echo "save folder: $folder"; echo "files: $(cd "$stage" && ls | tr '\n' ' ')";
-  echo "not included: diaries/, entities/, ballots"; } > "$stage/share_info.txt"
+  echo "not included: diaries/, entities/, ballots"
+  [ -f "$stage/wordstat.txt" ] && echo "wordstat: $(sed -n '/^Conclusion:/,$p' "$stage/wordstat.txt" | sed '1d' | tr '\n' ' ')"; } > "$stage/share_info.txt"
 stamp=$(date '+%Y%m%d-%H%M%S')
 if command -v zip > /dev/null 2>&1; then
   out="$out_dir/share-$stamp.zip"; ( cd "$stage" && zip -q -9 "$out" ./* ) || exit 1
@@ -39,5 +42,6 @@ else
 fi
 size=$(wc -c < "$out" | tr -d ' ')
 echo "share: $out ($size bytes, $n files + share_info.txt)"
+[ -f "$stage/wordstat.txt" ] && echo "share: wordstat: $(sed -n '/^Conclusion:/,$p' "$stage/wordstat.txt" | sed '1d' | tr '\n' ' ')"
 [ "$size" -gt 400000 ] && echo "share: larger than expected: trend.txt and run_log.txt have grown; send it anyway"
 exit 0

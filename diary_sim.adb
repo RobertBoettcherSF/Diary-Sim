@@ -1,4 +1,4 @@
---  Version: 0.044
+--  Version: 0.045
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -28,7 +28,7 @@ pragma Ada_2022;
 
 with Ada.Calendar, Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Finalization, Ada.Strings.Fixed, Ada.Streams.Stream_IO, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
-     GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chat, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Records, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Trial, Sim_Util, Sim_Visit, Sim_Voice, Sim_World;
+     GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chat, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Records, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Trial, Sim_Util, Sim_Visit, Sim_Voice, Sim_Wordstat, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
 
 procedure Diary_Sim is
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.044";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.045";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -274,6 +274,7 @@ procedure Diary_Sim is
    --  chat=1 sessions (Sim_Chat): Robert's typed lines and every answer are C lines of diaries/chat.txt (record-first, replay-verified)
    Chat_Mode : Boolean := False;                 --  --chat / make chat: one session with the input line, paced
    Chat_Script_Opt : Unbounded_String;           --  --chat-script FILE: lines "<ticks into the session> <text>" typed by a script (tests)
+   Wordstat_Mode : Boolean := False;             --  --wordstat / make wordstat: the vocabulary report (read-only)
    Chatlog_Mode : Boolean := False;              --  --chatlog / make chatlog: the last chat lines
    Chat_Active : Boolean := False;               --  the session being replayed is a chat=1 session
    Chat_Path : constant String := "diaries/chat.txt";
@@ -459,7 +460,7 @@ procedure Diary_Sim is
       Read_Lines (Data_Path ("limits.txt"), Lines, Found);
       if not Found then Warn (Msg ("warn.limits_file")); end if;
       Read_Lines (Data_Path ("menu.txt"), Lines, Found);   --  menu text: keys only, a missing file shows the keys
-      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt", "screens.txt", "chess.txt", "robot.txt", "govern.txt", "preport.txt", "ticks.txt", "visit.txt", "voices.txt", "chat.txt", "trial.txt", "records.txt"]) loop   --  the Buddhism layer: numbers, wording, players
+      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt", "screens.txt", "chess.txt", "robot.txt", "govern.txt", "preport.txt", "ticks.txt", "visit.txt", "voices.txt", "wordstat.txt", "chat.txt", "trial.txt", "records.txt"]) loop   --  the Buddhism layer: numbers, wording, players
          Read_Lines (Data_Path (F), Lines, Found);
          if not Found then Warn (Msg ("warn.dharma_file", F)); end if;
       end loop;
@@ -1754,6 +1755,316 @@ procedure Diary_Sim is
          when others => null;   --  stdout is a closed pipe (| head)
       end;
    end Print_Chatlog;
+
+   --  --wordstat: the vocabulary report (Sim_Wordstat, data/wordstat.txt); READ-ONLY, nothing is simulated or written.
+   --  Sources: entities/<id>/words.txt (what is known, how, when), and the later use of a word: diaries/screens.txt (show, read, pin, cmd,
+   --  leave, blend by the wesen), diaries/dictionary.txt (word= and mean= of its proposals; st=A is the agreed meaning), diaries/votes.txt
+   --  (kind=favourite choices), diaries/petitions.txt (the words of req=), entities/<id>/notebook.txt (if there is one).
+   --  PROOF-LATER: Importance 2/10, Urgency 1/10, SPARK2 (percent arithmetic on counts, bounded slices)
+   procedure Print_Wordstat is
+      Lines : Str_Vectors.Vector;
+      Found : Boolean;
+      Name_W : constant := 36;   --  label column
+      Cell_W : constant := 7;
+      Total_W : constant := 8;
+
+      function Nth (L : String; N : Positive) return String is   --  N-th blank-separated field, "" if none
+         Pos : Natural := L'First;
+         Count : Natural := 0;
+      begin
+         while Pos <= L'Last loop
+            while Pos <= L'Last and then L (Pos) = ' ' loop Pos := Pos + 1; end loop;
+            exit when Pos > L'Last;
+            declare
+               Start : constant Positive := Pos;
+            begin
+               while Pos <= L'Last and then L (Pos) /= ' ' loop Pos := Pos + 1; end loop;
+               Count := Count + 1;
+               if Count = N then return L (Start .. Pos - 1); end if;
+            end;
+         end loop;
+         return "";
+      end Nth;
+
+      function Num (S : String) return Natural is
+        (if S'Length in 1 .. 9 and then (for all C of S => C in '0' .. '9') then Natural'Value (S) else 0);
+
+      function Ent_Of (S : String) return Natural is
+      begin
+         for E in Entity_Id loop
+            if Name (E) = S then return Natural (E); end if;
+         end loop;
+         return 0;
+      end Ent_Of;
+
+      procedure Ids (E : Natural; List : String; Tick : Natural) is   --  "*12,5,40": every number is a word id
+         Acc : Natural := 0;
+         Have : Boolean := False;
+      begin
+         if E = 0 then return; end if;
+         for I in List'First .. List'Last + 1 loop
+            if I <= List'Last and then List (I) in '0' .. '9' then
+               if Acc < 100_000_000 then Acc := Acc * 10 + Character'Pos (List (I)) - Character'Pos ('0'); end if;
+               Have := True;
+            else
+               if Have and then Acc > 0 then Sim_Wordstat.Seen_Id (E, Acc, Tick); end if;
+               Acc := 0;
+               Have := False;
+            end if;
+         end loop;
+      end Ids;
+
+      procedure Texts (E : Natural; List : String; Tick : Natural) is   --  letters and digits make a word, anything else separates
+         From : Natural := 0;
+      begin
+         if E = 0 then return; end if;
+         for I in List'First .. List'Last + 1 loop
+            if I <= List'Last and then List (I) in 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | Character'Val (128) .. Character'Val (255) then
+               if From = 0 then From := I; end if;
+            else
+               if From /= 0 then Sim_Wordstat.Seen_Text (E, Ada.Characters.Handling.To_Lower (List (From .. I - 1)), Tick); end if;
+               From := 0;
+            end if;
+         end loop;
+      end Texts;
+
+      function Pad_L (S : String; W : Positive) return String is
+        (Fx."*" (Natural'Max (0, W - S'Length), ' ') & S);
+      function Pad_R (S : String; W : Positive) return String is
+        (if S'Length >= W then S (S'First .. S'First + W - 1) else S & Fx."*" (W - S'Length, ' '));
+      function Pct (A, B : Natural) return Natural is (if B = 0 then 0 else Natural (Int (A) * 100 / Int (B)));
+      function Cell (N : Natural) return String is (Pad_L (Img (N), Cell_W));
+
+      Per : array (0 .. Integer (Entity_Id'Last)) of Sim_Wordstat.Stat;
+      Head : Unbounded_String;
+
+      procedure Put (S : String) is begin TIO.Put_Line (S); end Put;
+
+      --  One row: the label and the value of every wesen, then the total.
+      generic
+         with function Pick (S : Sim_Wordstat.Stat) return Natural;
+      procedure Row (Label : String);
+      procedure Row (Label : String) is
+         R : Unbounded_String := To_Unbounded_String (Pad_R (Label, Name_W));
+      begin
+         for E in 1 .. Integer (Entity_Id'Last) loop Append (R, Cell (Pick (Per (E)))); end loop;
+         Append (R, Pad_L (Img (Pick (Per (0))), Total_W));
+         Put (To_String (R));
+      end Row;
+
+      function Total_Of (S : Sim_Wordstat.Stat) return Natural is (S.Total);
+      function Distinct_Of (S : Sim_Wordstat.Stat) return Natural is (S.Distinct);
+      function Agreed_Of (S : Sim_Wordstat.Stat) return Natural is (S.Agreed);
+      function Described_Of (S : Sim_Wordstat.Stat) return Natural is (S.Described);
+      function Used_Of (S : Sim_Wordstat.Stat) return Natural is (S.Used);
+      function Unused_Of (S : Sim_Wordstat.Stat) return Natural is (S.Total - S.Used);
+      function Unused_Pct_Of (S : Sim_Wordstat.Stat) return Natural is (Pct (S.Total - S.Used, S.Total));
+      function Chess_D_Of (S : Sim_Wordstat.Stat) return Natural is (S.Chess_Dist);
+      function Number_D_Of (S : Sim_Wordstat.Stat) return Natural is (S.Number_Dist);
+      function Prefix_Of (S : Sim_Wordstat.Stat) return Natural is (S.Prefix_Var);
+      function Suffix_Of (S : Sim_Wordstat.Stat) return Natural is (S.Suffix_Var);
+      function Any_Of (S : Sim_Wordstat.Stat) return Natural is (S.Any_Var);
+      procedure Row_Total is new Row (Total_Of);
+      procedure Row_Distinct is new Row (Distinct_Of);
+      procedure Row_Agreed is new Row (Agreed_Of);
+      procedure Row_Described is new Row (Described_Of);
+      procedure Row_Used is new Row (Used_Of);
+      procedure Row_Unused is new Row (Unused_Of);
+      procedure Row_Unused_Pct is new Row (Unused_Pct_Of);
+      procedure Row_Chess_D is new Row (Chess_D_Of);
+      procedure Row_Number_D is new Row (Number_D_Of);
+      procedure Row_Prefix is new Row (Prefix_Of);
+      procedure Row_Suffix is new Row (Suffix_Of);
+      procedure Row_Any is new Row (Any_Of);
+
+      Edges : Sim_Wordstat.Edge_Array;
+      Any_Words : Boolean := False;
+   begin
+      for I in Edges'Range loop
+         Edges (I) := Num (Msg ("wordstat.edge." & Img (I)));
+         if Edges (I) = 0 then Edges (I) := (if I = 1 then 2 else Edges (I - 1) + 1); end if;
+      end loop;
+      Sim_Wordstat.Reset (Natural (Int'Max (1, Limit ("wordstat.stem_min", 3))), Edges);
+      --  1. what each wesen knows
+      for E in Entity_Id loop
+         Lines.Clear;
+         Read_Lines ("entities/" & Name (E) & "/words.txt", Lines, Found);
+         if Found then
+            for L of Lines loop
+               if L'Length > 0 and then L (L'First) /= '#' and then Num (Nth (L, 1)) > 0 and then Nth (L, 2) /= "" then
+                  Sim_Wordstat.Add_Word (Positive (E), Num (Nth (L, 1)), Nth (L, 2), Nth (L, 3), Num (Nth (L, 4)), Nth (L, 5));
+                  Any_Words := True;
+               end if;
+            end loop;
+         end if;
+      end loop;
+      if not Any_Words then
+         TIO.Put_Line (TIO.Standard_Error, Msg ("wordstat.none"));
+         Ada.Command_Line.Set_Exit_Status (2);
+         return;
+      end if;
+      --  2. the later use of a word
+      Lines.Clear;
+      Read_Lines ("diaries/screens.txt", Lines, Found);
+      for L of Lines loop
+         if L'Length > 1 and then L (L'First) = 'K' then
+            declare
+               Op : constant String := Nth (L, 4);
+               E : constant Natural := Ent_Of (Nth (L, 3));
+               T : constant Natural := Num (Token (L, "t"));
+            begin
+               if Op in "show" | "read" | "pin" | "cmd" | "leave" | "blend" then
+                  Ids (E, Token (L, "w"), T);
+                  if Op = "blend" then Ids (E, Token (L, "a"), T); Ids (E, Token (L, "b"), T); end if;
+               end if;
+            end;
+         end if;
+      end loop;
+      Lines.Clear;
+      Read_Lines ("diaries/dictionary.txt", Lines, Found);
+      for L of Lines loop
+         if L'Length > 1 and then L (L'First) = 'L' then
+            declare
+               W : constant String := Token (L, "word");
+               E : constant Natural := Ent_Of (Token (L, "by"));
+               T : constant Natural := Num (Token (L, "t"));
+            begin
+               if Token (L, "st") = "A" then Sim_Wordstat.Agree (W); end if;
+               if E /= 0 then Texts (E, W, T); Texts (E, Token (L, "mean"), T); end if;
+            end;
+         end if;
+      end loop;
+      Lines.Clear;
+      Read_Lines ("diaries/votes.txt", Lines, Found);
+      for L of Lines loop
+         if L'Length > 1 and then L (L'First) = 'V' and then Token (L, "kind") = "favourite" then
+            Texts (Ent_Of (Token (L, "voter")), Token (L, "choice"), Num (Token (L, "t")));
+         end if;
+      end loop;
+      Lines.Clear;
+      Read_Lines ("diaries/petitions.txt", Lines, Found);
+      for L of Lines loop
+         if L'Length > 1 and then L (L'First) = 'P' then
+            Texts (Ent_Of (Token (L, "wesen")), Token (L, "req"), Num (Token (L, "t")));
+         end if;
+      end loop;
+      for E in Entity_Id loop   --  the notebooks of docs/LEARN.md, if a later build keeps them
+         Lines.Clear;
+         Read_Lines ("entities/" & Name (E) & "/notebook.txt", Lines, Found);
+         if Found then
+            for L of Lines loop
+               if L'Length > 0 and then L (L'First) /= '#' then Texts (Natural (E), L, Num (Token (L, "t"))); end if;
+            end loop;
+         end if;
+      end loop;
+      for E in 0 .. Integer (Entity_Id'Last) loop Per (E) := Sim_Wordstat.Result (E); end loop;
+      --  3. the report
+      Put (Msg ("wordstat.title", Img (Per (0).Last_Tick)));
+      TIO.New_Line;
+      Head := To_Unbounded_String (Pad_R ("", Name_W));
+      for E in Entity_Id loop Append (Head, Pad_L (Sim_World.Show (Name (E)), Cell_W)); end loop;
+      Append (Head, Pad_L (Msg ("wordstat.col.total"), Total_W));
+      Put (To_String (Head));
+      Row_Total (Msg ("wordstat.l.known"));
+      Row_Distinct (Msg ("wordstat.l.distinct"));
+      TIO.New_Line;
+      Put (Msg ("wordstat.sec.kind"));
+      for K in Sim_Wordstat.Kind loop
+         declare
+            function Pick (S : Sim_Wordstat.Stat) return Natural is (S.Known (K));
+            procedure Row_K is new Row (Pick);
+         begin
+            Row_K ("  " & Msg ("wordstat.k." & Ada.Characters.Handling.To_Lower (Sim_Wordstat.Kind'Image (K))));
+         end;
+      end loop;
+      TIO.New_Line;
+      Put (Msg ("wordstat.sec.use"));
+      Row_Agreed ("  " & Msg ("wordstat.l.agreed"));
+      Row_Described ("  " & Msg ("wordstat.l.described"));
+      Row_Used ("  " & Msg ("wordstat.l.used"));
+      Row_Unused ("  " & Msg ("wordstat.l.unused"));
+      Row_Unused_Pct ("  " & Msg ("wordstat.l.unused_pct"));
+      TIO.New_Line;
+      Put (Msg ("wordstat.sec.kinduse"));
+      Put (Msg ("wordstat.kinduse.head"));
+      for K in Sim_Wordstat.Kind loop
+         declare
+            Known : constant Natural := Per (0).Known (K);
+            Used : constant Natural := Per (0).Used_Kind (K);
+         begin
+            Put (Msg ("wordstat.kinduse.row", Pad_R ("  " & Msg ("wordstat.k." & Ada.Characters.Handling.To_Lower (Sim_Wordstat.Kind'Image (K))), Name_W),
+                      Pad_L (Img (Known), 8), Pad_L (Img (Used), 7), Pad_L (Img (Known - Used), 7), Pad_L (Img (Pct (Known - Used, Known)), 9)));
+         end;
+      end loop;
+      TIO.New_Line;
+      for Plain in Boolean loop
+         Put (Msg (if Plain then "wordstat.sec.len_plain" else "wordstat.sec.len"));
+         for B in 1 .. Sim_Wordstat.Buckets loop
+            declare
+               Lo : constant Natural := (if B = 1 then 1 else Edges (B - 1) + 1);
+               Label : constant String :=
+                 (if B = Sim_Wordstat.Buckets then Msg ("wordstat.len.open", Img (Lo))
+                  elsif Lo = Edges (B) then Msg ("wordstat.len.one", Img (Lo))
+                  else Msg ("wordstat.len.range", Img (Lo), Img (Edges (B))));
+               function Pick (S : Sim_Wordstat.Stat) return Natural is (if Plain then S.Len_Plain (B) else S.Len (B));
+               procedure Row_B is new Row (Pick);
+            begin
+               Row_B ("  " & Label);
+            end;
+         end loop;
+         TIO.New_Line;
+      end loop;
+      Put (Msg ("wordstat.sec.var"));
+      Row_Chess_D ("  " & Msg ("wordstat.l.chess_dist"));
+      Row_Number_D ("  " & Msg ("wordstat.l.number_dist"));
+      Row_Prefix ("  " & Msg ("wordstat.l.prefix"));
+      Row_Suffix ("  " & Msg ("wordstat.l.suffix"));
+      Row_Any ("  " & Msg ("wordstat.l.anyvar"));
+      TIO.New_Line;
+      Put (Msg ("wordstat.sec.origin"));
+      for K in Sim_Wordstat.Kind loop
+         if Per (0).Token_From (K) > 0 then
+            Put (Pad_R ("  " & Msg ("wordstat.o." & Ada.Characters.Handling.To_Lower (Sim_Wordstat.Kind'Image (K))), Name_W) & Pad_L (Img (Per (0).Token_From (K)), Total_W));
+         end if;
+      end loop;
+      TIO.New_Line;
+      --  4. the conclusion: one paragraph, wrapped to 79 columns
+      declare
+         T : Sim_Wordstat.Stat renames Per (0);
+         package SW renames Sim_Wordstat;
+         Tokens : constant Natural := T.Known (SW.Chess) + T.Known (SW.Number);
+         type Group is (G_Start, G_World, G_Taught, G_Screen, G_Coined, G_Chess, G_Other);
+         function Size (G : Group) return Natural is
+           (case G is
+               when G_Start => T.Known (SW.Start), when G_World => T.Known (SW.World), when G_Taught => T.Known (SW.Taught),
+               when G_Screen => T.Known (SW.Screen), when G_Coined => T.Known (SW.Coined), when G_Chess => Tokens, when G_Other => T.Known (SW.Other));
+         function Key (G : Group) return String is
+           (case G is when G_Start => "start", when G_World => "world", when G_Taught => "taught", when G_Screen => "screen",
+               when G_Coined => "coined", when G_Chess => "chess", when G_Other => "other");
+         Big : Group := G_Start;
+         Route : SW.Kind := SW.Other;
+         Rest_Words : constant Natural := T.Total - Tokens;
+         Avg_Rest : constant Natural := Rest_Words / Entity_Id'Pos (Entity_Id'Last);
+         Avg_Fold : constant Natural := Natural'Max (0, Rest_Words - T.Any_Var) / Entity_Id'Pos (Entity_Id'Last);
+         Para : Unbounded_String;
+      begin
+         for G in Group loop
+            if Size (G) > Size (Big) then Big := G; end if;
+         end loop;
+         for K in SW.Start .. SW.Other loop
+            if K not in SW.Chess | SW.Number and then T.Token_From (K) > T.Token_From (Route) then Route := K; end if;
+         end loop;
+         Para := To_Unbounded_String
+           (Msg ("wordstat.concl.1", Msg ("wordstat.g." & Key (Big)), Img (Size (Big)), Img (T.Total), Img (Pct (Size (Big), T.Total)))
+            & " " & Msg ("wordstat.concl.2", Img (Tokens), Img (Pct (Tokens, T.Total)), Msg ("wordstat.route." & Ada.Characters.Handling.To_Lower (SW.Kind'Image (Route))), Img (Pct (T.Total - T.Used, T.Total)))
+            & " " & Msg ("wordstat.concl.3", Img (Avg_Rest), Img (Avg_Fold))
+            & " " & Msg ("wordstat.concl.4", Img (T.Distinct), Img (T.Chess_Dist + T.Number_Dist)));
+         Put (Msg ("wordstat.concl.head"));
+         for L of Sim_Voice.Wrap (To_String (Para), 79) loop Put (L); end loop;
+      end;
+   exception
+      when TIO.Layout_Error | TIO.Device_Error | TIO.Status_Error => null;   --  stdout is a closed pipe (| head)
+   end Print_Wordstat;
 
    --  --report: print run_report.txt of the save folder (the complete report of the last run); nothing is simulated.
    procedure Print_Report is
@@ -5586,6 +5897,7 @@ begin
          elsif Opt = "--chat" then Chat_Mode := True;
          elsif Opt = "--chat-script" then Chat_Script_Opt := To_Unbounded_String (Val);
          elsif Opt = "--chatlog" then Chatlog_Mode := True;
+         elsif Opt = "--wordstat" then Wordstat_Mode := True;
          elsif Opt = "--session-ticks" then Night_Ticks := Number (Opt, Val);
          elsif Opt = "--max-sessions" then Night_Sessions := Number (Opt, Val);
          elsif Opt = "--max-hours" then
@@ -5693,7 +6005,7 @@ begin
    end if;
    Menu_Wanted := Menu_Opt or else (Ada.Command_Line.Argument_Count = 0 and then Is_Tty (0) and then Is_Tty (1));
    if Menu_Opt and then not (Is_Tty (0) and then Is_Tty (1)) then raise Usage_Error with Msg ("err.menu_tty"); end if;
-   Resolve_Home (Header => not (Menu_Wanted or else Inbox_Mode or else Map_Mode or else Ledger_Mode or else Grant_Mode or else Veto_Mode or else Challenge_Mode or else Next_Ticks_Mode or else Say_Mode or else Answer_Mode or else Report_Mode or else Runlog_Mode or else Trend_Mode or else Folder_Mode or else (Length (Section_Opt) > 0 and then not Preview)));
+   Resolve_Home (Header => not (Menu_Wanted or else Inbox_Mode or else Map_Mode or else Ledger_Mode or else Grant_Mode or else Veto_Mode or else Challenge_Mode or else Next_Ticks_Mode or else Say_Mode or else Answer_Mode or else Report_Mode or else Runlog_Mode or else Trend_Mode or else Folder_Mode or else Wordstat_Mode or else (Length (Section_Opt) > 0 and then not Preview)));
    Saved_Line := To_Unbounded_String (Msg ("saved", To_String (Home_Path)));
    if Map_Mode then
       Do_Map;
@@ -5710,6 +6022,9 @@ begin
       return;
    elsif Chatlog_Mode then   --  make chatlog: the last lines of diaries/chat.txt
       Print_Chatlog;
+      return;
+   elsif Wordstat_Mode then   --  make wordstat: what the wesen know and where it came from (read-only)
+      Print_Wordstat;
       return;
    elsif Night_Mode then    --  make night: sessions back to back, in this process (Night_Begin ... Night_End)
       if not Ada.Directories.Exists (Self_Exe) then raise Usage_Error with Msg ("night.err.exe", Self_Exe); end if;
