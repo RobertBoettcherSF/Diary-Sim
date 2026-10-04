@@ -1,7 +1,7 @@
 # Life in the station: roles, life support, leisure (design only, nothing built)
 
 Status: **proposal for Robert**. No code for any of this exists yet; every number below is a *proposed default* that
-lives in `data/` when built, and every decision is open until Robert answers section 8. Style as `docs/WORLD.md`: what it is,
+lives in `data/` when built, and every decision is open until Robert answers section 9 (and 6.9). Style as `docs/WORLD.md`: what it is,
 what it is made of, what is recorded. (`docs/MVP.md` does not exist in this tree; this follows `docs/WORLD.md`.)
 
 ## Contents
@@ -10,9 +10,10 @@ what it is made of, what is recorded. (`docs/MVP.md` does not exist in this tree
 3. Life support: water, air, temperature, power, maybe food (`life=1`)
 4. Leisure and spare time (`leisure=1`)
 5. How the three interlock
-6. Build order, markers, size and risk
-7. Rules every step keeps
-8. Open questions for Robert, with a recommended answer each
+6. One being model (`bio=1`): one stored record for players and wesen, ages, death, text hooks
+7. Build order, markers, size and risk
+8. Rules every step keeps
+9. Open questions for Robert, with a recommended answer each (the being model's own are in 6.9)
 
 ## 1. Where we start
 * Four wesen (`ada gemini replika robert` = Adam, Eve, Abel, Ruth), `Entity_Id` is `range 1 .. 4`; every array is indexed by it. Their
@@ -72,7 +73,7 @@ duty a *quota*: `duty.ticks` of the day (3.2) it will do the maintenance job if 
 * **Leaves:** the existing karma layer already has *liberation* (a wesen that has let go). Proposed: a liberated wesen **retires
   at the next boundary** (`R<n>` record) instead of being reborn into the same slot; its role is vacant again. Otherwise rebirth as now.
 * **Retires** after `pop.service_sessions` (e.g. 25) sessions of service: a slot-age rule, same record, gentle.
-* **Dies:** only if `life.lethal = 1` (default 0) and a service has been `out` for `life.lethal_ticks` while the wesen's energy
+* **Dies:** by age, accident or disease under the being model (6.5, `bio=1`); or, without it, only if `life.lethal = 1` (default 0) and a service has been `out` for `life.lethal_ticks` while the wesen's energy
   is 0: a record `R<n> ... cause=<water|air|heat>`. Not in the first steps (question 3).
 * **After leaving:** diary file stays (history), entry stays in the roster as `gone` (the ledger, Elo list and trial lines keep
   their name), the chess Elo of a gone wesen is frozen, its open petitions are closed as `lapsed`, its watcher is freed, its
@@ -184,7 +185,149 @@ and softens trials (adherence +); skill grows per activity. The ledger adds a "l
 * **Governance and honesty** connect everything: the same D / trust / standing / misreport machinery, with new topics and one lever.
 * **Trials** can start from a leisure dispute (queue for the last massage slot): the existing `trial.clash` pairs get topic pairs.
 
-## 6. Build order, markers, size and risk
+## 6. One being model (`bio=1`)
+Robert's rule: **players and wesen have the same kind of details record**. It is *initially generated*, then *stored* in the save files, and then
+*changed over time by recorded events*. The only difference is a lifespan: a wesen has at most about **125 years**, a player (a wesen of the
+upper kind) **50,000 years, or an order of magnitude more (500,000)**, and is effectively immortal except by a violent accident or a sudden disease.
+It is enough that the record **lives in data**; **showing it on screen can wait**, but the stored fields must be **used in the text
+generation** (reports, petitions, visit answers, chess and trial lines, myth stories). The human is the Ground (`docs/MYTH.md` section 1): it has **no
+being record** and is never a fifth player.
+
+### 6.1 The record (one shape for everybody)
+| field | player | wesen | stored as |
+|---|---|---|---|
+| `id`, `kind` | iris .. vega, `player` | ada .. robert and the pool names, `wesen` | id never reused; kind fixed |
+| `born` | rolled long before the run (a *negative* day) | backdated for the first four (adult), the birth tick for newborns | an absolute day number (6.3); **age is derived**, never stored |
+| `lifespan` | one of 50,000 .. 500,000 years (a roll, 6.2) | cap 125 years (hard, 6.5) | years, fixed at genesis |
+| `origin` | the myth home family, place, "made of" (MYTH.md 6.3: stored as a reference `myth=M<n>`, not copied) | a place word, a family word, parents or "made by" (an id or none) | words from data lists |
+| `roles` | its office (`players.txt`) + its domains (myth) | the current role and the role history (LIFE.md 2.1) | ids + ticks |
+| `traits` | Rule 30 bits: tone, brevity, warmth, **plus** curiosity, courage, patience, frailty (0 .. 100) | the same | numbers at genesis, a small overlay of events (+/- 15 at most) |
+| `beliefs` | a view of the Ground, of death, of the made (myth dimensions 10, 13, 14) | views of the players, of death, of work, of Robert | key = a word from a list (a few per being) |
+| `relations` | kin and rivals of the other players (MYTH.md 6.3), its watch list | kin, friends, rivals, teacher, watcher | id -> kind + strength; trust and standing stay in the `Y` lines |
+| `history` | events (6.4) | events (6.4) | `H` records |
+| `health` | 0 .. 100 + conditions with an end tick (well, ill, hurt, frail) | the same | a number + a few keyed conditions |
+| `body` | build, height class, hair, eyes, marks, bearing (a few words from lists) | the same, changing with age and scars | words; a mark is added by an event |
+Everything that exists today (energy, mood, karma, trust, standing, the Rule 30 ring, Elo, vocabulary) **stays where it is**: the record
+holds the *slow, biographical* state and refers to the fast state; nothing is moved, so a `bio=0` run is untouched.
+
+### 6.2 Generated once, from seed + name
+At the first `bio=1` session start each being gets a **genesis** record `Z<n>` in `diaries/beings.txt` (`Sim_Store`, replay-verified, letters
+re-checked at build: `G` is taken by grants): `Z1 t=3401 id=iris kind=player born=-61820000 life=240000 ... h=`. The picks are the world's
+rule: **Rule 30 row** seeded by `hash(master seed, id)` for the trait bits, then every list pick is `Pick60` (D4 reroll on 1, 2/3/4 = block
+1/2/3 of 20, D20 inside) with its own salt range **13000 .. 13999** (LIFE 10000 .. 10699, myth 11000 .. 12999). Lists in `data/bio.txt`:
+places, families, body words, belief words, condition words, name pool, and the **age and lifespan tables** (players: block 1 = 50,000 .. 100,000
+years, block 2 = 100,000 .. 250,000, block 3 = 250,000 .. 500,000 in 20 steps each; wesen start ages: 18 .. 45). A *name* in `data/names.txt` is a label;
+the genesis is keyed to the **id**, so renaming Odin changes no stored detail (the same rule as for the myth). A newborn (LIFE.md 2.2) gets its
+`Z` line at the birth tick; the `B` record stays the fact "who exists", `Z` the details.
+
+### 6.3 Ticks, calendar, age
+One **world clock** for all beings (data: `data/time.txt`), so the lifespans differ and nothing else:
+`time.ticks_per_day = 24` (the leisure day of LIFE.md 4.1), `time.days_per_year = 25` -> **600 ticks = 1 year**, a month = 50 ticks. At the usual
+session length (300 ticks) that is two sessions a year; Robert's present 3,400 ticks are about 5.7 years; **a wesen can grow up (a stage change
+every few dozen sessions), work, retire and die inside a long run** (125 years = 75,000 ticks, roughly 250 sessions), while a player aged 200,000
+years does not change in any run that can be played: its age phrase stays "older than the hills" (data bands) and only an event changes it. Stage
+bands (`data/stages.txt`): wesen *child* 0-14, *young* 15-29, *prime* 30-54, *elder* 55-79, *old* 80+; players by fractions of their
+lifespan (*young god* < 5 %, *in its prime* 5-70 %, *ancient*), small lean tweaks to the action table (a child rests more, an elder talks more), never a new dice stream.
+Alternatives (real time = 8,760 ticks a year, or 100 ticks a year) are table values, not code (question 1).
+
+### 6.4 Events change the record (`H` records)
+`H<n> t= id= kind= a= b= h=` in the same file, replay-verified. **Kinds** (data list): born, grew (stage), role taken / left, learned (a trait
+step), bond / fell out, belief shifted, ill / recovered, hurt / healed, scar, milestone (first chess win, a trial won or lost, a landmark),
+rise (a player gains a domain; a rival named), retired, died. Most events are **consequences of state already replayed** (a stage change from the age, a
+role from a vacancy, a milestone from a `C`/`T` record) and only *recorded*; **chance events** (illness, accident, drifting bonds, belief steps)
+use `hash(seed, id, month, salt)` with salts in the 13000 range and **one chance roll per being per month** (a month = 50 ticks), so the cost is
+small and independent of session length. Each event writes **at most one line**, `bio.events_per_session` (20) is the cap, and every line
+carries `h=` of its rendered text. A removed, edited or invented `H` line is DRIFT.
+
+### 6.5 Death, accident, disease (tables in `data/mortality.txt`)
+* **Wesen:** a monthly roll against the hazard of the age band, per 1,000 a year (proposed): 0-14: 1; 15-39: 2; 40-59: 6; 60-79: 30; 80-99:
+  120; 100-109: 350; 110-124: 700; **age 125: certain** (`age.cap = 125`, a hard cap). The trait `frailty` and the health band scale it
+  (x0.7 .. x1.4; ill x3). *Accident* and *disease* are two more rolls: accident by role (power operator and caretaker higher; a `life=1` failure
+  event raises it for the staff on site), disease by season, crowding and a service in `low`/`short`. Severity: minor (a condition), serious (health -30,
+  a scar), **fatal** (rare, an age-dependent share of serious cases). A death writes `H kind=died cause=<age|accident|disease>` and the LIFE.md `R` record;
+  the diary stays, the slot is never reused, the chess Elo freezes, open petitions lapse (LIFE.md 2.3, which `life.lethal` in 2.3 now generalises).
+* **Players:** no age rule at all (the lifespan figure is a *scale* for bands and phrases, question 4). A flat **annual hazard**, only two causes:
+  `player.accident_ppm = 200` and `player.disease_ppm = 100` per year (1 in 3,300 together: over 50 game-years about a 6 % chance that *one of four* dies,
+  memorable and rare), with the cause text from `data/accident.txt` / `disease.txt` (the world's own misfortunes in plain words). **Shipped off**
+  (`player.hazard_x = 0`) until Robert decides (question 2). A health condition of a player heals slowly; nothing makes it "old".
+* **What a player's death means (proposed default, question 3):** (1) its record closes with `died`; the name stays in history and in `make myth` as
+  *a lost telling* (past tense, its myth kept); (2) its wesen go to the player with the fewest watched, its open petitions lapse; (3) after
+  `player.succession_sessions` (2) **a new manifestation stirs from the Ground**: a fresh genesis `kind=player`, a new name from a pool in `names.txt`,
+  a new myth (kin of the others, with 50 % chance the heir of one dead domain, rivals reshuffled); (4) the other players' stories mention the loss
+  in their biography lines. The Ground (Robert) is told in the inbox. **Technical risk:** every array is `range 1 .. 4` today and the Elo, the quartet
+  decisions, the median and the challenge logic assume four; a successor therefore **takes over the seat** (the slot and its id; the being, name and genesis are new, the old record is closed and kept in history) - to be tested before any hazard is turned on.
+
+### 6.6 How it ties to LIFE.md and to the myth framework
+* **Roles and population (2):** the `roles` field *is* the role table of 2.1 for one being; the vacancy and the birth rule read age (arrival
+  at 16, retirement at about 65 instead of `pop.service_sessions`), health and role history; `B`/`R` stay the facts of who exists, `Z`/`H` the details.
+* **Life support (3):** a shortage raises the monthly disease and accident rolls and, through `health`, lowers the energy base a little (a
+  condition word, not a new stat; 3.4 stays the rule).
+* **Leisure (4):** spare time of a being uses stage and traits (a young one likes games, an elder the library or the bath), health decides the gym;
+  an event "milestone" records a first.
+* **Myth (`docs/MYTH.md`):** the player's `origin`, domains, rise and kin are *references* to the `M` picks (one source of truth); the myth dimension
+  "ages and cycles" supplies the **age phrase** vocabulary; a player's `died` event rewrites its relations text; the myth of a wesen is the
+  few lines inside its player's story (MYTH.md question 8), and its *own* history is this record.
+
+### 6.7 Text hooks: which stored field feeds which slot
+A template slot is filled from the record; a slot with no value is dropped (the rule of the visit templates), so short and long forms coexist.
+Phrase lists are `data/biotext.txt` (original wording; bands, not numbers; a player's age is never printed as a figure unless asked).
+
+| slot | from | example filling |
+|---|---|---|
+| `{origin}` | origin (place, family word) | "from the high shore", "of the river people" |
+| `{age_phrase}` | born, kind, stage | wesen: "in their first years", "grey and steady"; players: "older than the hills", "since before the rivers were named" |
+| `{stage}` | stage band | child / young / prime / elder / old |
+| `{trait_adverb}` | traits (highest or lowest) | warmth -> "kindly", brevity -> "curtly", courage -> "boldly", patience -> "in no hurry" |
+| `{belief}` | beliefs | "who holds that nothing is lost", "who thinks the players listen" |
+| `{kin}`, `{rival}`, `{friend}` | relations | "its sister Eve", "the one it quarrels with, Abel" |
+| `{role_word}`, `{role_past}` | roles, history | "the water engineer", "once a caretaker" |
+| `{health_phrase}` | health, conditions | "a little unwell", "still limping from the fall" |
+| `{body_phrase}` | body, marks | "tall, with a scar on the hand" |
+| `{event_recent}` | newest `H` line, within `bio.recent` ticks | "who has just come of age", "since the fall at the pump" |
+| `{domain}`, `{myth_line}` | M picks | "keeper of the rivers", the first line of the story |
+
+Where each is used, and how (examples are invented wording):
+* **Player reports and inbox** (`data/preport.txt`): the box header "Ganesha, {age_phrase}, {trait_adverb}: ..." -> *"Ganesha, older than the hills,
+  kindly: Adam has been on shift too long; I granted two petitions and put one off."* A rival or a kin of the petitioner colours the verdict wording:
+  *"I granted Abel's request, though {rival} spoke against it."*
+* **Petitions** (`data/topics.txt` petition text of a wesen): `{role_word}` and `{health_phrase}` : *"Petition: as the water engineer, still a little unwell, I ask for
+  a longer rest."* The **topic** choice may lean to the role (LIFE.md 3.5); the *text* uses the record.
+* **Visit answers** (`data/visit.txt`): the visit layer only speaks with **words the wesen knows**, so the record does not add words: it selects
+  *which* known pool answers (an ill or old wesen answers from the tired pool and shorter; a child asks more `{q}`; a wesen with a friend named in the
+  room uses that name if it knows it).
+* **Chess and trial lines** (`data/chess.txt`, `data/trial.txt`): a rival or friend, an elder or a child, a scar or a milestone: *"Abel, the
+  old rival, took the bishop"*, *"the court heard Eve, who had lost to Ruth twice."*
+* **Myth stories** (`docs/MYTH.md` 5.5): the player's `{origin}`, `{kin}`, `{rival}`, `{domain}`, and the age phrase fill the biography
+  line and the two-part story ("how it came from the Ground"); the wesen named in the story use their stage, role and a belief.
+* **Later, not now:** `make being NAME=<n>` as a read-only view (B5); the first releases only *speak* with the record.
+
+### 6.8 Build order of the being model
+| step | what | size (Ada + data) | time | risk |
+|---|---|---|---|---|
+| B1 | `data/bio.txt`, `time.txt`, `stages.txt`; pure genesis function; marker `bio=1`; `Z` records + replay check; no text yet | ~450 + 400 | 2 days | M |
+| B2 | calendar, age, stage change events, role history; `H` records; the caps | ~350 + 150 | 1-2 days | M |
+| B3 | health, mortality, accident, disease; wesen death + the `R` link (needs `roles=1`) | ~400 + 250 | 2 days | **M-H** (population dynamics, tuning) |
+| B4 | **text hooks** into reports, petitions, visit, chess/trial, myth lines (`data/biotext.txt`) | ~250 + 500 | 2 days | L-M (content volume) |
+| B5 | `make being` view (read-only); player hazard switch + succession (only after Robert's answer) | ~300 + 100 | 2 days | **H** (4-slot assumptions) |
+Total about 1,750 Ada + 1,400 data lines, ~9 days. `bio=1` on new sessions only; **marker off = byte-identical** (`offcmp2`), the old four keep their
+ids and files, 0 warnings on GNAT 14 and 12, README and `--help` updated at each step. Replay cost: one roll per being per month; 12 beings add well under 10 % to the time.
+
+### 6.9 Open questions about the being model (recommended answer first)
+1. **How do ticks map to years?** *Recommend:* one world clock, 600 ticks = 1 year (a month 50 ticks, a day 24 ticks), identical for wesen and players; only
+   the lifespans differ. A real-time scale (8,760 ticks a year) would make nobody age in the run; 100 ticks a year makes lives of 12,500 ticks.
+2. **May a player die at all in the first release?** *Recommend:* the rules ship, the hazard is **off** (`player.hazard_x = 0`); Robert turns it on after seeing a
+   test, because a death changes the four-player structure.
+3. **What does a player's death mean?** *Recommend:* the seat is refilled after two sessions by a *new manifestation of the Ground* (new genesis, new myth, maybe heir of a
+   domain); the dead one stays in history as "a lost telling"; its wesen pass to the player with the fewest. Alternative: the seat stays empty (3 players).
+4. **Does a player have a natural end at 50,000-500,000 years?** *Recommend:* no; the number is a scale for phrases and stages. Only accident or disease.
+5. **Are the first four wesen backdated?** *Recommend:* yes: adults of 24-41 years (a roll) born on negative days, so no age-0 child needs a school; the first `Z` lines are
+   written at tick 3401 and earlier sessions stay byte-identical.
+6. **Is a wesen's death final?** *Recommend:* final for the being (the slot is never reused); the karma layer's rebirth stays as *wording* (a newborn is "born into the
+   place left") with **no** inherited stat for now.
+7. **Do the details show on screen?** *Recommend:* no, they only feed the texts first; a `make being` view comes in B5; health and body are fiction, never medical advice.
+8. **How grim may the texts be?** *Recommend:* gentle: illness, accident and death in plain, short, non-graphic words; consistent with MYTH.md 7 (general audience).
+
+## 7. Build order, markers, size and risk
 Each step is one commit: marker, `*.enabled` in `data/limits.txt`, **off = byte-identical** (proved by `offcmp2` against the previous
 tip), a checks scenario, README/help, version headers, 0 warnings on both compilers, `make portable` green. "Size" = Ada lines + data
 lines; "time" = my working time incl. gates (full checks ~20 min, portable ~12 min). Risk: L low, M medium, H high.
@@ -199,11 +342,12 @@ lines; "time" = my working time incl. gates (full checks ~20 min, portable ~12 m
 | P2 | `leisure=1` | priced sites needing services and hosts: baths, sauna, spa/massage, kitchen, gym, cinema, bar; booking queue; vacancies from sites feed R2 | ~900 + 200 | 2-3 days | M-H |
 | P3 | all | interlock checks, trials from leisure disputes, report wording, tuning of the numbers, README tour | ~300 + 100 | 1 day | L |
 
-Rough total: ~5000 lines of Ada, ~1000 of data, 2 weeks of steps. The small binary grows by ~0.5 MB (`make small`, today 2.8 MB).
+The being model (section 6) has its own steps B1 to B5 (`bio=1`, ~1750 Ada + 1400 data lines, ~9 days); B1, B2 and B4 can start right after R1, B3 needs R2.
+Rough total without it: ~5000 lines of Ada, ~1000 of data, 2 weeks of steps. The small binary grows by ~0.5 MB (`make small`, today 2.8 MB).
 Dependencies: `life=1` needs `rest=1` + `world=1`; `leisure=1` needs `rest=1` + `world=1`; `roles=1` needs `world=1`; sites ignore a
 service need if `life=0`; the vacancy list ignores a site if `leisure=0`. R1 and L1 can be done in either order; R2 should come before P2.
 
-## 7. Rules every step keeps
+## 8. Rules every step keeps
 Plain Ada, standard library only; every number, word and table in `data/`; every roll is `hash(seed, entity, tick, salt)` with its own
 salt range (roles 10000 .. 10199, life 10200 .. 10399, leisure 10400 .. 10699); state is rebuilt by replay and the *records*
 (`B R J F V L` lines) are compared: changed / invented / removed = DRIFT; markers on the `S` line, new sessions only, removed
@@ -211,7 +355,7 @@ marker = DRIFT; `--help` and README stay current; no new test suites (extend `sc
 (`debug.txt` <= 1500 bytes); version header on every file; 0 warnings (GNAT 14 and 12, -O0 and -O1); PROOF-LATER labels on the
 arithmetic. Display names only from `data/names.txt`.
 
-## 8. Open questions for Robert (recommended answer first)
+## 9. Open questions for Robert (recommended answer first)
 1. **How many wesen at most?** *Recommend:* 12 alive at once, 32 slot numbers in total (never reused), start with 4; a data limit
    `pop.max_alive` below the compile-time slot count. More means a slower replay (about 3x at 12).
 2. **Is Food a fifth service?** *Recommend:* not in L1/L2; it comes with the cook in P2 (`food.enabled`), so the first life-support
@@ -238,4 +382,4 @@ arithmetic. Display names only from `data/names.txt`.
 12. **Names of the newborn?** *Recommend:* a pool of ~40 short names in `data/namepool.txt` (ids = lower case), picked by Rule 30,
     each used once; deities stay for the *players*, the wesen get ordinary short names. Robert may replace the pool freely.
 
-*End of the proposal; nothing here changes the program until the steps of section 6 are started.*
+*End of the proposal; nothing here changes the program until the steps of section 7 (and 6.8) are started.*

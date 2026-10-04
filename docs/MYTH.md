@@ -32,6 +32,8 @@ Robert's framing: *"Basically we are Brahman in this."* In the fiction there are
   faces), not a statement about any religion. Each myth can take a *stance* toward the Ground: devout, covenant, bargaining, playful,
   doubting, identical ("I am its face"). The stance changes wording and one small trait (6.4); it never makes the player disobey Robert's
   commands: vetoes, `say`, challenges work as they do today.
+* A player is a **being** like a wesen, with the same stored record (`docs/LIFE.md` section 6, the *one being model*): only the lifespan differs
+  (50,000 to 500,000 years against at most 125 for a wesen). The Ground is not a being and has no record.
 * A player's myth has **two parts**: where *it* came from (its rise out of the Ground, through older figures if the family has them) and
   how it made, or came to watch, its wesen.
 
@@ -201,6 +203,10 @@ per unordered pair, so the four stories agree with each other (a sister in one i
 All effects apply only in `myth=1` sessions, so replays of older sessions are unchanged. Nothing here changes the veto / approve / say rules.
 
 ### 6.5 The M record (replay-checked)
+The myth is **part of the player's being record** (LIFE.md 6): the record stores a reference `myth=M<n>` and reads the picks from here, so origin,
+domains, rise and kin exist once. The age phrase of a player ("older than the hills", from dimension 11), its `born` and its stage come from the
+being record; the story's biography line and the report voice use the same text slots (`{origin}`, `{age_phrase}`, `{kin}`, `{rival}`, `{domain}`;
+LIFE.md 6.7). If a player dies (LIFE.md 6.5, off by default), its myth stays as *a lost telling* and its successor gets a new one.
 Record-first, like the other layers: `diaries/myth.txt` (`Sim_Store`), own salts 11000 .. 12999:
 
     M1 t=3401 player=iris home=in-puranic blend=an-andes tone=1,2,1 prim=17 stir=4 ctype=9 act=33 mat=51 dom=6/12 ... ground=2 stance=3 h=48211
@@ -245,9 +251,9 @@ Every step is one commit with its own checks scenario, README / `--help` lines, 
 | M2 | marker `myth=1`, `M` records in `diaries/myth.txt`, replay check, session-start two lines, first inbox line; flavor only | ~300 + 100 | 1-2 days | M |
 | M3 | biography, relations (pair rolls), rivals in the report box; `make myth-coverage` | ~300 + 200 | 1-2 days | L |
 | M4 | effects (6.4), each behind `myth.effects`, one scenario per effect, small bounds | ~250 + 60 | 1-2 days | **M-H** (touches governance / honesty dice: only in `myth=1` sessions) |
-| M5 | wave 1b light families for the four labels | ~0 + 500 data | 1 day | L |
+| M5 | wave 1b light families for the four labels (story slots may read the being record once `bio=1` exists: LIFE.md 6.8) | ~0 + 500 data | 1 day | L |
 | M6+ | waves 2 to 4 (data only, one family per commit); wave 5 only after the decision | data | ~1 day per family | L |
-Size: Ada +~1500 lines, data +~3000 lines (the data is read at run time; the binary grows ~0.15 MB). Dependencies: needs the player layer
+Size: Ada +~1500 lines, data +~3000 lines (the data is read at run time; the binary grows ~0.15 MB). Dependencies: needs the player layer; the being record (LIFE.md 6) is optional, the story slots fall back to nothing
 (the four players); independent of LIFE.md (the domain / service link is optional wording), and it reuses `Pick60`, the Rule 30 rows, `Sim_Store` and the display names.
 Rules kept: plain Ada, text in `data/`, every roll `hash(seed, entity, tick, salt)`, state by replay, PROOF-LATER labels on the arithmetic, compact output (`debug.txt` <= 1500 bytes).
 
