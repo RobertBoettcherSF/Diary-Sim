@@ -1,4 +1,4 @@
---  Version: 0.009
+--  Version: 0.010
 --  Pure helpers of diary_sim: deterministic hash rolls and the diary line
 --  format (read side).  Standard library only.
 pragma Ada_2022;
@@ -36,6 +36,7 @@ package Sim_Util is
    function Stamp return String;                      --  2026-10-03T02:19:00
    --  True when file descriptor Fd (0 = stdin, 1 = stdout) is a terminal (libc isatty).
    function Is_Tty (Fd : Integer) return Boolean;
+   function Foreground return Boolean;   --  stdin is a terminal and this process is in its foreground process group (a background job may not touch the terminal modes)
    function Plain_Stamp return String;                --  20261003_021900
    --  Where two lines first differ, as: column N: stored "..." vs generated "..." (~36 characters of each).
    function Diff_At (A, B : String) return String;

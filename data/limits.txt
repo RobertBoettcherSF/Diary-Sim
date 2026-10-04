@@ -447,3 +447,7 @@ report.trend_tail = 40
 night.session_ticks = 300
 night.max_sessions = 0
 night.max_hours = 12
+# The whole history is replayed from the files by a child process (make verify) and compared with everything stored: verify_end = 1 at the end of
+# a night run that stops at a limit (not after q or Ctrl-C: those end at once), verify_every = N: also after every N sessions (0 = never)
+night.verify_end = 1
+night.verify_every = 0

@@ -1,4 +1,4 @@
---  Version: 0.009
+--  Version: 0.010
 pragma Ada_2022;
 
 with Ada.Calendar.Formatting, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Maps, Ada.Directories,
@@ -10,6 +10,11 @@ package body Sim_Util is
    pragma Import (C, C_Isatty, "isatty");
    use type Interfaces.C.int;
    function Is_Tty (Fd : Integer) return Boolean is (C_Isatty (Interfaces.C.int (Fd)) = 1);
+   function C_Tcgetpgrp (Fd : Interfaces.C.int) return Interfaces.C.int;
+   pragma Import (C, C_Tcgetpgrp, "tcgetpgrp");
+   function C_Getpgrp return Interfaces.C.int;
+   pragma Import (C, C_Getpgrp, "getpgrp");
+   function Foreground return Boolean is (Is_Tty (0) and then C_Tcgetpgrp (0) = C_Getpgrp);
 
    package Fx renames Ada.Strings.Fixed;
    package Str_Maps is new Ada.Containers.Indefinite_Hashed_Maps (String, String, Ada.Strings.Hash, "=");

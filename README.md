@@ -110,29 +110,65 @@ For a run you leave alone and read in the morning, and for the loop *Robert runs
     make share                                  # ONE zip to send back
 
 * **`make night`** (`bin/diary_sim --continuous [--session-ticks N] [--max-sessions N] [--max-hours H]`, defaults `night.session_ticks`,
-  `night.max_sessions`, `night.max_hours` in `data/limits.txt`; 0 means no limit, `H` may have decimals) runs normal sessions back to back.
-  Every session is a run of the program with `--more N`, started through `/bin/sh` (its console goes to `night_console.txt` in the save
-  folder, overwritten each time; its exit status to `night_rc.txt`, which the timer polls so that it keeps running during the session), so each one is exactly what `make run TICKS=N` typed by hand would give: own session, own markers, replay-verified, the same bytes
-  in diaries, entities and records (a check compares three night sessions with three hand-made ones). The price: each session replays the
-  history first, so the sessions get slower as the save grows (about a millisecond per tick). There is no 'Next run' advice loop: the
-  length is `SESSION_TICKS`, and no question is asked. It continues an existing save or starts a new one (`SEED=`); it cannot be combined
-  with `--ticks`, `--more`, `--fresh`, `--preview` or `--visit`.
-* **Stopping:** press **`q`** (no Enter needed, any case) at any time: the session in progress finishes cleanly and the run stops, so
-  nothing is ever cut in the middle. It also stops on a **DRIFT** (the box says so, with the import failure), at `MAX_SESSIONS`, at
-  `MAX_HOURS` (checked between sessions, so a session may end a little after it), and on Ctrl-C or SIGTERM (a session in progress is
-  stopped at once and a rerun resumes; the exit status is 130). Without a terminal on stdin (a pipe, `nohup`, cron) the keyboard is not
-  read and only the limits and signals stop it, so give `MAX_SESSIONS` or `MAX_HOURS` then.
+  `night.max_sessions`, `night.max_hours` in `data/limits.txt`; 0 means no limit, `H` may have decimals) runs normal sessions back to back,
+  **all in one process**: the history is replayed **once** (the first session's replay-verify, as always), then every session goes on from
+  the tick where the previous one ended instead of starting a new program that replays everything again. A session is the same code as a
+  hand-made `make run TICKS=N`: own session record, own markers, `trend.txt` and `run_log.txt` lines, the same bytes in diaries, entities,
+  records, `summary.*` and `run_report.txt` (`scripts/checks.sh` compares night sessions with hand-made ones, and `make bench` does it on a
+  larger save). The console of a session is kept in `night_console.txt` (overwritten each time). It continues an existing save or starts a
+  new one (`SEED=`); it cannot be combined with `--ticks`, `--more`, `--fresh`, `--preview` or `--visit`. There is no 'Next run' advice
+  loop: the length is `SESSION_TICKS`, and no question is asked. **Do not run `make say`, `grant` or `veto` while a night run is going**
+  (the night run reads those files once, at its start): press q first.
+* **Speed** (`make bench`: 20 sessions of 300 ticks after a 6000-tick save; the old way is one program start per session, i.e. a full
+  replay each, about a millisecond per tick at `-O0`, so 20 s and more at 20000 ticks). Measured on the build machine (GNAT 14): the old
+  way at `-O0` took **6.7 s per session** (it grows with the save); the night run at `-O2` takes **0.76 s per session including** the
+  one replay (2.5 s) and the check at the end, and **about 0.3 s for a session alone**, whatever the age of the save: 89 % less in all,
+  95 % less per session once it runs. The two parts: one process instead of a replay per session (4.05 s to 0.76 s at `-O2`), and
+  `-O2` instead of `-O0` (6.7 s to 4.05 s for the old way; the output is byte for byte the same). Disk writes are not the cost
+  (system time is about 1 % of a run). The default build is `-O2` now (a clean build takes about a minute; `make all OPT=-O0` for quick
+  edit-and-test builds, which rebuilds everything when `OPT` changes). The price of one process: the whole history is replayed from the
+  files once at the start and checked once at the end (below), not once per session.
+* **No checkpoint (decided, not built).** A snapshot of the state at a session end plus the hash of the whole history, so that a normal
+  `make run` resumes without a replay, was evaluated and left out: the state is spread over about 15 units (world, dharma, things, screens,
+  games, robot, governance, reports, next, trial, records, visit, stores and the counters of the main program: vectors, hash maps,
+  caches), so a snapshot format would be a large second copy of the simulation that must stay byte-identical to the replay, and a stale
+  or wrong one would hide DRIFT. The design if it is ever wanted: one file `checkpoint.txt` (build, seed, tick, SHA-256 of all
+  diaries and record files up to that tick, then every state field in a fixed order), written at a session end; a run uses it only if
+  build, seed and the hash match the files on disk, otherwise it says why and replays everything; `make verify` always replays. A
+  check would compare a resumed run with a full-replay run. The night run already removes the replay from all but the first session.
+* **`make verify`** (`bin/diary_sim --verify`) replays the whole history from the files and compares it with everything stored (diaries,
+  sessions, inbox, records of every kind): one `verify: OK ...` line, or the DRIFT text and exit status 1; it writes nothing. A night run
+  that stops at `MAX_SESSIONS` or `MAX_HOURS` runs it in a child process at its end (`night.verify_end = 1`; the box says so), and every
+  `night.verify_every` sessions if that is set (default 0 = never). After q or Ctrl-C it is not run (those end at once): run
+  `make verify` by hand. q during the check stops the check.
+* **Stopping:** press **`q`** (no Enter needed, any case) **at any time**; it is looked at between ticks, so it takes effect within a
+  fraction of a second at every stage, and the header says `q pressed: stopping...` at once.
+  * *During the first replay* (nothing new exists yet): it stops at once, nothing is lost, the files are as they were, the message says at
+    which tick; a rerun goes on from there. Exit status 0.
+  * *Once new ticks exist*: the session in progress finishes (300 ticks take a fraction of a second; with a very large
+    `SESSION_TICKS` it takes as long as those ticks), everything is written (diaries, entities, summaries, `trend.txt`, `run_log.txt` with
+    `stop: reason=q`), the final box is shown. Exit status 0.
+  * *Ctrl-C, SIGTERM, SIGHUP*: stop at the next tick (the files are always consistent, a rerun resumes there, exit status 130). **SIGHUP**
+    is what a closed terminal window sends: it is caught like Ctrl-C, so closing the terminal during a night run stops it cleanly; if the
+    process is killed without a signal it can catch (`kill -9`, power off), `debug.txt` keeps a `RUN` stub and the next run resumes (a half
+    written last diary line is skipped with a warning, as before).
+  * The terminal is never left changed: the keys are read one at a time with the terminal switched only for that moment and put back. Keys are read
+    only when the program is the foreground job of the terminal (not under `&`, `nohup`, cron, ssh without a tty): then only the limits and
+    signals stop it, so give `MAX_SESSIONS` or `MAX_HOURS`.
+  * It also stops on a **DRIFT** (the box says so, with the import failure), at `MAX_SESSIONS` and at `MAX_HOURS` (checked between sessions).
 * **Console, plain (no terminal on stdout, e.g. a file):** two lines at the start, then per session ONE status line
   (`s17 t5100 02:31:05 | Adam -3/80 Eve 12/60 Abel 5/55 Ruth -20/20`: session, tick, local time, mood/energy of each wesen) with a timer
   line below it (`  0h12m05s | 4.2 MB (+310 KB) | 8.1 s/session | 58 tick/s | left 11h47m00s`), and a final box (why it stopped, sessions,
   time, seconds per session, ticks per second, save folder size and growth, last values).
 * **Console, on a terminal: the timer header.** The screen is cleared once; then about once per second the header is repainted in place
-  (ANSI cursor home, the whole block written with one call, so it does not flicker): the local date and time, the time elapsed, the limits
-  and the estimated time left to the nearest one (from the average session), the size of the save folder and its growth since the start,
-  the session in progress with its tick (or 'replaying the history first'), sessions done, the time of the last finished session, the average
-  seconds per session and ticks per second, the mood/energy of the four wesen as of the last finished session, and the key hint; below it the
-  status lines of the last 8 sessions. The final box follows. The header is written by the driver only (the sessions run in their own
-  processes), so it changes no simulation file and costs a directory listing per second. The full report of
+  (ANSI cursor home, the whole block written with one call, so it does not flicker; 80 columns): the local date and time, the time
+  elapsed, the limits and the estimated time left to the nearest one (from the average session), the size of the save folder and its growth
+  since the start, what is going on now (`replaying the history first: tick 3000 of 19800 (15%)`, `session 15, tick 4350 of 4500`,
+  `verifying the whole history`), sessions done, the time of the last finished session, the average seconds per session; then a table,
+  live (as of the tick being simulated): for the four wesen mood, energy, words, petitions; for the four players (3 or 4 in a session) the
+  wesen each one watches, its mood, petitions granted/refused (the raw votes of `trend.txt`) and the stance (generous +, strict -); then
+  the key hint, and below it the status lines of the last 6 sessions. The final box follows. The header writes no simulation file and
+  costs a directory listing every few seconds. The full report of
   the last session is in `run_report.txt` (the one before in `run_report_prev.txt`) and `run_log.txt` has a timestamped `RUN` entry per
   session plus `NIGHT` entries for the start and the stop (`start: ...`, `stop: reason=q sessions=14 last_session=30 tick=9000
   elapsed=2h10m`; reasons `q`, `signal`, `max_sessions`, `max_hours`, `drift`, `error`). `report.log_keep` is 500 so a night does not
@@ -923,8 +959,8 @@ Exit: 0 ok, 1 error, 2 usage. Run it from the project directory (or from any
 directory: `data/` is found next to the executable).
 
 **Speed.** Most of "make run" used to be the compile, not the simulation: a clean build took ~60 s on one core (the unit `diary_sim.adb`
-alone ~20 s at -O1). `make` now compiles the units in parallel (`-j0`, all cores) at `-O0`: ~12 s on 8 cores, no change to any output byte
-(same diaries, same hashes). `make OPT="-O1 -fno-inline"` is the strict build (optimizer-level warnings); `make portable` builds both ways with
+alone ~20 s at -O1). `make` compiles the units in parallel (`-j0`, all cores); the default is `-O2` since build 0.042 (a clean build ~1 min, a replay 2.2 times faster
+than at `-O0`, the same output byte for byte); `make all OPT=-O0` builds in ~12 s on 8 cores for quick edits. `make OPT="-O1 -fno-inline"` is the strict build (optimizer-level warnings); `make portable` builds at -O0, -O1 (strict) and -O2 with
 GNAT 14 and 12 and fails on any warning. The simulation itself: a save with 1800 ticks is replay-verified in ~1.4 s (every line of every
 diary, world, screens, chess, robot and governance record is recomputed - that is not skipped); 300 more ticks add ~0.1 s. The replay
 used to spend 40 % in counting the known words of a wesen (`Known_Count` scanned the whole vocabulary at every call; now a counter kept
@@ -944,7 +980,7 @@ run time, never linked in: `words.txt` 55,186, `limits.txt` 18,198, `messages.tx
 
 | build | unstripped | stripped | what it is |
 |---|---:|---:|---|
-| `make` (dev: `-g -O0`) | 9,464,824 | 5,505,736 | the default, fast to build, symbolic tracebacks |
+| `make all OPT=-O0` (dev: `-g -O0`) | 9,464,824 | 5,505,736 | fast to build, symbolic tracebacks (the default build is `-g -O2` now) |
 | `-g -O1 -fno-inline` (strict, `make portable`) | 9,882,960 | 3,752,552 | |
 | `-O1`, no `-g` | 4,825,168 | 3,875,368 | symbol table only |
 | `-O0`, no `-g` | 6,935,512 | 5,669,576 | |

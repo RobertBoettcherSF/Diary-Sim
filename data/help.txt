@@ -33,10 +33,15 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
   --report       print the last run_report.txt of the save folder (make report)
 --runlog       the last 40 lines of run_log.txt (make runlog)
 --trend        the last 40 lines of trend.txt (make trend)
---continuous   sessions back to back (make night); q finishes the session in
-               progress and stops; also DRIFT, --max-sessions=N, --max-hours=H
-               (decimals ok), Ctrl-C; --session-ticks=N (default 300);
-               on a terminal a timer header (clock, elapsed, size, speed)
+--continuous   sessions back to back in one process, the history replayed
+               once (make night); q works at every stage (it stops at
+               once during the first replay, later the session in progress
+               finishes first); Ctrl-C, SIGTERM, SIGHUP stop at the next
+               tick; DRIFT, --max-sessions=N, --max-hours=H (decimals ok),
+               --session-ticks=N (default 300) also stop it; on a
+               terminal a timer header with the wesen and the players
+--verify       replay the whole history from the files and compare it with
+               everything stored; one OK line (make verify; writes nothing)
   --debug        also write debug_digest.txt (make run|demo DEBUG=1)
   --debug-section=NAME  print one block of debug_full.txt (drift trace players
                  inbox run ledger preport status); nothing is simulated

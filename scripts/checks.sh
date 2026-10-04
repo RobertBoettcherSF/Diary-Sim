@@ -1023,8 +1023,8 @@ unset DIARY_HOME
 
 echo "== 37. build and run speed: parallel -O0 build by default, strict -O1 build on request, replay of a longer save stays fast =="
 fl=$(make -n -B -C "$root" all 2>/dev/null | grep -m1 gnatmake)
-echo "$fl" | grep -q -- '-j0' && echo "$fl" | grep -q -- '-O0' && make -n -B -C "$root" all OPT="-O1 -fno-inline" 2>/dev/null | grep -m1 gnatmake | grep -q -- '-O1 -fno-inline' \
-  && grep -q 'OPT' "$root/scripts/portable_check.sh" && ok "make builds with -j0 -O0; OPT=\"-O1 -fno-inline\" selects the strict build; make portable builds both" || bad "make flags ($fl)"
+echo "$fl" | grep -q -- '-j0' && echo "$fl" | grep -q -- '-O2' && make -n -B -C "$root" all OPT=-O0 2>/dev/null | grep -m1 gnatmake | grep -q -- '-O0' && make -n -B -C "$root" all OPT="-O1 -fno-inline" 2>/dev/null | grep -m1 gnatmake | grep -q -- '-O1 -fno-inline' \
+  && grep -q 'OPT' "$root/scripts/portable_check.sh" && ok "make builds with -j0 -O2 by default; OPT=-O0 selects the quick build, OPT=\"-O1 -fno-inline\" the strict one; make portable builds all" || bad "make flags ($fl)"
 rm -rf "$w/spd"; mkdir -p "$w/spd/h"; export DIARY_HOME="$w/spd/h"; cd "$w/spd" || exit 1
 t0=$(date +%s.%N); "$bin" --seed 42 --ticks 600 --yes --every 5000 > a1.txt 2>&1; "$bin" --more 600 --every 5000 > a2.txt 2>&1; "$bin" --more 300 --every 5000 > a3.txt 2>&1; t1=$(date +%s.%N)
 grep -q '^import OK: 4 entities, 1200 ticks verified' a3.txt && ok "1500 ticks over three runs (the last one replay-verifies 1200 ticks of every record file and adds 300): $(awk -v a="$t0" -v b="$t1" 'BEGIN { printf "%.1f", b - a }') s" || bad "speed run"
@@ -1632,6 +1632,14 @@ ns=$(grep -c '^s[0-9]* t[0-9]* [0-9][0-9]:[0-9][0-9]:[0-9][0-9] | ' night.txt); 
 nsums() { ( cd "$1" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./run_log*|./trend*|./night_console*|./debug*|./last*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
 nsums "$w/nt/night" > ns1.txt; nsums "$w/nt/hand" > ns2.txt
 [ -s ns1.txt ] && cmp -s ns1.txt ns2.txt && ok "three night sessions are byte for byte three hand-made --more 60 runs (diaries, entities, summary, records: $(wc -l < ns1.txt) files)" || bad "night differs from hand runs"
+# make verify: OK on a night save; a changed diary line is DRIFT (exit 1); the night run against the same sessions by hand, run_report.txt included
+env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/night" > vf.txt 2>&1; rcv=$?
+rm -rf "$w/nt/vt"; cp -r "$w/nt/night" "$w/nt/vt"; sed -i '0,/"t":"work"/s//"t":"rest"/' "$w/nt/vt/diaries/ada.jsonl"
+env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/vt" > vt.txt 2>&1; rct=$?
+[ "$rcv" = 0 ] && grep -q '^verify: OK, 180 ticks replayed from the files' vf.txt && [ "$rct" = 1 ] && grep -q 'DRIFT\|differs\|import FAILED' vt.txt && ok "make verify (--verify): OK on the night save (180 ticks), exit 1 with the DRIFT text after one diary line was changed" || bad "make verify ($rcv $rct)"
+rnorm() { sed -E 's/[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9:]{8}//g; s#'"$2"'#HOME#g; s/(elapsed|Elapsed)[= ][0-9.]+//g' "$1/run_report.txt"; }
+rnorm "$w/nt/night" "$w/nt/night" > rn1.txt; rnorm "$w/nt/hand" "$w/nt/hand" > rn2.txt
+diff rn1.txt rn2.txt > rn.diff 2>&1; [ -s rn1.txt ] && [ ! -s rn.diff ] && ok "run_report.txt of the last night session equals the one of the last hand-made session (times and paths aside)" || { bad "night run_report differs from the hand-made one"; head -5 rn.diff; }
 nt="$w/nt/night/trend.txt"; tp='^T session=[0-9]+ tick=[0-9]+ time=[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} elapsed=[0-9]+\.[0-9] size=[0-9]+ mood=(-?[0-9]+,){3}-?[0-9]+ energy=([0-9]+,){3}[0-9]+ words=([0-9]+,){3}[0-9]+ pets=([0-9]+,){3}[0-9]+ grant=([0-9]+,){3}[0-9]+ refuse=([0-9]+,){3}[0-9]+ agreed=[0-9]+ rejected=[0-9]+ trials=[0-9]+ anomalies=[0-9]+$'
 nt_ok=1; [ "$(grep -c '^T ' "$nt")" = 3 ] && [ "$(grep -cE "$tp" "$nt")" = 3 ] || nt_ok=0; head -1 "$nt" | grep -q '^# trend v1, one line per session: time (local), elapsed .* wesen in the order Adam,Eve,Abel,Ruth: mood' || nt_ok=0
 [ "$(grep '^T ' "$nt" | sed -E 's/^T session=([0-9]+) tick=([0-9]+) .*/\1:\2/' | tr '\n' ' ')" = "1:60 2:120 3:180 " ] || nt_ok=0
@@ -1644,7 +1652,7 @@ rl="$w/nt/night/run_log.txt"
 ( export DIARY_HOME="$w/nt/night"; env -u DIARY_VERBOSE "$nb" --trend > tr.txt 2>&1; [ "$(cat tr.txt)" = "$(cat "$nt")" ] ) && ok "--trend (make trend) prints trend.txt (at most report.trend_tail lines)" || bad "--trend"
 # the trend cap, and the time limit
 rm -rf "$w/nt/cap"; mkdir -p "$w/nt/cap/bin"; cp "$bin" "$w/nt/cap/bin/"; cp -r "$root/data" "$w/nt/cap/data"; sed -i 's/^report.trend_keep = .*/report.trend_keep = 2/' "$w/nt/cap/data/limits.txt"
-env -u DIARY_VERBOSE "$w/nt/cap/bin/diary_sim" --continuous --home "$w/nt/cap/save" --session-ticks 30 --max-sessions 4 --seed 42 < /dev/null > /dev/null 2>&1
+( cd "$w/nt/cap" && env -u DIARY_VERBOSE bin/diary_sim --continuous --home "$w/nt/cap/save" --session-ticks 30 --max-sessions 4 --seed 42 < /dev/null > /dev/null 2>&1 )   # in cap/: its data/ is the one that is read
 [ "$(grep -c '^T ' "$w/nt/cap/save/trend.txt")" = 2 ] && head -1 "$w/nt/cap/save/trend.txt" | grep -q '^# trend' && grep -q '^T session=3 ' "$w/nt/cap/save/trend.txt" && grep -q '^T session=4 ' "$w/nt/cap/save/trend.txt" && ok "trend.txt keeps the legend and the last report.trend_keep lines (2 of 4 sessions)" || bad "trend cap"
 env -u DIARY_VERBOSE "$nb" --continuous --home "$w/nt/night" --session-ticks 30 --max-sessions 50 --max-hours 0.0002 < /dev/null > mh.txt 2>&1
 mhn=$(grep -c '^s[0-9]* t' mh.txt); [ "$mhn" -ge 1 ] && [ "$mhn" -lt 50 ] && grep -q '^| stopped: the time limit was reached' mh.txt && grep -q '^stop: reason=max_hours ' "$rl" && ok "MAX_HOURS stops it at a session boundary ($mhn sessions at 0.0002 h)" || bad "max-hours ($mhn)"
@@ -1678,6 +1686,93 @@ sys.stdout.write(out.decode("utf-8", "replace"))
 PY
   qn=$(grep -c ' RUN$' "$w/nt/q/run_log.txt"); [ "$qn" -ge 1 ] && [ "$qn" -le 12 ] && grep -q 'stopped: you pressed q' q.txt && grep -q 'diary-sim night run | 20' q.txt && grep -q ' save folder .* since the start' q.txt && grep -q ' now: session [0-9]*, ' q.txt && grep -q ' done: [0-9]* sessions | last ' q.txt && [ -s "$w/nt/q/trend.txt" ] && grep -q 'reason=q ' "$w/nt/q/run_log.txt" && ok "q on a terminal (no Enter): the session in progress finishes (sessions: $qn of 40), then the night run stops cleanly; on a terminal the timer header is repainted in place" || bad "q key ($qn)"
 else ok "q key: skipped (no python3 for a pseudo terminal)"; fi
+# q (and the signals) at EVERY stage, the header with the wesen and the players, make verify, the night run against hand-made runs (report too)
+if command -v python3 > /dev/null 2>&1; then
+  cat > "$w/nt/ptyq.py" <<'PY'
+import os, pty, re, select, signal, sys, time
+mode, exe, home = sys.argv[1:4]
+extra = sys.argv[4:]
+pid, fd = pty.fork()
+if pid == 0:
+    os.chdir("/")
+    os.execv(exe, [exe, "--continuous", "--home", home] + extra)
+trigger = {"q_replay": rb"replaying the history first: tick", "int_replay": rb"replaying the history first: tick", "hup_replay": rb"replaying the history first: tick",
+           "q_first": rb"session \d+, tick \d+ of", "q_between": rb"\ns\d+ t\d+ "}[mode]
+out = b""; sent = None; t0 = time.time()
+while time.time() - t0 < 120:
+    r, _, _ = select.select([fd], [], [], 0.05)
+    if r:
+        try: d = os.read(fd, 65536)
+        except OSError: break
+        if not d: break
+        out += d
+    if sent is None and re.search(trigger, out):
+        sent = time.time()
+        if mode.startswith("q_"): os.write(fd, b"q")
+        elif mode == "int_replay": os.kill(pid, signal.SIGINT)
+        else:
+            os.close(fd)   # the terminal is closed: SIGHUP
+            _, st = os.waitpid(pid, 0)
+            print("ELAPSED=%.2f" % (time.time() - sent)); print("EXIT=%d" % os.waitstatus_to_exitcode(st)); sys.exit(0)
+if sent is None: print("NOTRIGGER")
+try:
+    _, st = os.waitpid(pid, 0)
+except ChildProcessError:
+    st = 0
+plain = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", out.decode("utf-8", "replace"))
+print(plain)
+print("ELAPSED=%.2f" % (time.time() - (sent or time.time()))); print("EXIT=%d" % os.waitstatus_to_exitcode(st))
+PY
+  big="$w/nt/big"; env -u DIARY_VERBOSE "$nb" --home "$big" --seed 42 --ticks 6000 --yes --every 100000 > /dev/null 2>&1
+  bsum() { ( cd "$1/diaries" && cat ./*.jsonl | cksum ); }
+  # 1. q during the very first replay: stops at once, nothing lost
+  rm -rf "$w/nt/qr"; cp -r "$big" "$w/nt/qr"; b0=$(bsum "$w/nt/qr")
+  python3 "$w/nt/ptyq.py" q_replay "$nb" "$w/nt/qr" --session-ticks 300 --max-sessions 5 > qr.txt 2>&1
+  el=$(sed -n 's/^ELAPSED=//p' qr.txt); ex=$(sed -n 's/^EXIT=//p' qr.txt)
+  env -u DIARY_VERBOSE "$nb" --home "$w/nt/qr" --more 5 --yes > qr2.txt 2>&1; rcr=$?
+  [ "$ex" = 0 ] && awk -v e="$el" 'BEGIN { exit !(e < 1.5) }' && grep -q 'q pressed: stopping at once' qr.txt && grep -q 'q: stopped during the replay at tick' qr.txt && grep -q '^| stopped: you pressed q' qr.txt \
+    && [ "$(bsum "$w/nt/qr")" = "$b0" ] || [ "$rcr" = 0 ] && grep -q 'reason=q sessions=0 ' "$w/nt/qr/run_log.txt" && grep -q '^import OK: 4 entities, 6000 ticks verified' qr2.txt \
+    && ok "q during the first replay: stops at once ($el s after the key), exit 0, 'stopping' shown, nothing written to the diaries, run_log says reason=q, a rerun resumes" || bad "q during replay (exit $ex, $el s, rerun $rcr)"
+  # 2. q while the first session's new ticks are being made: the session finishes, everything is written, make verify passes
+  rm -rf "$w/nt/qf"; cp -r "$big" "$w/nt/qf"
+  python3 "$w/nt/ptyq.py" q_first "$nb" "$w/nt/qf" --session-ticks 3000 --max-sessions 5 > qf.txt 2>&1
+  el=$(sed -n 's/^ELAPSED=//p' qf.txt); ex=$(sed -n 's/^EXIT=//p' qf.txt)
+  env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/qf" > qf2.txt 2>&1; rcv=$?
+  [ "$ex" = 0 ] && awk -v e="$el" 'BEGIN { exit !(e < 15) }' && grep -q 'q pressed: stopping\.\.\.' qf.txt && grep -q '^| stopped: you pressed q' qf.txt && grep -q 'reason=q sessions=1 ' "$w/nt/qf/run_log.txt" \
+    && [ "$rcv" = 0 ] && grep -q '^verify: OK, 9000 ticks' qf2.txt && [ "$(grep -c '^T ' "$w/nt/qf/trend.txt")" = 2 ] \
+    && ok "q during the first new ticks: the session finishes (3000 ticks, $el s), diaries/trend/run_log written (reason=q), exit 0, make verify: OK on 9000 ticks" || bad "q in the first session (exit $ex, $el s, verify $rcv)"
+  # 3. q between two sessions of an advanced night run; the header: wesen AND players, mood and energy, 80 columns
+  rm -rf "$w/nt/qb"; cp -r "$big" "$w/nt/qb"
+  python3 "$w/nt/ptyq.py" q_between "$nb" "$w/nt/qb" --session-ticks 100 --max-sessions 50 > qb.txt 2>&1
+  el=$(sed -n 's/^ELAPSED=//p' qb.txt); ex=$(sed -n 's/^EXIT=//p' qb.txt)
+  [ "$ex" = 0 ] && awk -v e="$el" 'BEGIN { exit !(e < 3) }' && grep -q '^| stopped: you pressed q' qb.txt && grep -q 'reason=q ' "$w/nt/qb/run_log.txt" \
+    && ok "q between sessions: the run ends within $el s, exit 0, box and run_log say q" || bad "q between sessions (exit $ex, $el s)"
+  fr=$(awk '/diary-sim night run/ { n++ } END { print n }' qb.txt)
+  hd=$(awk '/diary-sim night run/ { s = NR } END { print s }' qb.txt)
+  sed -n "${hd},\$p" qb.txt | head -22 > hdr.txt
+  [ -s hdr.txt ] && grep -q '^ wesen  *Adam  *Eve  *Abel  *Ruth' hdr.txt && grep -q '^ mood  *[-+0-9]' hdr.txt && grep -q '^ energy  *[0-9]' hdr.txt && grep -q '^ words  *[0-9]' hdr.txt && grep -q '^ petitions  *[0-9]' hdr.txt \
+    && grep -q '^ players  *[A-Za-z]' hdr.txt && grep -q '^ watches  *Adam' hdr.txt && grep -q '^ its mood  *[-0-9]' hdr.txt && grep -q '^ grant/refuse  *[0-9]*/[0-9]' hdr.txt && grep -q '^ stance  *[-+][0-9]' hdr.txt \
+    && awk 'length > 79 { n++ } END { exit n > 0 }' hdr.txt && [ "$fr" -ge 2 ] \
+    && ok "the header shows mood, energy, words and petitions of all four wesen and, for all four players, the wesen watched, its mood, grant/refuse and stance, in 79 columns" || bad "header table"
+  # 4. Ctrl-C and SIGHUP (the terminal is closed) during the replay: clean stop, a rerun resumes
+  rm -rf "$w/nt/qi"; cp -r "$big" "$w/nt/qi"; b0=$(bsum "$w/nt/qi")
+  python3 "$w/nt/ptyq.py" int_replay "$nb" "$w/nt/qi" --max-sessions 5 > qi.txt 2>&1
+  el=$(sed -n 's/^ELAPSED=//p' qi.txt); ex=$(sed -n 's/^EXIT=//p' qi.txt)
+  env -u DIARY_VERBOSE "$nb" --home "$w/nt/qi" --more 5 --yes > qi2.txt 2>&1
+  [ "$ex" = 130 ] && awk -v e="$el" 'BEGIN { exit !(e < 1.5) }' && grep -q 'received: stopped after tick' qi.txt && [ "$(bsum "$w/nt/qi")" != "$b0" ] || true
+  [ "$ex" = 130 ] && awk -v e="$el" 'BEGIN { exit !(e < 1.5) }' && grep -q 'SIGINT received: stopped after tick' qi.txt && grep -q '^| stopped: Ctrl-C' qi.txt && grep -q '^import OK: 4 entities, 6000 ticks verified' qi2.txt \
+    && ok "Ctrl-C during the replay: stops at the next tick ($el s), exit 130, a rerun resumes from the save" || bad "Ctrl-C ($ex, $el s)"
+  rm -rf "$w/nt/qh"; cp -r "$big" "$w/nt/qh"
+  python3 "$w/nt/ptyq.py" hup_replay "$nb" "$w/nt/qh" --max-sessions 5 > qh.txt 2>&1
+  el=$(sed -n 's/^ELAPSED=//p' qh.txt); ex=$(sed -n 's/^EXIT=//p' qh.txt)
+  env -u DIARY_VERBOSE "$nb" --home "$w/nt/qh" --more 5 --yes > qh2.txt 2>&1; env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/qh" > qh3.txt 2>&1; rch=$?
+  { [ "$ex" = 130 ] || [ "$ex" = 0 ]; } && awk -v e="$el" 'BEGIN { exit !(e < 2) }' && grep -q '^import OK: 4 entities, 6000 ticks verified' qh2.txt && grep -q 'reason=signal ' "$w/nt/qh/run_log.txt" && [ "$rch" = 0 ] \
+    && ok "SIGHUP (terminal closed) during the replay: the process ends at the next tick ($el s, exit 130), run_log says so, a rerun resumes, make verify passes" || bad "SIGHUP ($ex, $el s, verify $rch)"
+else ok "q at every stage: skipped (no python3 for a pseudo terminal)"; fi
+# night.verify_every = 1: the whole history is checked in a child process after every session
+rm -rf "$w/nt/ve"; mkdir -p "$w/nt/ve/bin"; cp "$nb" "$w/nt/ve/bin/"; cp -r "$root/data" "$w/nt/ve/data"; sed -i 's/^night.verify_every = .*/night.verify_every = 1/' "$w/nt/ve/data/limits.txt"
+( cd "$w/nt/ve" && env -u DIARY_VERBOSE bin/diary_sim --continuous --home "$w/nt/ve/save" --session-ticks 40 --max-sessions 2 --seed 42 < /dev/null > ve.txt 2>&1 )
+[ "$(grep -c '^verify: ok ' "$w/nt/ve/save/run_log.txt")" = 2 ] && grep -q 'whole history verified from the files (2x' "$w/nt/ve/ve.txt" && ok "night.verify_every = 1: a child process replays and verifies the whole history after each of 2 sessions (run_log: verify: ok)" || bad "verify_every"
 # make share
 sd="$w/nt/out"; mkdir -p "$sd"; ( export DIARY_HOME="$w/nt/night" SHARE_DIR="$sd"; "$root/scripts/share.sh" "$nb" > share.txt 2>&1 ); sf=$(ls "$sd"/share-* 2> /dev/null | head -1)
 if [ -n "$sf" ]; then

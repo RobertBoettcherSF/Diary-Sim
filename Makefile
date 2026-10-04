@@ -1,4 +1,4 @@
-# Version: 0.034
+# Version: 0.035
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -16,11 +16,19 @@
 # make report     print the last run_report.txt of the save folder (the full report, with `== name ==` headers and the @@TRACE marker)
 # make runlog     show the last 40 lines of run_log.txt (one entry per run and per DRIFT stop, newest last)
 # make night      sessions back to back, for the night: SESSION_TICKS=300 (ticks per session), MAX_SESSIONS=n, MAX_HOURS=n (default 12;
-#                 0 = no limit); q (no Enter needed) finishes the session in progress and stops, so do DRIFT, the limits and Ctrl-C;
-#                 on a terminal a timer header repainted about once a second (clock, elapsed, save folder size and growth, session and
-#                 tick, seconds per session, ticks per second, time left, mood/energy), else one status line and one timer line per
-#                 session; a box at the end; trend.txt and run_log.txt get a line per session
-#                 (bin/diary_sim --continuous; every session is a normal --more run, byte for byte what you would get by hand)
+#                 0 = no limit).  ONE process: the history is replayed once, then the sessions follow (a session ~0.2-0.5 s instead of a
+#                 full replay each); the files are byte for byte what the same sessions started by hand (--more N) would write.  q (no
+#                 Enter needed) works at every stage: during the first replay it stops at once, later the session in progress finishes,
+#                 everything is written, the box is shown, exit 0.  Ctrl-C, SIGTERM and SIGHUP (terminal closed) stop at the next tick;
+#                 a rerun resumes.  On a terminal a header repainted about once a second (clock, elapsed, save folder size and growth,
+#                 session and tick, seconds per session, time left; mood, energy, words, petitions of the wesen and watches, mood,
+#                 grant/refuse, stance of the players), else one status line and one timer line per session; a box at the end;
+#                 trend.txt and run_log.txt get a line per session.  At the end (limits) a child process replays the WHOLE history from the
+#                 files (make verify); night.verify_every in data/limits.txt = also every N sessions.  Do not use say/grant/veto during a
+#                 night run: quit first.
+# make verify     replay the whole history from the files and compare it with everything stored; prints one OK line (exit 1: DRIFT)
+# make bench      seconds per session: 20 sessions of 300 ticks after a 6000-tick save, the old way (one program start per session)
+#                 against the night run (BENCH_SESSIONS, BENCH_TICKS, BENCH_BASE); diaries of both must be identical
 # make trend      the last 40 lines of trend.txt (one line per session: mood, energy, words, petitions, votes, trials, anomalies)
 # make share      ONE zip (tar.gz without zip) with trend.txt, run_log.txt, run_report*.txt, summary.txt, player_reports.txt, dictionary.txt and
 #                 divergence.txt; no diaries and no ballots; next to the save folder (SHARE_DIR=... to choose); prints path and size
@@ -83,14 +91,15 @@
 #                 sizes (source, data, per unit, stripped / unstripped, debug share) of the files that exist
 # make check      version headers + the resume/replay/drift/crash checks
 GNATMAKE ?= gnatmake
-# Build speed: units compile in parallel (-j0 = all cores) and at -O0 (a clean build took ~60 s serial at -O1; ~12 s now; the run
-# itself is ~35 % slower, 300 ticks on 1800 replayed ticks take ~2 s).  make portable builds BOTH ways with both compilers and
-# fails on any warning: OPT="-O1 -fno-inline" is the strict (optimizer-level warnings) one, e.g. make all OPT="-O1 -fno-inline".
-OPT ?= -O0
+# The default is -O2: the program replays the whole history on every start, and -O2 runs that about 2.2 times faster than -O0 (same
+# output, byte for byte).  A clean build takes ~50 s with -j0; for quick edit-and-test builds use make all OPT=-O0 (~12 s).
+# make portable builds with both compilers at -O0, at -O1 and at -O2 and fails on any warning; OPT="-O1 -fno-inline" is the
+# strict (optimizer-level warnings) one, e.g. make all OPT="-O1 -fno-inline".
+OPT ?= -O2
 JOBS ?= -j0
 FLAGS = -g $(OPT) -gnatwa -gnat2022 -gnata $(JOBS)
 
-.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog trend night share small footprint
+.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog trend night verify bench share small footprint
 export WESEN PLAYER TEXT AS
 
 EVERY ?= 100
@@ -101,6 +110,7 @@ SMALL_FLAGS = $(SMALL) -ffunction-sections -fdata-sections -gnatwa -gnat2022 -gn
 
 all:
 	mkdir -p obj bin
+	@[ "$$(cat obj/.opt 2>/dev/null)" = "$(OPT)" ] || { rm -rf obj; mkdir -p obj; echo "$(OPT)" > obj/.opt; }   # another OPT: build everything again (the build tool does not notice)
 	$(GNATMAKE) $(FLAGS) -D obj diary_sim.adb -o bin/diary_sim -bargs -E
 	@rm -f b~*
 
@@ -167,6 +177,12 @@ trend: all
 night: all
 	bin/diary_sim --continuous $(if $(SESSION_TICKS),--session-ticks $(SESSION_TICKS),) $(if $(MAX_SESSIONS),--max-sessions $(MAX_SESSIONS),) $(if $(MAX_HOURS),--max-hours $(MAX_HOURS),) $(if $(SEED),--seed $(SEED),)
 
+verify: all
+	bin/diary_sim --verify
+
+bench: all
+	scripts/bench.sh bin/diary_sim
+
 share: all
 	scripts/share.sh bin/diary_sim
 
@@ -216,4 +232,4 @@ footprint:
 	@scripts/footprint.sh
 
 clean:
-	rm -rf obj obj_small bin diaries diaries_old_* entities summary.txt summary.jsonl run_report.txt run_report_prev.txt run_log.txt trend.txt night_console.txt debug.txt debug.tmp debug_digest.txt debug_digest.prev debug_full.txt last_error.txt
+	rm -rf obj obj_small bin diaries diaries_old_* entities summary.txt summary.jsonl run_report.txt run_report_prev.txt run_log.txt trend.txt night_console.txt night_verify.txt debug.txt debug.tmp debug_digest.txt debug_digest.prev debug_full.txt last_error.txt
