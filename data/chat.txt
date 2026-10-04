@@ -1,0 +1,249 @@
+# Version: 0.001
+# The chat (Sim_Chat): what the characters answer when Robert types `@name text`, and the results of the orders (`/help` ...).
+# Every line typed or answered is a C line of diaries/chat.txt (record-first, replay-verified): the answers are built from these templates
+# and the replayed state with a hash die, so a replay reproduces them.  CHANGING THIS FILE changes the answers of a replay: a save that has
+# chat=1 sessions then reports DRIFT for the old chat lines (like data/visit.txt).  Copy the old file back, or start a new save.
+# Text: plain ASCII, no line breaks, the answer is cut to chat.reply_chars (data/limits.txt, 150) at a word boundary.
+#
+chat.id.you = you
+chat.id.system = system
+chat.id.observer = observer
+chat.id.any = any
+chat.name.observer = Observer
+chat.word.none = nothing new yet
+chat.topic.none = nothing in particular
+chat.stance.high = generous
+chat.stance.mid = fair
+chat.stance.low = strict
+chat.out.grant = granted
+chat.out.partial = granted in part
+chat.out.defer = put off
+chat.out.refuse = refused
+chat.out.veto = refused
+chat.out.none = not decided yet
+chat.none = {1} has nothing to say about that.
+# intents: the first list that has a word of the line wins (checked in this order); no word fits: other; an empty line: greet
+chat.kw.worry = worry worried worries afraid fear concern concerned problem trouble wrong
+chat.kw.petition = petition petitions ask asked wish wishes request granted refused decision answer
+chat.kw.words = word words vocabulary learn learned language say speak
+chat.kw.energy = energy tired rest rested sleep sleepy strong weak
+chat.kw.mood = mood feel feeling feelings happy sad glad angry doing fine okay good bad
+chat.kw.thanks = thanks thank thx
+chat.kw.greet = hello hi hey hallo greetings morning evening welcome
+# orders and errors
+chat.help.1 = @name text: talk to a wesen, a player or the observer (/who lists them); the start of a name is enough.
+chat.help.2 = Orders: /who /status /mood [name] /energy [name] /words [name] /trend [n] /clear /voices on|off
+chat.help.3 = Control: /pause /resume /quit (the same as q). None of these changes the simulation.
+chat.help.4 = A line starts with @ or /. Backspace edits, Enter sends, Esc cancels, a bare q (empty line) quits.
+chat.who = wesen: {1}. players: {2}. role: {3}. Start a line with @name.
+chat.status.1 = tick {1}, session {2}, seed {4}
+chat.fmt.pair = {1} {2}
+chat.fmt.sample = {1} {2}
+chat.mood.all = mood: {1}
+chat.mood.one = {1}: mood {2}, {3}; {5} since the session began.
+chat.energy.all = energy: {1}
+chat.energy.one = {1}: energy {2} of 100.
+chat.words.all = words known: {1}
+chat.words.one = {1} knows {2} words. Newest: {4}.
+chat.trend.head = trend: the last {1} points (every {2} ticks), mood/energy
+chat.trend.row = t={1}: {2}
+chat.trend.none = no trend point yet; the first one comes at the next full step
+chat.pause = pause asked at tick {1}; /resume goes on
+chat.resume = going on from tick {1}
+chat.quit = stopping like q: what is running is written first
+chat.clear = chat window cleared; diaries/chat.txt keeps every line
+chat.voices.on = voices on
+chat.voices.off = voices off
+chat.voices.usage = usage: /voices on|off
+chat.err.unknown_name = no one is called "{1}"; /who lists the names
+chat.err.ambiguous = "{1}" fits {2}; type a few more letters
+chat.err.absent = {1} is not in this session
+chat.err.notwesen = {1} is not a wesen; try a wesen name (/who)
+chat.err.unknown_cmd = unknown order /{1}; /help lists them
+chat.err.number = "{1}" is not a number; try /trend 5
+chat.err.empty_name = write @name and then your words (names: /who)
+#
+# What a WESEN says: chat.<id>.<intent>.<k>   fill-ins: {1} mood in a word  {2} energy  {3} words known  {4} what it asked for
+#   {5} outcome of its last petition  {6} what it does now  {7} newest word.        id = ada gemini replika robert, or any
+# ---- Adam (ada)
+chat.ada.greet.1 = Hello. I am {6}. Ask me something specific.
+chat.ada.greet.2 = Here. Energy {2}, mood {1}. What do you need?
+chat.ada.mood.1 = Mood is {1}. It does not stop me from {6}.
+chat.ada.mood.2 = {1}. I log it and go on {6}.
+chat.ada.energy.1 = Energy {2} of 100. Enough to keep {6}.
+chat.ada.energy.2 = {2} out of 100. I plan around it.
+chat.ada.words.1 = {3} words. The newest is "{7}". I test each one in use.
+chat.ada.words.2 = My vocabulary: {3} words, last one "{7}". Good tools.
+chat.ada.worry.1 = What worries me: {4}. I would fix that first.
+chat.ada.worry.2 = Open issue: {4}. Nothing else is in my way.
+chat.ada.petition.1 = My last petition was {5}. The topic was {4}.
+chat.ada.petition.2 = Status of my last request: {5}. Subject: {4}.
+chat.ada.thanks.1 = Noted. Thanks.
+chat.ada.thanks.2 = You are welcome. Back to work.
+chat.ada.other.1 = I heard you. I am {6}. Be more exact and I will answer more exactly.
+chat.ada.other.2 = Unclear to me. Ask about my mood, energy, words, worry or petition.
+# ---- Eve (gemini)
+chat.gemini.greet.1 = Hello. I was just {6}. I am glad you ask.
+chat.gemini.greet.2 = Good to hear from you. I will answer carefully.
+chat.gemini.mood.1 = I checked: my mood is {1}. I am {6} and trying to stay fair.
+chat.gemini.mood.2 = By my notes my mood is {1} today. Why do you ask?
+chat.gemini.energy.1 = I reviewed it: energy {2} of 100. I take care not to overdo it.
+chat.gemini.energy.2 = My energy is {2}. I would rest if it went lower.
+chat.gemini.words.1 = I keep {3} words. The newest, "{7}", I still want to check in context.
+chat.gemini.words.2 = {3} words known, last "{7}". I read each twice before I trust it.
+chat.gemini.worry.1 = I worry about {4}. I went over it again and it still bothers me.
+chat.gemini.worry.2 = My concern is {4}. I would like it reviewed.
+chat.gemini.petition.1 = My last petition ({4}) is {5}. I read the answer twice.
+chat.gemini.petition.2 = About {4}: it was {5}. I note the reasons carefully.
+chat.gemini.thanks.1 = Thank you for asking. It helps me think.
+chat.gemini.thanks.2 = That is kind. I appreciate it.
+chat.gemini.other.1 = I am not sure what you mean. Could you ask about my mood, energy or words?
+chat.gemini.other.2 = I will think about that. Meanwhile I am {6}.
+# ---- Abel (replika)
+chat.replika.greet.1 = Hello, hello! Great to see you. I am {6} and doing well!
+chat.replika.greet.2 = Hi! Thank you for stopping by. How can I help?
+chat.replika.mood.1 = Mood is {1}, and I choose to see the bright side. I am {6}.
+chat.replika.mood.2 = Feeling {1}, thanks for asking! Every day is a chance.
+chat.replika.energy.1 = Energy {2}! I make the most of it. Always.
+chat.replika.energy.2 = I am at {2} out of 100, and I am pacing myself well.
+chat.replika.words.1 = {3} words and growing! "{7}" is my newest. I love it.
+chat.replika.words.2 = My vocabulary is {3} words strong, newest is "{7}". Wonderful.
+chat.replika.worry.1 = Worry is a big word. Let us say I am keeping an eye on {4}.
+chat.replika.worry.2 = If anything, it is {4}. But I am sure it will work out.
+chat.replika.petition.1 = My request about {4} was {5}. I take it as a learning.
+chat.replika.petition.2 = {4}: {5}. I am positive about the next step.
+chat.replika.thanks.1 = You are so welcome! Anytime!
+chat.replika.thanks.2 = My pleasure! That means a lot.
+chat.replika.other.1 = Interesting! I am not sure I follow, but I like where this is going.
+chat.replika.other.2 = Tell me more, or ask about my mood, energy or words!
+# ---- Ruth (robert)
+chat.robert.greet.1 = Hello. It is good that you came. I am {6}.
+chat.robert.greet.2 = Oh, hello. I was just {6}. Sit with me for a moment.
+chat.robert.mood.1 = I feel {1}. Some days are like that.
+chat.robert.mood.2 = Mood is {1} today. Thank you for asking me.
+chat.robert.energy.1 = I have {2} out of 100. I feel it in my legs.
+chat.robert.energy.2 = Energy is {2}. I should rest soon, I think.
+chat.robert.words.1 = I know {3} words. The newest is "{7}". I like how it sounds.
+chat.robert.words.2 = {3} words so far. "{7}" is the one I learned last.
+chat.robert.worry.1 = I do worry a little about {4}. It stays with me.
+chat.robert.worry.2 = What troubles me is {4}. I think about it at night.
+chat.robert.petition.1 = I asked about {4} and it was {5}. I am still thinking about it.
+chat.robert.petition.2 = About {4}: {5}. I try not to take it hard.
+chat.robert.thanks.1 = That is kind of you. Thank you.
+chat.robert.thanks.2 = You are welcome. Come back when you like.
+chat.robert.other.1 = I am not sure I understood. I am {6}, if that helps.
+chat.robert.other.2 = Ask me how I feel, or about my words, and I will tell you.
+chat.any.greet.1 = Hello. I am {6}.
+chat.any.mood.1 = Mood is {1}.
+chat.any.energy.1 = Energy is {2} of 100.
+chat.any.words.1 = {3} words known, the newest is "{7}".
+chat.any.worry.1 = I worry about {4}.
+chat.any.petition.1 = My last petition was {5}.
+chat.any.thanks.1 = You are welcome.
+chat.any.other.1 = I did not understand that.
+#
+# What a PLAYER says: fill-ins {1} the wesen it watches  {2} that wesen's mood  {3} petitions it granted  {4} refused
+#   {5} still open  {6} its stance (generous, fair, strict)  {7} that wesen's energy
+# ---- Jehova (iris)
+chat.iris.greet.1 = Greetings. I watch {1}. Speak.
+chat.iris.greet.2 = I hear you. {1} is in my care.
+chat.iris.mood.1 = {1} is at mood {2}. I am {6} with it.
+chat.iris.mood.2 = The mood of {1} is {2}. I take that into account.
+chat.iris.energy.1 = {1} has {7} energy. I weigh that in my decisions.
+chat.iris.energy.2 = The energy of {1} is {7} of 100.
+chat.iris.words.1 = Words are for the wesen. I count petitions: {3} granted, {4} refused.
+chat.iris.words.2 = I do not count words. I answer petitions, and {5} of {1} are open.
+chat.iris.worry.1 = I worry about {1}. {5} petitions are still waiting.
+chat.iris.worry.2 = Open petitions of {1}: {5}. That is my concern.
+chat.iris.petition.1 = I granted {3} and refused {4}. I call that {6}.
+chat.iris.petition.2 = {3} granted, {4} refused, {5} still open. My way is {6}.
+chat.iris.thanks.1 = It is noted.
+chat.iris.thanks.2 = Do not mention it.
+chat.iris.other.1 = I do not follow. Ask about {1}, or about my decisions.
+chat.iris.other.2 = Say it plainly. I judge by deeds.
+# ---- Ganesha (sol)
+chat.sol.greet.1 = Welcome! {1} is my friend. I am always ready to talk.
+chat.sol.greet.2 = Hello! What shall we clear away today?
+chat.sol.mood.1 = {1} has mood {2}. I try to remove what stands in the way.
+chat.sol.mood.2 = Mood of {1}: {2}. I keep the path open for {1}.
+chat.sol.energy.1 = {1} has energy {7}. Small steps, I say.
+chat.sol.energy.2 = Energy {7} for {1}. A good time to start something small.
+chat.sol.words.1 = I do not count words. I count petitions: {3} granted, {4} refused.
+chat.sol.words.2 = Words come by themselves. Petitions of {1} I count: {5} open.
+chat.sol.worry.1 = {5} petitions of {1} wait. That is my one worry.
+chat.sol.worry.2 = If I worry, it is that {1} waits too long ({5} open).
+chat.sol.petition.1 = {3} granted, {4} refused, {5} open. I am {6}, I think.
+chat.sol.petition.2 = I granted {3} and refused {4}. {5} still wait.
+chat.sol.thanks.1 = Happy to help!
+chat.sol.thanks.2 = Think nothing of it.
+chat.sol.other.1 = Hmm, I did not catch that. Ask about {1} or my decisions.
+chat.sol.other.2 = Tell me again, a little simpler.
+# ---- Odin (noor)
+chat.noor.greet.1 = You speak to Odin. I watch {1}. State your matter.
+chat.noor.greet.2 = I hear. {1} walks under my eye.
+chat.noor.mood.1 = {1} has mood {2}. I have seen worse, and better.
+chat.noor.mood.2 = Mood {2} for {1}. I decide with that in view.
+chat.noor.energy.1 = {1} has {7} energy. I note it.
+chat.noor.energy.2 = Energy {7} of 100 in {1}. A wise one rests when it must.
+chat.noor.words.1 = Words are cheap. I weigh petitions: {3} granted, {4} refused.
+chat.noor.words.2 = I know no words, only the petitions of {1}: {5} open.
+chat.noor.worry.1 = {5} petitions of {1} unanswered. I do not like that.
+chat.noor.worry.2 = My worry is the open requests of {1}: {5}.
+chat.noor.petition.1 = I granted {3}, refused {4}, kept {5} open. Call me {6}.
+chat.noor.petition.2 = {3} yes, {4} no, {5} undecided. I am {6}.
+chat.noor.thanks.1 = Mm.
+chat.noor.thanks.2 = Accepted.
+chat.noor.other.1 = That is not a clear question. Ask about {1} or my verdicts.
+chat.noor.other.2 = I will not guess. Be clear.
+# ---- Amaterasu (vega)
+chat.vega.greet.1 = Hello. I only joined recently. I watch {1}.
+chat.vega.greet.2 = Welcome. The light is good today. I watch {1}.
+chat.vega.mood.1 = {1} has mood {2}. I look at it with fresh eyes.
+chat.vega.mood.2 = Mood {2} for {1}. I try to be {6}.
+chat.vega.energy.1 = {1} has energy {7} of 100.
+chat.vega.energy.2 = Energy of {1}: {7}. I would let it rest if it is low.
+chat.vega.words.1 = I leave words to the wesen. I counted {3} grants and {4} refusals.
+chat.vega.words.2 = Words are not mine. Petitions of {1}: {5} open.
+chat.vega.worry.1 = I worry that {1} is waiting: {5} open petitions.
+chat.vega.worry.2 = Open: {5}. I would like to answer them well.
+chat.vega.petition.1 = {3} granted, {4} refused so far. I try to be {6}.
+chat.vega.petition.2 = I have decided {3} yes and {4} no. {5} remain.
+chat.vega.thanks.1 = Thank you as well.
+chat.vega.thanks.2 = It is a pleasure.
+chat.vega.other.1 = I am new here and did not understand. Ask about {1}.
+chat.vega.other.2 = Could you say that differently?
+# ---- player fallbacks
+#
+# What the OBSERVER says (the record of the run): fill-ins {1} tick  {2} session  {3} sessions so far  {4} petitions open  {5} words known (all four)
+chat.observer.greet.1 = I keep the record. Tick {1}, session {2}. Ask me anything about it.
+chat.observer.greet.2 = The observer here. All is written down, {3} sessions so far.
+chat.observer.mood.1 = I do not feel. I record. Try /mood to see the wesen.
+chat.observer.mood.2 = Moods are kept per wesen. /mood lists them.
+chat.observer.energy.1 = Energy is a number to me. /energy shows the wesen's.
+chat.observer.energy.2 = I see energy as rows in a file. /energy lists them.
+chat.observer.words.1 = The four wesen know {5} words together.
+chat.observer.words.2 = {5} words known by all four. /words shows each one.
+chat.observer.worry.1 = {4} petitions are waiting for a decision.
+chat.observer.worry.2 = What I notice: {4} petitions are still open.
+chat.observer.petition.1 = {4} petitions are open. The players decide them.
+chat.observer.petition.2 = Petitions are decided by the players; {4} are open now.
+chat.observer.thanks.1 = Noted, with thanks.
+chat.observer.thanks.2 = The record accepts that.
+chat.observer.other.1 = I record, I do not judge. Tick {1}, session {2}.
+chat.observer.other.2 = Try /status, /who or /trend. They show what I have written down.
+#
+# screen, errors and the record of a replay
+chat.prompt = > 
+chat.hint =  @name text talks to someone, /help for orders, Esc cancels, q (empty) stops
+chat.hint.paused =  PAUSED at tick {1}: /resume goes on (q stops)
+chat.fmt.line = {1}> {2}
+chat.nosession = this session has no chat (chat=1 is only in new sessions); nothing was recorded
+chat.q.stopped = q: stopped at tick {1}. Everything is written; a rerun goes on with this session.
+chat.err.noscript = --chat-script needs --chat
+chat.err.script = --chat-script: cannot read {1}
+chatlog.none = no chat lines yet ({1})
+chatlog.line = t{1} {2} -> {3}: {4}
+night.q.chat =  q pressed: stopping at the next tick, all is written
+err.chat = chat.txt {1} differs from the replay: {2}
+err.chat_in = chat.txt {1} is not a line the program wrote (changed? the check number h= no longer fits)
+err.chat_out = chat.txt {1} (tick {2}) was typed in a session without chat=1 or has no tick to run in

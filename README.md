@@ -152,7 +152,7 @@ For a run you leave alone and read in the morning, and for the loop *Robert runs
     is what a closed terminal window sends: it is caught like Ctrl-C, so closing the terminal during a night run stops it cleanly; if the
     process is killed without a signal it can catch (`kill -9`, power off), `debug.txt` keeps a `RUN` stub and the next run resumes (a half
     written last diary line is skipped with a warning, as before).
-  * The terminal is never left changed: the keys are read one at a time with the terminal switched only for that moment and put back. Keys are read
+  * The terminal is never left changed: the keys are read one at a time with the terminal switched only for that moment and put back (with the chat input line the terminal is switched for the whole run and restored at every way out, see *Chat*; there q only counts as the first key of an empty line). Keys are read
     only when the program is the foreground job of the terminal (not under `&`, `nohup`, cron, ssh without a tty): then only the limits and
     signals stop it, so give `MAX_SESSIONS` or `MAX_HOURS`.
   * It also stops on a **DRIFT** (the box says so, with the import failure), at `MAX_SESSIONS` and at `MAX_HOURS` (checked between sessions).
@@ -203,6 +203,58 @@ For a run you leave alone and read in the morning, and for the loop *Robert runs
   size (a few tens of KB). Inside: `trend.txt`, `run_log.txt`, `run_report.txt`, `run_report_prev.txt`, `summary.txt`,
   `player_reports.txt`, `dictionary.txt` (the public list), `divergence.txt` (the output of `make divergence`) and `share_info.txt`.
   **Not inside:** `diaries/`, `entities/` and the secret ballots (`diaries/ballots.txt`), which stay with the Ground.
+
+## Chat: talk to the wesen, the players and the observer (`make chat`, `chat=1` sessions, `make chatlog`)
+
+A line input under the voices, in `make night` on a terminal and in a session of its own:
+
+    make chat                       # one paced session (SESSION_TICKS=600 at chat.tps = 20 ticks a second), continues the save
+    make chat SESSION_TICKS=2000
+    make chatlog                    # the last 30 chat lines (chat.log_tail) with names: t6001 you -> Eve: hello
+
+* **What you type.** A line starts with **`@`** or **`/`**; every other first key is ignored, except a bare **`q`** on an empty line, which
+  still stops the run (decision: `q` is the stop key of Phase A, so a line cannot start with a letter). Backspace deletes, Ctrl-U clears,
+  **Enter** sends, **Esc** cancels the line (arrow keys are ignored). The input line is the last row but one of a 24-row screen and is drawn again
+  with every key, under the voices and the chat window (the last `chat.rows` = 2 lines of what was said, and `chat.recent` = 1 status line of the last night session); the header around it is
+  repainted as before. Names are written in any case and a unique start is enough: `@adam`, `@EVE`, `@ru`, `@jeh`, `@ob`.
+* **`@name text`** speaks to one character: the wesen **Adam, Eve, Abel, Ruth**, the players **Jehova, Ganesha, Odin, Amaterasu** (the
+  fourth only in a players4=1 session) and the **observer** (the role word of Robert's side: it answers with the record of the run).
+  Names are those of `data/names.txt` (the ids `ada`, `iris` ... work too). An unknown name, a name that fits several (`@a`), or an absent
+  player gives an error line, nothing else happens. The character answers in under 150 characters from the templates of
+  **`data/chat.txt`** (`chat.<id>.<intent>.<k>`, several per character and intent; the intent is found by keywords: greeting, mood,
+  energy, words, worry, petition, thanks, other), filled with the real state: mood, energy, words and the newest one, what it asked for
+  last, the outcome of its last petition; a player speaks about the wesen it watches and its own decisions (granted, refused, open,
+  stance). Wording lives in the data file only; a hash die (seed, line number, tick; salts 18100 .. 18299) picks the template.
+* **`/orders`** (they only show something or control the run):
+  `/help`, `/who`, `/status`, `/mood [name]`, `/energy [name]`, `/words [name]`, `/trend [n]` (mood/energy of the wesen every
+  `chat.trend_step` = 100 ticks, the last n points, at most `chat.trend_max`), `/clear` (empties the window, not the file), `/voices on|off`,
+  `/pause` and `/resume` (the ticks wait; keys, screen and chat go on; `--chat` and `make night` on a terminal), `/quit` (the same as `q`).
+  **No order changes the simulation** (no `/say`, no grants: those stay `make say`, `make grant`). Not built, on purpose: `/story`, portals.
+* **Record: `diaries/chat.txt`**, append-only, one line per thing said, Robert's lines and the answers and the results of orders:
+  `C12 t=6001 who=you to=ada h=65599 text=@adam hello` and `C13 t=6001 who=ada to=you h=41312 text=Hello. I am working. ...`
+  (`who` and `to` are internal ids, `you` is Robert, `system` the orders and errors, `observer` the role; `h=` is a check number over the line,
+  hash salt 18400 .. 18499). It follows the record-first rule of the other record files (`Sim_Store`, like `diaries/visit.txt`): a
+  session marker **`chat=1`** in `sessions.txt` (**new sessions only**: a night run on a terminal and `--chat` write it; sessions of a
+  plain `make run`, or with `chat.enabled = 0`, have no marker and no chat file, and are byte for byte what they were before), every line
+  is handled at the end of its tick, and on every replay Robert's lines are read first and the **answers are computed again** from the replayed
+  state and compared: a changed, removed or invented line, or a changed `h=`, is **DRIFT** (`make verify` says which line). `make verify`
+  and the end-of-night check include it. Editing `data/chat.txt` changes the answers of a replay, so a save with chat lines then reports
+  DRIFT for the old lines (as `data/visit.txt` does for the visit): keep the file as it was, or start a new save.
+* **The chat never changes the simulation.** It reads the replayed state and writes only `diaries/chat.txt` (and the `chat=1` marker of
+  new sessions). `scripts/checks.sh` runs the same session with and without chat lines and compares every other diary, entity file and record
+  byte for byte. A line typed while no tick can run it (the first replay, between night sessions) waits and is handled in the next tick;
+  in a session without the marker (an old unfinished one) it is answered on the screen only and not recorded.
+* **`--chat` / `make chat`.** The night machinery with one session: `--session-ticks N` (default `chat.session_ticks` = 600), paced to
+  `chat.tps` ticks a second so that there is time to talk; **q** (or Ctrl-C, or `/quit`) stops at the next tick, everything written, the
+  session is unfinished and the next run resumes it; no full check at the end (run `make verify`). `--chat-script FILE` types the lines
+  "`<ticks into the run> <text>`" of a file instead of a keyboard (used by the checks; unpaced, `/pause` does nothing).
+* **The terminal.** While the input line is on, the terminal is switched once to "no echo, no line buffering" (`stty`, the old settings are
+  kept) and put back at every way out: normal end, q, `/quit`, Ctrl-C, SIGTERM, SIGHUP, DRIFT, an error, a crash (the package that does it
+  restores it when the program ends). Only after `kill -9` or a power cut could it stay changed: `stty sane` (or `reset`) fixes it. Without a
+  terminal (a pipe, cron, a background job) there is no input line and nothing is changed.
+* **Limits** (`data/limits.txt`): `chat.enabled`, `chat.keep` (lines kept on screen), `chat.rows`, `chat.recent`, `chat.max_input` (120), `chat.reply_chars`
+  (150), `chat.session_ticks`, `chat.tps`, `chat.trend_step`, `chat.trend_max`, `chat.log_tail`, and for the voices `voice.shown_chat`.
+* **Layout** (24 rows): header 6 + tables 10 + hint 1 + one voice (2 lines) + night status line 1 + chat window 2 + input line 1 + 1 free row.
 
 ## The Buddhism layer and the players (record-first)
 
@@ -1269,7 +1321,7 @@ paste it` and `back up diaries/ before the next run`.
 vocabulary, Rule 30 personality, bench kernels, votes and summary text), `sim_util.ads/.adb` (hash rolls,
 line parsing, data-file helpers), `data/words.txt`, `data/topics.txt` (petition topics), `data/limits.txt`,
 `data/messages.txt` (all console wording), `data/kalpas.txt` (session length votes), `data/menu.txt` (menu text, title, tagline), `data/fonts.txt` (title letters), `data/vocab.txt`, `data/help.txt`, `sim_dharma.ads/.adb` (karma, rebirth, unrest, ladder, awareness, players, inbox), `sim_things.ads/.adb` (the treadmill world), `data/things.txt` (its lists), `docs/WORLD.md`, `data/karma.txt` (numbers), `data/dharma.txt` (wording, flavour labels), `data/players.txt` (the three players),
-`sim_next.ads/.adb` + `data/ticks.txt` (the advice for the next run), `sim_visit.ads/.adb` + `data/visit.txt` (the visit: watch and talk), `sim_voice.ads/.adb` + `data/voices.txt` (the wesen messages under the night header), `sim_trial.ads/.adb` + `data/trial.txt` (trial by chess), `sim_records.ads/.adb` + `data/records.txt` (votes, petitions, dictionary, announcements), `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
+`sim_next.ads/.adb` + `data/ticks.txt` (the advice for the next run), `sim_visit.ads/.adb` + `data/visit.txt` (the visit: watch and talk), `sim_voice.ads/.adb` + `data/voices.txt` (the wesen messages under the night header), `sim_chat.ads/.adb` + `data/chat.txt` (the chat), `sim_trial.ads/.adb` + `data/trial.txt` (trial by chess), `sim_records.ads/.adb` + `data/records.txt` (votes, petitions, dictionary, announcements), `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
 Design documents (proposals, nothing built unless the README says so above): `docs/WORLD.md` (the treadmill world), `docs/LIFE.md` (roles,
 companies and positions, exhaustion, life support, leisure, the one being model), `docs/MYTH.md` (creation myths of the players),
 `docs/LEARN.md` (slow core, mixed study, dictionary pruning, pondering, notebooks and study; the byte-level predictor is postponed).

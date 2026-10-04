@@ -1,4 +1,4 @@
---  Version: 0.043
+--  Version: 0.044
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -28,7 +28,7 @@ pragma Ada_2022;
 
 with Ada.Calendar, Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Finalization, Ada.Strings.Fixed, Ada.Streams.Stream_IO, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
-     GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Records, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Trial, Sim_Util, Sim_Visit, Sim_Voice, Sim_World;
+     GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chat, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Records, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Trial, Sim_Util, Sim_Visit, Sim_Voice, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
 
 procedure Diary_Sim is
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.043";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.044";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -162,6 +162,7 @@ procedure Diary_Sim is
    Section_Opt : Unbounded_String;                         --  --debug-section NAME
    Verbose : Boolean := False;                             --  --verbose / DIARY_VERBOSE=1 / make run VERBOSE=1: the whole report on the console as before
    Trend_Mode, Folder_Mode : Boolean := False;             --  --trend / make trend: the last lines of trend.txt; --folder: print the save folder (make share)
+   Tty_Out : Boolean := False;                             --  a terminal: the night header is repainted in place (ANSI cursor home); else plain lines
    Night_On : Boolean := False;                            --  the night run is going (keys are read, the console is held)
    Night_Mode : Boolean := False;                          --  --continuous / make night: back-to-back sessions until q, a limit, or DRIFT
    Night_Ticks, Night_Sessions : Int := -1;                --  --session-ticks / --max-sessions (-1: data/limits.txt night.*)
@@ -175,7 +176,14 @@ procedure Diary_Sim is
    Act_Count : array (Entity_Id, Action) of Natural := [others => [others => 0]];   --  all ticks replayed
    Last_Act : Action := Rest;
    Voice_Act : array (Entity_Id) of List_Id := [others => Rest];   --  the latest verb and the newest learned or coined word of each wesen (display only: the voices)
-   Voice_Word : array (Entity_Id) of Natural := [others => 0];
+   Voice_Hist : array (Entity_Id, 1 .. 5) of Natural := [others => [others => 0]];   --  the newest words, [1] the newest
+   Voice_On : Boolean := True;                  --  voices are shown (voice.enabled, /voices on|off)
+
+   procedure Voice_Note (E : Entity_Id; W : Positive) is
+   begin
+      for K in reverse 2 .. 5 loop Voice_Hist (E, K) := Voice_Hist (E, K - 1); end loop;
+      Voice_Hist (E, 1) := W;
+   end Voice_Note;
    Votes_Of : All_Stats;
    --  The treadmill world (Sim_Things): on in sessions that carry world=1; Last_Verb is the last Step's verb
    --  (the base action, or Examine / Push / Eat / Greet); Verb_Count counts the verbs of all ticks replayed.
@@ -263,6 +271,31 @@ procedure Diary_Sim is
    end record;
    package Visit_Vectors is new Ada.Containers.Vectors (Positive, Visit_In);
    Visit_Inputs : Visit_Vectors.Vector;
+   --  chat=1 sessions (Sim_Chat): Robert's typed lines and every answer are C lines of diaries/chat.txt (record-first, replay-verified)
+   Chat_Mode : Boolean := False;                 --  --chat / make chat: one session with the input line, paced
+   Chat_Script_Opt : Unbounded_String;           --  --chat-script FILE: lines "<ticks into the session> <text>" typed by a script (tests)
+   Chatlog_Mode : Boolean := False;              --  --chatlog / make chatlog: the last chat lines
+   Chat_Active : Boolean := False;               --  the session being replayed is a chat=1 session
+   Chat_Path : constant String := "diaries/chat.txt";
+   Chat_Store : Sim_Store.Store;
+   type Chat_In is record
+      N : Positive := 1;
+      Tick : Int := 0;
+      Text : Unbounded_String;
+      Done : Boolean := False;
+   end record;
+   package Chat_Vectors is new Ada.Containers.Vectors (Positive, Chat_In);
+   Chat_Inputs : Chat_Vectors.Vector;
+   Chat_N : Natural := 0;                        --  C lines so far (the next one is Chat_N + 1)
+   Chat_Paused : Boolean := False;               --  /pause: the ticks wait (live only)
+   Chat_Live : Boolean := False;                 --  the line being handled was typed now (effects and screen), not replayed
+   Chat_Shown : Str_Vectors.Vector;              --  the chat lines on the screen (live ones)
+   Chat_Version : Natural := 0;                  --  counts changes of Chat_Shown (the screen is drawn again)
+   Chat_Start_Mood : array (Entity_Id) of Integer := [others => 0];   --  the moods at the start of the session (replay-stable, for "since the session began")
+   Chat_Samples : Sim_Chat.Sample_Vectors.Vector;
+   Chat_Script : Str_Vectors.Vector;
+   Chat_Script_Next : Positive := 1;
+   Chat_Session_Count : Natural := 0;            --  sessions started so far (Start_Life), replay-stable
    Visit_Left : Boolean := False;                --  the human left: no more frames
    Visit_Wait : Int := 0;                        --  no prompt before this tick
    Script_File : TIO.File_Type;
@@ -426,7 +459,7 @@ procedure Diary_Sim is
       Read_Lines (Data_Path ("limits.txt"), Lines, Found);
       if not Found then Warn (Msg ("warn.limits_file")); end if;
       Read_Lines (Data_Path ("menu.txt"), Lines, Found);   --  menu text: keys only, a missing file shows the keys
-      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt", "screens.txt", "chess.txt", "robot.txt", "govern.txt", "preport.txt", "ticks.txt", "visit.txt", "voices.txt", "trial.txt", "records.txt"]) loop   --  the Buddhism layer: numbers, wording, players
+      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt", "screens.txt", "chess.txt", "robot.txt", "govern.txt", "preport.txt", "ticks.txt", "visit.txt", "voices.txt", "chat.txt", "trial.txt", "records.txt"]) loop   --  the Buddhism layer: numbers, wording, players
          Read_Lines (Data_Path (F), Lines, Found);
          if not Found then Warn (Msg ("warn.dharma_file", F)); end if;
       end loop;
@@ -757,7 +790,7 @@ procedure Diary_Sim is
                      Use_Word (E, Pa);
                      Use_Word (E, Pb);
                      Learn_Word (E, W);
-                     Voice_Word (E) := W;
+                     Voice_Note (E, W);
                      if Screen_Active then Sim_Screen.Note (E, W, "coined"); end if;
                      Ensure (E, Words_File, Words_Line (W, "coined", Tick, Parents (W)));
                      Add (Msg ("detail.coined", Text, Word (Pa), Word (Pb)));
@@ -819,7 +852,7 @@ procedure Diary_Sim is
                W : constant Positive := Pending_Word (E);
             begin
                Learn_Word (E, W, Natural (Pending_From (E)));
-               Voice_Word (E) := W;
+               Voice_Note (E, W);
                Ensure (E, Words_File, Words_Line (W, "taught", Tick, Name (Pending_From (E))));
                Add (Msg ("detail.learned", Word (W), Name (Pending_From (E))));
                Pending_Word (E) := 0;
@@ -1684,6 +1717,44 @@ procedure Diary_Sim is
       end;
    end Print_Tail;
 
+   --  --chatlog: the last chat.log_tail lines of diaries/chat.txt as "t6001 you -> Eve: hello"; nothing is simulated.
+   procedure Print_Chatlog is
+      Lines : Str_Vectors.Vector;
+      Found : Boolean;
+      Tail : constant Natural := Natural (Int'Max (1, Limit ("chat.log_tail", 30)));
+      First : Natural := 0;
+      Count : Natural := 0;
+   begin
+      Read_Lines (Chat_Path, Lines, Found);
+      if Found and then Natural (Lines.Length) > 0 and then Lines.First_Element'Length > 7 and then Lines.First_Element (1 .. 7) = "# seed " then
+         Sim_Chat.Init (Int'Value (Lines.First_Element (8 .. Lines.First_Element'Last)));   --  the check number h= depends on the seed
+      end if;
+      for I in reverse 1 .. Natural (Lines.Length) loop
+         exit when Count >= Tail;
+         if Lines.Element (I)'Length > 0 and then Lines.Element (I) (1) = 'C' then Count := Count + 1; First := I; end if;
+      end loop;
+      if not Found or else Count = 0 then
+         TIO.Put_Line (TIO.Standard_Error, Msg ("chatlog.none", Ada.Directories.Full_Name (Chat_Path)));
+         Ada.Command_Line.Set_Exit_Status (2);
+         return;
+      end if;
+      begin
+         for I in First .. Natural (Lines.Length) loop
+            declare
+               P : Sim_Chat.Parsed;
+               OK : Boolean;
+            begin
+               Sim_Chat.Parse_Line (Lines (I), P, OK);
+               if OK then
+                  TIO.Put_Line (Msg ("chatlog.line", Img (P.Tick), Sim_World.Show (To_String (P.Who)), Sim_World.Show (To_String (P.To_Id)), To_String (P.Text)));
+               end if;
+            end;
+         end loop;
+      exception
+         when others => null;   --  stdout is a closed pipe (| head)
+      end;
+   end Print_Chatlog;
+
    --  --report: print run_report.txt of the save folder (the complete report of the last run); nothing is simulated.
    procedure Print_Report is
       F : Ada.Streams.Stream_IO.File_Type;
@@ -2526,6 +2597,270 @@ procedure Diary_Sim is
       end if;
    end Verify_Visit;
 
+   --  The facts one wesen can say about itself, from the real records of the replayed state.
+   function Voice_Facts (E : Entity_Id; Change : Integer) return Sim_Voice.Facts is
+      F : Sim_Voice.Facts;
+      Fav : Natural := 0;
+      Fav_N : Int := 0;
+      Latest : Natural := 0;
+      Dec : constant String := (if Govern_Active then Sim_Govern.Last_Line_Of (E) else "");
+   begin
+      F.Id := To_Unbounded_String (Name (E));
+      F.Name := To_Unbounded_String (Sim_World.Display (E));
+      F.Act := To_Unbounded_String (Low (Voice_Act (E)));
+      F.Mood := St (E).Mood;
+      F.Energy := St (E).Energy;
+      F.Words := Known_Count (E);
+      F.Change := Change;
+      for L in 0 .. 3 loop
+         if Votes_Of (E) (L).N > Fav_N then Fav_N := Votes_Of (E) (L).N; Fav := L; end if;
+      end loop;
+      if Fav_N > 0 then F.Place := To_Unbounded_String (Msg ("loc." & Img (Fav))); end if;
+      if Voice_Hist (E, 1) > 0 then F.Word := To_Unbounded_String (Word (Voice_Hist (E, 1))); end if;
+      for N in reverse 1 .. Petition_Total loop
+         if Petition_From (N) = E then Latest := N; exit; end if;
+      end loop;
+      F.Open := (if Govern_Active then Sim_Govern.Open_Of (E) else Petitions_Of (E));
+      F.Outcome := To_Unbounded_String (Token (Dec, "kind"));
+      if Dec /= "" and then F.Open = 0 and then Topic_Id (Token (Dec, "topic")) > 0 then
+         F.Topic := To_Unbounded_String (Topic_Phrase (Topic_Id (Token (Dec, "topic"))));
+      elsif Latest > 0 then
+         F.Topic := To_Unbounded_String (Topic_Phrase (Topic_Id (Petition_Topic (Latest))));
+      end if;
+      F.Trials := (if Trial_Active then Sim_Trial.Count else 0);
+      return F;
+   exception
+      when Constraint_Error => return F;
+   end Voice_Facts;
+
+   function Voice_Text (E : Entity_Id; Tick : Int; Change : Integer) return String is
+     (Sim_Voice.Message (Voice_Facts (E, Change), Seed, Tick, Integer (E)));
+
+   --  ---- the chat (Sim_Chat): every typed line and every answer is a C line of diaries/chat.txt ----------------------------------------
+   --  A line is handled at the very end of its tick (state: the replayed state of that tick, in this code path live and on replay).  The
+   --  typed lines (who = the human) are read before the replay; the answers are computed again and compared: a line that is not exactly
+   --  what the program writes (its check number h= included), a missing, changed or invented line is DRIFT.  Nothing here changes the
+   --  simulation: the chat reads the state and writes diaries/chat.txt only.
+   procedure Load_Chat is
+      Lines : Str_Vectors.Vector;
+      Found : Boolean;
+   begin
+      Chat_Inputs.Clear;
+      Chat_N := 0;
+      if not Ada.Directories.Exists (Chat_Path) then return; end if;
+      Read_Lines (Chat_Path, Lines, Found);
+      for L of Lines loop
+         if L'Length > 0 and then L (L'First) = 'C' then
+            declare
+               P : Sim_Chat.Parsed;
+               OK : Boolean;
+            begin
+               Sim_Chat.Parse_Line (L, P, OK);
+               if not OK then raise Drift_Error with Msg ("err.chat_in", Sim_Store.Key_Of (L)); end if;
+               if To_String (P.Who) = Sim_Chat.Me then
+                  Chat_Inputs.Append (Chat_In'(N => Positive (P.N), Tick => P.Tick, Text => P.Text, Done => False));
+               end if;
+            end;
+         end if;
+      end loop;
+   end Load_Chat;
+
+   procedure Chat_Sample (Tick : Int) is
+      Step : constant Int := Int'Max (1, Limit ("chat.trend_step", 100));
+      S : Sim_Chat.Sample;
+   begin
+      if Tick mod Step /= 0 then return; end if;
+      S.Tick := Tick;
+      for E in Entity_Id loop
+         S.Mood (Integer (E)) := St (E).Mood;
+         S.Energy (Integer (E)) := St (E).Energy;
+      end loop;
+      Chat_Samples.Append (S);
+      if Natural (Chat_Samples.Length) > 200 then Chat_Samples.Delete_First; end if;
+   end Chat_Sample;
+
+   function Chat_World (Tick : Int) return Sim_Chat.World is
+      W : Sim_Chat.World;
+      Seen : Natural := 0;
+   begin
+      W.Tick := Tick;
+      Seen := Chat_Session_Count;
+      W.Session := Seen;
+      W.Sessions := Seen;
+      W.Samples := Chat_Samples;
+      for E in Entity_Id loop
+         declare
+            P : Sim_Chat.Person;
+         begin
+            P.Kind := Sim_Chat.Wesen;
+            P.Id := To_Unbounded_String (Name (E));
+            P.Name := To_Unbounded_String (Sim_World.Display (E));
+            P.Facts := Voice_Facts (E, St (E).Mood - Chat_Start_Mood (E));
+            for K in 1 .. 5 loop
+               if Voice_Hist (E, K) > 0 then Append (P.Word_List, (if Length (P.Word_List) > 0 then ", " else "") & Word (Voice_Hist (E, K))); end if;
+            end loop;
+            W.People.Append (P);
+         end;
+      end loop;
+      for Pl in 1 .. 4 loop
+         declare
+            Pid : constant Sim_Dharma.Player_Id := Sim_Dharma.Player_Id (Pl);
+            P : Sim_Chat.Person;
+         begin
+            P.Kind := Sim_Chat.Player;
+            P.Id := To_Unbounded_String (Sim_Dharma.Player_Name (Pid));
+            P.Name := To_Unbounded_String (Sim_World.Show (Sim_Dharma.Player_Name (Pid)));
+            P.Present := Pl <= Integer (Sim_Dharma.Last_Player);
+            if P.Present then
+               for E in Entity_Id loop
+                  if Natural (Sim_Dharma.Watcher (E)) = Pl then
+                     P.Watches := To_Unbounded_String (Sim_World.Display (E));
+                     P.Watch_Mood := St (E).Mood;
+                     P.Watch_Energy := St (E).Energy;
+                     P.Open := P.Open + (if Govern_Active then Sim_Govern.Open_Of (E) else 0);
+                  end if;
+               end loop;
+               declare
+                  C : constant Sim_Govern.Counts_T := Sim_Govern.Counts_Of (Pid);
+               begin
+                  P.Seen := C (1);
+                  P.Granted := C (2);
+                  P.Refused := C (5);
+               end;
+               P.Stance := Sim_Dharma.Warm_Of (Pid);
+            end if;
+            W.People.Append (P);
+         end;
+      end loop;
+      declare
+         P : Sim_Chat.Person;
+      begin
+         P.Kind := Sim_Chat.Observer;
+         P.Id := To_Unbounded_String (Msg ("chat.id.observer"));
+         P.Name := To_Unbounded_String (Msg ("chat.name.observer"));
+         W.People.Append (P);
+      end;
+      return W;
+   end Chat_World;
+
+   procedure Chat_Emit (Line : String; Tick : Int) is
+      Result : Sim_Store.Status;
+      Old : Unbounded_String;
+   begin
+      Sim_Store.Emit (Chat_Store, Line, Tick > Int (Common) and then not Preview and then not Ledger_Mode, Result, Old);
+      if Sim_Store."=" (Result, Sim_Store.Differs) then
+         raise Drift_Error with Msg ("err.chat", Sim_Store.Key_Of (Line), Diff_At (To_String (Old), Line));
+      elsif Sim_Store."=" (Result, Sim_Store.Skipped) then
+         raise Drift_Error with Msg ("err.chat", Sim_Store.Key_Of (Line), Diff_At ("(missing)", Line));
+      end if;
+   end Chat_Emit;
+
+   --  The chat window on the screen: what was said, newest last (only lines typed now; a replay does not fill the screen).
+   procedure Chat_Show (Who, Text : String) is
+      Shown : constant String := Msg ("chat.fmt.line", Sim_World.Show (Who), Text);
+   begin
+      Chat_Shown.Append (Shown);
+      while Natural (Chat_Shown.Length) > Natural (Int'Max (4, Limit ("chat.keep", 200))) loop Chat_Shown.Delete_First; end loop;
+      Chat_Version := Chat_Version + 1;
+      if Night_On and then not Tty_Out then Con.Put_Line_Now (Shown); end if;   --  no terminal: the lines go to the plain console
+   end Chat_Show;
+
+   procedure Chat_Line (Who, To_Id, Text : String; Tick : Int) is
+   begin
+      Chat_N := Chat_N + 1;
+      Chat_Emit (Sim_Chat.Line_Of (Chat_N, Tick, Who, To_Id, Text), Tick);
+      if Chat_Live then Chat_Show (Who, Text); end if;
+   end Chat_Line;
+
+   --  One typed line at the end of Tick: Robert's C line, the answers, and (typed now only) what an order does to the run.
+   procedure Chat_Apply (Text : String; Tick : Int) is
+      Res : constant Sim_Chat.Result := Sim_Chat.Handle (Chat_World (Tick), Chat_N + 1, Text);
+   begin
+      Chat_Line (Sim_Chat.Me, To_String (Res.To), Text, Tick);
+      for R of Res.Replies loop Chat_Line (To_String (R.Who), To_String (R.To_Id), To_String (R.Text), Tick); end loop;
+      if Chat_Live then
+         case Res.Effect is
+            when Sim_Chat.None => null;
+            when Sim_Chat.Pause => Chat_Paused := Tty_Out and then Length (Chat_Script_Opt) = 0;   --  a script runs on ticks: it cannot wait
+            when Sim_Chat.Resume => Chat_Paused := False;
+            when Sim_Chat.Quit => Sim_Quit.Ask_Quit;
+            when Sim_Chat.Clear =>
+               declare
+                  Last : constant String := (if Chat_Shown.Is_Empty then "" else Chat_Shown.Last_Element);
+               begin
+                  Chat_Shown.Clear;
+                  if Last /= "" then Chat_Shown.Append (Last); end if;
+                  Chat_Version := Chat_Version + 1;
+               end;
+            when Sim_Chat.Voices_On => Voice_On := True;
+            when Sim_Chat.Voices_Off => Voice_On := False;
+         end case;
+      end if;
+   end Chat_Apply;
+
+   --  The first number of a script line "<ticks> <text>" (ticks into the live part of the run); -1: not a script line.
+   function Script_At (L : String) return Int is
+      Sp : constant Natural := Fx.Index (L, " ");
+   begin
+      return (if Sp > L'First and then (for all C of L (L'First .. Sp - 1) => C in '0' .. '9') then Int'Value (L (L'First .. Sp - 1)) else -1);
+   end Script_At;
+
+   --  The lines typed now (the terminal's, or the script's) are handled in tick order, at the end of Tick.
+   procedure Chat_Live_Lines (Tick : Int) is
+   begin
+      Chat_Live := True;
+      loop
+         if Chat_Script_Next <= Natural (Chat_Script.Length) and then Script_At (Chat_Script.Element (Chat_Script_Next)) <= Tick - Int (Common) then
+            declare
+               L : constant String := Chat_Script.Element (Chat_Script_Next);
+            begin
+               Chat_Script_Next := Chat_Script_Next + 1;
+               Chat_Inputs.Append (Chat_In'(N => Chat_N + 1, Tick => Tick, Text => To_Unbounded_String (Fx.Trim (L (Fx.Index (L, " ") + 1 .. L'Last), Ada.Strings.Both)), Done => True));
+               Chat_Apply (Fx.Trim (L (Fx.Index (L, " ") + 1 .. L'Last), Ada.Strings.Both), Tick);
+            end;
+         elsif Sim_Quit.Pending then
+            declare
+               L : constant String := Sim_Quit.Take;
+            begin
+               Chat_Inputs.Append (Chat_In'(N => Chat_N + 1, Tick => Tick, Text => To_Unbounded_String (L), Done => True));
+               Chat_Apply (L, Tick);
+            end;
+         else
+            exit;
+         end if;
+      end loop;
+      Chat_Live := False;
+   exception
+      when others => Chat_Live := False; raise;
+   end Chat_Live_Lines;
+
+   procedure Chat_Step (Tick : Int) is
+   begin
+      for I in 1 .. Natural (Chat_Inputs.Length) loop
+         if not Chat_Inputs (I).Done and then Chat_Inputs (I).Tick = Tick then
+            Chat_Inputs.Reference (I).Done := True;
+            Chat_Apply (To_String (Chat_Inputs (I).Text), Tick);
+         end if;
+      end loop;
+      if Tick > Int (Common) and then not Ledger_Mode and then not Preview and then (Night_On or else Chat_Mode) then
+         Chat_Live_Lines (Tick);
+      end if;
+   end Chat_Step;
+
+   procedure Verify_Chat (Upto : Int) is
+      Orphan : constant String := Sim_Store.Orphan (Chat_Store, Upto);
+   begin
+      for X of Chat_Inputs loop
+         if not X.Done and then X.Tick <= Upto then
+            raise Drift_Error with Msg ("err.chat_out", "C" & Img (X.N), Img (X.Tick));
+         end if;
+      end loop;
+      if Orphan /= "" then
+         raise Drift_Error with Msg ("err.chat", Sim_Store.Key_Of (Orphan), Diff_At (Orphan, "(not in the replay)"));
+      end if;
+   end Verify_Chat;
+
+
    --  trial=1: at most one dispute per tick is settled (Sim_Trial); its games are g=N lines of diaries/chess.txt, the trial a T line.
    procedure Trial_Step (Tick : Int) is
       Moods : Sim_Games.Mood_Array;
@@ -2639,6 +2974,8 @@ procedure Diary_Sim is
          Sim_Records.Scan_Coined (Tick);
          Flush_Records (Tick > Int (Common));
       end if;
+      Chat_Sample (Tick);
+      if Chat_Active then Chat_Step (Tick); end if;   --  the typed lines of this tick and their answers (chat=1), after everything else
       Last_Done := Tick;
    end Do_Tick;
 
@@ -3037,6 +3374,7 @@ procedure Diary_Sim is
       Records : Boolean := False;       --  records=1: votes, petitions, dictionary and announcements as record files; a clean word vote (Sim_Records; needs govern=1)
       Visit : Boolean := False;         --  visit=1: Robert stands next to one wesen (vwho=<id>) and talks to it (Sim_Visit, diaries/visit.txt)
       Visit_Who : Natural := 0;
+      Chat : Boolean := False;          --  chat=1: Robert types lines (@name text, /order) and the answers are recorded (Sim_Chat, diaries/chat.txt)
    end record;
    package Session_Vectors is new Ada.Containers.Vectors (Positive, Session_Rec);
    Sessions : Session_Vectors.Vector;
@@ -3059,7 +3397,8 @@ procedure Diary_Sim is
       & (if R.Screen then " screen=1" else "") & (if R.Chess then " chess=1" else "") & (if R.Chessrules then " chessrules=2" else "")
       & (if R.Robot then " robot=1" else "") & (if R.Govern then " govern=1" else "") & (if R.Scoin then " scoin=1" else "")
       & (if R.Preport then " preport=1" else "") & (if R.Players4 then " players4=1" else "") & (if R.Nextticks then " nextticks=1" else "") & (if R.Trial then " trial=1" else "") & (if R.Rec2 and then R.Records then " records=2" elsif R.Records then " records=1" else "")
-      & (if R.Visit then " visit=1 vwho=" & Name (Entity_Id (R.Visit_Who)) else ""));
+      & (if R.Visit then " visit=1 vwho=" & Name (Entity_Id (R.Visit_Who)) else "")
+      & (if R.Chat then " chat=1" else ""));
    function Yuga (N : Positive) return String is (Msg ("yuga." & Img ((N - 1) mod 4)));
    --  The four votes of a session that starts after tick Start (state: St, known words).
    function Votes_At (Start : Int) return Kalpa_Votes is
@@ -3107,6 +3446,7 @@ procedure Diary_Sim is
       R.Rec2 := R.Records and then Token (L, "records") = "2";
       R.Visit := Token (L, "visit") = "1";
       R.Visit_Who := (if R.Visit then Sim_Dharma.Find_Wesen (Token (L, "vwho")) else 0);
+      R.Chat := Token (L, "chat") = "1";
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
         and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0 and then (R.Visit_Who > 0 or else not R.Visit);
       while OK and then K < 4 loop
@@ -3216,6 +3556,7 @@ procedure Diary_Sim is
       Next_Active := False;
       Next_End := -1;
       Visit_Active := False;
+      Chat_Active := False;
       Trial_Active := False;
       if not Ada.Directories.Exists (Sessions_Path) then return; end if;
       Read_Lines (Sessions_Path, Lines, Found);
@@ -3277,6 +3618,9 @@ procedure Diary_Sim is
       if R.Robot then Sim_Robot.Begin_Life (R.Start); end if;   --  the robot comes into the world with its first session
       Trial_Active := R.Trial and then R.Chess and then R.Govern;
       if Trial_Active then Sim_Trial.Begin_Session; end if;
+      Chat_Active := R.Chat;
+      Chat_Session_Count := Chat_Session_Count + 1;
+      for E in Entity_Id loop Chat_Start_Mood (E) := St (E).Mood; end loop;
       Visit_Active := R.Visit;
       if R.Visit then
          Visit_E := Entity_Id (R.Visit_Who);
@@ -3518,6 +3862,9 @@ procedure Diary_Sim is
    function Records_Wanted return Boolean is (Govern_Wanted and then Limit ("records.enabled", 1) /= 0);
    function Rec2_Wanted return Boolean is (Records_Wanted and then Limit ("rec.quality", 1) /= 0);   --  records=2: quality rules for word proposals   --  records=1 needs the governance (the D records)
    function Nextticks_Wanted return Boolean is (Govern_Wanted and then Limit ("nextticks.enabled", 1) /= 0);   --  nextticks=1 needs the governance (the open petitions)
+   function Chat_Wanted return Boolean is   --  new sessions carry chat=1 when a line can be typed (a terminal in the foreground, or --chat)
+     (Sim_Chat.Enabled and then not Preview and then (Chat_Mode or else Sim_Quit.Lines_On));
+
    function Preport_Wanted return Boolean is (Govern_Wanted and then Limit ("preport.enabled", 1) /= 0);   --  preport=1 needs the governance (the D records)
 
    --  After the replay of 1 .. Common: resume the unfinished session, or start one
@@ -3539,7 +3886,7 @@ procedure Diary_Sim is
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
                Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => Visit_Mode, Visit_Who => Visit_Who);
+               Visit => Visit_Mode, Visit_Who => Visit_Who, Chat => Chat_Wanted);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -3556,7 +3903,7 @@ procedure Diary_Sim is
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
                World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => False, Visit_Who => 0);
+               Visit => False, Visit_Who => 0, Chat => Chat_Wanted);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);
@@ -4536,7 +4883,7 @@ procedure Diary_Sim is
    Base_S, Base_T : Natural := 0;               --  the sessions and ticks the save had at the start
    Night_Phase : Natural := 0;                  --  0 replaying the history, 1 a session, 2 verifying, 3 between sessions
    Night_Verified : Natural := 0;               --  full replays by the child process
-   Tty_Out, Q_Said : Boolean := False;          --  a terminal: the header is repainted in place (ANSI cursor home); else plain lines
+   Q_Said : Boolean := False;
    Size0, Size_Now : Int := 0;
    Sess_Total, Last_Dur : Duration := 0.0;      --  wall time of the finished sessions / of the last one
    S_Start, Last_Paint, Last_Poll, Last_Size : Ada.Calendar.Time := Night_T0;
@@ -4641,50 +4988,10 @@ procedure Diary_Sim is
    --  of those, petitions granted / refused, stance).  Columns of 12, labels of 13: at most 62 columns.
    --  ---- the voices of the wesen (Sim_Voice, data/voices.txt): display only, a pure function of the replayed state ---------------------
    --  Nothing here writes to a diary or changes the simulation; voice_log.txt of the save folder is a log of what was shown (not verified).
-   Voice_On : Boolean := True;                  --  voices are shown (voice.enabled)
    Voice_Cache, Voice_Logged : array (Entity_Id) of Unbounded_String;
    Voice_Idx : Integer := -1;                   --  the rotation step of the cache (a new one every voice.refresh_seconds)
    Voice_Log_N : Natural := 0;                  --  lines of voice_log.txt
    Voice_Log_Path : constant String := "voice_log.txt";
-
-   --  The facts one wesen can say about itself, from the real records of the replayed state.
-   function Voice_Facts (E : Entity_Id; Change : Integer) return Sim_Voice.Facts is
-      F : Sim_Voice.Facts;
-      Fav : Natural := 0;
-      Fav_N : Int := 0;
-      Latest : Natural := 0;
-      Dec : constant String := (if Govern_Active then Sim_Govern.Last_Line_Of (E) else "");
-   begin
-      F.Id := To_Unbounded_String (Name (E));
-      F.Name := To_Unbounded_String (Sim_World.Display (E));
-      F.Act := To_Unbounded_String (Low (Voice_Act (E)));
-      F.Mood := St (E).Mood;
-      F.Energy := St (E).Energy;
-      F.Words := Known_Count (E);
-      F.Change := Change;
-      for L in 0 .. 3 loop
-         if Votes_Of (E) (L).N > Fav_N then Fav_N := Votes_Of (E) (L).N; Fav := L; end if;
-      end loop;
-      if Fav_N > 0 then F.Place := To_Unbounded_String (Msg ("loc." & Img (Fav))); end if;
-      if Voice_Word (E) > 0 then F.Word := To_Unbounded_String (Word (Voice_Word (E))); end if;
-      for N in reverse 1 .. Petition_Total loop
-         if Petition_From (N) = E then Latest := N; exit; end if;
-      end loop;
-      F.Open := (if Govern_Active then Sim_Govern.Open_Of (E) else Petitions_Of (E));
-      F.Outcome := To_Unbounded_String (Token (Dec, "kind"));
-      if Dec /= "" and then F.Open = 0 and then Topic_Id (Token (Dec, "topic")) > 0 then
-         F.Topic := To_Unbounded_String (Topic_Phrase (Topic_Id (Token (Dec, "topic"))));
-      elsif Latest > 0 then
-         F.Topic := To_Unbounded_String (Topic_Phrase (Topic_Id (Petition_Topic (Latest))));
-      end if;
-      F.Trials := (if Trial_Active then Sim_Trial.Count else 0);
-      return F;
-   exception
-      when Constraint_Error => return F;
-   end Voice_Facts;
-
-   function Voice_Text (E : Entity_Id; Tick : Int; Change : Integer) return String is
-     (Sim_Voice.Message (Voice_Facts (E, Change), Seed, Tick, Integer (E)));
 
    procedure Voice_Log_Add (Line : String) is
       F : TIO.File_Type;
@@ -4842,6 +5149,22 @@ procedure Diary_Sim is
       when others => return R;   --  a state that is not complete yet: show what there is
    end Night_Table;
 
+   --  The last Rows lines of the chat window (each entry wrapped to the screen width), padded to Rows lines.
+   function Chat_Region (Rows : Natural) return Str_Vectors.Vector is
+      All_Lines, R : Str_Vectors.Vector;
+   begin
+      for T of Chat_Shown loop
+         declare
+            V : constant Str_Vectors.Vector := Sim_Voice.Wrap (T, 74);
+         begin
+            for K in 1 .. Natural (V.Length) loop All_Lines.Append ((if K = 1 then " " else "   ") & V.Element (K)); end loop;
+         end;
+      end loop;
+      for I in Natural'Max (1, Natural (All_Lines.Length) - Rows + 1) .. Natural (All_Lines.Length) loop R.Append (All_Lines (I)); end loop;
+      while Natural (R.Length) < Rows loop R.Prepend (""); end loop;
+      return R;
+   end Chat_Region;
+
    --  One piece, written with one call: home, the lines (each cleared to its end), clear below.
    procedure Paint is
       R : Unbounded_String;
@@ -4865,42 +5188,107 @@ procedure Diary_Sim is
       L (Msg ("night.t.4", Now_Text));
       L (Msg ("night.t.5", Img (Night_Done), (if Night_Done > 0 then Tenths_Text (Last_Dur) & " s" else "-"), Avg_Text, Ticks_Per_Sec));
       for T of Tab loop L (" " & T); end loop;
-      L (Msg (if Sim_Quit.Key_Q then (if Night_Phase = 0 then "night.q.replay" else "night.q") elsif Sim_Quit.Watching then "night.keys" else "night.nokeys"));
+      L (if Sim_Quit.Key_Q then Msg (if Night_Phase = 0 then "night.q.replay" elsif Chat_Mode then "night.q.chat" else "night.q")
+         elsif Chat_Paused then Msg ("chat.hint.paused", Img (Last_Done))
+         elsif Sim_Quit.Lines_On then Msg ("chat.hint")
+         else Msg (if Sim_Quit.Watching then "night.keys" else "night.nokeys"));
       if Voice_On then
-         for T of Voice_Region (Natural (Int'Max (1, Int'Min (4, Limit ("voice.shown", 2)))), 2) loop L (T); end loop;
+         for T of Voice_Region (Natural (Int'Max (1, Int'Min (4, Limit ((if Sim_Quit.Lines_On then "voice.shown_chat" else "voice.shown"), (if Sim_Quit.Lines_On then 1 else 2))))), 2) loop L (T); end loop;
       end if;
-      for I in Natural'Max (1, Natural (Recent.Length) - Natural (Int'Max (0, Limit ("night.recent", 2))) + 1) .. Natural (Recent.Length) loop L (Recent (I)); end loop;
-      Append (R, ASCII.ESC & "[J");
+      for I in Natural'Max (1, Natural (Recent.Length) - Natural (Int'Max (0, Limit ((if Sim_Quit.Lines_On then "chat.recent" else "night.recent"), (if Sim_Quit.Lines_On then 1 else 2)))) + 1) .. Natural (Recent.Length) loop
+         L (Recent (I));
+      end loop;
+      if Sim_Quit.Lines_On then
+         for T of Chat_Region (Natural (Int'Max (1, Limit ("chat.rows", 3)))) loop L (T); end loop;
+      end if;
+      if Sim_Quit.Lines_On then   --  the input line is the last row but one; the cursor goes back up behind the typed text
+         declare
+            Typed : constant String := Msg ("chat.prompt") & Fx.Tail (Sim_Quit.Typing, 70);
+         begin
+            Append (R, Typed & ASCII.ESC & "[K" & ASCII.LF & ASCII.ESC & "[J" & ASCII.ESC & "[A" & ASCII.ESC & "[" & Img (Natural (Typed'Length + 1)) & "G");
+         end;
+      else
+         Append (R, ASCII.ESC & "[J");
+      end if;
       Con.Put_Now (To_String (R));
       Flush_Out;
    end Paint;
 
    --  Called every few ticks (both tick loops, the wait for the verify child): reads the keys, says at once that q was understood, and
    --  repaints the header about once a second.
+   Typed_Seen, Chat_Seen : Natural := 0;        --  Sim_Quit.Changed / Chat_Version when the screen was drawn last
+   Pace_At : Ada.Calendar.Time := Ada.Calendar.Clock;   --  --chat: when the next tick may run
+
    procedure Night_Tick is
-      Now : constant Ada.Calendar.Time := Ada.Calendar.Clock;
+      Now : Ada.Calendar.Time := Ada.Calendar.Clock;
+
+      --  Draw again at once when the typed line or the chat window changed, else about once a second.
+      procedure Refresh is
+      begin
+         Now := Ada.Calendar.Clock;
+         if Voice_On then Voice_Refresh (Now - Night_T0); end if;
+         if Tty_Out and then (Sim_Quit.Changed /= Typed_Seen or else Chat_Version /= Chat_Seen) then
+            Typed_Seen := Sim_Quit.Changed;
+            Chat_Seen := Chat_Version;
+            Last_Paint := Now;
+            Paint;
+         elsif Tty_Out and then Now - Last_Paint >= 1.0 then
+            Last_Paint := Now;
+            if Now - Last_Size >= 3.0 then Last_Size := Now; Size_Now := Folder_Bytes ("."); end if;
+            Paint;
+         end if;
+      end Refresh;
+
+      --  A line typed while no chat session is running (an old session without chat=1): answered on the screen only, not recorded.
+      procedure No_Session is
+      begin
+         while Sim_Quit.Pending and then Night_Phase = 1 and then not Chat_Active loop
+            declare
+               Dropped : constant String := Sim_Quit.Take;
+               pragma Unreferenced (Dropped);
+            begin
+               Chat_Show (Msg ("chat.id.system"), Msg ("chat.nosession"));
+            end;
+         end loop;
+      end No_Session;
    begin
       if not Night_On then return; end if;
       if Now - Last_Poll >= 0.05 then
          Last_Poll := Now;
          Sim_Quit.Poll;
       end if;
-      if Voice_On then Voice_Refresh (Now - Night_T0); end if;
+      No_Session;
       if (Sim_Quit.Key_Q or else Sim_Quit.Requested) and then not Q_Said then
          Q_Said := True;
-         if Tty_Out then Paint; else Con.Put_Line_Now (Msg ((if Night_Phase = 0 then "night.q.replay" else "night.q"))); Flush_Out; end if;
+         if Tty_Out then Paint; else Con.Put_Line_Now (Msg ((if Night_Phase = 0 then "night.q.replay" elsif Chat_Mode then "night.q.chat" else "night.q"))); Flush_Out; end if;
       end if;
-      if Tty_Out and then Now - Last_Paint >= 1.0 then
-         Last_Paint := Now;
-         if Now - Last_Size >= 3.0 then Last_Size := Now; Size_Now := Folder_Bytes ("."); end if;
-         Paint;
+      Refresh;
+      if Chat_Paused then   --  /pause: the ticks wait; the screen, the keys and the lines go on
+         while Chat_Paused and then not Sim_Quit.Key_Q and then not Sim_Quit.Requested loop
+            Sim_Quit.Poll;
+            No_Session;
+            if Chat_Active and then Last_Done > Int (Common) and then Sim_Quit.Pending then Chat_Live_Lines (Last_Done); end if;
+            Refresh;
+            delay 0.05;
+         end loop;
+         Chat_Paused := False;
+         Pace_At := Ada.Calendar.Clock;
+      end if;
+      if Chat_Mode and then Night_Phase = 1 and then Tty_Out and then Last_Done > Int (Common) and then Length (Chat_Script_Opt) = 0 then   --  paced: chat.tps ticks a second
+         Pace_At := Ada.Calendar."+" (Pace_At, 1.0 / Duration (Int'Max (1, Limit ("chat.tps", 20))));
+         if Ada.Calendar.Clock - Pace_At > 1.0 then Pace_At := Ada.Calendar.Clock; end if;
+         while Ada.Calendar.Clock < Pace_At and then not Sim_Quit.Key_Q and then not Sim_Quit.Requested loop
+            delay Duration'Min (0.05, Pace_At - Ada.Calendar.Clock);
+            Sim_Quit.Poll;
+            Refresh;
+         end loop;
       end if;
    end Night_Tick;
 
    procedure Night_Begin is
    begin
       Night_On := True;
-      Night_Per := Int'Max (1, (if Night_Ticks >= 0 then Night_Ticks else Limit ("night.session_ticks", 300)));
+      Night_Per := Int'Max (1, (if Night_Ticks >= 0 then Night_Ticks elsif Chat_Mode then Limit ("chat.session_ticks", 600) else Limit ("night.session_ticks", 300)));
       Night_Max_S := (if Night_Sessions >= 0 then Night_Sessions else Limit ("night.max_sessions", 0));
       Night_Max_Secs :=
         (if Length (Night_Hours) > 0 then Duration'Value (To_String (Night_Hours)) * 3600 else Duration (Limit ("night.max_hours", 12)) * 3600);
@@ -4917,6 +5305,7 @@ procedure Diary_Sim is
       end;
       Sim_Quit.Watch_Keys (True);
       Voice_On := Limit ("voice.enabled", 1) /= 0;
+      if Tty_Out and then Sim_Chat.Enabled then Sim_Quit.Set_Lines (True, Positive (Int'Max (20, Limit ("chat.max_input", 120)))); end if;   --  the input line (B2)
       if Voice_On and then Ada.Directories.Exists (Voice_Log_Path) then
          declare
             Lines : Str_Vectors.Vector;
@@ -4959,6 +5348,7 @@ procedure Diary_Sim is
       Cut : Natural := T'First;
       Seen : Natural := 0;
    begin
+      Sim_Quit.Set_Lines (False);   --  the terminal as it was
       Con.Hold (False);
       if Tail and then T'Length > 0 then
          for I in reverse T'First .. T'Last - 1 loop
@@ -5047,6 +5437,7 @@ procedure Diary_Sim is
    begin
       if not Night_On then return; end if;
       Night_On := False;
+      Sim_Quit.Set_Lines (False);
       Con.Hold (False);
       Night_Phase := 3;
       Size_Now := Folder_Bytes (".");
@@ -5078,7 +5469,7 @@ procedure Diary_Sim is
    --  After a session (its report is on the held console): the status line, the limits, the check of the whole history.  True: stop now.
    function Night_After_Session return Boolean is
       Every_N : constant Int := Limit ("night.verify_every", 0);
-      End_Check : constant Boolean := Limit ("night.verify_end", 1) /= 0;
+      End_Check : constant Boolean := Limit ("night.verify_end", 1) /= 0 and then not Chat_Mode;   --  --chat: one short session, no full check at its end
       Verified_Now : Boolean := False;
       Ok : Boolean := True;
    begin
@@ -5173,7 +5564,7 @@ begin
          Eq  : constant Natural := Fx.Index (A, "=");
          Opt : constant String := (if Eq > 0 then A (A'First .. Eq - 1) else A);
          Num : constant Boolean := Opt in "--ticks" | "--seed" | "--every" | "--crash-at" | "--more" | "--session-ticks" | "--max-sessions";
-         Sep : constant Boolean := (Num or else Opt in "--max-hours" | "--home" | "--say" | "--text" | "--as" | "--grant" | "--veto" | "--approve" | "--challenge" | "--debug-section" | "--visit" | "--visit-script") and then Eq = 0 and then I < Ada.Command_Line.Argument_Count;   --  --ticks 200
+         Sep : constant Boolean := (Num or else Opt in "--max-hours" | "--home" | "--say" | "--text" | "--as" | "--grant" | "--veto" | "--approve" | "--challenge" | "--debug-section" | "--chat-script" | "--visit" | "--visit-script") and then Eq = 0 and then I < Ada.Command_Line.Argument_Count;   --  --ticks 200
          Val : constant String := (if Eq > 0 then A (Eq + 1 .. A'Last) elsif Sep then Ada.Command_Line.Argument (I + 1) else "");
          Help  : Str_Vectors.Vector;
          Found : Boolean;
@@ -5192,6 +5583,9 @@ begin
          elsif Opt = "--trend" then Trend_Mode := True;
          elsif Opt = "--folder" then Folder_Mode := True;
          elsif Opt = "--continuous" then Night_Mode := True;
+         elsif Opt = "--chat" then Chat_Mode := True;
+         elsif Opt = "--chat-script" then Chat_Script_Opt := To_Unbounded_String (Val);
+         elsif Opt = "--chatlog" then Chatlog_Mode := True;
          elsif Opt = "--session-ticks" then Night_Ticks := Number (Opt, Val);
          elsif Opt = "--max-sessions" then Night_Sessions := Number (Opt, Val);
          elsif Opt = "--max-hours" then
@@ -5246,6 +5640,22 @@ begin
       end;
       I := I + 1;
    end loop;
+   if Length (Chat_Script_Opt) > 0 and then not Chat_Mode then raise Usage_Error with Msg ("chat.err.noscript"); end if;
+   if Chat_Mode then   --  --chat: the night machinery with one paced session (--session-ticks N, default chat.session_ticks)
+      Night_Mode := True;
+      if Night_Sessions < 0 then Night_Sessions := 1; end if;
+      if Length (Chat_Script_Opt) > 0 then
+         declare
+            Found : Boolean;
+         begin
+            Read_Lines (To_String (Chat_Script_Opt), Chat_Script, Found);
+            if not Found then raise Usage_Error with Msg ("chat.err.script", To_String (Chat_Script_Opt)); end if;
+            for I in reverse 1 .. Natural (Chat_Script.Length) loop
+               if Script_At (Chat_Script.Element (I)) < 0 then Chat_Script.Delete (I); end if;   --  blank lines, # lines and anything without a leading number
+            end loop;
+         end;
+      end if;
+   end if;
    if Night_Mode and then (Ticks >= 0 or else More >= 0 or else Fresh or else Preview or else Visit_Mode or else Menu_Opt) then raise Usage_Error with Msg ("night.err.opts"); end if;
    if Length (Visit_Script) > 0 and then not Visit_Mode then raise Usage_Error with Msg ("visit.err.nocmd"); end if;
    if Visit_Mode then   --  --visit <name|id|1..4> [--more N]: the length defaults to visit.ticks of data/visit.txt
@@ -5297,6 +5707,9 @@ begin
       return;
    elsif Trend_Mode then    --  make trend: the last lines of trend.txt
       Print_Tail ("trend.txt", "report.trend_tail", "trend.none");
+      return;
+   elsif Chatlog_Mode then   --  make chatlog: the last lines of diaries/chat.txt
+      Print_Chatlog;
       return;
    elsif Night_Mode then    --  make night: sessions back to back, in this process (Night_Begin ... Night_End)
       if not Ada.Directories.Exists (Self_Exe) then raise Usage_Error with Msg ("night.err.exe", Self_Exe); end if;
@@ -5472,6 +5885,9 @@ begin
    Sim_Store.Open (Bals_Store, Bals_Path, "# seed " & Img (Seed));
    Sim_Store.Open (Visit_Store, Visit_Path, "# seed " & Img (Seed));
    Load_Visit;
+   Sim_Chat.Init (Seed);
+   Sim_Store.Open (Chat_Store, Chat_Path, "# seed " & Img (Seed));
+   Load_Chat;
    Load_Challenges;
    Set_Ledger_From;
    if not Ledger_Mode then Write_Debug ("RUN", ""); end if;   --  stub: a kill -9 still leaves a file
@@ -5515,6 +5931,7 @@ begin
             Verify_Trial (Last_Done);
             Verify_Records (Last_Done);
             Verify_Visit (Last_Done);
+            Verify_Chat (Last_Done);
             Con.Put_Line (Msg ("verify.ok", Img (Verify_To), Img (Integer (Sessions.Length)), Tenths_Text (Ada.Calendar."-" (Ada.Calendar.Clock, T_Run))));
          elsif Voices_View then Con.Put (Voices_Text); elsif Elo_View then Con.Put (Elo_Text); elsif Govern_View then Con.Put (Govern_Text); elsif Audit_View then Con.Put (Audit_Text); elsif Next_View then Con.Put (Next_Text); elsif Trial_View then Con.Put (Trials_Text); elsif Rec_View then Con.Put (Lines_Text (Sim_Records.Divergence)); elsif Dict_View then Con.Put (Lines_Text (Sim_Records.Dictionary)); elsif Bal_View then Con.Put (Lines_Text (Sim_Records.Ballots)); elsif Robot_View then Con.Put (Robot_Text); elsif Screens_View then Con.Put (Screens_Text); else Con.Put_Line (Sim_Ledger.Report (Seed, Ledger_From, Ledger_Full)); end if;
          return;
@@ -5542,13 +5959,13 @@ begin
       S_Start := Ada.Calendar.Clock;
       for Tick in Int range Int (Verify_To) + 1 .. Ticks loop
          Do_Tick (Tick);
-         if Night_On and then Tick mod 8 = 0 then Night_Tick; end if;
+         if Night_On and then (Chat_Mode or else Tick mod 8 = 0) then Night_Tick; end if;
          Check_Dharma_At (Tick);   --  a stored session end beyond the common tick (a diary was behind)
          if Tick > Int (Common) and then Tick mod Every = 0 and then not (Visit_Mode and then Visit_Active and then not Visit_Left) then
             Con.Put_Line (Msg ("progress", Img (Tick), Img (Ticks), Img (Integer (Entity_Id'Last)), Img (Events)));
             Write_Debug ("RUN", "");   --  refresh the stub
          end if;
-         Quit_Seen := Sim_Quit.Requested;
+         Quit_Seen := Sim_Quit.Requested or else (Chat_Mode and then Sim_Quit.Key_Q);   --  --chat: q stops at the next tick (a rerun resumes the session)
          exit when Quit_Seen;
       end loop;
    end if;
@@ -5572,6 +5989,7 @@ begin
       Verify_Trial (Last_Done);
       Verify_Records (Last_Done);
       Verify_Visit (Last_Done);
+      Verify_Chat (Last_Done);
    end if;
    if Quit_Seen then   --  Ctrl-C / SIGTERM / SIGHUP: everything written so far is flushed; a rerun resumes
       declare
@@ -5579,7 +5997,7 @@ begin
       begin
          if Night_On then Night_Release (Tail => False); end if;
          if By_Key then
-            Con.Put_Line (Msg ("night.q.stopped", Img (Last_Done), Img (Verify_To)));
+            Con.Put_Line (Msg ((if Chat_Mode and then Night_Phase /= 0 then "chat.q.stopped" else "night.q.stopped"), Img (Last_Done), Img (Verify_To)));
          else
             Con.Put_Line (Msg ("quit", Sim_Quit.Which, Img (Last_Done)));
          end if;

@@ -1,4 +1,4 @@
-# Version: 0.036
+# Version: 0.037
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -15,6 +15,9 @@
 #                 DIARY_VERBOSE=1 in the environment) prints it all as before.
 # make report     print the last run_report.txt of the save folder (the full report, with `== name ==` headers and the @@TRACE marker)
 # make runlog     show the last 40 lines of run_log.txt (one entry per run and per DRIFT stop, newest last)
+# make chat       one paced session (SESSION_TICKS=600 ticks, chat.tps ticks a second) with an input line: `@name text` talks to a wesen, a player
+#                 or the observer, `/help` lists the orders; every line is recorded in diaries/chat.txt (replay-verified); q or /quit stops
+# make chatlog    print the last lines of diaries/chat.txt (chat.log_tail), read-only
 # make voices     print the four wesen messages (what the night header shows, one line each, at most voice.max_chars) for the last tick of the
 #                 save; deterministic, read-only, replay-verified; data/voices.txt holds the templates
 # make night      sessions back to back, for the night: SESSION_TICKS=300 (ticks per session), MAX_SESSIONS=n, MAX_HOURS=n (default 12;
@@ -101,7 +104,7 @@ OPT ?= -O2
 JOBS ?= -j0
 FLAGS = -g $(OPT) -gnatwa -gnat2022 -gnata $(JOBS)
 
-.PHONY: voices all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog trend night verify bench share small footprint
+.PHONY: chat chatlog voices all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog trend night verify bench share small footprint
 export WESEN PLAYER TEXT AS
 
 EVERY ?= 100
@@ -117,7 +120,7 @@ all:
 	@rm -f b~*
 
 version-check:
-	@bad=0; for f in Makefile diary_sim.adb sim_util.ads sim_util.adb sim_world.ads sim_world.adb sim_quit.ads sim_quit.adb sim_menu.ads sim_menu.adb sim_dharma.ads sim_dharma.adb sim_things.ads sim_things.adb sim_ledger.ads sim_ledger.adb sim_store.ads sim_store.adb sim_screen.ads sim_screen.adb sim_chess.ads sim_chess.adb sim_games.ads sim_games.adb sim_robot.ads sim_robot.adb sim_govern.ads sim_govern.adb sim_preport.ads sim_preport.adb sim_next.ads sim_next.adb sim_visit.ads sim_visit.adb sim_voice.ads sim_voice.adb sim_trial.ads sim_trial.adb sim_records.ads sim_records.adb; do \
+	@bad=0; for f in Makefile diary_sim.adb sim_util.ads sim_util.adb sim_world.ads sim_world.adb sim_quit.ads sim_quit.adb sim_menu.ads sim_menu.adb sim_dharma.ads sim_dharma.adb sim_things.ads sim_things.adb sim_ledger.ads sim_ledger.adb sim_store.ads sim_store.adb sim_screen.ads sim_screen.adb sim_chess.ads sim_chess.adb sim_games.ads sim_games.adb sim_robot.ads sim_robot.adb sim_govern.ads sim_govern.adb sim_preport.ads sim_preport.adb sim_next.ads sim_next.adb sim_visit.ads sim_visit.adb sim_chat.ads sim_chat.adb sim_voice.ads sim_voice.adb sim_trial.ads sim_trial.adb sim_records.ads sim_records.adb; do \
 	  head -1 $$f | grep -Eq 'Version: [0-9]+\.[0-9]{3}' || { echo "no version header: $$f"; bad=1; }; done; \
 	  v=$$(head -1 diary_sim.adb | grep -Eo '[0-9]+\.[0-9]{3}'); \
 	  grep -q "Build : constant String := \"$$v\"" diary_sim.adb || { echo "Build constant differs from diary_sim.adb header $$v"; bad=1; }; \
@@ -202,6 +205,12 @@ govern: all
 
 voices: all
 	bin/diary_sim --voices
+
+chat: all
+	bin/diary_sim --chat $(if $(SESSION_TICKS),--session-ticks $(SESSION_TICKS),) $(if $(SEED),--seed $(SEED),)
+
+chatlog: all
+	bin/diary_sim --chatlog
 
 veto: all
 	bin/diary_sim --veto $(DECISION) $(if $(AS),--as $(AS))

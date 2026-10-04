@@ -466,3 +466,20 @@ voice.low_energy = 30
 voice.delta = 8
 voice.log = 1
 voice.log_keep = 500
+# The chat (Sim_Chat, data/chat.txt, diaries/chat.txt; new sessions that carry chat=1).  enabled 0/1: 1 = a night run on a terminal and
+# --chat (make chat) write chat=1 sessions; keep: chat lines kept on screen and in memory; rows: chat rows under the voices; recent: night status lines kept above them; max_input:
+# longest typed line; reply_chars: an answer is cut to this length; session_ticks and tps: length and speed (ticks a second) of the one
+# session of --chat; trend_step: ticks between the points of /trend and trend_max: most points it shows; log_tail: lines of make chatlog.
+# voice.shown_chat: voices on screen at once while the input line is there (the chat window takes the other rows).
+chat.enabled = 1
+chat.keep = 200
+chat.rows = 2
+chat.recent = 1
+chat.max_input = 120
+chat.reply_chars = 150
+chat.session_ticks = 600
+chat.tps = 20
+chat.trend_step = 100
+chat.trend_max = 12
+chat.log_tail = 30
+voice.shown_chat = 1

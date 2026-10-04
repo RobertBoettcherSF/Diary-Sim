@@ -1836,6 +1836,111 @@ PY
 else ok "voices on a terminal: skipped (no python3 for a pseudo terminal)"; fi
 grep -q 'voice.refresh_seconds' "$root/data/limits.txt" && grep -q 'voice.max_chars' "$root/data/limits.txt" && grep -q -- '--voices' "$root/data/help.txt" && grep -q 'make voices' "$root/Makefile" && grep -q 'voice_log.txt' "$root/README.md" \
   && ok "README, Makefile, --help and data/limits.txt describe the voices (voice.*, make voices, voice_log.txt)" || bad "voices docs"
+# ---- B2: the chat (Sim_Chat, data/chat.txt, diaries/chat.txt): record-first, replay-verified, never changes the simulation ----
+cscript="$w/nt/chat_script.txt"
+printf '%s\n' '# ticks into the run, then the line' '5 @adam hello' '9 @Eve how are you feeling today' '12 @zz hi' '15 /status' '20 /pause' '22 /resume' '30 /mood' '34 /trend 3' '40 @ru what worries you?' '50 @ob hello' '60 @o hi' '70 @jeh how are you' '80 /words eve' '90 /foo' '100 /help' > "$cscript"
+rm -rf "$w/nt/ch" "$w/nt/cp" "$w/nt/ch2"; cp -r "$vh" "$w/nt/ch"; cp -r "$vh" "$w/nt/cp"; cp -r "$vh" "$w/nt/ch2"
+env -u DIARY_VERBOSE "$nb" --chat --chat-script "$cscript" --session-ticks 300 --home "$w/nt/ch" < /dev/null > ch1.txt 2>&1; rcc=$?
+env -u DIARY_VERBOSE "$nb" --chat --chat-script "$cscript" --session-ticks 300 --home "$w/nt/ch2" < /dev/null > ch2.txt 2>&1
+env -u DIARY_VERBOSE "$nb" --home "$w/nt/cp" --seed 42 --more 300 --every 100 --yes > /dev/null 2>&1
+cf="$w/nt/ch/diaries/chat.txt"; cn=$(grep -c '^C' "$cf" 2> /dev/null)
+badfmt=$(grep '^C' "$cf" | grep -vcE '^C[0-9]+ t=[0-9]+ who=[a-z]+ to=[a-z]+ h=[0-9]+ text=.+$'); badlen=$(grep '^C' "$cf" | sed 's/^.* text=//' | awk 'length($0) > 150' | wc -l)
+seqok=$(grep '^C' "$cf" | sed -E 's/^C([0-9]+) .*/\1/' | awk 'BEGIN { ok = 1 } { if ($1 != NR) ok = 0 } END { print ok }')
+env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/ch" > chv.txt 2>&1; rcv2=$?
+env -u DIARY_VERBOSE "$nb" --chatlog --home "$w/nt/ch" > chl.txt 2>&1
+[ "$rcc" = 0 ] && [ "$cn" -ge 25 ] && [ "$badfmt" = 0 ] && [ "$badlen" = 0 ] && [ "$seqok" = 1 ] && head -1 "$cf" | grep -q '^# seed 42$' \
+  && grep -q '^C[0-9]* t=[0-9]* who=ada to=you h=[0-9]* text=.\+' "$cf" && grep -q ' who=system to=you .* text=no one is called "zz"' "$cf" && grep -q ' who=system to=you .* text=tick [0-9]*, session [0-9]*, seed 42' "$cf" \
+  && grep -q ' who=system to=you .* text=pause asked' "$cf" && grep -q ' who=system to=you .* text=going on from tick' "$cf" && grep -q 'who=observer to=you' "$cf" && grep -q ' text="o" fits ' "$cf" \
+  && grep -q 'who=iris to=you' "$cf" && grep -q 'who=gemini to=you' "$cf" && [ "$rcv2" = 0 ] && grep -q '^verify: OK' chv.txt && grep -q '^t[0-9]* you -> Ruth: @ru what worries you?$' chl.txt && grep -q '^Adam> ' ch1.txt && grep -q '^you> @adam hello$' ch1.txt \
+  && tail -1 "$w/nt/ch/diaries/sessions.txt" > /dev/null && grep -c ' chat=1' "$w/nt/ch/diaries/sessions.txt" | grep -q '^1$' \
+  && ok "--chat with a script: @adam / @Eve / @ru / @jeh / @ob get answers from their templates, an unknown name, a name that fits two (@o) and an unknown order get error lines, /status /pause /resume /mood /trend /words /help answer; $cn C lines in diaries/chat.txt (format C<n> t= who= to= h= text=, numbered 1..$cn, none over 150 characters), the session carries chat=1, make verify passes, make chatlog and the plain console show them" || bad "chat script ($rcc, $cn lines, fmt $badfmt, len $badlen, seq $seqok, verify $rcv2)"
+cmp -s "$cf" "$w/nt/ch2/diaries/chat.txt" && ok "the answers are deterministic: the same script on a copy of the same save gives the same chat.txt byte for byte" || bad "chat answers differ between two runs"
+cs() { ( cd "$1" || exit 1; find . -type f ! -name 'chat.txt' ! -name 'voice_log.txt' ! -name 'run_*' ! -name 'trend.txt' ! -name 'night_*' ! -name 'debug.txt' ! -name 'last*' | sort | while read -r f; do case $f in *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | sed 's/ chat=1//' | cksum | sed "s#\$# $f#";; *) cksum < "$f" | sed "s#\$# $f#";; esac; done ); }
+cs "$w/nt/ch" > cs1.txt; cs "$w/nt/cp" > cs2.txt
+[ -s cs1.txt ] && cmp -s cs1.txt cs2.txt && [ ! -e "$w/nt/cp/diaries/chat.txt" ] && ! grep -q 'chat=1' "$w/nt/cp/diaries/sessions.txt" \
+  && ok "the chat does not change the simulation: a session with $cn chat lines and the same session without leave every other diary, entity file and record byte for byte the same ($(wc -l < cs1.txt) files; only the chat=1 marker of sessions.txt and chat.txt differ); a plain run has no marker and no chat.txt" || bad "chat changes the simulation ($(diff cs1.txt cs2.txt | head -3 | tr '\n' ' '))"
+# off = identical: chat.enabled = 0 gives no marker and no file even with --chat
+rm -rf "$w/nt/cd" "$w/nt/coff"; mkdir -p "$w/nt/cd/bin"; cp "$nb" "$w/nt/cd/bin/"; cp -r "$root/data" "$w/nt/cd/data"; sed -i 's/^chat.enabled = .*/chat.enabled = 0/' "$w/nt/cd/data/limits.txt"; cp -r "$vh" "$w/nt/coff"
+( cd "$w/nt/cd" && env -u DIARY_VERBOSE bin/diary_sim --chat --chat-script "$cscript" --session-ticks 300 --home "$w/nt/coff" < /dev/null > "$w/nt/coff.txt" 2>&1 )
+( cd "$w/nt" && cp "$w/nt/coff/diaries/sessions.txt" cso.txt; grep -v '^# build' "$w/nt/cp/diaries/sessions.txt" > csp.txt; grep -v '^# build' cso.txt | cmp -s - csp.txt ) && [ ! -e "$w/nt/coff/diaries/chat.txt" ] && ! grep -q '^you>' "$w/nt/coff.txt" \
+  && ok "chat.enabled = 0: --chat writes no chat=1 marker and no chat.txt, the lines are not answered, sessions.txt is byte for byte that of a plain run (off = identical)" || bad "chat off"
+# tampering: a changed answer, a changed typed line (the check number no longer fits), a removed answer, an invented line: DRIFT
+tm() { rm -rf "$w/nt/ct"; cp -r "$w/nt/ch" "$w/nt/ct"; sed -i "$1" "$w/nt/ct/diaries/chat.txt"; env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/ct" > ctv.txt 2>&1; rcx=$?; [ "$rcx" = 1 ] && grep -q 'DRIFT\|differs\|import FAILED' ctv.txt && grep -q 'chat.txt' ctv.txt; }
+t1=0; tm '0,/text=Hello\./s//text=Hullo./' && t1=$((t1 + 1)); tm '0,/ text=@adam hello/s// text=@adam hullo/' && t1=$((t1 + 1)); tm '3d' && t1=$((t1 + 1))
+tm '$a C99 t=3100 who=ada to=you h=5 text=I was never asked' && t1=$((t1 + 1)); tm '0,/ t=3[0-9]* who=you/s// t=3001 who=you/' && t1=$((t1 + 1))
+[ "$t1" = 5 ] && ok "tampering with diaries/chat.txt is DRIFT (5 of 5): a changed answer, a changed typed line (check number h=), a removed line, an invented line, a moved line; make verify names chat.txt" || bad "chat tamper ($t1 of 5)"
+# on a terminal: the input line, editing (Backspace, Esc), the answers on screen, /pause /resume /quit, a bare q, the terminal put back
+if command -v python3 > /dev/null 2>&1; then
+  cat > "$w/nt/ptyc.py" <<'PY'
+import os, pty, re, select, struct, sys, time, termios, fcntl, signal
+exe, home, mode = sys.argv[1:4]
+pid, fd = pty.fork()
+if pid == 0:
+    os.chdir("/")
+    os.execv(exe, [exe, "--chat", "--home", home, "--session-ticks", "2000", "--seed", "42"])
+fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
+if mode == "talk":
+    ev = [(5.0, b"@adam hel"), (5.4, b"lo\x7f\x7fo!\r"), (6.0, b"@zzz hi\r"), (6.5, b"/stat"), (6.8, b"us\r"), (7.2, b"/pause\r"), (8.0, b"@x\x1b"), (8.4, b"\r"), (8.8, b"@eve are you tired?\r"),
+          (9.4, b"/resume\r"), (10.0, b"/mood\r"), (10.4, b"/help\r"), (11.2, b"/quit\r")]
+elif mode == "bareq":
+    ev = [(5.0, b"x"), (5.5, b"q")]
+else:
+    ev = [(5.0, b"@a"), (5.5, b"q"), (6.0, b"\r")]   # q inside a line is text; then Enter sends "@aq"; stop with Ctrl-C
+out = b""; t0 = time.time(); done = None; mid = None
+while time.time() - t0 < 60:
+    r, _, _ = select.select([fd], [], [], 0.05)
+    if r:
+        try: d = os.read(fd, 65536)
+        except OSError: break
+        if not d: break
+        out += d
+    while ev and time.time() - t0 >= ev[0][0]:
+        os.write(fd, ev[0][1]); ev.pop(0)
+    if mid is None and time.time() - t0 > 4.5:
+        a = termios.tcgetattr(fd); mid = (bool(a[3] & termios.ECHO), bool(a[3] & termios.ICANON))
+    if mode == "other" and not ev and time.time() - t0 > 7.5:
+        os.kill(pid, signal.SIGINT); mode = "other-sent"
+    try:
+        p, st = os.waitpid(pid, os.WNOHANG)
+    except ChildProcessError:
+        p, st = pid, 0
+    if p:
+        done = os.waitstatus_to_exitcode(st); break
+for _ in range(100):
+    if done is not None: break
+    try:
+        q, st = os.waitpid(pid, os.WNOHANG)
+    except ChildProcessError:
+        done = -1; break
+    if q: done = os.waitstatus_to_exitcode(st); break
+    time.sleep(0.05)
+try:
+    a = termios.tcgetattr(fd); end = (bool(a[3] & termios.ECHO), bool(a[3] & termios.ICANON))
+except Exception:
+    end = None
+frames = out.decode("utf-8", "replace").split("\x1b[H")
+shown = [re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", f) for f in frames]
+best = max(shown[1:-1] if len(shown) > 3 else shown, key=lambda f: ("Adam>" in f) * 2 + ("system>" in f))
+rows = best.replace("\r", "").rstrip("\n").split("\n")
+print("EXIT=%s" % done); print("RAW=%s" % (mid,)); print("BACK=%s" % (end,)); print("ROWS=%d" % len(rows)); print("WIDE=%d" % sum(1 for f in shown[1:] for x in f.replace("\r", "").split("\n")[:22] if len(x) > 79))
+print("PROMPT=%d" % sum(1 for x in rows if x.startswith("> ") or x == ">")); print("ADAM=%d" % ("Adam> " in best)); print("SYSTEM=%d" % ("system> " in best))
+print("EVER_ADAM=%d" % ("Adam> " in "".join(shown))); print("TYPED=%d" % ("> @adam hel" in "".join(shown)))
+PY
+  rm -rf "$w/nt/pt"; cp -r "$vh" "$w/nt/pt"; ptr=$(python3 "$w/nt/ptyc.py" "$nb" "$w/nt/pt" talk 2>&1); pf() { echo "$ptr" | sed -n "s/^$1=//p"; }
+  env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/pt" > ptv.txt 2>&1; rcp=$?; pc="$w/nt/pt/diaries/chat.txt"
+  [ "$(pf EXIT)" = 0 ] && [ "$(pf RAW)" = "(False, False)" ] && [ "$(pf BACK)" = "(True, True)" ] && [ "$(pf ROWS)" -le 24 ] && [ "$(pf WIDE)" = 0 ] && [ "$(pf PROMPT)" = 1 ] && [ "$(pf EVER_ADAM)" = 1 ] && [ "$(pf TYPED)" = 1 ] \
+    && grep -q 'who=you to=ada .* text=@adam helo!$' "$pc" && grep -q 'who=ada to=you' "$pc" && grep -q 'who=system to=you .*no one is called "zzz"' "$pc" && grep -q 'text=tick [0-9]*, session' "$pc" && grep -q 'text=pause asked' "$pc" \
+    && grep -q 'who=gemini to=you' "$pc" && grep -q 'text=going on from tick' "$pc" && grep -q 'text=mood: ' "$pc" && grep -q 'text=stopping like q' "$pc" && ! grep -q 'text=@x' "$pc" && [ "$rcp" = 0 ] && grep -q '^verify: OK' ptv.txt \
+    && ok "on a terminal: a line starting with @ or / appears on the input line as it is typed (Backspace edits, Esc cancels the line: '@x' was never sent), the answers appear in the chat window, /pause waits and the lines typed while paused are answered, /resume goes on, /quit stops the run (exit 0); the terminal is raw while it runs and back to echo + line mode after; screen <= 24 rows and <= 79 columns; chat.txt verifies" || bad "chat on a terminal ($ptr) verify $rcp"
+  rm -rf "$w/nt/pq"; cp -r "$vh" "$w/nt/pq"; ptr=$(python3 "$w/nt/ptyc.py" "$nb" "$w/nt/pq" bareq 2>&1)
+  [ "$(pf EXIT)" = 0 ] && [ "$(pf BACK)" = "(True, True)" ] && ! grep -q '^C' "$w/nt/pq/diaries/chat.txt" 2> /dev/null \
+    && ok "a bare q on an empty input line still stops the run (a key that is not @ or / is ignored: 'x' did nothing), nothing is recorded, the session can be resumed" || bad "bare q ($ptr)"
+  rm -rf "$w/nt/po"; cp -r "$vh" "$w/nt/po"; ptr=$(python3 "$w/nt/ptyc.py" "$nb" "$w/nt/po" other 2>&1)
+  grep -q ' text=@aq$' "$w/nt/po/diaries/chat.txt" && grep -q 'text="aq" fits\|text=no one is called "aq"' "$w/nt/po/diaries/chat.txt" && [ "$(pf BACK)" = "(True, True)" ] \
+    && ok "q inside a line is text (@aq was sent, not a stop), Ctrl-C ends the run and the terminal is put back" || bad "q inside a line ($ptr)"
+else ok "chat on a terminal: skipped (no python3 for a pseudo terminal)"; fi
+grep -q 'make chat' "$root/Makefile" && grep -q 'make chatlog' "$root/Makefile" && grep -q -- '--chat' "$root/data/help.txt" && grep -q -- '--chatlog' "$root/data/help.txt" && grep -q 'chat.session_ticks' "$root/data/limits.txt" && grep -q 'diaries/chat.txt' "$root/README.md" \
+  && grep -q '18000 .. 18499' "$root/docs/LEARN.md" && grep -q 'stty sane' "$root/README.md" && ok "README, Makefile, --help, data/limits.txt and docs/LEARN.md (salts 18000 .. 18499) describe the chat" || bad "chat docs"
 cd "$w" || exit 1
 
 

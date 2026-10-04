@@ -1,5 +1,5 @@
 # Life in the station: roles, companies, life support, leisure (design only, nothing built)
-Version: 0.004
+Version: 0.005
 
 Status: **proposal for Robert**. No code for any of this exists yet; every number below is a *proposed default* that
 lives in `data/` when built, and every decision is open until Robert answers section 9 (and 6.9), except the exhaustion rule (2.6), which is a rule. Style as `docs/WORLD.md`: what it is,
@@ -442,7 +442,7 @@ service need if `life=0`; the vacancy list ignores a site if `leisure=0`. R1 and
 
 ## 8. Rules every step keeps
 Plain Ada, standard library only; every number, word and table in `data/`; every roll is `hash(seed, entity, tick, salt)` with its own
-salt range (roles 10000 .. 10199, life 10200 .. 10399, leisure 10400 .. 10699, companies, positions and exhaustion 15000 .. 15399, learning (`docs/LEARN.md`) 16000 .. 16999; the records of the present
+salt range (roles 10000 .. 10199, life 10200 .. 10399, leisure 10400 .. 10699, companies, positions and exhaustion 15000 .. 15399, learning (`docs/LEARN.md`) 16000 .. 16999, voices and chat 18000 .. 18499; the records of the present
 build use 14000 .. 14399); state is rebuilt by replay and the *records*
 (`B R J F V L Q O X` lines; the letters are re-checked at build, each in its own file) are compared: changed / invented / removed = DRIFT; markers on the `S` line, new sessions only, removed
 marker = DRIFT; `--help` and README stay current; no new test suites (extend `scripts/checks.sh`); compact output

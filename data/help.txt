@@ -41,6 +41,14 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
                --session-ticks=N (default 300) also stop it; on a
                terminal a timer header with the wesen and the players, and
                under it a message from each wesen in turn (voice.*)
+--chat         one paced session with an input line (make chat): @name
+               text talks to a wesen, a player or the observer; /help lists
+               the orders; q (empty line) stops; every line is recorded in
+               diaries/chat.txt (chat=1 session, replay-verified). Also on in
+               make night on a terminal. --session-ticks=N sets the length
+--chat-script=FILE  with --chat: lines "<ticks into the run> <text>" are
+               typed by the script (tests); no pause, no pacing
+--chatlog      the last lines of diaries/chat.txt (make chatlog; read-only)
 --voices       the four wesen messages the night header shows (make voices;
                data/voices.txt; read-only)
 --verify       replay the whole history from the files and compare it with

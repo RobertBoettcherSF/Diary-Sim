@@ -1,5 +1,5 @@
 # Learning in the station: slow core, mixed study, pruning, pondering, notebooks (design only, nothing built)
-Version: 0.001
+Version: 0.002
 
 Status: **proposal for Robert**. No code for any of this exists yet; every number below is a *proposed default* that lives in `data/` when
 built, and every decision is open until Robert answers section 11. Style as `docs/LIFE.md`: what it is, what it is made of, what is recorded.
@@ -48,7 +48,7 @@ else about it. Robert's second wish is in section 6: "The Wesen should be able t
 * **Salt ranges.** Used so far: 9820 .. 9824, 9900 .. 9999 (incl. trial 9960 .. 9979), LIFE 10000 .. 10699, MYTH 11000 .. 12999, being model
   13000 .. 13999, records 14000 .. 14399, companies, positions, exhaustion 15000 .. 15399. **This file: 16000 .. 16999** (checked free in the
   code): slow 16000 .. 16099, mix 16100 .. 16299, prune 16300 .. 16399 (no dice, reserved), ponder 16400 .. 16599, notes 16600 .. 16899,
-  control 16900 .. 16999. Reserved for the postponed byte predictor: 17000 .. 17999.
+  control 16900 .. 16999. Reserved for the postponed byte predictor: 17000 .. 17999. **Phase B (voices and chat): 18000 .. 18499** (voices 18000 .. 18099, chat answers 18100 .. 18299, check numbers of the chat lines 18400 .. 18499); not used by anything here.
 
 ## 2. Slow core, fast skills (`slow=1`)
 **Idea:** the things that make a wesen *who it is* change at a fraction (default 1/10) of the rate of the things it *knows and feels today*.
