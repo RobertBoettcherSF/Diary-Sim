@@ -1,4 +1,4 @@
---  Version: 0.035
+--  Version: 0.036
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -92,7 +92,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.035";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.036";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -2823,6 +2823,7 @@ procedure Diary_Sim is
       Trial : Boolean := False;         --  trial=1: disputes are settled with chess games (Sim_Trial, diaries/trials.txt; needs chess=1 and govern=1)
       Nextticks : Boolean := False;     --  nextticks=1: wesen propose and players decide the ticks of the next run (Sim_Next, diaries/nextticks.txt)
       Preport : Boolean := False;       --  preport=1: the players report to Robert in text boxes; their claims are recorded (Sim_Preport, diaries/preports.txt)
+      Rec2 : Boolean := False;          --  records=2: records=1 plus the quality rules for word proposals (meaning is a base word, no repeated meanings; Sim_Records)
       Records : Boolean := False;       --  records=1: votes, petitions, dictionary and announcements as record files; a clean word vote (Sim_Records; needs govern=1)
       Visit : Boolean := False;         --  visit=1: Robert stands next to one wesen (vwho=<id>) and talks to it (Sim_Visit, diaries/visit.txt)
       Visit_Who : Natural := 0;
@@ -2847,7 +2848,7 @@ procedure Diary_Sim is
       & (if R.World then " world=1" else "") & (if R.Rest then " rest=1" else "") & (if R.Grant then " grant=1" else "")
       & (if R.Screen then " screen=1" else "") & (if R.Chess then " chess=1" else "") & (if R.Chessrules then " chessrules=2" else "")
       & (if R.Robot then " robot=1" else "") & (if R.Govern then " govern=1" else "") & (if R.Scoin then " scoin=1" else "")
-      & (if R.Preport then " preport=1" else "") & (if R.Players4 then " players4=1" else "") & (if R.Nextticks then " nextticks=1" else "") & (if R.Trial then " trial=1" else "") & (if R.Records then " records=1" else "")
+      & (if R.Preport then " preport=1" else "") & (if R.Players4 then " players4=1" else "") & (if R.Nextticks then " nextticks=1" else "") & (if R.Trial then " trial=1" else "") & (if R.Rec2 and then R.Records then " records=2" elsif R.Records then " records=1" else "")
       & (if R.Visit then " visit=1 vwho=" & Name (Entity_Id (R.Visit_Who)) else ""));
    function Yuga (N : Positive) return String is (Msg ("yuga." & Img ((N - 1) mod 4)));
    --  The four votes of a session that starts after tick Start (state: St, known words).
@@ -2892,7 +2893,8 @@ procedure Diary_Sim is
       R.Players4 := Token (L, "players4") = "1";
       R.Nextticks := Token (L, "nextticks") = "1";
       R.Trial := R.Chess and then R.Govern and then Token (L, "trial") = "1";
-      R.Records := R.Govern and then Token (L, "records") = "1";
+      R.Records := R.Govern and then (Token (L, "records") = "1" or else Token (L, "records") = "2");
+      R.Rec2 := R.Records and then Token (L, "records") = "2";
       R.Visit := Token (L, "visit") = "1";
       R.Visit_Who := (if R.Visit then Sim_Dharma.Find_Wesen (Token (L, "vwho")) else 0);
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
@@ -3052,7 +3054,7 @@ procedure Diary_Sim is
       Scoin_Active := R.Scoin and then R.Screen;
       Sim_Screen.Begin_Session (Scoin_Active);   --  a new count of screen blends per wesen
       if R.Govern then Sim_Govern.Begin_Life (R.Start); end if;   --  the players take over the petitions with the first govern=1 session
-      Sim_Records.Begin_Session (R.N, R.Start, R.Records and then R.Govern);   --  also sets the clean word vote
+      Sim_Records.Begin_Session (R.N, R.Start, R.Records and then R.Govern, R.Rec2 and then R.Records and then R.Govern);   --  also sets the clean word vote
       if Sim_Records.Active then
          Sim_Records.Length_Votes (R.Start, R.Votes);
          Flush_Records (R.Start >= Int (Common));
@@ -3303,7 +3305,8 @@ procedure Diary_Sim is
    function Govern_Wanted return Boolean is (Rest_Wanted and then Limit ("govern.enabled", 1) /= 0);     --  govern=1 needs the rest model (the levers)
    function Players4_Wanted return Boolean is (Limit ("players4.enabled", 1) /= 0);   --  players4=1: the fourth player (data/players.txt player.4.*)
    function Trial_Wanted return Boolean is (Chess_Wanted and then Govern_Wanted and then Limit ("trial.enabled", 1) /= 0);   --  trial=1 needs chess=1 and govern=1
-   function Records_Wanted return Boolean is (Govern_Wanted and then Limit ("records.enabled", 1) /= 0);   --  records=1 needs the governance (the D records)
+   function Records_Wanted return Boolean is (Govern_Wanted and then Limit ("records.enabled", 1) /= 0);
+   function Rec2_Wanted return Boolean is (Records_Wanted and then Limit ("rec.quality", 1) /= 0);   --  records=2: quality rules for word proposals   --  records=1 needs the governance (the D records)
    function Nextticks_Wanted return Boolean is (Govern_Wanted and then Limit ("nextticks.enabled", 1) /= 0);   --  nextticks=1 needs the governance (the open petitions)
    function Preport_Wanted return Boolean is (Govern_Wanted and then Limit ("preport.enabled", 1) /= 0);   --  preport=1 needs the governance (the D records)
 
@@ -3325,7 +3328,7 @@ procedure Diary_Sim is
       Session_N := (if Sessions.Is_Empty then 0 else Sessions.Last_Element.N);
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
-               Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
+               Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
                Visit => Visit_Mode, Visit_Who => Visit_Who);
          if R.Len > 0 then
             Append_Session (R);
@@ -3342,7 +3345,7 @@ procedure Diary_Sim is
          Kalpa_Line := To_Unbounded_String (Msg ("kalpa.resume", Img (R.N), Yuga (R.N), Votes_Text (R.Votes), Img (R.Len), Img (Ticks)));
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
-               World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
+               World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
                Visit => False, Visit_Who => 0);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);

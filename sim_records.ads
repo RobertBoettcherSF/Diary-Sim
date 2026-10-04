@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  The raw records of diary_sim (records=1 sessions; needs govern=1): WHAT WAS VOTED, WHAT WAS ASKED, which words were agreed, what was
 --  announced.  Four record files in diaries/, all derived from the replay and compared with it by diary_sim through Sim_Store (a changed,
 --  invented or removed line is DRIFT; own hash salts 14000 .. 14399):
@@ -14,6 +14,8 @@
 --  An announcement raises awareness: the other wesen hear it (their mood moves a few points toward the speaker's), the deciding players
 --  weigh a petition of the announced topic a little more; it costs the announcer standing and may draw a counter-reaction (a lower
 --  chance for its own petitions of that topic).  Every chance and number is in data/limits.txt (rec.*), the wording in data/records.txt.
+--  Sessions marked records=2 add quality rules (the meaning of a proposal is a base word of data/vocab.txt, never a coined word; a meaning
+--  already agreed or pending is not proposed again, a rejected one only after rec.mean_cooldown sessions).
 --  Records sessions also keep the word vote clean (Sim_World.Set_Clean: no chess moves as favourite words, no coined word that
 --  contains its own part).  Pure functions of (seed, wesen/player, tick, salts) and of the replayed state; nothing runs without records=1.
 --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (bounded integer arithmetic, hash dice, record parsing)
@@ -31,7 +33,9 @@ package Sim_Records is
 
    procedure Init (Seed : Int);                            --  forgets everything (a new replay); reads nothing yet
    --  A session begins (every session, with or without the marker): sets the per-session counters and the clean word vote.
-   procedure Begin_Session (N : Positive; Start : Int; On : Boolean);
+   --  Quality (records=2 sessions): word proposals get a base word as meaning, and a meaning is not put to a vote again while it is agreed,
+   --  pending, or rejected less than rec.mean_cooldown sessions ago.
+   procedure Begin_Session (N : Positive; Start : Int; On : Boolean; Quality : Boolean := False);
    function Active return Boolean;
 
    --  Lines of other records, verified by the caller: they become vote and petition lines.

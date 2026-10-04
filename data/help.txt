@@ -151,6 +151,8 @@ dictionary.txt, announcements.txt, replay-verified. Wesen propose words, the
 players vote (majority, caps per session), agreed words go to the dictionary;
 wesen and players may announce what they expect (awareness against standing).
 make divergence: claims vs raw votes. make dictionary. records.enabled=0: off.
+records=2 session: a meaning is a base word, never repeated while agreed,
+pending or recently rejected (rec.mean_cooldown). rec.quality=0: records=1.
 Size (make footprint, make small): bin/diary_sim (-g -O0) is ~9 MB, of which
 ~4 MB is debug info and symbols. make small builds bin/diary_sim_small (-Os,
 no -g, gc-sections, stripped): ~2.9 MB, same output. See README, Footprint.

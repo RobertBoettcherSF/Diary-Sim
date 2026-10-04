@@ -626,7 +626,7 @@ another.
 * **Not done / defaults:** the verdict has no effect on the petitions themselves, only on standing, trust and mood; a trial runs in
   one tick (its games are played at once, not over many ticks); sessions that began before `trial=1` keep their old rules.
 
-## Records, dictionary, announcements and `make divergence` (`records=1` sessions)
+## Records, dictionary, announcements and `make divergence` (`records=1` and `records=2` sessions)
 
 The raw side of the game is written to files, so you can set it against what the players tell you (`sim_records.ads/.adb`; numbers
 `rec.*` and `records.enabled` in `data/limits.txt`, wording in `data/records.txt`). New sessions of a save with `govern=1` carry
@@ -648,6 +648,11 @@ are record lines that every replay computes again (Sim_Store, own hash salts 140
   `rec.agree_cap` (3) per session. `L<n> t= s= st=A|R word= slot= mean= by= prop= yes= no= ann= why=`: A = agreed, R = rejected (with
   `why`: split, tie, cap). The wesen's own vocabulary is never changed: the dictionary is the OFFICIAL list. `make dictionary` shows
   it against the base vocabulary of `data/vocab.txt`.
+* **Quality of the proposals** (`records=2` sessions; `rec.quality = 1` is the default, `0` keeps `records=1`; an existing save picks it up
+  at its next new session, no `--fresh`, older sessions replay as they were). The meaning of a proposal is a plain base word of
+  `data/vocab.txt` (a coined word contributes the two base words it was made of), never a coined word (`mukuki = rugu` came from
+  naming a coined word). A meaning is not put to a vote again while it is agreed or already pending, and a rejected meaning may come
+  back only after `rec.mean_cooldown` (3) sessions (`brown` three times, `greasy` twice before). Ties stay rejected.
 * **Announcements** (`diaries/announcements.txt`): a wesen that files a petition may tell everybody what it expects (`rec.ann_pct`), or
   announce a proposed word (`rec.word_ann_pct`); a player may announce its main concern at the end of a session (`rec.pann_pct`).
   `A<n> t= s= by= kind=wish|word|player topic= heard= mood= cost= react=ok|counter`. It raises awareness: each other wesen hears it

@@ -399,6 +399,11 @@ rec.word_len = 4
 rec.word_ann_vote = 12
 rec.coin_bonus = 10
 rec.word_ann_pct = 20
+# records=2 sessions (quality = 1: new sessions carry records=2; 0: records=1 as before): the meaning of a proposal is a base word of
+# data/vocab.txt (never a coined word), a meaning that is agreed or pending is not put to a vote again, a rejected meaning only after
+# mean_cooldown sessions.
+rec.quality = 1
+rec.mean_cooldown = 3
 # Announcements: a wesen that files a petition tells everybody with the chance ann_pct.  Each other wesen hears it with ann_hear_pct and its
 # mood moves toward the speaker's by (mood / 40) points, at most ann_mood.  For ann_window ticks the deciding players add ann_vote points
 # (at most ann_vote_max) to the score of a petition of the same topic.  The speaker pays ann_cost standing and with ann_counter_pct a

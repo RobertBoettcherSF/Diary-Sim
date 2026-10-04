@@ -1448,7 +1448,7 @@ echo "== 46. records (records=1): votes, petitions, dictionary, announcements; c
 rm -rf "$w/rc"; mkdir -p "$w/rc"
 rc_run() {   # rc_run NAME 'sed expr on limits.txt' [ticks]: a fresh save of seed 42 (govern=1), proposals made likely
   mkdir -p "$w/rc/$1/bin" "$w/rc/$1/h"; cp "$bin" "$w/rc/$1/bin/"; cp -r "$idata" "$w/rc/$1/data"
-  sed -i 's/^govern.enabled = .*/govern.enabled = 1/; s/^rec.prop_pct = .*/rec.prop_pct = 70/; s/^rec.ann_pct = .*/rec.ann_pct = 50/; s/^trial.enabled = .*/trial.enabled = 0/' "$w/rc/$1/data/limits.txt"
+  sed -i 's/^govern.enabled = .*/govern.enabled = 1/; s/^rec.prop_pct = .*/rec.prop_pct = 70/; s/^rec.ann_pct = .*/rec.ann_pct = 50/; s/^trial.enabled = .*/trial.enabled = 0/; s/^rec.quality = .*/rec.quality = 0/' "$w/rc/$1/data/limits.txt"
   [ -n "$2" ] && sed -i "$2" "$w/rc/$1/data/limits.txt"
   ( cd "$w/rc/$1/h" || exit 1; export DIARY_HOME="$w/rc/$1/h"; "$w/rc/$1/bin/diary_sim" --seed 42 --ticks "${3:-300}" --yes --every 5000 > run.txt 2>&1 )
 }
@@ -1500,6 +1500,38 @@ sed -i 's/^records.enabled = .*/records.enabled = 1/' "$w/rc/off/data/limits.txt
 ( cd "$w/rc/off/h" && export DIARY_HOME="$w/rc/off/h" && "$w/rc/off/bin/diary_sim" --more 300 --every 5000 > run3.txt 2>&1; echo "rc=$?" >> run3.txt; "$w/rc/off/bin/diary_sim" --more 0 --every 5000 > run4.txt 2>&1; echo "rc=$?" >> run4.txt )
 [ "$(grep -c '^S[0-9].* records=1' "$w/rc/off/h/diaries/sessions.txt")" = 1 ] && [ "$(grep -c '^S[0-9]' "$w/rc/off/h/diaries/sessions.txt")" = 3 ] && grep -q '^rc=0' "$w/rc/off/h/run3.txt" && grep -q '^rc=0' "$w/rc/off/h/run4.txt" && [ -s "$w/rc/off/h/diaries/votes.txt" ] && ok "an existing save picks it up at its next new session (no --fresh): sessions 1-2 as before, session 3 has records=1, all replays verify" || bad "marker on for an old save"
 grep -q '^## Records, dictionary' "$root/README.md" && grep -q 'make divergence' "$root/README.md" && grep -q 'make divergence' "$root/Makefile" && grep -q -- '--divergence' "$root/data/help.txt" && ok "README, Makefile and --help mention records, make divergence and make dictionary" || bad "docs for records"
+
+echo "== 47. records=2 (rec.quality): the meaning of a proposal is a base word, no repeated meaning (agreed, pending, cooldown), ties rejected, old save picks it up =="
+rm -rf "$w/rq"; mkdir -p "$w/rq/bin" "$w/rq/h"; cp "$bin" "$w/rq/bin/"; cp -r "$idata" "$w/rq/data"
+sed -i 's/^govern.enabled = .*/govern.enabled = 1/; s/^rec.prop_pct = .*/rec.prop_pct = 90/; s/^trial.enabled = .*/trial.enabled = 0/; s/^players4.enabled = .*/players4.enabled = 1/; s/^rec.quality = .*/rec.quality = 0/' "$w/rq/data/limits.txt"
+( cd "$w/rq/h" || exit 1; export DIARY_HOME="$w/rq/h"; q="$w/rq/bin/diary_sim"
+  "$q" --seed 42 --ticks 400 --yes --every 5000 > r1.txt 2>&1; "$q" --more 400 --every 5000 > r2.txt 2>&1
+  sed -i 's/^rec.quality = .*/rec.quality = 1/' "$w/rq/data/limits.txt"
+  "$q" --more 400 --every 5000 > r3.txt 2>&1; "$q" --more 400 --every 5000 > r4.txt 2>&1; "$q" --more 400 --every 5000 > r5.txt 2>&1; "$q" --more 400 --every 5000 > r6.txt 2>&1
+  "$q" --more 0 --every 5000 > r7.txt 2>&1; echo "rc=$?" >> r7.txt )
+cd "$w/rq/h" || exit 1; export DIARY_HOME="$w/rq/h"
+m1=$(grep -c '^S[0-9].* records=1' diaries/sessions.txt); m2=$(grep -c '^S[0-9].* records=2' diaries/sessions.txt)
+[ "$m1" = 2 ] && [ "$m2" = 4 ] && grep -q '^rc=0' r7.txt && ! grep -q DRIFT r7.txt && ok "an existing records=1 save picks up records=2 at its next new session (no --fresh): sessions 1-2 records=1, 3-6 records=2, replay verifies" || bad "records=2 marker ($m1 $m2)"
+first2=$(grep '^S[0-9].* records=2' diaries/sessions.txt | head -1 | sed -E 's/^S([0-9]+) .*/\1/')
+grep -v '^#' "$root/data/vocab.txt" | grep -v '^$' > "$w/rq/base.txt"
+nq=$(grep '^L[0-9]' diaries/dictionary.txt | awk -v f="$first2" '{ for (i = 1; i <= NF; i++) if ($i ~ /^s=/ && substr($i, 3) + 0 >= f) n++ } END { print n + 0 }')
+nonbase=$(grep '^L[0-9]' diaries/dictionary.txt | awk -v f="$first2" -v b="$w/rq/base.txt" 'BEGIN { while ((getline l < b) > 0) base[l] = 1 }
+  { s = ""; m = ""; for (i = 1; i <= NF; i++) { if ($i ~ /^s=/) s = substr($i, 3) + 0; if ($i ~ /^mean=/) m = substr($i, 6) }
+    if (s < f) next; n = split(m, part, "+"); for (j = 1; j <= n; j++) if (!(part[j] in base)) bad++ } END { print bad + 0 }')
+[ "$nq" -ge 6 ] && [ "$nonbase" = 0 ] && ok "records=2 proposals: the meaning is always a base word of data/vocab.txt ($nq proposals voted in sessions $first2 on)" || bad "meaning not a base word ($nq $nonbase)"
+rep=$(grep '^L[0-9]' diaries/dictionary.txt | awk -v f="$first2" '{ s = ""; m = ""; st = ""; for (i = 1; i <= NF; i++) { if ($i ~ /^s=/) s = substr($i, 3) + 0; if ($i ~ /^mean=/) m = substr($i, 6); if ($i ~ /^st=/) st = substr($i, 4) }
+  if (s >= f) { if (m in agreed) bad++; if ((m in last) && s < last[m] + 3) bad++ }
+  last[m] = s; if (st == "A") agreed[m] = 1 } END { print bad + 0 }')
+[ "$rep" = 0 ] && ok "no meaning is put to a vote again once agreed, nor within rec.mean_cooldown (3) sessions of a rejection (checked over the whole dictionary)" || bad "repeated meaning ($rep)"
+dup=$(grep '^L[0-9]' diaries/dictionary.txt | awk '{ for (i = 1; i <= NF; i++) { if ($i ~ /^s=/) s = $i; if ($i ~ /^mean=/) m = $i } print s, m }' | sort | uniq -d | wc -l)
+tie_bad=$(grep '^L[0-9]' diaries/dictionary.txt | awk '{ for (i = 1; i <= NF; i++) { if ($i ~ /^yes=/) y = substr($i, 5); if ($i ~ /^no=/) n = substr($i, 4); if ($i ~ /^st=/) st = substr($i, 4) } if (y == n && st != "R") bad++ } END { print bad + 0 }')
+ties=$(grep -c ' why=tie' diaries/dictionary.txt)
+[ "$dup" = 0 ] && [ "$tie_bad" = 0 ] && [ "$ties" -ge 1 ] && ok "no meaning twice in one session; a tie (2/2) is always rejected ($ties ties in this save)" || bad "dup/tie ($dup $tie_bad)"
+rm -rf "$w/rq/q0"; mkdir -p "$w/rq/q0/bin" "$w/rq/q0/h"; cp "$bin" "$w/rq/q0/bin/"; cp -r "$idata" "$w/rq/q0/data"
+sed -i 's/^govern.enabled = .*/govern.enabled = 1/; s/^trial.enabled = .*/trial.enabled = 0/; s/^rec.quality = .*/rec.quality = 0/' "$w/rq/q0/data/limits.txt"
+( cd "$w/rq/q0/h" || exit 1; export DIARY_HOME="$w/rq/q0/h"; "$w/rq/q0/bin/diary_sim" --seed 42 --ticks 300 --yes --every 5000 > r1.txt 2>&1; "$w/rq/q0/bin/diary_sim" --more 300 --every 5000 > r2.txt 2>&1 )
+[ "$(grep -c '^S[0-9].* records=1' "$w/rq/q0/h/diaries/sessions.txt")" = 2 ] && ! grep -q 'records=2' "$w/rq/q0/h/diaries/sessions.txt" && ok "rec.quality = 0: sessions stay records=1 (the earlier rules)" || bad "rec.quality = 0"
+grep -q 'rec.quality' "$root/data/limits.txt" && grep -q 'rec.mean_cooldown' "$root/data/limits.txt" && grep -q 'records=2' "$root/README.md" && grep -q 'records=2' "$root/data/help.txt" && ok "README, --help and data/limits.txt describe records=2, rec.quality and rec.mean_cooldown" || bad "docs for records=2"
 
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="

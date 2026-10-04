@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  See sim_records.ads.
 pragma Ada_2022;
 
@@ -18,6 +18,7 @@ package body Sim_Records is
    --  ---- state -----------------------------------------------------------------------------------------------------------
    Seed_V : Int := 0;
    Is_Active : Boolean := False;
+   Is_Quality : Boolean := False;                  --  records=2 session: the quality rules for proposals
    Sess_N : Natural := 0;
    Scan_Init : Boolean := False;
    Last_Scan : Natural := 0;
@@ -112,7 +113,7 @@ package body Sim_Records is
    procedure Init (Seed : Int) is
    begin
       Seed_V := Seed;
-      Is_Active := False; Sess_N := 0; Scan_Init := False; Last_Scan := 0;
+      Is_Active := False; Is_Quality := False; Sess_N := 0; Scan_Init := False; Last_Scan := 0;
       V_N := 0; A_N := 0; L_N := 0; Voted_N := 0; Agreed_N := 0;
       Ses_Agreed := 0; Ses_Rejected := 0; Ses_Ann := 0;
       Pending.Clear; Anns.Clear; Sess_List.Clear;
@@ -121,9 +122,10 @@ package body Sim_Records is
       Votes_All.Clear; Pets_All.Clear; Dict_All.Clear; Anns_All.Clear;
    end Init;
 
-   procedure Begin_Session (N : Positive; Start : Int; On : Boolean) is
+   procedure Begin_Session (N : Positive; Start : Int; On : Boolean; Quality : Boolean := False) is
    begin
       Is_Active := On;
+      Is_Quality := On and then Quality;
       Sess_N := N;
       Sess_List.Append (Sess_Rec'(N => N, Start => Start, On => On));
       Voted_N := 0; Agreed_N := 0; Ses_Agreed := 0; Ses_Rejected := 0; Ses_Ann := 0;
@@ -276,9 +278,35 @@ package body Sim_Records is
       return False;
    end Is_Known_Text;
 
+   --  records=2: a meaning that is agreed, pending, or was rejected less than rec.mean_cooldown sessions ago is not put to a vote
+   function Mean_Blocked (Mean : String) return Boolean is
+      Cool : constant Natural := Natural (L ("rec.mean_cooldown", 3));
+   begin
+      for P of Pending loop if To_String (P.Mean) = Mean then return True; end if; end loop;
+      for D of Dict_All loop
+         if Tok (D, "mean") = Mean then
+            if Tok (D, "st") = "A" or else Natural (Num (Tok (D, "s"))) + Cool > Sess_N then return True; end if;
+         end if;
+      end loop;
+      return False;
+   end Mean_Blocked;
+
+   function Is_Base (Name : String) return Boolean is   --  a plain word of data/vocab.txt
+      W : constant Natural := Find (Name);
+   begin
+      return W /= 0 and then W <= Base_Count and then Plain (W);
+   end Is_Base;
+
+   function Base_Pair (Mean : String) return Boolean is   --  "hand+phone": every part is a base word
+      Plus : constant Natural := Fx.Index (Mean, "+");
+   begin
+      return (if Plus = 0 then Is_Base (Mean) else Is_Base (Mean (Mean'First .. Plus - 1)) and then Is_Base (Mean (Plus + 1 .. Mean'Last)));
+   end Base_Pair;
+
    procedure Add_Prop (Text, Mean : String; Slot : Positive; By : Entity_Id; Tick : Int; Salt : Natural) is
    begin
       if Natural (Pending.Length) >= Natural (L ("rec.prop_cap", 12)) or else Is_Known_Text (Text) then return; end if;
+      if Is_Quality and then (not Base_Pair (Mean) or else Mean_Blocked (Mean)) then return; end if;
       declare
          Ann : constant Boolean := Roll (Seed_V, Positive (By), Tick, 14004 + Salt mod 30, 100) <= L ("rec.word_ann_pct", 20);
       begin
@@ -313,7 +341,7 @@ package body Sim_Records is
             declare
                W : constant Positive := (Start - 1 + I) mod N + 1;
             begin
-               if Knows (E, W) and then Plain (W) then return W; end if;
+               if Knows (E, W) and then Plain (W) and then (not Is_Quality or else (W <= Base_Count and then not Mean_Blocked (Word (W)))) then return W; end if;
             end;
          end loop;
       end;
@@ -345,6 +373,16 @@ package body Sim_Records is
       Np : constant Positive := Positive (Sim_Dharma.Last_Player);
       K : Natural := 0;
    begin
+      if Is_Quality then   --  records=2: proposals made before (old rules) or meanwhile blocked are dropped, not voted on
+         declare
+            Waiting : constant Prop_Vectors.Vector := Pending;
+         begin
+            Pending.Clear;
+            for P of Waiting loop
+               if Base_Pair (To_String (P.Mean)) and then not Mean_Blocked (To_String (P.Mean)) then Pending.Append (P); end if;
+            end loop;
+         end;
+      end if;
       while not Pending.Is_Empty and then K < Natural (L ("rec.words_per_session", 6)) loop
          declare
             P : constant Prop_Rec := Pending.First_Element;
