@@ -1,5 +1,5 @@
 # Learning in the station: slow core, mixed study, pruning, pondering, notebooks (design only, nothing built)
-Version: 0.002
+Version: 0.003
 
 Status: **proposal for Robert**. No code for any of this exists yet; every number below is a *proposed default* that lives in `data/` when
 built, and every decision is open until Robert answers section 11. Style as `docs/LIFE.md`: what it is, what it is made of, what is recorded.
@@ -19,6 +19,7 @@ else about it. Robert's second wish is in section 6: "The Wesen should be able t
 9. The byte-level predictor: postponed, one hook name reserved
 10. Build order, check plan, risks
 11. Open questions for Robert (recommended answer first)
+12. Condensing the vocabulary by an order of magnitude (measured with `make wordstat`)
 
 ## 1. Where we start, and what mini-AGI gives us
 * **What the wesen have today:** energy 0 .. 100 and mood -100 .. 100 (fast, move every tick), a vocabulary that only grows (taught, coined,
@@ -48,7 +49,7 @@ else about it. Robert's second wish is in section 6: "The Wesen should be able t
 * **Salt ranges.** Used so far: 9820 .. 9824, 9900 .. 9999 (incl. trial 9960 .. 9979), LIFE 10000 .. 10699, MYTH 11000 .. 12999, being model
   13000 .. 13999, records 14000 .. 14399, companies, positions, exhaustion 15000 .. 15399. **This file: 16000 .. 16999** (checked free in the
   code): slow 16000 .. 16099, mix 16100 .. 16299, prune 16300 .. 16399 (no dice, reserved), ponder 16400 .. 16599, notes 16600 .. 16899,
-  control 16900 .. 16999. Reserved for the postponed byte predictor: 17000 .. 17999. **Phase B (voices and chat): 18000 .. 18499** (voices 18000 .. 18099, chat answers 18100 .. 18299, check numbers of the chat lines 18400 .. 18499); not used by anything here.
+  control 16900 .. 16999, **vocabulary condensing 19900 .. 19999 (section 12)**. Reserved for the postponed byte predictor: 17000 .. 17999. **Phase B (voices and chat): 18000 .. 18499** (voices 18000 .. 18099, chat answers 18100 .. 18299, check numbers of the chat lines 18400 .. 18499); not used by anything here.
 
 ## 2. Slow core, fast skills (`slow=1`)
 **Idea:** the things that make a wesen *who it is* change at a fraction (default 1/10) of the rate of the things it *knows and feels today*.
@@ -195,5 +196,52 @@ Total about 2,500 Ada + 500 data lines, about 9.5 days (LN7 optional: 8.5 withou
 13. **Where does the pondering budget come from for players?** *Recommend:* delay in ticks (recorded), no energy; Robert may later give players an "attention" cost.
 14. **Order: notes before slow, or slow first?** *Recommend:* LN1 and LN2 first (small, measurable, answer the two observed problems), then LN3 and LN4 (Robert's wish), then LN5 to LN7.
 15. **Byte level later?** *Recommend:* leave `Sim_Bytes`, `bytes=1` and 17000 .. 17999 reserved; revisit after LN4, when notebooks give the predictor something to learn from.
+
+## 12. Condensing the vocabulary by an order of magnitude (measured with `make wordstat`)
+Robert asked why each wesen knows 5,000+ words after 287 sessions (start vocabulary 275), what the words mean, and whether the vocabulary can be condensed by about
+a factor of ten with synonyms. The read-only report `make wordstat` (`--wordstat`, `data/wordstat.txt`) answers the first two from the files. **Numbers of one real run of this build
+(build 0.045, seed 42, 287 sessions of 300 ticks, 86,100 ticks, `make night`-style, replay-verified):**
+
+| per wesen (Adam, Eve, Abel, Ruth) | words |
+|---|---|
+| known words | 5,526 / 5,396 / 5,425 / 5,067 (21,414 in all; only **6,047 different texts**, the wesen share one pool) |
+| start words | 64 / 61 / 65 / 74 (the start slice of the 282 words of `data/vocab.txt`) |
+| names of things met in the world | 669 / 411 / 633 / 353 |
+| taught in lessons (not chess or numbers) | 1,286 / 1,449 / 1,231 / 1,042 |
+| read on a screen | 184 / 180 / 181 / 299 |
+| coined or blended | 120 / 126 / 155 / 226 |
+| **chess move as coordinates** (`e2e4`) | 1,603 / 1,588 / 1,571 / 1,540 |
+| **chess move as numbers** (`5755`) | 1,600 / 1,581 / 1,589 / 1,533 |
+| agreed meaning in the dictionary (`st=A`) | 4 / 2 / 1 / 1 (8 in all) |
+| never used again after learning | 21 % / 16 % / 26 % / 14 % (19 % of all words; chess tokens 13 %, start words 40 %) |
+
+* **What the words mean.** 58 % of all words (12,605 of 21,414; 1,661 different moves, each as a coordinate string and as a number string) mean one thing: "a chess move (coordinate or numeric notation)". The rest are
+  the 282 base words, made-up names of things (meaning stored by the world: taste, quality, social, feel), words that were taught or read, and 627 blends of two words. Only eight words have a meaning agreed in the dictionary.
+* **Where they come from.** Every chess move a wesen plays while resting (`diary_sim.adb`, rest -> `Sim_Games.Turn`) makes two words, the move string and its numeric string (`Sim_Things.Prop_Word`, text `chess.word`); the player and the
+  partner both learn them as `world` words, and lessons and screens then spread them (of the 12,605 tokens: 6,309 met in the world, 5,140 taught, 1,156 read on a screen). They are never *used* much: they sit on screens
+  (a screen is a small list of words) and are shown again, which is why 87 % count as "used again". The **biggest source is the chess moves**; without them a wesen knows about 2,200 words, and about 1,600 if the 2,275 words that
+  start or end with another known word (at least 3 letters) were folded into it.
+* So a factor of ten needs more than synonyms: synonyms alone give about 1.3x on the non-chess words (1.1x on all words), the tokens about 2.4x, and the rest has to come from keeping fewer words *active*.
+
+**Options (each is new sessions only, behind its own marker, off = byte-identical, the old rule kept for old sessions; nothing of the history is deleted):**
+* **(c) Stop minting meaningless tokens as words (`symbols=1`).** Chess strings and numeric strings stay *symbols*: they are written on the screens and in the chess record exactly as now, but they are not word ids, are not learned, taught or counted in
+  `Known_Count`, and they do not enter the dice pools of lessons, coining and favourite words. Effect: 5,353 -> about 2,200 known words per wesen (-58 %), the screen file shrinks (31 % of its 141,000 lines are chess adds, more with the chess tokens seen on other screens), and the pool of distinct texts drops from
+  6,047 to about 2,700. Cost: the word ids and `Teachable` counts change, so the dice of the new sessions differ from a run without the marker: **marker `symbols=1` on the S line, own salt range 19900 .. 19919 (a symbol needs none; the range
+  is for the tie-break of which symbol a screen keeps), new sessions only, an existing save keeps every old byte (no `--fresh`)**, and `make verify` replays old sessions with the old minting rule and new ones with the new rule. Cheap (about 150 Ada lines), safe.
+* **(a) A per-wesen active vocabulary with a cap (`active=1`).** Each wesen keeps at most `vocab.cap` (proposed **500**) *active* words; the others become *dormant* with the pruning rule of section 4 (a word unused for `vocab.idle_sessions` = 6
+  sessions and older than `vocab.min_age` = 3 sessions goes first, oldest idle first, at most `vocab.per_session` = 40 per boundary, ties by a seeded die in 19920 .. 19949). A dormant word stays in `entities/<id>/words.txt` (history), is a record line
+  (`diaries/vocab.txt`, planned, `Sim_Store`, status `D` for dormant and `W` for woken, with `h=`; replay-verified: a changed, removed or invented line is DRIFT), is not in `Nth_Known`, is not taught, and wakes when the wesen meets or is taught it again. Words of
+  `data/vocab.txt` and words with an open proposal are never dormant (as in section 4). Effect: the *active* vocabulary is about 500 per wesen (x10 against 5,353) while "ever known" keeps counting upward in the report. This one changes the dice pools, so it is
+  new sessions only (marker `active=1`).
+* **(b) Synonym classes (display and later use).** A word gets a **canonical head** from (1) the agreed dictionary meaning (`st=A`: words with the same meaning are one class), then (2) shared parents of coined blends (`a+b` and `a+c` share `a`), then
+  (3) exact prefix/suffix variants. Aliases map to the head in reports and screens (a dictionary status `st=S word=<alias> head=<word>`, records=2). **The data say this saves little on its own:** only 8 meanings were ever agreed in 287 sessions, and the
+  prefix/suffix variants are 26 % of the non-token words, so classes give about 1.3x on those. Keep it as a *view* of `make wordstat` (the variants line) until the dictionary has meaning to build classes on.
+
+**Recommended answer.** Do **(c) first** (one small step, removes 58 % of the words and a third of the screen traffic without touching anything the wesen say), then **(a) in two stages**: first as a report only (`make wordstat` shows the active count the
+rule *would* give, no dice change, no marker), then the real `active=1` with cap 500 if Robert likes the numbers. **(b) stays a view** for now. Together: about 5,400 -> 500 active words per wesen (x10), the full history untouched.
+Questions for Robert: (1) is the goal "fewer words known" or "fewer words *in use*"? *Recommend:* in use (active), and let the report keep the history. (2) May chess strings stop being words? *Recommend:* yes. (3) Cap 500, idle window 6 sessions?
+*Recommend:* yes, both tunable in `data/limits.txt` (`vocab.cap`, `vocab.idle_sessions`). (4) Retroactive? *Recommend:* never: no `--fresh`, no edit of an old line, new sessions only; the old sessions keep replaying with the old rules.
+**Replay determinism, in one line:** every step above changes which words exist or which are drawn, so each is a session marker with its own salt range, new sessions only, off = byte-identical, and the record of dormancy (`diaries/vocab.txt`) is
+recomputed by every replay; `make wordstat` itself changes nothing.
 
 *End of the proposal; nothing here changes the program until the steps of section 10 are started.*

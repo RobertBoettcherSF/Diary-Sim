@@ -1,5 +1,5 @@
 # Settings, portals, the farm market and the books (design only, nothing built)
-Version: 0.001
+Version: 0.002
 
 Status: **proposal for Robert**. No code for any of this exists; every number below is a *proposed default* that lives in `data/` when
 built, and every decision is open until Robert answers section 12. Style as `docs/LIFE.md` and `docs/MYTH.md`: what it is, what it is
@@ -191,7 +191,7 @@ The model is the **company model of LIFE.md**: each player owns a company, its d
 | fjord, mountain | `data/fjord.txt`, `mountain.txt` | `fjord=1`, `mountain=1` | 19600 .. 19699 |
 | accounting | `data/accounts.txt`; `diaries/accounts.txt` (`A`) | `accounts=1` | 19700 .. 19799 (errors, lateness) |
 | stories | `data/story.txt` (no record in the first release) | none | 19800 .. 19899 |
-* Salt ranges **19000 .. 19899** are new; the reserved/used ranges stay as in `docs/LEARN.md` and `docs/LIFE.md` (10000 .. 10699 life, 11000 .. 12999 myth, 13000 .. 13999 being, 14000 .. 14399 records, 15000 .. 15399 company, 16000 .. 16999 learning, 17000 .. 17999 reserved, 18000 .. 18499 voices and chat). Record letters are re-checked at build.
+* Salt ranges **19000 .. 19899** are new; the reserved/used ranges stay as in `docs/LEARN.md` and `docs/LIFE.md` (10000 .. 10699 life, 11000 .. 12999 myth, 13000 .. 13999 being, 14000 .. 14399 records, 15000 .. 15399 company, 16000 .. 16999 learning, 17000 .. 17999 reserved, 18000 .. 18499 voices and chat, 19900 .. 19999 vocabulary condensing, `docs/LEARN.md` 12). Record letters are re-checked at build.
 * Every file here follows the rules of LIFE.md 8: plain Ada, std lib only, all numbers and words in `data/`, record-first with replay verification, markers on the `S` line, new sessions only, **off = byte-identical**, `--help` and README current, checks extended
   in `scripts/checks.sh`, 0 warnings on GNAT 14 and 12, version headers, PROOF-LATER labels on the money arithmetic (no overflow, balance invariant, weighted-average rounding).
 
