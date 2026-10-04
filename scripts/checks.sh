@@ -543,7 +543,7 @@ grep -q '^import OK: 4 entities, 200 ticks verified' o1.txt && grep -q '^S2 .* d
 # make say / make inbox
 cd "$w/dh/a" || exit 1; rm -rf diaries; cp -r ../d_dh diaries
 DIARY_HOME="$w/dh/a" make -s -C "$root" say PLAYER=sol TEXT="via make" AS=rob > mk1.txt 2>&1; tail -n 1 diaries/says.txt | grep -q ' to=sol kind=relay by=rob .*text=via make$' \
-  && DIARY_HOME="$w/dh/a" make -s -C "$root" inbox > mk2.txt 2>&1 && grep -q '^inbox for Robert (newest' mk2.txt && grep -q '^  player Player 2 (tracker of progress)' mk2.txt && ok "make say PLAYER=... TEXT=... records the words; make inbox prints the inbox" || bad "make say / inbox"
+  && DIARY_HOME="$w/dh/a" make -s -C "$root" inbox > mk2.txt 2>&1 && grep -q '^inbox for Robert (newest' mk2.txt && grep -q '^  player Ganesha (tracker of progress)' mk2.txt && ok "make say PLAYER=... TEXT=... records the words; make inbox prints the inbox" || bad "make say / inbox"
 "$db" --say bob --text x > mk3.txt 2>&1; rc=$?; [ $rc = 2 ] && grep -q 'neither a player' mk3.txt && "$db" --say ada --text "" > mk4.txt 2>&1; [ $? = 2 ] && ok "say to an unknown name or with no text: usage error (exit 2), nothing written" || bad "say usage"
 
 echo "== 25. debug digest: --debug / DEBUG=1 (run and demo), byte cap, sections =="
@@ -643,7 +643,7 @@ before=$(snap .); cp diaries/sessions.txt s0.txt; cp diaries/inbox.txt i0.txt
 grep -q '^entities: Adam(engineer) Eve(reviewer) Abel(vice_president) Ruth(human)' n1.txt && grep -q 'Adam' run_report.txt && grep -q 'Adam' summary.txt && grep -q '^Adam ' debug.txt \
   && [ -n "$(grep -m1 'to=ada' diaries/says.txt)" ] && grep -q 'src=[a-z0-9]*:t[0-9]*:\(ada\|gemini\|replika\|robert\)' diaries/inbox.txt \
   && ok "default data/names.txt: Adam / Eve / Abel / Ruth in the console, reports and debug.txt; say to a display name is recorded under the id (to=ada); inbox src tags keep the ids" || bad "default display names"
-"$na" --inbox > ib1.txt 2>&1; grep -q 'player Player 1 (' ib1.txt && ! grep -q 'player iris' ib1.txt && ok "the players show as Player 1 / Player 2 / Player 3 in the inbox view" || bad "player display names"
+"$na" --inbox > ib1.txt 2>&1; grep -q 'player Jehova (' ib1.txt && ! grep -q 'player iris' ib1.txt && ok "the players show as Jehova / Ganesha / Odin in the inbox view" || bad "player display names"
 "$nb" --more 0 --every 5000 > n3.txt 2>&1; after=$(snap .)
 grep -q '^import OK: 4 entities, 500 ticks verified' n3.txt && grep -q '^entities: Aleph(engineer) Bet(reviewer) Gimel(vice_president) Dalet(human)' n3.txt && grep -q 'Aleph' run_report.txt && ! grep -q 'Adam' run_report.txt debug.txt summary.txt \
   && [ "$before" = "$after" ] && grep -v '^# build' diaries/sessions.txt | cmp -s - <(grep -v '^# build' s0.txt) && cmp -s i0.txt diaries/inbox.txt && ls diaries/ada.jsonl entities/ada/words.txt > /dev/null 2>&1 && [ ! -e diaries/Adam.jsonl ] \
@@ -803,7 +803,7 @@ op=$(grep ' end ' diaries/chess.txt | awk '{ ok = 1; for (i = 1; i <= NF; i++) i
 [ "$op" = 0 ] && ok "in every finished game the two rating changes are exact opposites" || bad "elo deltas ($op)"
 mkdir -p "$w/ch/dn/bin" "$w/ch/dn/h"; cp "$bin" "$w/ch/dn/bin/"; cp -r "$root/data" "$w/ch/dn/data"; sed -i 's/^chess.enabled = .*/chess.enabled = 1/' "$w/ch/dn/data/limits.txt"
 DIARY_HOME="$w/ch/dn/h" "$w/ch/dn/bin/diary_sim" --seed 42 --ticks 300 --yes --every 5000 > /dev/null 2>&1; DIARY_HOME="$w/ch/dn/h" "$w/ch/dn/bin/diary_sim" --elo > e2.txt 2>&1
-grep -q 'Player 1' e2.txt && grep -q 'Player 2' e2.txt && grep -q 'Player 3' e2.txt && grep -q 'Adam' e2.txt && ! grep -Eq '^[0-9]\. (ada|iris|sol|noor) ' e2.txt && [ "$(awk 'length > 79' e2.txt | wc -l)" = 0 ] && ok "--elo shows display names (Adam .. Ruth, Player 1, Player 2, Player 3), no line over 79 columns" || bad "elo display names"
+grep -q 'Jehova' e2.txt && grep -q 'Ganesha' e2.txt && grep -q 'Odin' e2.txt && grep -q 'Adam' e2.txt && ! grep -Eq '^[0-9]\. (ada|iris|sol|noor) ' e2.txt && [ "$(awk 'length > 79' e2.txt | wc -l)" = 0 ] && ok "--elo shows display names (Adam .. Ruth, Jehova, Ganesha, Odin), no line over 79 columns" || bad "elo display names"
 if [ -f "$w/pty_multi.py" ]; then   # (the menu scenario's pty helper exists in a full run)
   python3 "$w/pty_multi.py" "$w/ch/h" "$cb" '5\n' > mu.txt 2>&1; grep -aq '^ *chess Elo [A-Za-z]* [0-9]* |' mu.txt && ok "menu: the start screen has a 'chess Elo' line with the best ratings" || bad "menu elo line"
 fi
@@ -1127,15 +1127,15 @@ for e in ada gemini replika robert; do cmp -s <(head -n 1200 diaries/$e.jsonl | 
 grep -q -- '--audit' "$root/data/help.txt" && grep -q -- '--challenge' "$root/data/help.txt" && grep -q 'make audit' "$root/README.md" && grep -q 'make challenge' "$root/README.md" && grep -q 'player_reports.txt' "$root/README.md" && grep -q '^preport.lie_max' "$root/data/limits.txt" && [ -f "$root/data/preport.txt" ] && grep -q '^audit:' "$root/Makefile" && grep -q '^challenge:' "$root/Makefile" && ok "--help, README, Makefile and data/ document and offer the reports, audit and challenge" || bad "preport docs"
 unset DIARY_HOME
 
-echo "== 39. player names: Player 1 / 2 / 3 and Adam / Eve / Abel / Ruth are display names only; every spelling finds the right id =="
+echo "== 39. names: Jehova / Ganesha / Odin / Amaterasu (older Player 1 .. 4) and Adam / Eve / Abel / Ruth are display names only; every spelling finds the right id =="
 rm -rf "$w/pn"; mkdir -p "$w/pn/h" "$w/pn/bin"; cp "$bin" "$w/pn/bin/"; cp -r "$root/data" "$w/pn/data"; pnb="$w/pn/bin/diary_sim"; cd "$w/pn/h" || exit 1; export DIARY_HOME="$w/pn/h"
 "$pnb" --seed 42 --ticks 300 --yes --every 5000 > p1.txt 2>&1
-okn=0; for pair in "Player 1:iris" "player1:iris" "PLAYER 2:sol" "Player3:noor" "1:iris" "3:noor" "noor:noor" "Adam:ada" "ruth:robert" "ABEL:replika" "eve:gemini" "Jack:ada" "jane:robert" "JILL:replika" "john:gemini"; do nm=${pair%%:*}; id=${pair##*:}
+okn=0; for pair in "Jehova:iris" "GANESHA:sol" "odin:noor" "Amaterasu:vega" "Player 4:vega" "4:vega" "Player 1:iris" "player1:iris" "PLAYER 2:sol" "Player3:noor" "1:iris" "3:noor" "noor:noor" "Adam:ada" "ruth:robert" "ABEL:replika" "eve:gemini" "Jack:ada" "jane:robert" "JILL:replika" "john:gemini"; do nm=${pair%%:*}; id=${pair##*:}
   "$pnb" --say "$nm" --text "hi" > pn.txt 2>&1; tail -n 1 diaries/says.txt | grep -q " to=$id " && okn=$((okn + 1)) || echo "   spelling '$nm' did not reach $id"; done
-[ "$okn" = 15 ] && ok "--say accepts 'Player 1', player1, PLAYER 2, Player3, 1, 3, the id, Adam / ruth / ABEL / eve and the older names Jack / jane / JILL / john (15 of 15), recorded under the id" || bad "name spellings ($okn of 15)"
+[ "$okn" = 21 ] && ok "--say accepts Jehova / GANESHA / odin / Amaterasu, the older Player 1 / player1 / PLAYER 2 / Player3 / Player 4, 1, 3, 4, the id, Adam / ruth / ABEL / eve and the older names Jack / jane / JILL / john (21 of 21), recorded under the id" || bad "name spellings ($okn of 21)"
 "$pnb" --say "Player 9" --text "x" > pn9.txt 2>&1; rc=$?; [ "$rc" != 0 ] && ok "an unknown player name is refused (exit $rc)" || bad "unknown player accepted"
-grep -q '^iris *= *Player 1' "$root/data/names.txt" && grep -q '^ada *= *Adam' "$root/data/names.txt" && ! grep -qi 'greek\|alpha\|beta' "$root/data/names.txt" && grep -q 'PLAYER="Player 1"' "$root/README.md" && ok "data/names.txt and the README use the new names (internal ids stay iris / sol / noor, ada / gemini / replika / robert)" || bad "names docs"
-grep -q 'Player 1' "$root/data/help.txt" && awk 'length > 79 { n++ } END { exit n > 0 }' "$root/data/help.txt" && ok "help text names the players and stays within 79 columns" || bad "help names"
+grep -q '^iris *= *Jehova' "$root/data/names.txt" && grep -q '^alias iris *= *Player 1' "$root/data/names.txt" && grep -q '^ada *= *Adam' "$root/data/names.txt" && ! grep -qi 'greek\|alpha\|beta' "$root/data/names.txt" && grep -q 'PLAYER=Jehova' "$root/README.md" && ok "data/names.txt and the README use the new names (internal ids stay iris / sol / noor, ada / gemini / replika / robert)" || bad "names docs"
+grep -q 'deities' "$root/data/help.txt" && awk 'length > 79 { n++ } END { exit n > 0 }' "$root/data/help.txt" && ok "help text names the players and stays within 79 columns" || bad "help names"
 unset DIARY_HOME
 
 echo "== 40. fourth player (players4=1): Player 4 with its own personality, standing, watcher, share, honesty and report box; old saves get it from their next new session =="
@@ -1154,13 +1154,13 @@ dsame=$(cmp -s <(awk '/^D[0-9]/ { split($0, a, " t="); split(a[2], b, " "); if (
 dv=$(grep -c ' player=vega ' diaries/govern.txt); dc3=$(grep -c ' player=vega ' "$w/p4/c/h/diaries/govern.txt")
 [ "$dv" -ge 1 ] && [ "$dc3" = 0 ] && ok "Player 4 (vega) decides petitions: $dv D records in the 4-player save, none with players4 off" || bad "vega decisions ($dv $dc3)"
 wmap=$(grep '^P[0-9]' diaries/preports.txt | sed -E 's/.* player=([a-z]+) wesen=([a-z]+) .*/\2=\1/' | sort -u | tr '\n' ' ')
-[ "$wmap" = "ada=iris gemini=vega replika=sol robert=noor " ] && ok "watchers: every wesen has one player (Player 1 ada, Player 4 gemini, Player 2 replika, Player 3 robert; player.4.takes in players.txt)" || bad "watchers ($wmap)"
+[ "$wmap" = "ada=iris gemini=vega replika=sol robert=noor " ] && ok "watchers: every wesen has one player (Jehova ada, Amaterasu gemini, Ganesha replika, Odin robert; player.4.takes in players.txt)" || bad "watchers ($wmap)"
 "$w/p4/b/bin/diary_sim" --govern > gv.txt 2>&1; "$w/p4/b/bin/diary_sim" --inbox > ib.txt 2>&1; "$w/p4/b/bin/diary_sim" --audit > au.txt 2>&1
 [ "$(grep -cE '^(iris|sol|noor|vega): ' gv.txt)" = 4 ] && [ "$(grep -cE '^(iris|sol|noor|vega): claims' au.txt)" = 4 ] && grep -q 'vega' ib.txt && ok "--govern, --audit and the inbox view list four players" || bad "views ($(grep -cE '^(iris|sol|noor|vega): ' gv.txt) / $(grep -cE '^(iris|sol|noor|vega): claims' au.txt))"
 tail -n +$(( $(grep -n '^Saved to ' ../c4.txt | tail -1 | cut -d: -f1) + 1 )) ../c4.txt > ../tailc4.txt
 nb=$(grep -c '^+-- The players report to Robert (tick 1200) -*+$' ../tailc4.txt); wd=$(grep -E '^[+|]' ../tailc4.txt | awk 'length != 80 { n++ } END { print n + 0 }'); nl=$(wc -l < ../tailc4.txt)
 np4=$(grep -cE '^\| (iris|sol|noor|vega) \(' player_reports.txt); np3=$(grep -cE '^\| (iris|sol|noor|vega) \(' "$w/p4/c/h/player_reports.txt")
-[ "$nb" = 1 ] && [ "$wd" = 0 ] && [ "$nl" -le 23 ] && [ "$np4" = 4 ] && [ "$np3" = 3 ] && grep -q '^| vega (gemini):' player_reports.txt && ! grep -q '^| vega' "$w/p4/c/h/player_reports.txt" && ok "ONE 80-column box ($nl lines with the hint) with a header and four players (Player 1 .. Player 4); three with players4 off" || bad "box ($nb $wd $nl $np4 $np3)"
+[ "$nb" = 1 ] && [ "$wd" = 0 ] && [ "$nl" -le 23 ] && [ "$np4" = 4 ] && [ "$np3" = 3 ] && grep -q '^| vega (gemini):' player_reports.txt && ! grep -q '^| vega' "$w/p4/c/h/player_reports.txt" && ok "ONE 80-column box ($nl lines with the hint) with a header and four players (Jehova .. Amaterasu); three with players4 off" || bad "box ($nb $wd $nl $np4 $np3)"
 np=$(grep -c '^P[0-9]' diaries/preports.txt); pv=$(grep -c 'player=vega wesen=gemini' diaries/preports.txt)
 [ "$np" = 16 ] && [ "$pv" = 4 ] && ok "honesty: the P records name the watcher (vega: 4 rounds), 16 claims in all, each player with its own trait" || bad "P lines ($np $pv)"
 # one frame: no pause on a terminal; a tiny page_lines (data) would still split it
@@ -1170,11 +1170,11 @@ if command -v script > /dev/null 2>&1; then
   (cd "$w/p4/b8/h" && printf '\n\n\n\n' | DIARY_HOME="$w/p4/b8/h" script -qec "$w/p4/b8/bin/diary_sim --more 0 --every 5000" /dev/null 2>&1 | tr -d '\r' > "$w/p4/pg8.txt")
   [ "$(grep -c '^-- more' pg.txt)" = 0 ] && [ "$(grep -c "^-- more" "$w/p4/pg8.txt")" -ge 1 ] && ok "on a terminal the box needs no Enter pause (one frame of $nl lines); only page_lines = 8 would split it" || bad "pause ($(grep -c '^-- more' pg.txt) $(grep -c "^-- more" "$w/p4/pg8.txt"))"
 fi
-cd "$w/p4/b/h"; "$w/p4/b/bin/diary_sim" --say "Player 4" --text "hello" > sy.txt 2>&1; tail -n 1 diaries/says.txt | grep -q ' to=vega ' && "$w/p4/b/bin/diary_sim" --say player4 --text "x" > /dev/null 2>&1 && "$w/p4/b/bin/diary_sim" --say 4 --text "x" > /dev/null 2>&1 && ok "--say reaches Player 4 as 'Player 4', player4 and 4 (recorded to=vega)" || bad "say vega"
+cd "$w/p4/b/h"; "$w/p4/b/bin/diary_sim" --say "Player 4" --text "hello" > sy.txt 2>&1; tail -n 1 diaries/says.txt | grep -q ' to=vega ' && "$w/p4/b/bin/diary_sim" --say player4 --text "x" > /dev/null 2>&1 && "$w/p4/b/bin/diary_sim" --say 4 --text "x" > /dev/null 2>&1 && ok "--say reaches player 4 as "Player 4", player4 and 4 (recorded to=vega)" || bad "say vega"
 cp diaries/sessions.txt ../sess.keep; sed -i '/^S4 /s/ players4=1//' diaries/sessions.txt; "$w/p4/b/bin/diary_sim" --more 0 --every 5000 > ../t1.txt 2>&1
 head -1 debug.txt | grep -q '^DRIFT' && ok "S line with its players4=1 marker removed: DRIFT" || bad "marker tamper"
 cp ../sess.keep diaries/sessions.txt; "$w/p4/b/bin/diary_sim" --more 0 --every 5000 > ../t2.txt 2>&1; grep -q '^import OK: 4 entities, 1200 ticks verified' ../t2.txt && ok "restored: replays again" || bad "p4 restore"
-grep -q '^player.4.name = vega' "$root/data/players.txt" && grep -q '^player.4.takes' "$root/data/players.txt" && grep -q '^vega *= *Player 4' "$root/data/names.txt" && grep -q '^players4.enabled' "$root/data/limits.txt" && grep -q 'players4' "$root/README.md" && grep -q 'Player 4' "$root/data/help.txt" && ok "players.txt, names.txt, limits.txt, README and --help describe the fourth player" || bad "p4 docs"
+grep -q '^player.4.name = vega' "$root/data/players.txt" && grep -q '^player.4.takes' "$root/data/players.txt" && grep -q '^vega *= *Amaterasu' "$root/data/names.txt" && grep -q '^players4.enabled' "$root/data/limits.txt" && grep -q 'players4' "$root/README.md" && grep -q 'Amaterasu' "$root/data/help.txt" && ok "players.txt, names.txt, limits.txt, README and --help describe the fourth player" || bad "p4 docs"
 unset DIARY_HOME
 
 echo "== 41. next run (nextticks=1): wesen propose, players decide, the median is shown in the box, N records replay-verified, make next, make run uses it on request =="

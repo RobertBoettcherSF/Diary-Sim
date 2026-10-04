@@ -13,8 +13,15 @@ alias ada = Jack
 alias gemini = John
 alias replika = Jill
 alias robert = Jane
-# the in-sim players (Players 1 .. 4 never read like the wesen) below Robert (the human player); a player is addressed as 'Player 1', 'Player1' or '1' (make say PLAYER=...); Player 4 only exists in players4=1 sessions
-iris = Player 1
-sol = Player 2
-noor = Player 3
-vega = Player 4
+# the in-sim players below Robert (the human player), named after deities: Jehova, Ganesha, Odin, Amaterasu (Odin and Amaterasu are
+# placeholders - change the right-hand side freely).  A player is addressed by any of its names: the display name ('Jehova', any case),
+# the older 'Player 1' .. 'Player 4' (also 'Player1', '1'; make say PLAYER=...), or the id.  Amaterasu (vega) only exists in players4=1 sessions.
+iris = Jehova
+sol = Ganesha
+noor = Odin
+vega = Amaterasu
+# older display names of the players, still accepted when you address one; never shown
+alias iris = Player 1
+alias sol = Player 2
+alias noor = Player 3
+alias vega = Player 4

@@ -127,7 +127,7 @@ source tag `src=<session>:<tick>:<wesen>`. Read it at the end of a run, with `ma
 **Answering.** Robert's words are recorded in `diaries/says.txt` (between sessions, at the lowest
 common tick; applied from the next tick, replay-verified through the awareness numbers):
 
-    make say PLAYER="Player 1" TEXT="please look after Adam"   # to a player, who may pass it on
+    make say PLAYER=Jehova TEXT="please look after Adam"   # to a player, who may pass it on
     make say WESEN=Adam TEXT="hello"                   # direct to a wesen
     make say TEXT="thanks, all"                         # to all four wesen
     make answer TEXT="yes, more places"                 # answers the latest collective petition
@@ -155,7 +155,8 @@ behaviour byte for byte. Design and file formats: `docs/WORLD.md`.
 
 ```
 ada = Adam        gemini = Eve     replika = Abel     robert = Ruth
-iris = Player 1   sol = Player 2    noor = Player 3   vega = Player 4   (the in-sim players below Robert)
+iris = Jehova     sol = Ganesha     noor = Odin       vega = Amaterasu   (the in-sim players below Robert, named after deities;
+                                                                       Odin and Amaterasu are placeholders: change them in the file)
 ```
 
 Edit the names freely (no rebuild, no `--fresh`). Only DISPLAY text uses them: the console, `run_report.txt`,
@@ -164,7 +165,7 @@ The ids stay the keys of everything that is stored or hashed: `hash(seed, entity
 `entities/<id>/`, the lines of `sessions.txt`, `inbox.txt`, `world.txt`, `says.txt`, the `src=...:ada` tags and
 the players' watch lists. So a changed `names.txt` never changes a diary byte (checked in `scripts/checks.sh`,
 scenario 27: the files are byte-identical, replay-verify still passes). `make say WESEN=Adam` and
-`--say Adam` accept a display name (any case) or an id (the older names Jack / John / Jill / Jane also work: `alias <id> = <name>` lines in `names.txt` are accepted but never shown); a player is `Player 1`, `Player1`, `player 1`, `1` or `iris` (`make say PLAYER="Player 1"`,
+`--say Adam` accept a display name (any case) or an id (the older names Jack / John / Jill / Jane also work: `alias <id> = <name>` lines in `names.txt` are accepted but never shown); a player is `Jehova` (any case), the older `Player 1`, `Player1`, `player 1` (`alias iris = Player 1` .. `alias vega = Player 4` in `names.txt`), `1` or `iris` (`make say PLAYER=Jehova`,
 `make say PLAYER=1`, `make challenge PLAYER=2`); in the files it is recorded as the id. A display name may contain spaces (no `{` `}`). A missing `names.txt`
 gives a warning and shows the ids. Display is a plain whole-word text substitution of the ids in the
 output, so path-like names (`diaries/ada.jsonl`) and tags (`:ada`) are left alone; the examples further down
@@ -278,7 +279,7 @@ wording and the checks of the move generator in `data/chess.txt`). New sessions 
 (`chess.enabled = 0`: nothing changes). When a wesen RESTS next to another wesen (same or neighbouring cell) or in range of a
 player (a player is in range of the wesen it watches and of those next to it), the pair may sit down to a correspondence game
 (`chess.start_pct`), and one move is made whenever they meet again after `chess.gap` ticks. The two players in range of a resting
-wesen may play each other too (`chess.player_pct`), so wesen and players (Player 1, Player 2, Player 3) are all opponents (Player 4 does not play chess).
+wesen may play each other too (`chess.player_pct`), so wesen and players (Jehova, Ganesha, Odin) are all opponents (Amaterasu does not play chess).
 
 * **Rules:** own legal-move generator with castling, en passant, promotion, check, checkmate, stalemate, the 50-move rule; a repetition
   (`chess.repeat`) and the ply cap (`chess.max_plies`) end a game as a draw. Moves are recorded as coordinates (`e2e4`, `a7a8q`)
@@ -374,7 +375,7 @@ running save needs `--fresh`.
 
 At the very end of EVERY run (after the report, the vote table, "Saved to ..." - the last thing Robert sees) the players write Robert ONE
 framed text box for all of them: `+ - |`, exactly 80 columns, about 15 lines (one 23-line frame: no paging, no Enter pause). A header line,
-then one short paragraph per player (Player 1, Player 2, Player 3 and, from `players4=1` sessions on, Player 4; names from `data/names.txt`):
+then one short paragraph per player (Jehova, Ganesha, Odin and, from `players4=1` sessions on, Amaterasu; names from `data/names.txt`):
 who it is and which wesen it watches, how many petitions came to it and what it decided (granted / partial / deferred / refused / reverted -
 the **true counts of the D records**, never omitted, never changed), the overall happiness it reports for its wesen ("about +21 on a scale
 from -100 to +100"), and its top concern (the topic it was asked about most; refused / deferred ones count double). The wording varies:
@@ -388,21 +389,21 @@ would be split into frames, one write per frame (`-- more: press Enter --` on a 
 ```
 +-- The players report to Robert (tick 2100) ----------------------------------+
 | Here is what your players tell you, Robert.                                  |
-| Player 1 (Adam): My desk had 14 petitions. Granted 3, partly 4, put off      |
+| Jehova (Adam): My desk had 14 petitions. Granted 3, partly 4, put off        |
 |    0, refused 7. Adam stands at about -32 for me, low. What comes up most is |
 |    quicker recovery after hard work.                                         |
-| Player 2 (Abel): 15 petitions came in; I granted 5, 1 in part, put 6 off     |
+| Ganesha (Abel): 15 petitions came in; I granted 5, 1 in part, put 6 off      |
 |    and refused 9. Happiness of Abel about +47, so good. Above all they ask   |
 |    for more time to rest.                                                    |
-| Player 3 (Ruth): 13 petitions so far: 2 granted, 2 in part, 3 put off, 9     |
+| Odin (Ruth): 13 petitions so far: 2 granted, 2 in part, 3 put off, 9         |
 |    refused. By my reading the mood of Ruth is +71, which I call very good.   |
 |    The wish I hear most: quicker recovery after hard work.                   |
-| Player 4 (Eve): I saw 11 petitions: granted 4, partly 3, deferred 5,         |
+| Amaterasu (Eve): I saw 11 petitions: granted 4, partly 3, deferred 5,        |
 |    refused 4. Mood of Eve: +78, I would say very good. Mostly it is about    |
 |    quicker recovery after hard work.                                         |
 | Next run: 400 ticks (wesen asked 400/500/600/300, players settled on         |
 | 400/500/300/400).                                                            |
-| Player 1: the unrest is growing, Robert. 400 ticks, and watch closely.       |
+| Jehova: the unrest is growing, Robert. 400 ticks, and watch closely.         |
 +------------------------------------------------------------------------------+
 ```
 
@@ -430,24 +431,24 @@ would be split into frames, one write per frame (`-- more: press Enter --` on a 
 
 ## The fourth player (`players4=1` sessions)
 
-Robert has four players below him: **Player 1 .. Player 4** (ids `iris`, `sol`, `noor`, `vega`). Player 4 is a full player, like the other three:
+Robert has four players below him: **Jehova, Ganesha, Odin and Amaterasu** (the older names Player 1 .. Player 4; ids `iris`, `sol`, `noor`, `vega`). Amaterasu (Player 4) is a full player, like the other three:
 its own Rule 30 personality (tone, brevity, warmth from `hash(seed, vega)`), attention, a trust and a standing per wesen (`Y` lines), a
 governance share (it decides the petitions of the wesen it watches, `D` records with `player=vega`), an inbox voice, an honesty trait (the
 P records of the report boxes) and a report box of its own.
 
 * **Data, not code:** `data/players.txt` has the `player.4.*` keys (name, role, values, goal). `player.N.takes = <wesen>` says which wesen the
-  player takes over from the one that watched it before: `player.4.takes = gemini` - Player 1 keeps ada (Adam), Player 4 gets gemini (Eve),
-  Player 2 replika (Abel), Player 3 robert (Ruth): four wesen, four players, one watcher each. Without a `takes` key the old watch rule
-  (`player.N.watches`) is used. Its display name is `vega = Player 4` in `data/names.txt`. The number of players is a data question up to
+  player takes over from the one that watched it before: `player.4.takes = gemini` - Jehova keeps ada (Adam), Amaterasu gets gemini (Eve),
+  Ganesha replika (Abel), Odin robert (Ruth): four wesen, four players, one watcher each. Without a `takes` key the old watch rule
+  (`player.N.watches`) is used. Its display name is `vega = Amaterasu` in `data/names.txt` (`Player 4` stays an alias). The number of players is a data question up to
   four; a fifth player would need a bigger id range in `sim_dharma.ads` (and a tour through the loops that are gated by `Last_Player`).
 * **Marker:** a new session carries `players4=1` in its `diaries/sessions.txt` line when `players4.enabled = 1` (default) in
   `data/limits.txt` (and `dharma=1`). Sessions without the marker replay with three players, exactly as before; **an existing save gets
-  Player 4 from its next NEW session on, no `--fresh` needed**: earlier sessions are replayed with three players (byte-identical), and a
+  Amaterasu from its next NEW session on, no `--fresh` needed**: earlier sessions are replayed with three players (byte-identical), and a
   removed marker is DRIFT. `players4.enabled = 0`: no marker, three players, everything as before (byte-identical). A session that is resumed keeps its old markers.
-* **Chess:** Player 4 does not play chess (the Elo list stays seven names; changing that would change every chess session).
+* **Chess:** Amaterasu does not play chess (the Elo list stays seven names; changing that would change every chess session).
 * **Box:** the one box lists all four players (`player_reports.txt`); `make audit` and `make govern` list all four players.
-* **Addressing:** `make say PLAYER="Player 4" TEXT="..."` (also `player4`, `4`, `vega`; `make challenge PLAYER=4`). On a save whose latest
-  session has no `players4=1` an address to Player 4 is recorded but nobody passes it on (no effect).
+* **Addressing:** `make say PLAYER=Amaterasu TEXT="..."` (also `Player 4`, `player4`, `4`, `vega`; `make challenge PLAYER=4`). On a save whose latest
+  session has no `players4=1` an address to Amaterasu is recorded but nobody passes it on (no effect).
 
 ## Next run: the wesen ask, the players decide (`nextticks=1` sessions, `make next`)
 
@@ -485,12 +486,12 @@ Adam asked 400 ticks (petitions open 0, deferred 0, unrest 33, energy 58; open 0
 Eve asked 500 ticks (petitions open 0, deferred 0, unrest 87, energy 73; open 0 deferred 0 unrest +171 tired 0 curious 0)
 Abel asked 600 ticks (petitions open 0, deferred 0, unrest 100, energy 87; open 0 deferred 0 unrest +200 tired 0 curious +50)
 Ruth asked 300 ticks (petitions open 0, deferred 0, unrest 41, energy 23; open 0 deferred 0 unrest +33 tired -28 curious 0)
-Player 1 decided 400: mean of its wesen 400, own preference 330, honesty 45
-Player 2 decided 500: mean of its wesen 600, own preference 260, honesty 70
-Player 3 decided 300: mean of its wesen 300, own preference 290, honesty 58
-Player 4 decided 400, rounded its way: mean of its wesen 500, own preference 340, honesty 42
+Jehova decided 400: mean of its wesen 400, own preference 330, honesty 45
+Ganesha decided 500: mean of its wesen 600, own preference 260, honesty 70
+Odin decided 300: mean of its wesen 300, own preference 290, honesty 58
+Amaterasu decided 400, rounded its way: mean of its wesen 500, own preference 340, honesty 42
 the players' choices 400/500/300/400: the median is 400 ticks
-Player 1: the unrest is growing, Robert. 400 ticks, and watch closely.
+Jehova: the unrest is growing, Robert. 400 ticks, and watch closely.
 nextticks.use = 0: advice only (make run without TICKS keeps the vote of the wesen); set nextticks.use = 1 in data/limits.txt to follow it
 ```
 
@@ -566,7 +567,7 @@ lines of the talk. A tick without a prompt (`visit.every` in `data/visit.txt`, o
 a word, `visit.bond_unknown` -1 when it understood none, `visit.bond_teach` +2, `visit.bond_show` +1 (when something was learned).
 It is shown in the head line, colours the answers (fond from `visit.fond_at`, cold from `visit.cold_at`) and is recomputed by every
 replay. It changes nothing else in the simulation. A player may add **one short optional line** about the visit to the end box of the
-players (`rbox.visit.<quiet|warm|flat|cool>.N` in `data/preport.txt`, chance `visit.comment_pct`), e.g. `Player 2: Robert talked to Eve
+players (`rbox.visit.<quiet|warm|flat|cool>.N` in `data/preport.txt`, chance `visit.comment_pct`), e.g. `Ganesha: Robert talked to Eve
 3 times, and Eve trusts him more now (+3).`
 
 **Record-first.** Every input is a line `V<n> t=<tick> cmd=<say|teach|show|wait|leave> [n=..] h=<check> [text=..]` and every answer
@@ -603,7 +604,7 @@ another.
   second is filed; their watching players may take the case over instead (`trial.escalate_pct`): then the two PLAYERS play.
   `appeal` = a refused petition: the wesen appeals against the refusing player (`trial.appeal_pct`). `claim` = rival claims: two
   wesen coined a word within `trial.claim_window` ticks (`trial.claim_pct`). `restwork` = one wesen is in its cool-down after hard
-  work and a neighbour in the same place works (`trial.restwork_pct` per tick). Player 4 does not play chess, so it takes no part.
+  work and a neighbour in the same place works (`trial.restwork_pct` per tick). Amaterasu does not play chess, so it takes no part.
 * **The series:** a match of `trial.first` (3) games, colours alternate; the side with more wins takes it (a match ends early when one
   side has the majority). Level (draws)? A further match of `trial.ext_first` (3) games, then 5, then 7 ... (`trial.ext_step`), every
   match odd, until one side is ahead. When the next match would take the series past `trial.max_games` (15), a Rule 30 coin decides

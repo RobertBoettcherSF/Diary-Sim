@@ -1,4 +1,4 @@
-# Version: 0.027
+# Version: 0.028
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -15,7 +15,7 @@
 # make demo       PREVIEW ONLY: build, then 200 ticks of a new world in memory, a screen of
 #                 excerpts, nothing written to disk (make run is what writes ./diaries)
 # make say       Robert speaks, between sessions (recorded in ../diary-data/diaries/says.txt, applied
-#                 from the next run): make say PLAYER="Player 1" TEXT="..." (a player may pass it on),
+#                 from the next run): make say PLAYER=Jehova TEXT="..." (a player may pass it on),
 #                 make say WESEN=ada TEXT="..." (direct), make say TEXT="..." (all four);
 #                 optional AS=name.  make answer TEXT="..." answers the latest collective petition.
 # make inbox      print the inbox: the reports of the players to Robert (newest 40 lines)
