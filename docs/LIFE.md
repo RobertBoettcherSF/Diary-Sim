@@ -1,5 +1,5 @@
 # Life in the station: roles, companies, life support, leisure (design only, nothing built)
-Version: 0.003
+Version: 0.004
 
 Status: **proposal for Robert**. No code for any of this exists yet; every number below is a *proposed default* that
 lives in `data/` when built, and every decision is open until Robert answers section 9 (and 6.9), except the exhaustion rule (2.6), which is a rule. Style as `docs/WORLD.md`: what it is,
@@ -435,12 +435,14 @@ X1 comes before the companies because the exhaustion rule is a hard constraint a
 player's record); C2 needs X1; C3 needs `govern=1` and C2; R2 reads open positions. Each step keeps off = byte-identical.
 The being model (section 6) has its own steps B1 to B5 (`bio=1`, ~1750 Ada + 1400 data lines, ~9 days); B1, B2 and B4 can start right after R1, B3 needs R2.
 Rough total without it: ~6700 lines of Ada, ~1500 of data, 3 weeks of steps (X1 and C1 to C3 add ~2100 Ada and ~530 data lines, ~6 days). The small binary grows by ~0.5 MB (`make small`, today 2.8 MB).
+The **learning layer** (`docs/LEARN.md`: slow core, mixed study, pruning, pondering, notebooks; steps **LN1 to LN7**, salts 16000 .. 16999) is a separate
+list so that the names L1 and L2 stay with life support: LN1 and LN2 need only `rest=1` and may follow X1, LN3 needs B1 and X1, LN5 follows C3 for the position decisions.
 Dependencies: `life=1` needs `rest=1` + `world=1`; `leisure=1` needs `rest=1` + `world=1`; `roles=1` needs `world=1`; sites ignore a
 service need if `life=0`; the vacancy list ignores a site if `leisure=0`. R1 and L1 can be done in either order; R2 should come before P2. `company=1` needs `roles=1`, `govern=1` and `rest=1`; `exhaust=1` needs `rest=1`.
 
 ## 8. Rules every step keeps
 Plain Ada, standard library only; every number, word and table in `data/`; every roll is `hash(seed, entity, tick, salt)` with its own
-salt range (roles 10000 .. 10199, life 10200 .. 10399, leisure 10400 .. 10699, companies, positions and exhaustion 15000 .. 15399; the records of the present
+salt range (roles 10000 .. 10199, life 10200 .. 10399, leisure 10400 .. 10699, companies, positions and exhaustion 15000 .. 15399, learning (`docs/LEARN.md`) 16000 .. 16999; the records of the present
 build use 14000 .. 14399); state is rebuilt by replay and the *records*
 (`B R J F V L Q O X` lines; the letters are re-checked at build, each in its own file) are compared: changed / invented / removed = DRIFT; markers on the `S` line, new sessions only, removed
 marker = DRIFT; `--help` and README stay current; no new test suites (extend `scripts/checks.sh`); compact output

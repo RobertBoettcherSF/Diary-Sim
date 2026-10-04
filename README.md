@@ -1160,5 +1160,9 @@ vocabulary, Rule 30 personality, bench kernels, votes and summary text), `sim_ut
 line parsing, data-file helpers), `data/words.txt`, `data/topics.txt` (petition topics), `data/limits.txt`,
 `data/messages.txt` (all console wording), `data/kalpas.txt` (session length votes), `data/menu.txt` (menu text, title, tagline), `data/fonts.txt` (title letters), `data/vocab.txt`, `data/help.txt`, `sim_dharma.ads/.adb` (karma, rebirth, unrest, ladder, awareness, players, inbox), `sim_things.ads/.adb` (the treadmill world), `data/things.txt` (its lists), `docs/WORLD.md`, `data/karma.txt` (numbers), `data/dharma.txt` (wording, flavour labels), `data/players.txt` (the three players),
 `sim_next.ads/.adb` + `data/ticks.txt` (the advice for the next run), `sim_visit.ads/.adb` + `data/visit.txt` (the visit: watch and talk), `sim_trial.ads/.adb` + `data/trial.txt` (trial by chess), `sim_records.ads/.adb` + `data/records.txt` (votes, petitions, dictionary, announcements), `scripts/checks.sh`, `scripts/portable_check.sh`. Every source file starts with a
+Design documents (proposals, nothing built unless the README says so above): `docs/WORLD.md` (the treadmill world), `docs/LIFE.md` (roles,
+companies and positions, exhaustion, life support, leisure, the one being model), `docs/MYTH.md` (creation myths of the players),
+`docs/LEARN.md` (slow core, mixed study, dictionary pruning, pondering, notebooks and study; the byte-level predictor is postponed).
+
 `Version:` header (`make version-check`); a touched file goes up by 0.001. V&V is
 suspended: no new test suites, `scripts/checks.sh` must keep passing.
