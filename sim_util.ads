@@ -1,4 +1,4 @@
---  Version: 0.008
+--  Version: 0.009
 --  Pure helpers of diary_sim: deterministic hash rolls and the diary line
 --  format (read side).  Standard library only.
 pragma Ada_2022;
@@ -16,6 +16,8 @@ package Sim_Util is
    --  The project (source) folder: the folder above bin/ that holds the executable (or the
    --  executable's own folder), absolute and fixed at the first call (call it before any cd).
    function Project_Root return String;
+   --  The absolute path of this executable (call it before any cd: a relative name would no longer resolve).
+   function Exe_Path return String;
    --  Copies a folder with everything in it (never moves or deletes anything).
    procedure Copy_Tree (From, To : String);
    procedure Read_Lines (File : String; Into : in out Str_Vectors.Vector; Found : out Boolean);

@@ -1,4 +1,4 @@
---  Version: 0.008
+--  Version: 0.009
 pragma Ada_2022;
 
 with Ada.Calendar.Formatting, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Maps, Ada.Directories,
@@ -25,23 +25,24 @@ package body Sim_Util is
 
    Root_Cache : Ada.Strings.Unbounded.Unbounded_String;
 
+   function Exe_Path return String is
+      use type GNAT.OS_Lib.String_Access;
+      Name : constant String := Ada.Command_Line.Command_Name;
+      P    : GNAT.OS_Lib.String_Access;
+   begin
+      if Fx.Index (Name, "/") > 0 then return Ada.Directories.Full_Name (Name); end if;
+      P := GNAT.OS_Lib.Locate_Exec_On_Path (Name);   --  started through PATH
+      if P = null then return Ada.Directories.Full_Name (Name); end if;
+      declare
+         R : constant String := P.all;
+      begin
+         GNAT.OS_Lib.Free (P);
+         return R;
+      end;
+   end Exe_Path;
+
    function Project_Root return String is
       use Ada.Strings.Unbounded;
-      function Exe_Path return String is
-         use type GNAT.OS_Lib.String_Access;
-         Name : constant String := Ada.Command_Line.Command_Name;
-         P    : GNAT.OS_Lib.String_Access;
-      begin
-         if Fx.Index (Name, "/") > 0 then return Ada.Directories.Full_Name (Name); end if;
-         P := GNAT.OS_Lib.Locate_Exec_On_Path (Name);   --  started through PATH
-         if P = null then return Ada.Directories.Full_Name (Name); end if;
-         declare
-            R : constant String := P.all;
-         begin
-            GNAT.OS_Lib.Free (P);
-            return R;
-         end;
-      end Exe_Path;
    begin
       if Length (Root_Cache) = 0 then
          declare

@@ -87,7 +87,7 @@ diaries, entities and summary files are byte for byte the same.
 * **`run_log.txt`** (save folder, next to `run_report.txt`; `make runlog` shows its last 40 lines): one entry appended per run, each starting
   with a local time stamp (`YYYY-MM-DD HH:MM:SS RUN`, from `Ada.Calendar`), then the `@@TRACE` line, the `@@SECTIONS` line and
   `report: <path of run_report.txt>`. A DRIFT stop (which writes no report) appends `YYYY-MM-DD HH:MM:SS DRIFT` with `@@TRACE ... result=DRIFT`,
-  `reason:` and the `debug.txt` path. Only the last `report.log_keep` (200) entries stay (`data/limits.txt`; `report.log_tail` = 40 lines for
+  `reason:` and the `debug.txt` path. Only the last `report.log_keep` (500) entries stay (`data/limits.txt`; `report.log_tail` = 40 lines for
   `make runlog`). The clock is only in this file: diaries, entities, summaries and the report carry no time of day, so they stay byte for
   byte reproducible.
 * **Marker** (for people and for tools; the idea of the stack trace in `last_error.txt`): two lines, the first two of `run_report.txt` and
@@ -99,6 +99,52 @@ diaries, entities and summary files are byte for byte the same.
   `anomalies` is `none` or `count[first three]`: energy below `report.warn_energy` (25) or mood below `report.warn_mood` (-50) at the end
   of the run, `warnings:n`, `export-failed`. It is information only; nothing in the simulation reads it (`data/limits.txt`).
   `@@SECTIONS` gives the line of each header in `run_report.txt`.
+
+## Overnight: `make night`, `trend.txt`, `make trend`, `make share`
+
+For a run you leave alone and read in the morning, and for the loop *Robert runs it, sends the files, the code changes, Robert downloads*:
+
+    make night                                  # 300-tick sessions until q, DRIFT, or 12 hours
+    make night SESSION_TICKS=200 MAX_SESSIONS=40 MAX_HOURS=8
+    make trend                                  # the last 40 lines of trend.txt
+    make share                                  # ONE zip to send back
+
+* **`make night`** (`bin/diary_sim --continuous [--session-ticks N] [--max-sessions N] [--max-hours H]`, defaults `night.session_ticks`,
+  `night.max_sessions`, `night.max_hours` in `data/limits.txt`; 0 means no limit, `H` may have decimals) runs normal sessions back to back.
+  Every session is a run of the program with `--more N` (its console goes to `night_console.txt` in the save folder, overwritten each
+  time), so each one is exactly what `make run TICKS=N` typed by hand would give: own session, own markers, replay-verified, the same bytes
+  in diaries, entities and records (a check compares three night sessions with three hand-made ones). The price: each session replays the
+  history first, so the sessions get slower as the save grows (about a millisecond per tick). There is no 'Next run' advice loop: the
+  length is `SESSION_TICKS`, and no question is asked. It continues an existing save or starts a new one (`SEED=`); it cannot be combined
+  with `--ticks`, `--more`, `--fresh`, `--preview` or `--visit`.
+* **Stopping:** press **`q`** (no Enter needed, any case) at any time: the session in progress finishes cleanly and the run stops, so
+  nothing is ever cut in the middle. It also stops on a **DRIFT** (the box says so, with the import failure), at `MAX_SESSIONS`, at
+  `MAX_HOURS` (checked between sessions, so a session may end a little after it), and on Ctrl-C or SIGTERM (a session in progress is
+  stopped at once and a rerun resumes; the exit status is 130). Without a terminal on stdin (a pipe, `nohup`, cron) the keyboard is not
+  read and only the limits and signals stop it, so give `MAX_SESSIONS` or `MAX_HOURS` then.
+* **Console:** a first line (what and how to stop, two lines), ONE line per session (`s17 t5100 02:31:05 | Adam -3/80 Eve 12/60 Abel 5/55 Ruth -20/20`:
+  session, tick, local time, mood/energy of each wesen) and a final box (why it stopped, sessions, time, last values). The full report of
+  the last session is in `run_report.txt` (the one before in `run_report_prev.txt`) and `run_log.txt` has a timestamped `RUN` entry per
+  session plus `NIGHT` entries for the start and the stop (`start: ...`, `stop: reason=q sessions=14 last_session=30 tick=9000
+  elapsed=2h10m`; reasons `q`, `signal`, `max_sessions`, `max_hours`, `drift`, `error`). `report.log_keep` is 500 so a night does not
+  push out the earlier lines.
+* **`trend.txt`** (save folder; every run that adds ticks appends one line, `make night` or not; `report.trend_keep` = 2000 lines stay;
+  `make trend` shows the last `report.trend_tail` = 40). First line a `#` legend, then one line per finished session, fixed order:
+
+      T session=3 tick=180 time=2026-10-04 12:14:43 mood=-24,51,67,63 energy=71,49,78,37 words=183,193,189,205 pets=1,1,1,1 grant=1,0,0,1 refuse=0,1,1,0 agreed=0 rejected=2 trials=2 anomalies=0
+
+  `mood`, `energy`, `words` (known words) and `pets` (petitions filed so far) have one number per wesen in the order of the legend
+  (Adam,Eve,Abel,Ruth); `grant` and `refuse` one number per player (1 to 4): the petition votes so far, counted from the raw
+  `votes.txt`, not from the players' reports (zeros in sessions without `records`); `agreed` and `rejected`: dictionary words so far;
+  `trials`: chess trials so far; `anomalies`: the number of entries of the `@@TRACE` anomalies (energy below `report.warn_energy`, mood
+  below `report.warn_mood` at the end of the session, warnings, export failure). Values are cumulative or end-of-session values, so
+  subtract two lines for a session's own change. The time (local, `YYYY-MM-DD HH:MM:SS`) is the only clock; it is in this file and in
+  `run_log.txt` only, so the simulation files stay byte for byte reproducible.
+* **`make share`** (`scripts/share.sh`) builds `share-YYYYMMDD-HHMMSS.zip` (`tar.gz` if there is no `zip` and no `python3`) in the PARENT of
+  the save folder (for `~/Downloads/diary-data` that is `~/Downloads`; `SHARE_DIR=...` chooses another place) and prints the path and the
+  size (a few tens of KB). Inside: `trend.txt`, `run_log.txt`, `run_report.txt`, `run_report_prev.txt`, `summary.txt`,
+  `player_reports.txt`, `dictionary.txt` (the public list), `divergence.txt` (the output of `make divergence`) and `share_info.txt`.
+  **Not inside:** `diaries/`, `entities/` and the secret ballots (`diaries/ballots.txt`), which stay with the Ground.
 
 ## The Buddhism layer and the players (record-first)
 

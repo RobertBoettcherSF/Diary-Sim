@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 --  See sim_records.ads.
 pragma Ada_2022;
 
@@ -642,6 +642,29 @@ package body Sim_Records is
    function Counts return String is
      (Img (Count_Dict ("A")) & " agreed, " & Img (Count_Dict ("R")) & " rejected, " & Img (Waiting) & " waiting, "
       & Img (Natural (Anns_All.Length)) & " announced");
+
+   --  trend.txt: the petition votes of each player so far (the raw votes, not the reports) and the words agreed / rejected.  All zero
+   --  without records.
+   function Trend return String is
+      type Four is array (1 .. 4) of Natural;
+      Grant, Refuse : Four := [others => 0];
+      function List (A : Four) return String is (Img (A (1)) & "," & Img (A (2)) & "," & Img (A (3)) & "," & Img (A (4)));
+   begin
+      for V of Votes_All loop
+         if Tok (V, "kind") = "petition" then
+            declare
+               Pl : constant Natural := Sim_Dharma.Find_Player (Tok (V, "voter"));
+            begin
+               if Pl in 1 .. 4 then
+                  if Tok (V, "choice") = "grant" then Grant (Pl) := Grant (Pl) + 1;
+                  elsif Tok (V, "choice") not in "partial" | "defer" then Refuse (Pl) := Refuse (Pl) + 1;
+                  end if;
+               end if;
+            end;
+         end if;
+      end loop;
+      return " grant=" & List (Grant) & " refuse=" & List (Refuse) & " agreed=" & Img (Count_Dict ("A")) & " rejected=" & Img (Count_Dict ("R"));
+   end Trend;
 
    function Session_Of (T : Int) return Natural is   --  the session that ends at or contains tick T
    begin

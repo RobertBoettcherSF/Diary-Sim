@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 --  The raw records of diary_sim (records=1 sessions; needs govern=1): WHAT WAS VOTED, WHAT WAS ASKED, which words were agreed, what was
 --  announced.  Four record files in diaries/, all derived from the replay and compared with it by diary_sim through Sim_Store (a changed,
 --  invented or removed line is DRIFT; own hash salts 14000 .. 14399):
@@ -67,6 +67,7 @@ package Sim_Records is
    function Divergence return Str_Vectors.Vector;             --  make divergence: official reports against the raw records
    function Ballots return Str_Vectors.Vector;                --  make ballots: the secret ballots (the Ground only)
    function Dictionary return Str_Vectors.Vector;             --  make dictionary: the official word list
+   function Trend return String;                              --  trend.txt: " grant=a,b,c,d refuse=a,b,c,d agreed=n rejected=n" (all sessions)
    function Counts return String;                              --  "3 agreed, 2 rejected, 1 waiting, 4 announced" (all sessions)
 
 end Sim_Records;

@@ -437,6 +437,13 @@ rec.dict_rows = 14
 report.warn_energy = 25
 report.warn_mood = -50
 # run_log.txt (save folder, NOT on the console): one time stamped entry per run and per DRIFT stop (the @@TRACE and @@SECTIONS lines and the path of
-# run_report.txt); only the last log_keep entries stay; make runlog shows the last log_tail lines.  The clock is only in this file.
-report.log_keep = 200
+# run_report.txt, and the start and stop of a night run); only the last log_keep entries stay; make runlog shows the last log_tail lines.  The clock is only in this file.
+report.log_keep = 500
 report.log_tail = 40
+# trend.txt (save folder, NOT on the console): one line per finished session; only the last trend_keep lines stay; make trend shows trend_tail
+report.trend_keep = 2000
+report.trend_tail = 40
+# make night (--continuous): sessions of session_ticks ticks back to back; stops on q, DRIFT, max_sessions (0 = no limit) or max_hours (0 = no limit)
+night.session_ticks = 300
+night.max_sessions = 0
+night.max_hours = 12

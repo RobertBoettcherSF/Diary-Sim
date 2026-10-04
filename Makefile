@@ -1,4 +1,4 @@
-# Version: 0.032
+# Version: 0.033
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -15,6 +15,13 @@
 #                 DIARY_VERBOSE=1 in the environment) prints it all as before.
 # make report     print the last run_report.txt of the save folder (the full report, with `== name ==` headers and the @@TRACE marker)
 # make runlog     show the last 40 lines of run_log.txt (one entry per run and per DRIFT stop, newest last)
+# make night      sessions back to back, for the night: SESSION_TICKS=300 (ticks per session), MAX_SESSIONS=n, MAX_HOURS=n (default 12;
+#                 0 = no limit); q (no Enter needed) finishes the session in progress and stops, so do DRIFT, the limits and Ctrl-C;
+#                 one status line per session and a box at the end; trend.txt and run_log.txt get a line per session
+#                 (bin/diary_sim --continuous; every session is a normal --more run, byte for byte what you would get by hand)
+# make trend      the last 40 lines of trend.txt (one line per session: mood, energy, words, petitions, votes, trials, anomalies)
+# make share      ONE zip (tar.gz without zip) with trend.txt, run_log.txt, run_report*.txt, summary.txt, player_reports.txt, dictionary.txt and
+#                 divergence.txt; no diaries and no ballots; next to the save folder (SHARE_DIR=... to choose); prints path and size
 # make play       the same as make run
 # make menu       build, then the main menu (needs a terminal): Conway intro, DIARY title, New Game /
 #                 Load Game / Inbox / Settings / Quit.  The bare program on a terminal does the same.
@@ -81,7 +88,7 @@ OPT ?= -O0
 JOBS ?= -j0
 FLAGS = -g $(OPT) -gnatwa -gnat2022 -gnata $(JOBS)
 
-.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog small footprint
+.PHONY: all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog trend night share small footprint
 export WESEN PLAYER TEXT AS
 
 EVERY ?= 100
@@ -152,6 +159,15 @@ report: all
 runlog: all
 	bin/diary_sim --runlog
 
+trend: all
+	bin/diary_sim --trend
+
+night: all
+	bin/diary_sim --continuous $(if $(SESSION_TICKS),--session-ticks $(SESSION_TICKS),) $(if $(MAX_SESSIONS),--max-sessions $(MAX_SESSIONS),) $(if $(MAX_HOURS),--max-hours $(MAX_HOURS),) $(if $(SEED),--seed $(SEED),)
+
+share: all
+	scripts/share.sh bin/diary_sim
+
 perft: all
 	bin/diary_sim --perft
 
@@ -198,4 +214,4 @@ footprint:
 	@scripts/footprint.sh
 
 clean:
-	rm -rf obj obj_small bin diaries diaries_old_* entities summary.txt summary.jsonl run_report.txt run_report_prev.txt debug.txt debug.tmp debug_digest.txt debug_digest.prev debug_full.txt last_error.txt
+	rm -rf obj obj_small bin diaries diaries_old_* entities summary.txt summary.jsonl run_report.txt run_report_prev.txt run_log.txt trend.txt night_console.txt debug.txt debug.tmp debug_digest.txt debug_digest.prev debug_full.txt last_error.txt

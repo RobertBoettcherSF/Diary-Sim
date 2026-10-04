@@ -1439,7 +1439,7 @@ for d in a b; do
   cp -r "$idata" "$w/sm/$d/data"; sed -i 's/^chess.enabled = .*/chess.enabled = 1/; s/^govern.enabled = .*/govern.enabled = 1/; s/^trial.enabled = .*/trial.enabled = 1/; s/^screen.enabled = .*/screen.enabled = 1/; s/^robot.enabled = .*/robot.enabled = 1/' "$w/sm/$d/data/limits.txt"
   x="$w/sm/$d/bin/diary_sim"; [ $d = b ] && x="$w/sm/$d/bin/diary_sim_small"
   mkdir -p "$w/sm/$d/h"; ( cd "$w/sm/$d" && export DIARY_HOME="$w/sm/$d/h" && { "$x" --seed 42 --ticks 400 --yes --every 5000; "$x" --more 200 --every 5000; "$x" --trials; "$x" --elo; "$x" --govern; "$x" --more 0 --every 5000 --debug-section run; } 2>&1 | sed "s#$w/sm/$d/h#H#g" > "$w/sm/$d/out.txt" )
-  ( cd "$w/sm/$d/h" && find . -type f | sort | while read -r f; do case $f in ./debug*|./last*|./run_report*|./run_log*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done > "$w/sm/$d/files.txt" )
+  ( cd "$w/sm/$d/h" && find . -type f | sort | while read -r f; do case $f in ./debug*|./last*|./run_report*|./run_log*|./trend*|./night_console*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done > "$w/sm/$d/files.txt" )
 done
 [ -s "$w/sm/a/out.txt" ] && cmp -s "$w/sm/a/out.txt" "$w/sm/b/out.txt" && cmp -s "$w/sm/a/files.txt" "$w/sm/b/files.txt" && grep -q '^T[0-9]' "$w/sm/a/out.txt" && ok "the small binary gives the same console output and byte-identical diaries / entities / reports as the dev build ($(wc -l < "$w/sm/a/files.txt") files compared; trials, Elo, governance included)" || bad "small vs dev output"
 ( cd "$w/sm/src" && make footprint > "$w/sm/fp.txt" 2>&1 ); grep -q '^source  : ' "$w/sm/fp.txt" && grep -q '^data    : ' "$w/sm/fp.txt" && grep -q '^binary  : bin/diary_sim_small ' "$w/sm/fp.txt" && grep -q '^units   : ' "$w/sm/fp.txt" && grep -q '^runtime : ' "$w/sm/fp.txt" && ok "make footprint prints source, data, binary (stripped / debug share), per-unit and runtime sizes" || bad "footprint"
@@ -1584,7 +1584,7 @@ sed -n 4p save/run_log.txt | grep -q "^report: .*/save/run_report.txt$" && sed -
 cmp -s <(sed -n 6,7p save/run_log.txt) <(head -2 save/run_report.txt) || l_ok=0
 [ "$nst" = 2 ] && [ "$nl" = 8 ] && [ "$l_ok" = 1 ] && ok "run_log.txt: one entry per run (2), each 'YYYY-MM-DD HH:MM:SS RUN', the @@TRACE and @@SECTIONS lines (the same as run_report.txt lines 1-2) and 'report: <path>'" || bad "run_log.txt ($nst $nl $l_ok)"
 # the clock is only in run_log.txt: no replay-verified file has the date in it
-! grep -rl "$(date +%Y-%m-%d)" save --include='*.txt' 2> /dev/null | grep -v 'run_log.txt\|debug\|last_error' | grep -q . && ok "the time stamp is only in run_log.txt (no entity, summary, report or diary-record file carries it; only the jsonl "ts" fields, as before)" || bad "clock in a sim file"
+! grep -rl "$(date +%Y-%m-%d)" save --include='*.txt' 2> /dev/null | grep -v 'run_log.txt\|trend.txt\|debug\|last_error' | grep -q . && ok "the time stamp is only in run_log.txt and trend.txt (no entity, summary, report or diary-record file carries it; only the jsonl "ts" fields, as before)" || bad "clock in a sim file"
 badsec=0; for pr in $(sed -n 2p save/run_report.txt | sed 's/^@@SECTIONS //; s/,/ /g'); do n=${pr%%=*}; l=${pr##*=}; [ "$(sed -n "${l}p" save/run_report.txt)" = "== $n ==" ] || badsec=$((badsec + 1)); done
 nsec=$(sed -n 2p save/run_report.txt | tr ',' '\n' | wc -l); nh=$(grep -c '^== [a-z]* ==$' save/run_report.txt)
 [ "$badsec" = 0 ] && [ "$nsec" = "$nh" ] && [ "$nsec" -ge 12 ] && ok "section headers: every '== name ==' line is where @@SECTIONS says ($nsec sections)" || bad "sections ($badsec $nsec $nh)"
@@ -1595,7 +1595,7 @@ vl=$(wc -l < "$w/sh/vtail.txt")
 [ "$miss" = 0 ] && [ "$miss2" = 0 ] && [ "$vl" -gt 100 ] && grep -q '^== chess ==' save/run_report.txt && grep -q '^== ledger ==' save/run_report.txt && ok "run_report.txt is complete: every line of the verbose console ($vl lines) and of the short form is in it" || bad "run_report.txt incomplete ($miss $miss2 $vl)"
 # --verbose and DIARY_VERBOSE=1 print the old whole report; the simulation is untouched by any of it
 nrm() { sed 's#/sh/[a-z]*/#/sh/X/#g' "$1"; }
-sums() { ( cd "$1/save" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./run_log*|./debug*|./last*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
+sums() { ( cd "$1/save" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./run_log*|./trend*|./night_console*|./debug*|./last*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
 diff <(nrm ../flag/c1.txt) <(nrm ../envv/c1.txt) > /dev/null && diff <(nrm ../flag/c2.txt) <(nrm ../envv/c2.txt) > /dev/null && grep -q '^chess games' ../flag/c1.txt && grep -q '^treadmill' ../flag/c1.txt && grep -q '^please attach debug.txt' ../flag/c1.txt && ! grep -q '^@@TRACE\|^Full report:' ../flag/c1.txt \
   && ok "--verbose = DIARY_VERBOSE=1: the whole report as before (no marker, no pointer), $vl lines after 'report:'" || bad "verbose output"
 sums "$w/sh/short" > "$w/sh/s1.txt"; sums "$w/sh/flag" > "$w/sh/s2.txt"; sums "$w/sh/envv" > "$w/sh/s3.txt"
@@ -1619,6 +1619,78 @@ dn=$(grep -c ' DRIFT$' "$w/sh/dr/save/run_log.txt")
 anom=$(head -1 save/run_report.txt | sed -E 's/.* anomalies=([^ ]*) .*/\1/')
 [ "$anom" != none ] && echo "$anom" | grep -Eq '^[0-9]+\[(energy<25|mood<-50|warnings|export-failed)' && ok "anomalies are listed as information ($anom): energy below 25, mood below -50, warnings, a failed export" || bad "anomalies ($anom)"
 grep -q 'make runlog' "$root/Makefile" && grep -q -- '--runlog' "$root/data/help.txt" && grep -q 'run_log.txt' "$root/README.md" && grep -q 'report.log_keep' "$root/data/limits.txt" && grep -q 'make report' "$root/Makefile" && grep -q 'VERBOSE' "$root/Makefile" && grep -q -- '--verbose' "$root/data/help.txt" && grep -q -- '--report' "$root/data/help.txt" && grep -q '@@TRACE' "$root/README.md" && grep -q 'report.warn_energy' "$root/data/limits.txt" && ok "README, Makefile, --help and data/limits.txt describe the short console, VERBOSE=1, make report and the marker" || bad "docs for the report"
+
+echo "== 49. make night (--continuous): sessions back to back, q, limits, DRIFT; trend.txt; make share =="
+rm -rf "$w/nt"; mkdir -p "$w/nt/bin"; cp "$bin" "$w/nt/bin/"; cp -r "$root/data" "$w/nt/data"
+nb="$w/nt/bin/diary_sim"; cd "$w/nt" || exit 1
+env -u DIARY_VERBOSE "$nb" --continuous --home "$w/nt/night" --session-ticks 60 --max-sessions 3 --seed 42 < /dev/null > night.txt 2>&1; rcn=$?
+mkdir -p "$w/nt/hand"; for k in 1 2 3; do env -u DIARY_VERBOSE "$nb" --home "$w/nt/hand" --seed 42 --more 60 --every 100 --yes > /dev/null 2>&1; done
+ns=$(grep -c '^s[0-9]* t[0-9]* [0-9][0-9]:[0-9][0-9]:[0-9][0-9] | ' night.txt); nlines=$(wc -l < night.txt)
+[ "$rcn" = 0 ] && [ "$ns" = 3 ] && grep -q '^night run: sessions of 60 ticks; max sessions: 3; max hours: 12' night.txt && grep -q '^+-- night run finished' night.txt && grep -q '^| stopped: the number of sessions was reached' night.txt \
+  && ! grep -q '^@@\|Full report\|^report:\|^treadmill' night.txt && [ "$nlines" -le 14 ] && grep -v '^Save folder\|^Saved to' night.txt | awk 'length > 79 { n++ } END { exit n > 0 }' \
+  && ok "make night, no terminal, MAX_SESSIONS=3: one status line per session (3), a final box, no report spam ($nlines lines, <= 79 columns), exit 0" || bad "night console ($rcn $ns $nlines)"
+nsums() { ( cd "$1" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./run_log*|./trend*|./night_console*|./debug*|./last*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
+nsums "$w/nt/night" > ns1.txt; nsums "$w/nt/hand" > ns2.txt
+[ -s ns1.txt ] && cmp -s ns1.txt ns2.txt && ok "three night sessions are byte for byte three hand-made --more 60 runs (diaries, entities, summary, records: $(wc -l < ns1.txt) files)" || bad "night differs from hand runs"
+nt="$w/nt/night/trend.txt"; tp='^T session=[0-9]+ tick=[0-9]+ time=[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} mood=(-?[0-9]+,){3}-?[0-9]+ energy=([0-9]+,){3}[0-9]+ words=([0-9]+,){3}[0-9]+ pets=([0-9]+,){3}[0-9]+ grant=([0-9]+,){3}[0-9]+ refuse=([0-9]+,){3}[0-9]+ agreed=[0-9]+ rejected=[0-9]+ trials=[0-9]+ anomalies=[0-9]+$'
+nt_ok=1; [ "$(grep -c '^T ' "$nt")" = 3 ] && [ "$(grep -cE "$tp" "$nt")" = 3 ] || nt_ok=0; head -1 "$nt" | grep -q '^# trend v1, one line per session, wesen in the order Adam,Eve,Abel,Ruth' || nt_ok=0
+[ "$(grep '^T ' "$nt" | sed -E 's/^T session=([0-9]+) tick=([0-9]+) .*/\1:\2/' | tr '\n' ' ')" = "1:60 2:120 3:180 " ] || nt_ok=0
+diff <(sed 's/ time=[^ ]* [^ ]*//' "$nt") <(sed 's/ time=[^ ]* [^ ]*//' "$w/nt/hand/trend.txt") > /dev/null || nt_ok=0
+[ "$nt_ok" = 1 ] && ok "trend.txt: a legend line, then one fixed key=value line per session (session tick time mood energy words pets grant refuse agreed rejected trials anomalies); a normal run writes the same lines" || bad "trend.txt ($nt_ok)"
+rl="$w/nt/night/run_log.txt"
+[ "$(grep -c ' RUN$' "$rl")" = 3 ] && grep -q '^[0-9-]* [0-9:]* NIGHT$' "$rl" && grep -q '^start: session_ticks=60 max_sessions=3 keys=none$' "$rl" && grep -q '^stop: reason=max_sessions sessions=3 last_session=3 tick=180 elapsed=0h0[0-9]m$' "$rl" \
+  && ok "run_log.txt: a timestamped RUN entry per session and NIGHT start / stop entries (reason, sessions, last tick, elapsed)" || bad "night run_log.txt"
+( export DIARY_HOME="$w/nt/night"; env -u DIARY_VERBOSE "$nb" --trend > tr.txt 2>&1; [ "$(cat tr.txt)" = "$(cat "$nt")" ] ) && ok "--trend (make trend) prints trend.txt (at most report.trend_tail lines)" || bad "--trend"
+# the trend cap, and the time limit
+rm -rf "$w/nt/cap"; mkdir -p "$w/nt/cap/bin"; cp "$bin" "$w/nt/cap/bin/"; cp -r "$root/data" "$w/nt/cap/data"; sed -i 's/^report.trend_keep = .*/report.trend_keep = 2/' "$w/nt/cap/data/limits.txt"
+env -u DIARY_VERBOSE "$w/nt/cap/bin/diary_sim" --continuous --home "$w/nt/cap/save" --session-ticks 30 --max-sessions 4 --seed 42 < /dev/null > /dev/null 2>&1
+[ "$(grep -c '^T ' "$w/nt/cap/save/trend.txt")" = 2 ] && head -1 "$w/nt/cap/save/trend.txt" | grep -q '^# trend' && grep -q '^T session=3 ' "$w/nt/cap/save/trend.txt" && grep -q '^T session=4 ' "$w/nt/cap/save/trend.txt" && ok "trend.txt keeps the legend and the last report.trend_keep lines (2 of 4 sessions)" || bad "trend cap"
+env -u DIARY_VERBOSE "$nb" --continuous --home "$w/nt/night" --session-ticks 30 --max-sessions 50 --max-hours 0.0002 < /dev/null > mh.txt 2>&1
+mhn=$(grep -c '^s[0-9]* t' mh.txt); [ "$mhn" -ge 1 ] && [ "$mhn" -lt 50 ] && grep -q '^| stopped: the time limit was reached' mh.txt && grep -q '^stop: reason=max_hours ' "$rl" && ok "MAX_HOURS stops it at a session boundary ($mhn sessions at 0.0002 h)" || bad "max-hours ($mhn)"
+# DRIFT stops the night run and says so
+rm -rf "$w/nt/dr"; cp -r "$w/nt/night" "$w/nt/dr"; sed -i '/^S1 /s/votes=[0-9]*/votes=7/' "$w/nt/dr/diaries/sessions.txt"
+env -u DIARY_VERBOSE "$nb" --continuous --home "$w/nt/dr" --session-ticks 30 --max-sessions 5 < /dev/null > dr.txt 2>&1; rcd=$?
+[ "$rcd" = 1 ] && grep -q '^| stopped: DRIFT' dr.txt && grep -q 'import FAILED' dr.txt && ! grep -q '^s[0-9]* t[0-9]' dr.txt && grep -q '^stop: reason=drift sessions=0 ' "$w/nt/dr/run_log.txt" && grep -q ' DRIFT$' "$w/nt/dr/run_log.txt" && ok "a DRIFT stops the night run (exit 1, box says DRIFT, the import failure shown, NIGHT stop and DRIFT entries in run_log.txt)" || bad "night DRIFT ($rcd)"
+env -u DIARY_VERBOSE "$nb" --continuous --more 5 --home "$w/nt/night" > ue.txt 2>&1; rcu=$?
+[ "$rcu" = 2 ] && grep -q 'cannot be combined with --ticks, --more' ue.txt && ok "--continuous with --more is refused (exit 2)" || bad "night options ($rcu)"
+# q on a terminal: finishes the session in progress and stops (needs python3 for a pseudo terminal)
+if command -v python3 > /dev/null 2>&1; then
+  rm -rf "$w/nt/q"
+  python3 - "$nb" "$w/nt/q" > q.txt 2>&1 <<'PY'
+import os, pty, select, sys, time
+exe, home = sys.argv[1:3]
+pid, fd = pty.fork()
+if pid == 0:
+    os.chdir("/")
+    os.execv(exe, [exe, "--continuous", "--home", home, "--session-ticks", "150", "--max-sessions", "40", "--seed", "42"])
+out = b""; sent = False; t0 = time.time()
+while time.time() - t0 < 120:
+    r, _, _ = select.select([fd], [], [], 0.2)
+    if r:
+        try: d = os.read(fd, 4096)
+        except OSError: break
+        if not d: break
+        out += d
+    if not sent and b"s1 t" in out:
+        os.write(fd, b"q"); sent = True
+sys.stdout.write(out.decode("utf-8", "replace"))
+PY
+  qn=$(grep -c 's[0-9]* t[0-9]' q.txt); [ "$qn" -ge 1 ] && [ "$qn" -le 3 ] && grep -q 'stopped: you pressed q' q.txt && [ -s "$w/nt/q/trend.txt" ] && grep -q 'reason=q ' "$w/nt/q/run_log.txt" && ok "q on a terminal (no Enter): the session in progress finishes (sessions: $qn of 40), then the night run stops cleanly" || bad "q key ($qn)"
+else ok "q key: skipped (no python3 for a pseudo terminal)"; fi
+# make share
+sd="$w/nt/out"; mkdir -p "$sd"; ( export DIARY_HOME="$w/nt/night" SHARE_DIR="$sd"; "$root/scripts/share.sh" "$nb" > share.txt 2>&1 ); sf=$(ls "$sd"/share-* 2> /dev/null | head -1)
+if [ -n "$sf" ]; then
+  rm -rf "$w/nt/x"; mkdir -p "$w/nt/x"
+  case $sf in *.zip) python3 -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$sf" "$w/nt/x" 2> /dev/null || ( cd "$w/nt/x" && unzip -q "$sf" );; *) tar -xzf "$sf" -C "$w/nt/x";; esac
+  have=$(cd "$w/nt/x" && ls | tr '\n' ' '); sz=$(wc -c < "$sf")
+  miss=0; for f in trend.txt run_log.txt run_report.txt run_report_prev.txt summary.txt player_reports.txt dictionary.txt divergence.txt; do [ -s "$w/nt/x/$f" ] || miss=$((miss + 1)); done
+  [ "$miss" = 0 ] && [ "$sz" -lt 400000 ] && ! ls "$w/nt/x" | grep -qi 'ballot\|diaries\|jsonl' && ! grep -qE '^B[0-9]+ ' "$w/nt/x"/* && grep -q "$sf" share.txt && grep -q "$sz bytes" share.txt \
+    && ok "make share: ONE archive ($sz bytes) with trend, run_log, run_report(+prev), summary, player_reports, dictionary, divergence; no diaries, no ballots; path and size printed" || bad "share contents ($miss $sz: $have)"
+else bad "share: no archive ($(cat share.txt))"; fi
+grep -q 'make night' "$root/Makefile" && grep -q 'make trend' "$root/Makefile" && grep -q 'make share' "$root/Makefile" && grep -q -- '--continuous' "$root/data/help.txt" && grep -q -- '--trend' "$root/data/help.txt" && grep -q 'make night' "$root/README.md" && grep -q 'trend.txt' "$root/README.md" && grep -q 'make share' "$root/README.md" \
+  && grep -q 'night.max_hours' "$root/data/limits.txt" && grep -q 'report.trend_keep' "$root/data/limits.txt" && ok "README, Makefile, --help and data/limits.txt describe make night, make trend and make share" || bad "docs for night"
+cd "$w" || exit 1
+
 
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="

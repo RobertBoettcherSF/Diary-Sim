@@ -32,6 +32,10 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
   --verbose      the whole report on the console (see below; DIARY_VERBOSE=1)
   --report       print the last run_report.txt of the save folder (make report)
 --runlog       the last 40 lines of run_log.txt (make runlog)
+--trend        the last 40 lines of trend.txt (make trend)
+--continuous   sessions back to back (make night); q finishes the session in
+               progress and stops; also DRIFT, --max-sessions=N, --max-hours=H
+               (decimals ok), Ctrl-C; --session-ticks=N (default 300)
   --debug        also write debug_digest.txt (make run|demo DEBUG=1)
   --debug-section=NAME  print one block of debug_full.txt (drift trace players
                  inbox run ledger preport status); nothing is simulated
@@ -63,6 +67,9 @@ the @@TRACE and @@SECTIONS lines and the path of run_report.txt. --verbose
 (make run VERBOSE=1, or DIARY_VERBOSE=1) prints everything; --report (make
 report) prints the last run_report.txt (sections as "== name ==", previous run:
 run_report_prev.txt); --runlog (make runlog) the last 40 lines of run_log.txt.
+trend.txt (one line per session: mood, energy, words, petitions per wesen,
+votes per player, words, trials, anomalies; make trend) and make share (one zip
+with the files to send back, no diaries, no ballots) serve the overnight loop.
 debug.txt (<= 1500 bytes) is written on EVERY exit; attach it to chat messages.
 Ctrl-C / SIGTERM stop cleanly after the current tick (exit 130, status QUIT).
 Old diaries (before this version) are incompatible: use --fresh.
