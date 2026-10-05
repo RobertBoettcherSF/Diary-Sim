@@ -1,4 +1,4 @@
---  Version: 0.054
+--  Version: 0.055
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.054";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.055";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -3029,6 +3029,8 @@ procedure Diary_Sim is
          if Str_Tick >= 0 then
             for L of Sim_Voice.Wrap (Msg ("wordstat.sym.strict", Img (Str_Sess), Img (Str_Tick)), 77) loop Put ("  " & L); end loop;
             Row_Strict_Token ("  " & Msg ("wordstat.l.strict_tok"));
+         else
+            for L of Sim_Voice.Wrap (Msg ("wordstat.sym.nostrict"), 77) loop Put ("  " & L); end loop;
          end if;
       end if;
       TIO.New_Line;
@@ -6974,6 +6976,18 @@ procedure Diary_Sim is
       Con.Put_Line ("+-- " & Msg ("night.box.title") & " " & Fx."*" (Natural'Max (0, Wide - Msg ("night.box.title")'Length - 2), '-') & "+");
       for L of Box loop Con.Put_Line ("| " & Fx.Head (L, Wide) & " |"); end loop;
       Con.Put_Line ("+" & Fx."*" (Wide + 2, '-') & "+");
+      declare   --  the same box at the end of night_console.txt (make ship copies it into checkin.txt: the night ran on the terminal)
+         F : TIO.File_Type;
+      begin
+         if Ada.Directories.Exists ("night_console.txt") then TIO.Open (F, TIO.Append_File, "night_console.txt");
+         else TIO.Create (F, TIO.Out_File, "night_console.txt");
+         end if;
+         TIO.Put_Line (F, "== night box == reason=" & Why);
+         for L of Box loop TIO.Put_Line (F, L); end loop;
+         TIO.Close (F);
+      exception
+         when others => if TIO.Is_Open (F) then TIO.Close (F); end if;
+      end;
       Con.Put_Line (To_String (Saved_Line));
       Flush_Out;
       if Why = "signal" then Ada.Command_Line.Set_Exit_Status (130);

@@ -1,4 +1,4 @@
-# Version: 0.005
+# Version: 0.006
 # The vocabulary report (make wordstat, --wordstat, Sim_Wordstat): read-only, counts over entities/<id>/words.txt and the diaries.
 # "key = text".  {1}.. are filled in; labels in the tables are cut to 36 letters.  Nothing here changes a diary.
 # upper length of each length class (12 classes, the last one is open)
@@ -34,6 +34,7 @@ wordstat.l.since = words learned since then
 wordstat.l.since_tok = of those, chess or number strings
 wordstat.sym.strict = first symstrict=1 session: S{1} from tick {2}; from then on a coined chess or number string (a blend like 5336) is a symbol too, so this row stays 0:
 wordstat.l.strict_tok = chess or number strings
+wordstat.sym.nostrict = no symstrict=1 session yet (new sessions get it, symbols.strict): coined chess or number strings may still be taught.
 wordstat.sec.use = Meaning and use after learning:
 wordstat.l.agreed = same text as an agreed word
 wordstat.l.agreed_after = of those, learned after the vote

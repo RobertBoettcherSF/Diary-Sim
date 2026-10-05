@@ -107,13 +107,38 @@ diaries, entities and summary files are byte for byte the same.
 
 ## Overnight: `make night`, `trend.txt`, `make trend`, `make share`
 
+**Robert's loop (three steps, build 0.055):**
+
+1. Unzip `diary-sim.zip` over `~/Downloads/diary-sim` (the save in `~/Downloads/diary-data` stays):
+   `cd ~/Downloads && rm -rf diary-sim && unzip -o diary-sim.zip && cd diary-sim`
+2. ONE command: `make ship` (by day, about 40 sessions) or `make night-ship` (overnight, about 10 hours)
+3. Paste the short summary from the terminal and attach ONE file: `~/Downloads/diary-data/checkin.txt`
+
+* **`make ship`** builds, runs a night of `CHECKIN_SESSIONS` (40) sessions of `CHECKIN_TICKS` (300) ticks on the terminal (the live
+  screen of `make night`; no q needed), then `make active`, `make wordstat`, `make frustration`, `make evolve` and `make verify` into
+  files, and writes EVERYTHING into `checkin.txt` in the save folder (`../diary-data` next to the source folder, or `--home` /
+  `$DIARY_HOME`). Its top is a VERDICT header: PASS or FAIL with the reasons, build, stop reason, the new sessions and whether they carry
+  `symstrict=1` and `slowfloor=1`, mint-slow at the floor (from `make active`), chess or number strings learned since `symbols=1` and
+  since `symstrict=1` (from `make wordstat`), the `make verify` result and the wall time. Below it: this night's `run_log.txt` entries,
+  the new session records, their `trend.txt` lines, the console of the last session with the final box, and the full output of the
+  five reports. The terminal shows the same header (about 12 lines) and the path of the file; exit status 0 = PASS. A cold start (an
+  empty or missing save folder) works the same way. A smoke test: `make ship CHECKIN_SESSIONS=1`. `make checkin` stays (everything on
+  the terminal), the single targets too.
+* **`make night-ship`** is the overnight form: the same `checkin.txt` in the same place with the same VERDICT header, only the night
+  is longer. Defaults: `NIGHT_SHIP_TICKS` (300) ticks per session, `NIGHT_SHIP_HOURS` (10) hours, `NIGHT_SHIP_SESSIONS` (0 = no session
+  limit; set it to stop earlier). The stop reason is then `max_hours` (or `max_sessions`), both PASS. For a long night the run_log,
+  session and trend sections of `checkin.txt` keep their first 40 and last 240 lines (the rest stays in the save), so the file stays
+  small. e.g. `make night-ship NIGHT_SHIP_HOURS=8`. A cold start works the same way.
+
 For a run you leave alone and read in the morning, and for the loop *Robert runs it, sends the files, the code changes, Robert downloads*:
 
     make night                                  # 300-tick sessions until q, DRIFT, or 12 hours
     make night SESSION_TICKS=200 MAX_SESSIONS=40 MAX_HOURS=8
     make trend                                  # the last 40 lines of trend.txt
     make share                                  # ONE zip to send back
-    make checkin                                # ONE paste: a night of 40 sessions (no q needed), then active, wordstat, frustration, evolve, verify
+    make ship                                   # Robert's ONE command: night + reports into ../diary-data/checkin.txt
+    make night-ship                             # the same overnight: 300-tick sessions for 10 hours, same checkin.txt
+    make checkin                                # the older paste: a night of 40 sessions (no q needed), then active, wordstat, frustration, evolve, verify
     make checkin CHECKIN_SESSIONS=10 CHECKIN_TICKS=300 SEED=42
 
 * **`make checkin`** runs `make night` with a FIXED number of sessions (`CHECKIN_SESSIONS`, default 40, of `CHECKIN_TICKS`, default 300,

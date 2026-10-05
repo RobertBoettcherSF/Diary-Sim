@@ -1,4 +1,14 @@
-# Version: 0.043
+# Version: 0.044
+# make ship       ROBERT'S ONE COMMAND (after unzipping over the source folder; the save in ../diary-data stays): build, a night of
+#                 CHECKIN_SESSIONS (40) sessions of CHECKIN_TICKS (300) ticks on the terminal (no q needed), then active, wordstat,
+#                 frustration, evolve and verify; EVERYTHING goes into checkin.txt in the save folder (../diary-data/checkin.txt, or
+#                 --home / $DIARY_HOME) with a VERDICT header on top (build, stop reason, symstrict=1 / slowfloor=1 on the new sessions,
+#                 mint-slow at the floor, chess strings since symstrict=1, verify); the terminal shows a short summary and the path of
+#                 that ONE file to attach.  Exit 0 = PASS.  A short smoke: make ship CHECKIN_SESSIONS=1 (scripts/ship.sh)
+# make night-ship THE OVERNIGHT ONE COMMAND: the same as make ship (same checkin.txt, same verdict header), only longer: sessions of
+#                 NIGHT_SHIP_TICKS (300) ticks until NIGHT_SHIP_HOURS (10) hours have passed (NIGHT_SHIP_SESSIONS = 0: no session limit;
+#                 set it to stop earlier), then the same reports.  Stop reason max_hours (or max_sessions) = PASS; q still works (FAIL:
+#                 stopped by hand, the reports still run).  e.g. make night-ship NIGHT_SHIP_HOURS=8
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -103,7 +113,7 @@
 #                 as it is); the only difference: no symbols, so a crash report shows addresses instead of names.  make footprint: the
 #                 sizes (source, data, per unit, stripped / unstripped, debug share) of the files that exist
 # make check      version headers + the resume/replay/drift/crash checks
-# make checkin    ONE paste for Robert: a night run of CHECKIN_SESSIONS (40) sessions of CHECKIN_TICKS (300) ticks (no q needed; it says
+# make checkin    the older paste (humans: use make ship): a night run of CHECKIN_SESSIONS (40) sessions of CHECKIN_TICKS (300) ticks (no q needed; it says
 #                 when the history replay is done and the new sessions begin), then active, wordstat, frustration, evolve, verify,
 #                 each after "=== make <x> ===" with its own wall-time line; the last line is the wall time of the whole checkin.
 GNATMAKE ?= gnatmake
@@ -115,7 +125,7 @@ OPT ?= -O2
 JOBS ?= -j0
 FLAGS = -g $(OPT) -gnatwa -gnat2022 -gnata $(JOBS)
 
-.PHONY: checkin chat chatlog voices wordstat evolve active frustration all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog trend night verify bench share small footprint
+.PHONY: ship night-ship checkin chat chatlog voices wordstat evolve active frustration all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog trend night verify bench share small footprint
 export WESEN PLAYER TEXT AS
 
 # Every user-facing target prints its wall time as the LAST line (scripts/timed.sh), e.g. "make wordstat wall time: 0m12s (12s)":
@@ -131,6 +141,10 @@ QUIET = $(if $(findstring s,$(firstword -$(MAKEFLAGS))),1,0)
 #   make checkin CHECKIN_SESSIONS=10 CHECKIN_TICKS=300 SEED=42
 CHECKIN_SESSIONS ?= 40
 CHECKIN_TICKS ?= 300
+# make night-ship: the overnight form of make ship (0 sessions = no session limit; the hours end it)
+NIGHT_SHIP_SESSIONS ?= 0
+NIGHT_SHIP_TICKS ?= 300
+NIGHT_SHIP_HOURS ?= 10
 
 EVERY ?= 100
 
@@ -269,6 +283,12 @@ challenge: all
 
 ledger: all
 	$(TIMED) bin/diary_sim --ledger$(if $(FULL),=full)
+
+ship: all
+	$(TIMED) scripts/ship.sh ship $(CHECKIN_SESSIONS) $(CHECKIN_TICKS) "" $(T0) $(SEED)
+
+night-ship: all
+	$(TIMED) scripts/ship.sh night-ship $(NIGHT_SHIP_SESSIONS) $(NIGHT_SHIP_TICKS) $(NIGHT_SHIP_HOURS) $(T0) $(SEED)
 
 checkin: all
 	@echo "=== make night (checkin: $(CHECKIN_SESSIONS) sessions of $(CHECKIN_TICKS) ticks) ==="

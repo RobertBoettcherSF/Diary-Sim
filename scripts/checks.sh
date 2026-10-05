@@ -2435,6 +2435,41 @@ ss_row=$(grep '^  chess or number strings ' ss_w.txt | awk '{ print $NF }')
   && ok "symstrict=1: $ss_c number strings were coined under the old rules and $ss_leak leaked into words.txt after symbols=1 without it; 3 new sessions carry symstrict=1 and add 0 chess or number strings (the same 3 sessions with symbols.strict = 0: $ss_ctl); make verify OK on the mixed save; make wordstat counts 0 since the first symstrict=1 session" || bad "symstrict ($ss_c $ss_leak $rcs $ss_new $ss_ctl $rcsv '$ss_row')"
 cd "$w" || exit 1
 
+echo "== 60. make ship / make night-ship: ONE command, ONE file (checkin.txt in the save folder) with a VERDICT header; a short terminal summary; cold start =="
+cd "$w/nt" || exit 1
+rm -rf "$w/nt/sp"; cp -r "$w/nt/a2" "$w/nt/sp"; spn=$(grep -c '^S' "$w/nt/sp/diaries/sessions.txt")
+DIARY_HOME="$w/nt/sp" make --no-print-directory -C "$root" ship CHECKIN_SESSIONS=1 CHECKIN_TICKS=60 > sp.txt 2>&1 < /dev/null; rcp=$?
+ck="$w/nt/sp/checkin.txt"; sum=$(sed -n '/^-\{79\}$/,$p' sp.txt)
+secs_ok=1; for h in '== night: run_log.txt entries of this run ==' '== night: new session records (diaries/sessions.txt) ==' '== night: the console of the last session and the final box (night_console.txt) ==' \
+  '== make active (exit 0' '== make wordstat (exit 0' '== make frustration (exit 0' '== make evolve (exit 0' '== make verify (exit 0' '== night box == reason=max_sessions'; do grep -qF "$h" "$ck" || secs_ok=0; done
+[ "$rcp" = 0 ] && [ -f "$ck" ] && sed -n 1p "$ck" | grep -q '^diary-sim checkin (make ship): attach this ONE file' && sed -n 3p "$ck" | grep -q '^VERDICT: PASS$' \
+  && grep -q "^build: $(sed -n 's/^ *Build : constant String := "\([0-9.]*\)".*/\1/p' "$root/diary_sim.adb") " "$ck" && grep -q '^stop reason: max_sessions (the number of sessions was reached)$' "$ck" \
+  && grep -q "^new sessions: 1 (s$((spn + 1)) to s$((spn + 1))), active=2: 1/1$" "$ck" && grep -q '^newest sessions symstrict=1: yes (1/1)   slowfloor=1: yes (1/1)$' "$ck" \
+  && grep -q '^mint-slow at the floor: yes ([0-9] of 4 wesen at floor or above, make active)$' "$ck" && grep -q '^chess/number strings learned: since symbols=1: [0-9]*; since symstrict=1: 0$' "$ck" \
+  && grep -q '^verify: OK ([0-9]* ticks replayed from the files)$' "$ck" && [ "$secs_ok" = 1 ] \
+  && [ "$(echo "$sum" | wc -l)" -le 20 ] && echo "$sum" | grep -q "^attach this ONE file: $ck\$" && [ "$(echo "$sum" | grep -v '^attach this' | awk 'length > 79' | wc -l)" = 0 ] \
+  && tail -n 1 sp.txt | grep -Eq '^make ship wall time: [0-9]+m[0-5][0-9]s \([0-9]+s\)$' \
+  && ok "make ship CHECKIN_SESSIONS=1: checkin.txt in the save folder, VERDICT: PASS on top (build, stop reason max_sessions, symstrict=1 and slowfloor=1 on the new session, mint-slow at the floor, 0 chess strings since symstrict=1, verify OK), then the night and the five reports; the terminal summary has $(echo "$sum" | wc -l) lines (<= 79 columns) and the path; the wall time last" || bad "make ship ($rcp $secs_ok)"
+# cold start: no save folder at all; a FAIL verdict (a night that DRIFTs) gives exit 1 and says why
+rm -rf "$w/nt/spc"; DIARY_HOME="$w/nt/spc/diary-data" make --no-print-directory -C "$root" ship CHECKIN_SESSIONS=1 CHECKIN_TICKS=60 > spc.txt 2>&1 < /dev/null; rcc=$?
+rm -rf "$w/nt/spd"; cp -r "$w/nt/a2" "$w/nt/spd"; sed -i '0,/"t":"work"/s//"t":"rest"/' "$w/nt/spd/diaries/ada.jsonl"
+DIARY_HOME="$w/nt/spd" make --no-print-directory -C "$root" ship CHECKIN_SESSIONS=1 CHECKIN_TICKS=60 > spd.txt 2>&1 < /dev/null; rcd=$?
+cp -r "$w/nt/a2" "$w/nt/spw"; sed -i 's/ symstrict=1//' "$w/nt/spw/diaries/sessions.txt"; env -u DIARY_VERBOSE "$nb" --wordstat --home "$w/nt/spw" > spw.txt 2>&1
+[ "$rcc" = 0 ] && sed -n 3p "$w/nt/spc/diary-data/checkin.txt" | grep -q '^VERDICT: PASS$' && grep -q '^new sessions: 1 (s1 to s1)' "$w/nt/spc/diary-data/checkin.txt" \
+  && [ "$rcd" != 0 ] && sed -n 3p "$w/nt/spd/checkin.txt" | grep -q '^VERDICT: FAIL:.* night exit 1;.* stop reason drift;' && grep -q '^VERDICT: FAIL' spd.txt \
+  && grep -q 'no symstrict=1 session yet' spw.txt && grep -q 'make ship' "$root/README.md" && grep -q '^# make ship ' "$root/Makefile" && grep -q '^ship: all' "$root/Makefile" \
+  && ok "make ship on a cold start (no save folder): PASS, session 1; on a save that DRIFTs: exit $rcd, VERDICT: FAIL with the reasons; make wordstat without a symstrict=1 session says so; README and the Makefile header describe make ship" || bad "make ship cold / fail ($rcc $rcd)"
+# make night-ship: the overnight form; the same checkin.txt, the same verdict layout; here a tiny time limit, so the reason is max_hours
+rm -rf "$w/nt/spn"; cp -r "$w/nt/a2" "$w/nt/spn"
+DIARY_HOME="$w/nt/spn" make --no-print-directory -C "$root" night-ship NIGHT_SHIP_HOURS=0.002 NIGHT_SHIP_TICKS=30 > spn.txt 2>&1 < /dev/null; rcn=$?
+ckn="$w/nt/spn/checkin.txt"; keys() { sed -n '3,12p' "$1" | sed 's/:.*//'; }
+[ "$rcn" = 0 ] && sed -n 1p "$ckn" | grep -q '^diary-sim checkin (make night-ship): attach this ONE file' && sed -n 3p "$ckn" | grep -q '^VERDICT: PASS$' \
+  && grep -q '^stop reason: max_hours (the time limit was reached)$' "$ckn" && grep -q '^night: sessions of 30 ticks; max sessions: no limit; max hours: 0.002$' "$ckn" \
+  && grep -q '^night: sessions of 60 ticks; max sessions: 1; max hours: 12$' "$ck" && [ "$(keys "$ckn")" = "$(keys "$ck")" ] && grep -qF '== night box == reason=max_hours' "$ckn" \
+  && grep -q '^make night-ship wall time: ' spn.txt && grep -q '^# make night-ship ' "$root/Makefile" && grep -q '^night-ship: all' "$root/Makefile" && grep -q 'make night-ship' "$root/README.md" \
+  && ok "make night-ship (no session limit, a tiny time limit): VERDICT: PASS, stop reason max_hours, the same checkin.txt and the same verdict lines as make ship; Makefile and README describe it" || bad "make night-ship ($rcn)"
+cd "$w" || exit 1
+
 
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="
