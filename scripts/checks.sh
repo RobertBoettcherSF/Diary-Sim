@@ -791,7 +791,7 @@ cp "$bin" "$w/ch/bad/bin/"; cp -r "$w/ch/data" "$w/ch/bad/data"; sed -i 's/^perf
 cd "$w/ch/h" || exit 1; export DIARY_HOME="$w/ch/h"
 "$cb" --seed 42 --ticks 300 --yes --every 5000 > h1.txt 2>&1; "$cb" --more 300 --every 5000 > h2.txt 2>&1
 n_c=$(grep -c '^C[0-9]' diaries/chess.txt); n_m=$(grep -c ' move ' diaries/chess.txt)
-grep -q '^S1 .* chess=1$' diaries/sessions.txt && grep -q '^S2 .* chess=1$' diaries/sessions.txt && head -1 diaries/chess.txt | grep -q '^# seed 42$' && [ "$n_m" -gt 100 ] && grep -q ' start white=' diaries/chess.txt \
+grep -Eq '^S1 .* chess=1( symbols=1)?$' diaries/sessions.txt && grep -Eq '^S2 .* chess=1( symbols=1)?$' diaries/sessions.txt && head -1 diaries/chess.txt | grep -q '^# seed 42$' && [ "$n_m" -gt 100 ] && grep -q ' start white=' diaries/chess.txt \
   && ok "new sessions carry chess=1; starts, moves and ends are C lines in diaries/chess.txt ($n_c lines, $n_m moves)" || bad "chess.txt ($n_c $n_m)"
 bad_n=$(grep ' move ' diaries/chess.txt | awk '{ c = $7; n = $8; f = index("abcdefgh", substr(c, 1, 1)); t = index("abcdefgh", substr(c, 3, 1)); e = f substr(c, 2, 1) t substr(c, 4, 1); p = (length(c) == 5) ? index("qrbn", substr(c, 5, 1)) : ""; if (n != e p) bad++ } END { print bad + 0 }')
 [ "$bad_n" = 0 ] && ok "every recorded move is both coordinate notation and the matching ICCF number" || bad "ICCF notation ($bad_n differ)"
@@ -2018,6 +2018,46 @@ grep -q '^Chess strings as symbols' sy_ws1.txt && grep -q 'first symbols=1 sessi
   && ok "--wordstat: symbols section: since the first symbols=1 session $sw words were learned and $swt of them are chess or number strings; the control save says there is no symbols=1 session" || bad "wordstat symbols ($sw $swt)"
 grep -q 'symbols=1' "$root/README.md" && grep -q 'symbols.enabled' "$root/data/limits.txt" && grep -q 'symbols=1' "$root/data/help.txt" && grep -q 'symbols=1' "$root/docs/EVOLVE.md" \
   && ok "README, --help, data/limits.txt and docs/EVOLVE.md describe symbols=1" || bad "symbols docs"
+echo "== 52. make evolve (--evolve) and make active (--active): the evolution preview, read-only =="
+cd "$w/nt" || exit 1
+ev="$w/nt/sy_ctl"   # the save of scenario 51 made with the old rule: it has chess words, chess games and 7 sessions
+sumf() { ( cd "$1" && find . -type f | sort | while read -r f; do cksum < "$f" | sed "s#\$# $f#"; done | cksum ); }
+e0=$(sumf "$ev")
+env -u DIARY_VERBOSE "$nb" --evolve --home "$ev" > ev1.txt 2>&1; rce=$?
+env -u DIARY_VERBOSE "$nb" --evolve --home "$ev" > ev2.txt 2>&1
+env -u DIARY_VERBOSE "$nb" --active --home "$ev" > ea1.txt 2>&1; rca=$?
+e1=$(sumf "$ev")
+erow() { awk -v k="$2" 'index($0, k) > 0 { print $NF; exit }' "$1"; }
+ewk=$(awk '!/^#/ && NF >= 4 && !seen[FILENAME, $2]++ { n++ } END { print n + 0 }' \"$ev\"/entities/*/words.txt)
+esy=$(awk '!/^#/ && NF >= 4 && !seen[FILENAME, $2]++ && ($2 ~ /^[a-h][1-8][a-h][1-8][qrbn]?$/ || $2 ~ /^[0-9]+$/) { n++ } END { print n + 0 }' \"$ev\"/entities/*/words.txt)
+ebs=$(awk '!/^#/ && NF >= 4 && !seen[FILENAME, $2]++ && $3 == "start" && $2 !~ /^[0-9]+$/ && $2 !~ /^[a-h][1-8][a-h][1-8][qrbn]?$/ { n++ } END { print n + 0 }' \"$ev\"/entities/*/words.txt)
+gk=$(erow ev1.txt 'words known'); gs=$(erow ev1.txt 'chess/number strings'); gb=$(erow ev1.txt 'of those: base words'); ga=$(erow ev1.txt 'would be active'); gd=$(erow ev1.txt 'would be dormant'); go=$(erow ev1.txt 'other words')
+[ "$rce" = 0 ] && [ "$rca" = 0 ] && [ "$e0" = "$e1" ] && cmp -s ev1.txt ev2.txt && [ "$gk" = "$ewk" ] && [ "$gs" = "$esy" ] && [ "$gb" = "$ebs" ] && [ "$((ga + gd))" = "$go" ] && [ "$((gs + go))" = "$gk" ] && [ "$esy" -gt 50 ] \
+  && ok "--evolve: words known $gk, chess/number strings $gs and base words $gb equal an independent awk count of words.txt, active $ga + dormant $gd = the $go other words; the save folder is byte for byte unchanged, the same text on every run (a word listed twice under two ids counts once)" || bad "evolve words (rc $rce $rca: $gk/$ewk $gs/$esy $gb/$ebs $ga+$gd vs $go, before/after $e0 $e1)"
+# the chess part against the record: games, moves and the last Elo of the first wesen, counted again with awk
+cg=$(awk '/ end / { n++ } END { print n + 0 }' "$ev/diaries/chess.txt"); cm=$(awk '/ move / { n++ } END { print n + 0 }' "$ev/diaries/chess.txt")
+gm=$(sed -n '/^Chess: [0-9]/,$p' ev1.txt | tr '\n' ' ' | sed -E 's/^Chess: ([0-9]+) moves of ([0-9]+) games.*/\1 \2/')
+ce=$(grep ' end ' "$ev/diaries/chess.txt" | grep -o 'ada=[0-9]*>[0-9]*' | tail -1 | sed 's/.*>//'); ge=$(awk '/^  Elo now/ { print $3; exit }' ev1.txt)
+gsum=$(awk '/^  games / { s = 0; for (i = 2; i <= NF; i++) s += $i; print s; exit }' ev1.txt)
+wbad=$(awk '/^  (piece|takes|gives|castles|promotes|to |pawn|minor|king walk|opening)/ { for (i = NF - 6; i <= NF; i++) { v = $i; gsub(/\+/, "", v); if (v != "." && (v + 0 > 8 || v + 0 < -8)) b++ } } END { print b + 0 }' ev1.txt)
+[ "$gm" = "$cm $cg" ] && [ "$gsum" = "$((cg * 2))" ] && [ "$ge" = "$ce" ] && [ "$wbad" = 0 ] && grep -q '^Elo curve' ev1.txt && grep -q '^Conclusion:' ev1.txt && [ "$(awk 'length > 79' ev1.txt ea1.txt | wc -l)" = 0 ] && ! grep -q '\[evolve\.' ev1.txt \
+  && ok "--evolve chess: $cm moves of $cg games replayed and counted (equal to the record), every game counted for both sides ($gsum), the Elo of the first wesen equals the last rating in chess.txt ($ge), no weight outside -8 .. +8, every line <= 79 columns" || bad "evolve chess ('$gm' vs '$cm $cg', games $gsum, elo $ge vs $ce, weights out of range $wbad)"
+# the top list is sorted, the dormant list is not longer than the limit
+tf=$(sed -n '/^Top /,/^$/p' ev1.txt | awk 'NF >= 5 && $1 != "word" && $1 != "Top" { print $3 }'); ts=$(echo "$tf" | sort -rn | tr '\n' ' '); tu=$(echo "$tf" | tr '\n' ' ')
+[ -n "$tf" ] && [ "$ts" = "$tu" ] && [ "$(sed -n '/^Would be dormant first/,/^$/p' ev1.txt | grep -c '^  [a-z]')" -le 16 ] \
+  && ok "--evolve: the top words are listed by falling fitness; the would-be dormant list stays within its limit" || bad "evolve lists ($tu)"
+# make active: with a huge cap nothing goes dormant; with the default cap active + dormant = the other words and the per-session limit is respected
+rm -rf "$w/nt/evd"; mkdir -p "$w/nt/evd"; cp -r "$root/data" "$w/nt/evd/data"; sed -i 's/^evolve.cap = .*/evolve.cap = 100000/' "$w/nt/evd/data/limits.txt"
+( cd "$w/nt/evd" && env -u DIARY_VERBOSE "$nb" --active --home "$ev" > "$w/nt/ea2.txt" 2>&1 )
+aa=$(erow ea1.txt 'would be active'); ad=$(erow ea1.txt 'would be dormant'); ao=$(erow ea1.txt 'other words'); ab=$(erow ea1.txt 'of those: base words'); a2d=$(erow ea2.txt 'would be dormant'); a2a=$(erow ea2.txt 'would be active'); a2o=$(erow ea2.txt 'other words')
+ns=$(grep -c '^S[0-9]' "$ev/diaries/sessions.txt")
+[ "$((aa + ad))" = "$ao" ] && [ "$ab" -le "$aa" ] && [ "$ad" -le "$((40 * 4 * ns))" ] && [ "$a2d" = 0 ] && [ "$a2a" = "$a2o" ] && grep -q '^By kind' ea1.txt && grep -q '^Conclusion:' ea1.txt \
+  && ok "--active: active $aa + dormant $ad = the $ao words; the base words ($ab) stay active; at most 40 words per wesen and session go ($ad of $((40 * 4 * ns)) possible in $ns sessions); with evolve.cap = 100000 none goes ($a2d)" || bad "active ($aa + $ad vs $ao, base $ab, huge cap $a2d $a2a $a2o)"
+rm -rf "$w/nt/emp"; mkdir -p "$w/nt/emp"; env -u DIARY_VERBOSE "$nb" --evolve --home "$w/nt/emp" > eme.txt 2>&1; rcm=$?
+[ "$rcm" = 2 ] && grep -q 'no word lists yet' eme.txt && [ -z "$(find "$w/nt/emp" -name 'words.txt')" ] \
+  && ok "--evolve on a folder without word lists: one clear line, exit 2, nothing created" || bad "evolve empty ($rcm: $(head -c 100 eme.txt))"
+grep -q 'make evolve' "$root/Makefile" && grep -q '^evolve: all' "$root/Makefile" && grep -q '^active: all' "$root/Makefile" && grep -q -- '--evolve' "$root/data/help.txt" && grep -q -- '--active' "$root/data/help.txt" && grep -q 'make evolve' "$root/README.md" && grep -q 'evolve.cap' "$root/data/limits.txt" && grep -q 'make evolve' "$root/docs/EVOLVE.md" \
+  && ok "README, Makefile, --help, data/limits.txt and docs/EVOLVE.md describe make evolve and make active" || bad "evolve docs"
 cd "$w" || exit 1
 
 

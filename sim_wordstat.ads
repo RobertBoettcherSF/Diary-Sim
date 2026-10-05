@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 --  The vocabulary report (make wordstat, --wordstat): READ-ONLY.  The caller feeds the lines of entities/<id>/words.txt and of the diaries
 --  (screens, votes, petitions, dictionary) in; this package sorts every known word of every wesen into one kind (start, world, taught,
 --  screen, coined, chess coordinate, number, other), decides whether it was used again after it was learned, whether the dictionary agreed
@@ -6,6 +6,8 @@
 --  nothing is simulated, no dice: the numbers are counts over the files, so the same files always give the same report.
 --  PROOF-LATER: Importance 2/10, Urgency 1/10, SPARK2 (bounded counting, string slices within bounds)
 pragma Ada_2022;
+
+with Sim_Evolve;
 
 package Sim_Wordstat is
 
@@ -49,8 +51,20 @@ package Sim_Wordstat is
    --  One line of entities/<id>/words.txt: "<id> <word> <how> <tick> [extra]".
    procedure Add_Word (E : Positive; Id : Positive; Text, How : String; Tick : Natural; Extra : String);
    --  The wesen used the word again (a screen action, a vote, a petition, the dictionary, a notebook): counts only after the learning tick.
-   procedure Seen_Id (E : Positive; Id : Positive; Tick : Natural);
-   procedure Seen_Text (E : Positive; Text : String; Tick : Natural);
+   --  Why: a plain mention, a mention in a granted petition, or the meaning of an agreed dictionary entry (the points of docs/EVOLVE.md 3.1).
+   procedure Seen_Id (E : Positive; Id : Positive; Tick : Natural; Why : Sim_Evolve.Event_Kind := Sim_Evolve.Mention);
+   procedure Seen_Text (E : Positive; Text : String; Tick : Natural; Why : Sim_Evolve.Event_Kind := Sim_Evolve.Mention);
+   --  What was fed in, for make evolve: the words of a wesen in file order, and the log of every later use.
+   function Word_Count (E : Positive) return Natural;
+   function Word_Text (E : Positive; Index : Positive) return String;
+   function Word_Kind (E : Positive; Index : Positive) return Kind;
+   function Word_Tick (E : Positive; Index : Positive) return Natural;
+   type Log_Event is record
+      E, Index, Tick : Natural := 0;
+      Why : Sim_Evolve.Event_Kind := Sim_Evolve.Mention;
+   end record;
+   function Event_Count return Natural;
+   function Event_At (N : Positive) return Log_Event;
    --  The dictionary agreed a meaning for the word text at Tick.  Agreed names are NOT added to the wesen's word lists by the program; a word list
    --  only holds such a text if the world minted the same letters later.
    procedure Agree (Text : String; Tick : Natural);

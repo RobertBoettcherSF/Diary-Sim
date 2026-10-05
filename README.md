@@ -256,6 +256,27 @@ A line input under the voices, in `make night` on a terminal and in a session of
   (150), `chat.session_ticks`, `chat.tps`, `chat.trend_step`, `chat.trend_max`, `chat.log_tail`, and for the voices `voice.shown_chat`.
 * **Layout** (24 rows): header 6 + tables 10 + hint 1 + one voice (2 lines) + night status line 1 + chat window 2 + input line 1 + 1 free row.
 
+## The evolution preview (`make evolve`, `make active`; read-only, docs/EVOLVE.md)
+
+    make evolve        # word fitness, the words that would go dormant, the chess weight tables, the Elo curve
+    make active        # how many words each wesen would keep active under a cap of 500
+
+Nothing is retired, learned or changed: both commands only count over the files (`entities/*/words.txt`, the diaries) and write nothing, so they work on every
+save today (`--evolve`, `--active`; wording in `data/evolve.txt`, every number in `data/limits.txt` `evolve.*`; every line at most 79 columns).
+
+* **Words.** Each word gets a **fitness** per session: the running average of its points (a mention on a screen, in a vote, in a petition or notebook line: 1 each, at most 5 a
+  session; a mention in a *granted* petition: 3; the meaning of an agreed dictionary entry: 5 once). A word whose fitness is at or under `evolve.line10` (0.3 points a session)
+  for `evolve.idle_sessions` (6) sessions in a row, after `evolve.probation` (3) sessions, **would** go dormant: at most `evolve.retire_max` (40) per session and wesen, never a base
+  word, never below `evolve.min_active` (300). Chess and number strings are symbols and left out. The report lists the top words by fitness, the first words that would go, how many
+  dormant words were used again later (they would wake), and how many words are idle but kept by the floor.
+* **Chess.** The moves of `diaries/chess.txt` are replayed with `sim_chess` and counted by feature (35: the piece moved or taken, check, castling, promotion, centre, ring, pawn
+  two-step, development, king walk, 16 opening buckets). The table each of the 7 competitors **would** hold after learning from its games is worked out with the rules of
+  docs/EVOLVE.md 4.2 (credit for what was *different* from the competitor's usual use of a feature, win +, loss -, double for an Elo change of `evolve.big_elo`; each weight within
+  -8 .. +8, at most 3 per session and 12 in all). There is no mutation, decay or copying in the preview (they need dice). The Elo curve is the rating after the last game of every
+  session, as a bar over the last `evolve.curve` (30) sessions. The conclusion says how many changes ran into the limit of the table.
+* **`make active`** is the same word rule with a cap: above `evolve.cap` (500) active words the lowest fitness goes first, at most 40 a session; it prints known, symbols, base
+  words, active, dormant, the session in which the cap is reached, the split by kind and how many dormant words were used again later.
+
 ## The vocabulary report (`make wordstat`, `--wordstat`; read-only, also in `make share`)
 
     make wordstat      # per wesen and total: how many words are known, and where they came from

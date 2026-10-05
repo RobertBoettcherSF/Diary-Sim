@@ -54,6 +54,12 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
                again or not, the dictionary (agreed, rejected, announced),
                lengths, prefix/suffix variants, a conclusion (make wordstat;
                data/wordstat.txt; read-only)
+--evolve       the evolution preview, read-only (make evolve): word fitness,
+               the words that would go dormant, the chess weight table each
+               competitor would hold after its games, the Elo curve
+               (docs/EVOLVE.md; data/evolve.txt, limits.txt evolve.*)
+--active       the active-vocabulary preview, read-only (make active): how many
+               words each wesen would keep active under a cap of evolve.cap
 --voices       the four wesen messages the night header shows (make voices;
                data/voices.txt; read-only)
 --verify       replay the whole history from the files and compare it with

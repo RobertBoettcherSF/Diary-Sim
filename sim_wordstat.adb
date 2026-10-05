@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 --  See sim_wordstat.ads.  Read-only counting over strings; no I/O here.
 pragma Ada_2022;
 
@@ -36,6 +36,8 @@ package body Sim_Wordstat is
    end record;
 
    Ents : array (1 .. Max_Ent) of Ent_Data;
+   package Log_Vectors is new Ada.Containers.Vectors (Positive, Log_Event);
+   Log : Log_Vectors.Vector;
    Symbols_Tick : Integer := -1;   --  start of the first symbols=1 session (-1: none)
    Agreed_Set : Tick_Maps.Map;   --  agreed text -> tick of the first agreement
    Min_Stem : Natural := 3;
@@ -76,6 +78,7 @@ package body Sim_Wordstat is
          E.By_Text.Clear;
       end loop;
       Agreed_Set.Clear;
+      Log.Clear;
       Symbols_Tick := -1;
       Min_Stem := Natural'Max (1, Stem_Min);
       Class_Edges := Edges;
@@ -95,20 +98,30 @@ package body Sim_Wordstat is
       if not Ents (E).By_Text.Contains (Text) then Ents (E).By_Text.Insert (Text, Positive (Ents (E).Words.Length)); end if;
    end Add_Word;
 
-   procedure Mark (E : Positive; Index : Positive; Tick : Natural) is
+   procedure Mark (E : Positive; Index : Positive; Tick : Natural; Why : Sim_Evolve.Event_Kind) is
    begin
-      if Tick > Ents (E).Words (Index).Tick then Ents (E).Words (Index).Used := True; end if;
+      if Tick > Ents (E).Words (Index).Tick then
+         Ents (E).Words (Index).Used := True;
+         Log.Append (Log_Event'(E => E, Index => Index, Tick => Tick, Why => Why));
+      end if;
    end Mark;
 
-   procedure Seen_Id (E : Positive; Id : Positive; Tick : Natural) is
+   procedure Seen_Id (E : Positive; Id : Positive; Tick : Natural; Why : Sim_Evolve.Event_Kind := Sim_Evolve.Mention) is
    begin
-      if E <= Max_Ent and then Ents (E).By_Id.Contains (Id) then Mark (E, Ents (E).By_Id (Id), Tick); end if;
+      if E <= Max_Ent and then Ents (E).By_Id.Contains (Id) then Mark (E, Ents (E).By_Id (Id), Tick, Why); end if;
    end Seen_Id;
 
-   procedure Seen_Text (E : Positive; Text : String; Tick : Natural) is
+   procedure Seen_Text (E : Positive; Text : String; Tick : Natural; Why : Sim_Evolve.Event_Kind := Sim_Evolve.Mention) is
    begin
-      if E <= Max_Ent and then Ents (E).By_Text.Contains (Text) then Mark (E, Ents (E).By_Text (Text), Tick); end if;
+      if E <= Max_Ent and then Ents (E).By_Text.Contains (Text) then Mark (E, Ents (E).By_Text (Text), Tick, Why); end if;
    end Seen_Text;
+
+   function Word_Count (E : Positive) return Natural is (if E <= Max_Ent then Natural (Ents (E).Words.Length) else 0);
+   function Word_Text (E : Positive; Index : Positive) return String is (To_String (Ents (E).Words (Index).Text));
+   function Word_Kind (E : Positive; Index : Positive) return Kind is (Ents (E).Words (Index).K);
+   function Word_Tick (E : Positive; Index : Positive) return Natural is (Ents (E).Words (Index).Tick);
+   function Event_Count return Natural is (Natural (Log.Length));
+   function Event_At (N : Positive) return Log_Event is (Log (N));
 
    procedure Agree (Text : String; Tick : Natural) is
    begin

@@ -1,7 +1,7 @@
-# Evolutionary pressure on words and on chess (design only, nothing built)
-Version: 0.002
+# Evolutionary pressure on words and on chess (previews built, the rest design)
+Version: 0.003
 
-Build state: **step 1 (`symbols=1`) is built** (build 0.047, section 9); everything else is design only.
+Build state: **step 1 (`symbols=1`) is built** (build 0.047), **step 2 (`make evolve`) and step 3 (`make active`) are built as read-only previews** (build 0.048, sections 9 and 12); everything else is design only.
 
 Status: **proposal for Robert**. No code for any of this exists; every number below is a *proposed default* that lives in `data/` when
 built, and every decision is open until Robert answers section 11. Style as `docs/LIFE.md` and `docs/LEARN.md`: what it is, what it is made
@@ -21,6 +21,7 @@ list. Source of the numbers: `make wordstat` and `diaries/chess.txt` of a real 2
 9. Build order and checks
 10. Risks and bounds
 11. Open questions for Robert (recommended answer first)
+12. What the previews showed (`make evolve`, `make active`)
 
 ## 1. Where we start (measured)
 * **Words** (287 sessions): each wesen knows about 5,400 words (21,414 in all, 6,047 different texts). 58 % are chess strings (coordinates and numbers, 12,605 words
@@ -84,16 +85,15 @@ chess strings that are used "again" only because the screens show them, and fitn
 ## 4. Chess: weights, results, mutation, selection (`evolve=1`)
 **Idea:** each competitor (4 wesen, 3 players; ids 1 .. 7) owns a **small table of integer weights** that nudge the move choice, learns them from its results, mutates them a little, and copies from a winner now and then.
 
-**4.1 The table (`data/evolve_chess.txt`, about 40 numbers per competitor).** Features of a move, all computed from the position by pure functions (`Sim_Chess`): piece moved (6), piece taken (6), gives check, castles,
-promotes, moves to the centre (4 squares) or the ring around it, pawn two-step, a minor piece leaves its back rank (development), king move before castling, and an **opening bucket** (16 values: a hash of the first four plies,
-used for the first six plies of a side). A weight is an integer -8 .. +8; the start value is 0 for all (the table of `data/evolve_chess.txt` may carry a hand-made start per competitor; default all zero).
+**4.1 The table (35 numbers per competitor; the preview in `Sim_Evolve` uses exactly these).** Features of a move, all computed from the position by pure functions (`Sim_Chess`): piece moved (6), piece taken (5: a pawn, knight, bishop, rook or queen), gives check, castles,
+promotes, moves to the centre (4 squares) or the ring around it, pawn two-step, a minor piece leaves its back rank (development), king move in the first 10 moves of a side, and an **opening bucket** (16 values: a hash of the move text, used for the first 3 moves of a side). A weight is an integer -8 .. +8; the start value is 0 for all (a later `data/evolve_chess.txt` may carry a hand-made start per competitor; default all zero).
 **Effect:** `Choose` scores a move `16 * material_after + sum(weights of its features)`, with the total bonus clamped to -12 .. +12, so a weight can order moves of equal or nearly equal value but **never beat a pawn**
 (16) and never beats a mate (160,000). Only the strong branch of `Choose` (chance *strength*) uses the table; the random branch is untouched. **With all weights 0 the order of the scores equals the old order, so the choice,
 the dice and the record are identical to off** (a property the checks assert).
 
 **4.2 Learning from results.** At the end of a game (`C... end`), for each side and for each feature used in its moves of that game (counted again from the recorded move list, pure):
-`delta = sign(result) * min(uses, evolve.use_cap) * step`, with `result` = +1 win, 0 draw, -1 loss (resignation and timeout count as win/loss) and `step` = 1, or 2 when the Elo change of the game was 16 or more
-(an upset teaches more). Changes are collected per session and applied at the session boundary: at most +-`evolve.sess_max` (3) per weight, at most `evolve.sess_total` (12) moves of the table in all. Every session each weight also decays by 1 toward 0 with chance
+`credit = sign(result) * clamp(uses in this game - the competitor's usual uses of the feature, -evolve.use_cap .. +evolve.use_cap) * step` (**as built in the preview**: what was *different* from its usual play is credited; the plain count only rewards long games), with `result` = +1 win, 0 draw, -1 loss (resignation and timeout count as win/loss) and `step` = 1, or 2 when the Elo change of the game was 16 or more
+(an upset teaches more). Changes are collected per session: at most +-`evolve.sess_max` (3) per weight, at most `evolve.sess_total` (12) moves of the table in all, weights within +-`evolve.w_max` (8). The preview has no decay, mutation or copying (they need dice). Every session each weight also decays by 1 toward 0 with chance
 `evolve.decay_pct` (10), so unused habits fade (the slow core of LEARN.md 2 in miniature).
 
 **4.3 Mutation (seeded small tweaks).** At the session boundary each competitor, with chance `evolve.mut_pct` (30, die 20500 .. 20599), picks one weight by die and adds +-1 (die 20600 .. 20699). The tweak is **tentative**: its
@@ -146,7 +146,7 @@ Word fitness and retirement 20000 .. 20099 (ties only), mutation parents and var
 chess mutation pick 20500 .. 20599, chess mutation sign 20600 .. 20699, chess copy 20700 .. 20799, aliases from agreed entries 20800 .. 20849, `symbols=1` 20850 .. 20869 (reserved, it needs no dice), reserved 20870 .. 20999.
 
 ## 9. Build order and checks
-1. **`make evolve` report only** (no marker): word fitness from the existing records, the same counts as `make wordstat`; check = an independent awk count of one wesen's top word and its points.
+1. **`make evolve` report only (BUILT, build 0.048, no marker, no `--fresh`).** Reads the records of any save and writes nothing (a checksum of the save folder is identical before and after; two runs give the same text). Checks (scenario 52): known, symbol and base word counts equal an independent awk count of `words.txt`, active + dormant = the other words, the chess moves and games equal the record, the Elo equals the last rating in `chess.txt`, no weight outside -8 .. +8, every line at most 79 columns, a folder without word lists gives one line and exit 2. **`make active`** (the preview of the 500 cap of LEARN.md 12 (a)) is built on the same code, see section 12.
 2. **`Sim_Evolve` weights, `evolve=1` with all-zero tables**: `Choose` takes a table; check: off byte-identical, on-with-zero byte-identical in the chess record.
 3. **Learning from results** (4.2) + record file + replay verification (`G`, `P`); check: weights stay in bounds, the replay equals the record, a changed line is DRIFT.
 4. **Mutation and revert** (4.3), then **copying** (4.4); check: bounds, determinism (two runs, same bytes), a tampered `M` line is DRIFT.
@@ -185,3 +185,13 @@ Every step: version headers, README and `--help` current, PROOF-LATER labels on 
 9. **Mutation accepted by trial (4.3) or plain drift?** *Recommended:* trial and revert with 6 games. It is a hill climb that is easy to explain in a diary line and easy to bound.
 10. **Retire by fitness only, or by fitness and age?** *Recommended:* fitness for 6 sessions in a row below the floor, after 3 sessions of probation; nothing else decides (as LEARN.md 4: "never by a score" for votes, but here the score is the use record itself, not a vote).
 11. **Control run.** *Recommended:* the A/B in step 5 with the same seed and `evolve=0`, kept as a documented command, not a stored file.
+
+## 12. What the previews showed (build 0.048, `make evolve` and `make active`, read-only)
+The rule of 3 as built: the fitness is a **running average per session** (`fit = (3 * fit + 4 * points) / 4`, kept in tenths, at most `evolve.fit_cap`); a word whose fitness is **at or under** `evolve.line10` (3 tenths: a word must earn more than 0.3 points a session) for `evolve.idle_sessions` (6) sessions in a row, after `evolve.probation` (3) sessions, would go dormant. This replaces the "upkeep of 1 per session" of section 3. Base words never go; `evolve.min_active` (300) is a floor, `evolve.retire_max` (40) a limit per session. `make active` is the same with the cap `evolve.cap` (500) as floor and ceiling: the lowest fitness above the cap goes first. Chess and number strings are symbols and left out of both. The previews use no dice, so no salt is taken.
+
+Measured on the 287-session seed-42 run (old rule, 12,605 chess strings = 58 percent of the words):
+* **The floor binds.** `make evolve` (floor 300): 8,809 other words; the rule would retire 7,609 (86 percent), but every wesen is held at the 300 floor (638 more are "idle, but kept"). Even `evolve.line10 = 1` gives the same count, so the floor decides, not the line. The most used words are wash, gentlyfollow, kano, pick, right, turn, go, none, scaly, look, kine.
+* **A wake rule is needed.** 1,450 words that would be dormant were used again later (13 in a 15-session symbols save), so a dormant word has to wake when it is read again.
+* **Cap of 500.** 500 active words per wesen (2,000 in all), 6,809 dormant, the cap is reached in session 28 (at 40 retirements a session), 952 dormant words were used again later. Active / dormant by kind: start 264 / 0, world 245 / 1,821, taught 1,238 / 3,770, screen 145 / 699, coined 108 / 519. The taught and world words carry most of the pressure.
+* **Chess.** 98,575 moves of 3,519 games were counted again. Weights still saturate at +-8 for several features (credit follows the length of the game) and 185 changes ran into the limit of the table: the 4.2 rule needs a smaller step or a result-only credit before it is switched on. Elo now runs from 1,129 to 1,289.
+* **Speed.** `make evolve` takes about 2.2 s and `make active` 1.4 s on the 287-session save at -O0; a normal run is not changed (the previews are only called by `--evolve` / `--active`).

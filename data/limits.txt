@@ -488,3 +488,32 @@ chat.log_tail = 30
 voice.shown_chat = 1
 # The vocabulary report (make wordstat): shortest stem that makes a word a prefix or suffix variant of another word the wesen knows.
 wordstat.stem_min = 3
+
+# Evolution preview (make evolve, make active; Sim_Evolve, data/evolve.txt, docs/EVOLVE.md): READ-ONLY, nothing here changes a save.
+# Words: points per mention (use_pts), most use points per word and session (word_use_cap), a mention in a granted petition (grant_pts), the meaning of an
+# agreed dictionary entry (agree_pts, once); the fitness is the running average per session, at most fit_cap points.  A word whose fitness is at or under
+# line10 (tenths of a point per session) for idle_sessions sessions in a row, after probation sessions, would go dormant; at most retire_max per session
+# and wesen, never below min_active words, never a base word.  active view: cap active words per wesen.  Lists: top and list lines, curve sessions in the Elo bar.
+# Chess: the table each competitor would hold after learning from the recorded games: a game adds step per use (at most use_cap uses of a feature) for a win,
+# subtracts it for a loss, twice as much for an Elo change of big_elo or more; a weight stays within -w_max .. w_max, moves at most sess_max in a session
+# and sess_total in all.
+evolve.use_pts = 1
+evolve.word_use_cap = 5
+evolve.grant_pts = 3
+evolve.agree_pts = 5
+evolve.fit_cap = 200
+evolve.line10 = 3
+evolve.probation = 3
+evolve.idle_sessions = 6
+evolve.retire_max = 40
+evolve.min_active = 300
+evolve.cap = 500
+evolve.top = 15
+evolve.list = 15
+evolve.curve = 30
+evolve.use_cap = 3
+evolve.step = 1
+evolve.big_elo = 16
+evolve.w_max = 8
+evolve.sess_max = 3
+evolve.sess_total = 12

@@ -1,4 +1,4 @@
---  Version: 0.047
+--  Version: 0.048
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -28,7 +28,7 @@ pragma Ada_2022;
 
 with Ada.Calendar, Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Finalization, Ada.Strings.Fixed, Ada.Streams.Stream_IO, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
-     GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chat, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Records, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Trial, Sim_Util, Sim_Visit, Sim_Voice, Sim_Wordstat, Sim_World;
+     GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chat, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Records, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Trial, Sim_Util, Sim_Visit, Sim_Voice, Sim_Wordstat, Sim_Evolve, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
 
 procedure Diary_Sim is
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.047";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.048";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -274,6 +274,8 @@ procedure Diary_Sim is
    --  chat=1 sessions (Sim_Chat): Robert's typed lines and every answer are C lines of diaries/chat.txt (record-first, replay-verified)
    Chat_Mode : Boolean := False;                 --  --chat / make chat: one session with the input line, paced
    Chat_Script_Opt : Unbounded_String;           --  --chat-script FILE: lines "<ticks into the session> <text>" typed by a script (tests)
+   Evolve_Mode : Boolean := False;               --  --evolve / make evolve: the evolution preview (read-only; Sim_Evolve, docs/EVOLVE.md)
+   Active_Mode : Boolean := False;               --  --active / make active: the active-vocabulary preview with a cap (read-only)
    Wordstat_Mode : Boolean := False;             --  --wordstat / make wordstat: the vocabulary report (read-only)
    Chatlog_Mode : Boolean := False;              --  --chatlog / make chatlog: the last chat lines
    Chat_Active : Boolean := False;               --  the session being replayed is a chat=1 session
@@ -461,7 +463,7 @@ procedure Diary_Sim is
       Read_Lines (Data_Path ("limits.txt"), Lines, Found);
       if not Found then Warn (Msg ("warn.limits_file")); end if;
       Read_Lines (Data_Path ("menu.txt"), Lines, Found);   --  menu text: keys only, a missing file shows the keys
-      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt", "screens.txt", "chess.txt", "robot.txt", "govern.txt", "preport.txt", "ticks.txt", "visit.txt", "voices.txt", "wordstat.txt", "chat.txt", "trial.txt", "records.txt"]) loop   --  the Buddhism layer: numbers, wording, players
+      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt", "screens.txt", "chess.txt", "robot.txt", "govern.txt", "preport.txt", "ticks.txt", "visit.txt", "voices.txt", "wordstat.txt", "evolve.txt", "chat.txt", "trial.txt", "records.txt"]) loop   --  the Buddhism layer: numbers, wording, players
          Read_Lines (Data_Path (F), Lines, Found);
          if not Found then Warn (Msg ("warn.dharma_file", F)); end if;
       end loop;
@@ -1765,7 +1767,7 @@ procedure Diary_Sim is
    --  leave, blend by the wesen), diaries/dictionary.txt (word= and mean= of its proposals; st=A is the agreed meaning), diaries/votes.txt
    --  (kind=favourite choices), diaries/petitions.txt (the words of req=), entities/<id>/notebook.txt (if there is one).
    --  PROOF-LATER: Importance 2/10, Urgency 1/10, SPARK2 (percent arithmetic on counts, bounded slices)
-   procedure Print_Wordstat is
+   procedure Print_Wordstat (Evolve, Active : Boolean := False) is
       Lines : Str_Vectors.Vector;
       Found : Boolean;
       Name_W : constant := 36;   --  label column
@@ -1818,7 +1820,7 @@ procedure Diary_Sim is
          end loop;
       end Ids;
 
-      procedure Texts (E : Natural; List : String; Tick : Natural) is   --  letters and digits make a word, anything else separates
+      procedure Texts (E : Natural; List : String; Tick : Natural; Why : Sim_Evolve.Event_Kind := Sim_Evolve.Mention) is   --  letters and digits make a word, anything else separates
          From : Natural := 0;
       begin
          if E = 0 then return; end if;
@@ -1826,7 +1828,7 @@ procedure Diary_Sim is
             if I <= List'Last and then List (I) in 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | Character'Val (128) .. Character'Val (255) then
                if From = 0 then From := I; end if;
             else
-               if From /= 0 then Sim_Wordstat.Seen_Text (E, Ada.Characters.Handling.To_Lower (List (From .. I - 1)), Tick); end if;
+               if From /= 0 then Sim_Wordstat.Seen_Text (E, Ada.Characters.Handling.To_Lower (List (From .. I - 1)), Tick, Why); end if;
                From := 0;
             end if;
          end loop;
@@ -1886,6 +1888,429 @@ procedure Diary_Sim is
       procedure Row_Prefix is new Row (Prefix_Of);
       procedure Row_Suffix is new Row (Suffix_Of);
       procedure Row_Any is new Row (Any_Of);
+
+      --  ---- --evolve / --active: the evolution preview (Sim_Evolve, data/evolve.txt); READ-ONLY ---------------------------------
+      procedure Evolve_Report (Active_View : Boolean) is
+         function Lm (Key : String; D : Natural) return Natural is (Natural (Int'Max (0, Limit (Key, Int (D)))));
+         Starts : Sim_Evolve.Int_Vectors.Vector;
+         Pw : Sim_Evolve.Word_Params;
+         Pc : Sim_Evolve.Chess_Params;
+         Tw : array (Entity_Id) of Sim_Evolve.Word_Totals;
+         use type Sim_Wordstat.Kind;
+         Cap_N : constant Natural := Lm ("evolve.cap", 500);
+         Top_N : constant Natural := Lm ("evolve.top", 15);
+         List_N : constant Natural := Lm ("evolve.list", 15);
+         Curve_N : constant Natural := Lm ("evolve.curve", 30);
+
+         type Sel is (S_Known, S_Symbols, S_Plain, S_Base, S_Active, S_Held, S_Dormant, S_Woken, S_Avg, S_Cap);
+         function Pick (T : Sim_Evolve.Word_Totals; S : Sel) return Natural is
+           (case S is
+               when S_Known => T.Known, when S_Symbols => T.Symbols, when S_Plain => T.Known - T.Symbols, when S_Base => T.Base,
+               when S_Active => T.Active, when S_Held => T.Held, when S_Dormant => T.Dormant, when S_Woken => T.Woken_Later,
+               when S_Avg => (if T.Active = 0 then 0 else T.Fit10_Sum / T.Active), when S_Cap => T.Cap_Reached);
+
+         procedure Erow (Label : String; S : Sel) is
+            Line : Unbounded_String := To_Unbounded_String (Pad_R (Label, Name_W));
+            Sum, Fit, Act : Natural := 0;
+         begin
+            for E in Entity_Id loop
+               Append (Line, Pad_L ((if S = S_Cap and then Pick (Tw (E), S) = 0 then "-" else Img (Pick (Tw (E), S))), Cell_W));
+               Sum := Sum + Pick (Tw (E), S);
+               Fit := Fit + Tw (E).Fit10_Sum;
+               Act := Act + Tw (E).Active;
+            end loop;
+            Append (Line, Pad_L ((if S = S_Cap then "" elsif S = S_Avg then Img (Integer (if Act = 0 then 0 else Fit / Act)) else Img (Integer (Sum))), Total_W));
+            Put (To_String (Line));
+         end Erow;
+
+         function Cname (C : Sim_Games.Comp_Id) return String is   --  the id of a chess competitor as the record writes it (wesen 1 .. 4, players 5 .. 7)
+           (if C <= 4 then Name (Entity_Id (C)) else Msg ("evolve.comp." & Img (C)));
+         function Sgn (N : Integer) return String is
+           (if N > 0 then "+" & Img (Int (N)) elsif N < 0 then "-" & Img (Int (-N)) else ".");
+         function Fit_Img (N : Natural) return String is (Img (N / 10) & "." & Img (N mod 10));
+
+         type Pair is record E : Natural := 0; I : Natural := 0; end record;
+         package Pair_Vectors is new Ada.Containers.Vectors (Positive, Pair);
+
+         function Chosen (V : Pair_Vectors.Vector; E, I : Natural) return Boolean is
+         begin
+            for P of V loop if P.E = E and then P.I = I then return True; end if; end loop;
+            return False;
+         end Chosen;
+
+         procedure Head_Line is
+            H : Unbounded_String := To_Unbounded_String (Pad_R ("", Name_W));
+         begin
+            for E in Entity_Id loop Append (H, Pad_L (Sim_World.Show (Name (E)), Cell_W)); end loop;
+            Append (H, Pad_L (Msg ("evolve.col.total"), Total_W));
+            Put (To_String (H));
+         end Head_Line;
+
+         procedure Load_And_Run is
+         begin
+            Lines.Clear;
+            Read_Lines ("diaries/sessions.txt", Lines, Found);
+            for L of Lines loop
+               if L'Length > 1 and then L (L'First) = 'S' and then Token (L, "start") /= "" then
+                  Starts.Append (Integer (Num (Token (L, "start"))));
+               end if;
+            end loop;
+            if Starts.Is_Empty or else Starts.First_Element > 0 then Starts.Prepend (0); end if;
+            Pw := (Use_Pts => Lm ("evolve.use_pts", 1), Use_Cap => Lm ("evolve.word_use_cap", 5), Grant_Pts => Lm ("evolve.grant_pts", 3),
+                   Agree_Pts => Lm ("evolve.agree_pts", 5), Line10 => Lm ("evolve.line10", 3), Fit_Cap => Lm ("evolve.fit_cap", 200),
+                   Probation => Lm ("evolve.probation", 3), Idle => Lm ("evolve.idle_sessions", 6), Retire_Max => Lm ("evolve.retire_max", 40),
+                   Min_Active => (if Active_View then Cap_N else Lm ("evolve.min_active", 300)), Cap => (if Active_View then Cap_N else 0));
+            Sim_Evolve.Words_Reset (Pw, Starts);
+            for E in Entity_Id loop
+               for I in 1 .. Sim_Wordstat.Word_Count (Positive (E)) loop
+                  declare
+                     K : constant Sim_Wordstat.Kind := Sim_Wordstat.Word_Kind (Positive (E), I);
+                  begin
+                     Sim_Evolve.Add_Word (Positive (E), Sim_Wordstat.Word_Tick (Positive (E), I), K = Sim_Wordstat.Start, K in Sim_Wordstat.Chess | Sim_Wordstat.Number);
+                  end;
+               end loop;
+            end loop;
+            for J in 1 .. Sim_Wordstat.Event_Count loop
+               declare
+                  Ev : constant Sim_Wordstat.Log_Event := Sim_Wordstat.Event_At (J);
+               begin
+                  Sim_Evolve.Add_Event (Ev.E, Ev.Index, Ev.Tick, Ev.Why);
+               end;
+            end loop;
+            Sim_Evolve.Words_Run;
+            for E in Entity_Id loop Tw (E) := Sim_Evolve.Totals (Positive (E)); end loop;
+         end Load_And_Run;
+
+         Sum_Known, Sum_Sym, Sum_Dorm, Sum_Woken, Sum_Active : Natural := 0;
+         Best_E, Best_I : Natural := 0;
+         Chess_Found : Boolean := False;
+         Big_W : Integer := 0;
+         Big_C, Big_F : Natural := 0;
+         Elo_Lo, Elo_Hi : Natural := 0;
+         Games_Total : Natural := 0;
+      begin
+         Load_And_Run;
+         for E in Entity_Id loop
+            Sum_Known := Sum_Known + Tw (E).Known;
+            Sum_Sym := Sum_Sym + Tw (E).Symbols;
+            Sum_Dorm := Sum_Dorm + Tw (E).Dormant;
+            Sum_Woken := Sum_Woken + Tw (E).Woken_Later;
+            Sum_Active := Sum_Active + Tw (E).Active;
+         end loop;
+         if Active_View then
+            for L of Sim_Voice.Wrap (Msg ("evolve.a.title", Img (Cap_N), Img (Per (0).Last_Tick), Img (Sim_Evolve.Sessions)), 79) loop Put (L); end loop;
+            TIO.New_Line;
+            for L of Sim_Voice.Wrap (Msg ("evolve.a.rules", Img (Cap_N), Img (Lm ("evolve.retire_max", 40))), 79) loop Put (L); end loop;
+            TIO.New_Line;
+            Put (Msg ("evolve.a.sec"));
+            Head_Line;
+            Erow ("  " & Msg ("evolve.l.known"), S_Known);
+            Erow ("  " & Msg ("evolve.l.symbols"), S_Symbols);
+            Erow ("  " & Msg ("evolve.l.plain"), S_Plain);
+            Erow ("  " & Msg ("evolve.l.base"), S_Base);
+            Erow ("  " & Msg ("evolve.l.active"), S_Active);
+            Erow ("  " & Msg ("evolve.l.held"), S_Held);
+            Erow ("  " & Msg ("evolve.l.dormant"), S_Dormant);
+            Erow ("  " & Msg ("evolve.l.woken"), S_Woken);
+            Erow ("  " & Msg ("evolve.l.cap"), S_Cap);
+            TIO.New_Line;
+            Put (Msg ("evolve.a.sec.kind"));
+            Put (Msg ("evolve.a.kind.head"));
+            for K in Sim_Wordstat.Start .. Sim_Wordstat.Coined loop
+               declare
+                  A, D : Natural := 0;
+               begin
+                  for E in Entity_Id loop
+                     for I in 1 .. Sim_Wordstat.Word_Count (Positive (E)) loop
+                        if Sim_Wordstat.Word_Kind (Positive (E), I) = K then
+                           if Sim_Evolve.Result (Positive (E), I).Dormant_In = 0 then A := A + 1; else D := D + 1; end if;
+                        end if;
+                     end loop;
+                  end loop;
+                  Put (Pad_R ("  " & Msg ("wordstat.k." & Ada.Characters.Handling.To_Lower (Sim_Wordstat.Kind'Image (K))), Name_W + 3) & Pad_L (Img (A), 7) & Pad_L (Img (D), 9));
+               end;
+            end loop;
+            TIO.New_Line;
+            declare
+               Cap_Max : Natural := 0;
+               Per_E : constant Natural := Sum_Active / Entity_Id'Pos (Entity_Id'Last);
+            begin
+               for E in Entity_Id loop Cap_Max := Natural'Max (Cap_Max, Tw (E).Cap_Reached); end loop;
+               Put (Msg ("evolve.concl.head"));
+               for L of Sim_Voice.Wrap ((if Cap_Max > 0 then Msg ("evolve.a.concl", Img (Cap_N), Img (Per_E), Img (Sum_Active), Img (Sum_Dorm), Img (Cap_Max), Img (Sum_Woken), Img (Tw (Entity_Id'First).Base))
+                                         else Msg ("evolve.a.concl.never", Img (Cap_N), Img (Per_E), Img (Sum_Active), Img (Sum_Dorm), Img (Sum_Woken))), 79) loop
+                  Put (L);
+               end loop;
+            end;
+            return;
+         end if;
+         --  ---- the words
+         for L of Sim_Voice.Wrap (Msg ("evolve.title", Img (Per (0).Last_Tick), Img (Sim_Evolve.Sessions)), 79) loop Put (L); end loop;
+         TIO.New_Line;
+         for L of Sim_Voice.Wrap (Msg ("evolve.rules", Fit_Img (Pw.Line10), Img (Pw.Idle), Img (Pw.Probation), Img (Pw.Retire_Max), Img (Pw.Min_Active)), 79) loop Put (L); end loop;
+         TIO.New_Line;
+         Put (Msg ("evolve.sec.words"));
+         Head_Line;
+         Erow ("  " & Msg ("evolve.l.known"), S_Known);
+         Erow ("  " & Msg ("evolve.l.symbols"), S_Symbols);
+         Erow ("  " & Msg ("evolve.l.plain"), S_Plain);
+         Erow ("  " & Msg ("evolve.l.base"), S_Base);
+         Erow ("  " & Msg ("evolve.l.active"), S_Active);
+         Erow ("  " & Msg ("evolve.l.held"), S_Held);
+         Erow ("  " & Msg ("evolve.l.dormant"), S_Dormant);
+         Erow ("  " & Msg ("evolve.l.woken"), S_Woken);
+         Erow ("  " & Msg ("evolve.l.avg"), S_Avg);
+         TIO.New_Line;
+         Put (Msg ("evolve.sec.top", Img (Top_N)));
+         Put (Msg ("evolve.top.head"));
+         declare
+            Done : Pair_Vectors.Vector;
+         begin
+            for N in 1 .. Top_N loop
+               declare
+                  B : Pair := (0, 0);
+                  Bf : Integer := -1;
+               begin
+                  for E in Entity_Id loop
+                     for I in 1 .. Sim_Wordstat.Word_Count (Positive (E)) loop
+                        declare
+                           R : constant Sim_Evolve.Word_Result := Sim_Evolve.Result (Positive (E), I);
+                        begin
+                           if not Sim_Evolve.Is_Symbol (Positive (E), I) and then R.Dormant_In = 0 and then Integer (R.Fit10) > Bf
+                             and then not Chosen (Done, Natural (E), I)
+                           then
+                              Bf := Integer (R.Fit10);
+                              B := (Natural (E), I);
+                           end if;
+                        end;
+                     end loop;
+                  end loop;
+                  exit when B.E = 0;
+                  Done.Append (B);
+                  if Best_E = 0 then Best_E := B.E; Best_I := B.I; end if;
+                  declare
+                     R : constant Sim_Evolve.Word_Result := Sim_Evolve.Result (B.E, B.I);
+                  begin
+                     Put ("  " & Pad_R (Sim_Wordstat.Word_Text (B.E, B.I), 20) & Pad_R (Sim_World.Show (Name (Entity_Id (B.E))), 8) & Pad_L (Fit_Img (R.Fit10), 8)
+                          & Pad_L (Img (R.Uses), 7) & Pad_L (Img (R.Sessions), 9));
+                  end;
+               end;
+            end loop;
+            if Done.Is_Empty then Put (Msg ("evolve.none")); end if;
+         end;
+         TIO.New_Line;
+         Put (Msg ("evolve.sec.dorm", Img (List_N)));
+         Put (Msg ("evolve.dorm.head"));
+         declare
+            Done : Pair_Vectors.Vector;
+         begin
+            for N in 1 .. List_N loop
+               declare
+                  B : Pair := (0, 0);
+                  Bf : Integer := Integer'Last;
+               begin
+                  for E in Entity_Id loop
+                     for I in 1 .. Sim_Wordstat.Word_Count (Positive (E)) loop
+                        declare
+                           R : constant Sim_Evolve.Word_Result := Sim_Evolve.Result (Positive (E), I);
+                        begin
+                           if R.Dormant_In > 0 and then Integer (R.Fit_Then) < Bf and then not Chosen (Done, Natural (E), I) then
+                              Bf := Integer (R.Fit_Then);
+                              B := (Natural (E), I);
+                           end if;
+                        end;
+                     end loop;
+                  end loop;
+                  exit when B.E = 0;
+                  Done.Append (B);
+                  declare
+                     R : constant Sim_Evolve.Word_Result := Sim_Evolve.Result (B.E, B.I);
+                  begin
+                     Put ("  " & Pad_R (Sim_Wordstat.Word_Text (B.E, B.I), 20) & Pad_R (Sim_World.Show (Name (Entity_Id (B.E))), 8) & Pad_L (Fit_Img (R.Fit_Then), 8)
+                          & Pad_L (Img (R.Uses), 7) & Pad_L (Img (R.Dormant_In), 17));
+                  end;
+               end;
+            end loop;
+            if Done.Is_Empty then Put (Msg ("evolve.none")); end if;
+         end;
+         TIO.New_Line;
+         --  ---- chess
+         Pc := (Use_Cap => Lm ("evolve.use_cap", 3), Step => Lm ("evolve.step", 1), Big_Elo => Lm ("evolve.big_elo", 16), W_Max => Lm ("evolve.w_max", 8),
+                Sess_Max => Lm ("evolve.sess_max", 3), Sess_Total => Lm ("evolve.sess_total", 12), Elo_Start => Lm ("elo.start", 1200));
+         Sim_Evolve.Chess_Reset (Pc, Starts);
+         Lines.Clear;
+         Read_Lines ("diaries/chess.txt", Lines, Found);
+         for L of Lines loop
+            if L'Length > 1 and then L (L'First) = 'C' then
+               declare
+                  Op : constant String := Nth (L, 4);
+                  G : constant Natural := Num (Token (L, "g"));
+                  T : constant Natural := Num (Token (L, "t"));
+
+                  function Comp_Of (S : String) return Natural is
+                  begin
+                     for C in Sim_Games.Comp_Id loop
+                        if Cname (C) = S then return C; end if;
+                     end loop;
+                     return 0;
+                  end Comp_Of;
+               begin
+                  if G > 0 and then Op = "start" then
+                     Chess_Found := True;
+                     if Comp_Of (Token (L, "white")) > 0 and then Comp_Of (Token (L, "black")) > 0 then
+                        Sim_Evolve.Chess_Start (G, Comp_Of (Token (L, "white")), Comp_Of (Token (L, "black")));
+                     end if;
+                  elsif G > 0 and then Op = "move" then
+                     Sim_Evolve.Chess_Move (G, Nth (L, 7));
+                  elsif G > 0 and then Op = "end" then
+                     declare
+                        Elo_At_Pos : constant Natural := Fx.Index (L, " elo ");
+                        White_Name : constant String := "";
+                        Res : constant String := Nth (L, 5);
+                        Delta_W : Integer := 0;
+                        Rest : constant String := (if Elo_At_Pos = 0 then "" else L (Elo_At_Pos + 5 .. L'Last));
+                        Pos : Natural := Rest'First;
+                        pragma Unreferenced (White_Name);
+                     begin
+                        --  "name=before>after name=before>after": the rating after the game, and the change of the first one named
+                        while Pos <= Rest'Last loop
+                           declare
+                              Stop : constant Natural := (if Fx.Index (Rest, " ", Pos) = 0 then Rest'Last + 1 else Fx.Index (Rest, " ", Pos));
+                              Tok : constant String := Rest (Pos .. Stop - 1);
+                              Eq : constant Natural := Fx.Index (Tok, "=");
+                              Gt : constant Natural := Fx.Index (Tok, ">");
+                           begin
+                              if Eq > 0 and then Gt > Eq then
+                                 declare
+                                    C : constant Natural := Comp_Of (Tok (Tok'First .. Eq - 1));
+                                    After : constant Natural := Num (Tok (Gt + 1 .. Tok'Last));
+                                    Before : constant Natural := Num (Tok (Eq + 1 .. Gt - 1));
+                                 begin
+                                    if C > 0 and then After > 0 then Sim_Evolve.Elo_Point (C, T, After); end if;
+                                    if Pos = Rest'First then Delta_W := Integer (After) - Integer (Before); end if;   --  white is named first
+                                 end;
+                              end if;
+                              Pos := Stop + 1;
+                           end;
+                        end loop;
+                        Sim_Evolve.Chess_End (G, T, (if Res = "1-0" then 1 elsif Res = "0-1" then -1 else 0), Delta_W);
+                     end;
+                  end if;
+               end;
+            end if;
+         end loop;
+         Sim_Evolve.Chess_Finish;
+         for L of Sim_Voice.Wrap (Msg ("evolve.sec.chess"), 79) loop Put (L); end loop;
+         if not Chess_Found then
+            Put (Msg ("evolve.chess.none"));
+         else
+            for L of Sim_Voice.Wrap (Msg ("evolve.chess.cap", Img (Pc.W_Max), Img (Pc.Sess_Max), Img (Pc.Sess_Total), Img (Pc.Big_Elo)), 77) loop Put ("  " & L); end loop;
+            declare
+               H : Unbounded_String := To_Unbounded_String (Pad_R ("", 22));
+            begin
+               for C in Sim_Games.Comp_Id loop Append (H, Pad_L (Sim_World.Show (Cname (C)), 8)); end loop;
+               Put (To_String (H));
+            end;
+            for F in Sim_Evolve.Feature loop
+               declare
+                  Line : Unbounded_String := To_Unbounded_String (Pad_R ("  " & Msg ("evolve.f." & Img (F)), 22));
+               begin
+                  for C in Sim_Games.Comp_Id loop
+                     Append (Line, Pad_L (Sgn (Sim_Evolve.Weight (C, F)), 8));
+                     if abs Sim_Evolve.Weight (C, F) > abs Big_W then
+                        Big_W := Sim_Evolve.Weight (C, F);
+                        Big_C := C;
+                        Big_F := F;
+                     end if;
+                  end loop;
+                  Put (To_String (Line));
+               end;
+            end loop;
+            declare
+               Gm, Wn, Eo : Unbounded_String;
+            begin
+               Gm := To_Unbounded_String (Pad_R ("  " & Msg ("evolve.chess.games"), 22));
+               Wn := To_Unbounded_String (Pad_R ("  " & Msg ("evolve.chess.wins"), 22));
+               Eo := To_Unbounded_String (Pad_R ("  " & Msg ("evolve.chess.elo"), 22));
+               for C in Sim_Games.Comp_Id loop
+                  declare
+                     N : constant Natural := Sim_Evolve.Games_Of (C);
+                     R : constant Natural := Sim_Evolve.Elo_At (C, Sim_Evolve.Elo_Sessions);
+                  begin
+                     Games_Total := Games_Total + N;
+                     Append (Gm, Pad_L (Img (N), 8));
+                     Append (Wn, Pad_L (Img (Pct (Sim_Evolve.Wins_Of (C), N)), 8));
+                     Append (Eo, Pad_L (Img (R), 8));
+                     Elo_Lo := (if Elo_Lo = 0 then R else Natural'Min (Elo_Lo, R));
+                     Elo_Hi := Natural'Max (Elo_Hi, R);
+                  end;
+               end loop;
+               Put (To_String (Gm));
+               Put (To_String (Wn));
+               Put (To_String (Eo));
+            end;
+            TIO.New_Line;
+            for L of Sim_Voice.Wrap (Msg ("evolve.sec.elo", Img (Curve_N)), 79) loop Put (L); end loop;
+            Put (Msg ("evolve.elo.head"));
+            declare
+               S_N : constant Natural := Sim_Evolve.Elo_Sessions;
+               First : constant Positive := Positive'Max (1, S_N - Natural'Min (S_N, Curve_N) + 1);
+               G_Lo : Natural := 0;
+               G_Hi : Natural := 0;
+               Bars : constant String := " .:-=+*#%@";
+            begin
+               for C in Sim_Games.Comp_Id loop
+                  for S in First .. Positive'Max (First, S_N) loop
+                     declare
+                        R : constant Natural := Sim_Evolve.Elo_At (C, S);
+                     begin
+                        G_Lo := (if G_Lo = 0 then R else Natural'Min (G_Lo, R));
+                        G_Hi := Natural'Max (G_Hi, R);
+                     end;
+                  end loop;
+               end loop;
+               for C in Sim_Games.Comp_Id loop
+                  declare
+                     Lo, Hi : Natural := 0;
+                     Bar : Unbounded_String;
+                  begin
+                     for S in 1 .. S_N loop
+                        declare
+                           R : constant Natural := Sim_Evolve.Elo_At (C, S);
+                        begin
+                           Lo := (if Lo = 0 then R else Natural'Min (Lo, R));
+                           Hi := Natural'Max (Hi, R);
+                        end;
+                     end loop;
+                     for S in First .. Positive'Max (First, S_N) loop
+                        Append (Bar, Bars (Bars'First + (Sim_Evolve.Elo_At (C, S) - G_Lo) * 9 / Natural'Max (1, G_Hi - G_Lo)));
+                     end loop;
+                     Put ("  " & Pad_R (Sim_World.Show (Cname (C)), 11) & Pad_L (Img (Sim_Evolve.Elo_At (C, 1)), 8)
+                          & Pad_L (Img (Sim_Evolve.Elo_At (C, S_N)), 6) & Pad_L (Img (Lo), 6) & Pad_L (Img (Hi), 6) & "  " & To_String (Bar));
+                  end;
+               end loop;
+            end;
+         end if;
+         TIO.New_Line;
+         Put (Msg ("evolve.concl.head"));
+         for L of Sim_Voice.Wrap
+           (Msg ("evolve.concl.1", Img (Sum_Dorm), Img (Sum_Known - Sum_Sym), Img (Pct (Sum_Dorm, Sum_Known - Sum_Sym)), Img (Sum_Sym), Img (Sum_Woken),
+                 (if Best_E = 0 then "-" else Sim_Wordstat.Word_Text (Best_E, Best_I)), (if Best_E = 0 then "0" else Fit_Img (Sim_Evolve.Result (Best_E, Best_I).Fit10))), 79)
+         loop
+            Put (L);
+         end loop;
+         if Chess_Found then
+            for L of Sim_Voice.Wrap
+              (Msg ("evolve.concl.2", Img (Sim_Evolve.Moves_Seen), Img (Games_Total / 2), Sgn (Big_W),
+                    (if Big_F = 0 then "-" else Msg ("evolve.f." & Img (Big_F))), (if Big_C = 0 then "-" else Sim_World.Show (Cname (Sim_Games.Comp_Id (Big_C)))),
+                    Img (Elo_Lo), Img (Elo_Hi)) & " " & Msg ("evolve.concl.3", Img (Sim_Evolve.Bounded_Hits)), 79)
+            loop
+               Put (L);
+            end loop;
+         else
+            Put (Msg ("evolve.concl.nochess"));
+         end if;
+      end Evolve_Report;
 
       Edges : Sim_Wordstat.Edge_Array;
       Any_Words : Boolean := False;
@@ -1964,7 +2389,7 @@ procedure Diary_Sim is
                end if;
                if Token (L, "ann") = "1" then Dict_Ann := Dict_Ann + 1; end if;
                --  the proposed text of a new name is not a word of any word list: only the meaning (a base word) counts as used
-               if E /= 0 then Texts (E, Token (L, "mean"), T); end if;
+               if E /= 0 then Texts (E, Token (L, "mean"), T, (if St = "A" then Sim_Evolve.Agreed else Sim_Evolve.Mention)); end if;
             end;
          end if;
       end loop;
@@ -1984,7 +2409,8 @@ procedure Diary_Sim is
       Read_Lines ("diaries/petitions.txt", Lines, Found);
       for L of Lines loop
          if L'Length > 1 and then L (L'First) = 'P' then
-            Texts (Ent_Of (Token (L, "wesen")), Token (L, "req"), Num (Token (L, "t")));
+            Texts (Ent_Of (Token (L, "wesen")), Token (L, "req"), Num (Token (L, "t")),
+                   (if Token (L, "out") = "grant" then Sim_Evolve.Granted else Sim_Evolve.Mention));
          end if;
       end loop;
       for E in Entity_Id loop   --  the notebooks of docs/LEARN.md, if a later build keeps them
@@ -1997,6 +2423,10 @@ procedure Diary_Sim is
          end if;
       end loop;
       for E in 0 .. Integer (Entity_Id'Last) loop Per (E) := Sim_Wordstat.Result (E); end loop;
+      if Evolve or else Active then
+         Evolve_Report (Active);
+         return;
+      end if;
       --  3. the report
       Put (Msg ("wordstat.title", Img (Per (0).Last_Tick)));
       TIO.New_Line;
@@ -5973,6 +6403,8 @@ begin
          elsif Opt = "--chat-script" then Chat_Script_Opt := To_Unbounded_String (Val);
          elsif Opt = "--chatlog" then Chatlog_Mode := True;
          elsif Opt = "--wordstat" then Wordstat_Mode := True;
+         elsif Opt = "--evolve" then Evolve_Mode := True;
+         elsif Opt = "--active" then Active_Mode := True;
          elsif Opt = "--session-ticks" then Night_Ticks := Number (Opt, Val);
          elsif Opt = "--max-sessions" then Night_Sessions := Number (Opt, Val);
          elsif Opt = "--max-hours" then
@@ -6080,7 +6512,7 @@ begin
    end if;
    Menu_Wanted := Menu_Opt or else (Ada.Command_Line.Argument_Count = 0 and then Is_Tty (0) and then Is_Tty (1));
    if Menu_Opt and then not (Is_Tty (0) and then Is_Tty (1)) then raise Usage_Error with Msg ("err.menu_tty"); end if;
-   Resolve_Home (Header => not (Menu_Wanted or else Inbox_Mode or else Map_Mode or else Ledger_Mode or else Grant_Mode or else Veto_Mode or else Challenge_Mode or else Next_Ticks_Mode or else Say_Mode or else Answer_Mode or else Report_Mode or else Runlog_Mode or else Trend_Mode or else Folder_Mode or else Wordstat_Mode or else (Length (Section_Opt) > 0 and then not Preview)));
+   Resolve_Home (Header => not (Menu_Wanted or else Inbox_Mode or else Map_Mode or else Ledger_Mode or else Grant_Mode or else Veto_Mode or else Challenge_Mode or else Next_Ticks_Mode or else Say_Mode or else Answer_Mode or else Report_Mode or else Runlog_Mode or else Trend_Mode or else Folder_Mode or else Wordstat_Mode or else Evolve_Mode or else Active_Mode or else (Length (Section_Opt) > 0 and then not Preview)));
    Saved_Line := To_Unbounded_String (Msg ("saved", To_String (Home_Path)));
    if Map_Mode then
       Do_Map;
@@ -6100,6 +6532,9 @@ begin
       return;
    elsif Wordstat_Mode then   --  make wordstat: what the wesen know and where it came from (read-only)
       Print_Wordstat;
+      return;
+   elsif Evolve_Mode or else Active_Mode then   --  make evolve / make active: the evolution preview (read-only)
+      Print_Wordstat (Evolve_Mode, Active_Mode);
       return;
    elsif Night_Mode then    --  make night: sessions back to back, in this process (Night_Begin ... Night_End)
       if not Ada.Directories.Exists (Self_Exe) then raise Usage_Error with Msg ("night.err.exe", Self_Exe); end if;
