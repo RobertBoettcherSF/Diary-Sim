@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  See sim_robot.ads.
 pragma Ada_2022;
 
@@ -302,9 +302,9 @@ package body Sim_Robot is
                Words : array (1 .. Max_Verbs * (Max_Args + 1)) of Natural;
             begin
                for V in 1 .. N_Verbs loop
-                  if not Knows (E, Verbs (V).Word) then Unknown.Append (Img (Verbs (V).Word)); Words (Natural (Unknown.Length)) := Verbs (V).Word; end if;
+                  if not Knows (E, Verbs (V).Word) and then not Blocked (Verbs (V).Word) then Unknown.Append (Img (Verbs (V).Word)); Words (Natural (Unknown.Length)) := Verbs (V).Word; end if;
                   for K in 1 .. Verbs (V).N_Args loop
-                     if not Knows (E, Verbs (V).Arg_Word (K)) then
+                     if not Knows (E, Verbs (V).Arg_Word (K)) and then not Blocked (Verbs (V).Arg_Word (K)) then
                         Unknown.Append (Img (Verbs (V).Arg_Word (K)));
                         Words (Natural (Unknown.Length)) := Verbs (V).Arg_Word (K);
                      end if;

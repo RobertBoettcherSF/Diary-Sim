@@ -495,6 +495,15 @@ wesen may play each other too (`chess.player_pct`), so wesen and players (Jehova
   (`chess.repeat`) and the ply cap (`chess.max_plies`) end a game as a draw. Moves are recorded as coordinates (`e2e4`, `a7a8q`)
   and as ICCF numbers (`5254`, `17181`). `make perft` (`--perft`) checks the generator against the reference counts (six well-known
   positions, mate / stalemate / fifty-move states, notation); PROOF-LATER labels mark the rule and Elo arithmetic.
+* **Chess strings are symbols (`symbols=1`, `symbols.enabled`; `docs/EVOLVE.md` 9, step 1):** until the marker existed every move played
+  made two **words**, the coordinate string and its numeric string, for both players (58 % of all words in a 287-session save). A session that
+  carries `symbols=1` (new sessions of a `chess=1` save; **no `--fresh`**, an existing save picks it up at its next new session) keeps them as
+  **symbols**: they stay in `diaries/chess.txt` (the board record, as before) and in the diary line of the game, but they are **not minted as words**,
+  not put on the screens, and the chess strings that older sessions already made are **not learned, not taught and not blended** from then on
+  (whoever knows one keeps it; `make wordstat` shows them as before). `symbols.enabled = 0`: no marker, the old rule, byte for byte. Old
+  sessions replay with the old rule (`make verify` OK); the marker removed from a new session or added to an old one is DRIFT. The word counts
+  stop growing by about 19 words per wesen and session; `make wordstat` has a section "Chess strings as symbols" (words learned since the
+  first `symbols=1` session, and how many of them are chess or number strings: 0).
 * **All the rules (`chessrules=2`, `chessrules.enabled`):** a session that carries the marker (new sessions of a `chess=1` save) adds
   the rest of the FIDE draw rules; without the marker (old sessions, or `chessrules.enabled = 0`) the rules above are replayed
   exactly as before. Order after mate / stalemate: (1) *insufficient material* is automatic - K v K, K+B v K, K+N v K, K+B v K+B with

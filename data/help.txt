@@ -177,6 +177,10 @@ Every input is a line of diaries/visit.txt, replay-verified (tamper = DRIFT).
 --visit-script FILE or a pipe: the commands without a keyboard; EOF = leave.
 visit.enabled = 0 in limits.txt: no visits. STEP 2 (possess / steer) is only
 a hook, see README.
+Chess strings (symbols=1, new sessions; symbols.enabled): a played move stays
+a symbol of the board (diaries/chess.txt); it is no longer minted as a word,
+put on a screen, taught or learned. Old sessions replay as before; make
+wordstat shows the drop. symbols.enabled = 0 in limits.txt: the old rule.
 Trial by chess (trial=1 session; needs chess and govern; make trials): a
 dispute (clashing petitions, an appeal against a refusal, rival claims to a
 coined word, rest against work) between two wesen, a wesen and a player or two

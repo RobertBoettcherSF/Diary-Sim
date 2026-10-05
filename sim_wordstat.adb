@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  See sim_wordstat.ads.  Read-only counting over strings; no I/O here.
 pragma Ada_2022;
 
@@ -36,6 +36,7 @@ package body Sim_Wordstat is
    end record;
 
    Ents : array (1 .. Max_Ent) of Ent_Data;
+   Symbols_Tick : Integer := -1;   --  start of the first symbols=1 session (-1: none)
    Agreed_Set : Tick_Maps.Map;   --  agreed text -> tick of the first agreement
    Min_Stem : Natural := 3;
    Class_Edges : Edge_Array := [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15];
@@ -75,6 +76,7 @@ package body Sim_Wordstat is
          E.By_Text.Clear;
       end loop;
       Agreed_Set.Clear;
+      Symbols_Tick := -1;
       Min_Stem := Natural'Max (1, Stem_Min);
       Class_Edges := Edges;
    end Reset;
@@ -113,6 +115,11 @@ package body Sim_Wordstat is
       if Text /= "" and then not Agreed_Set.Contains (Text) then Agreed_Set.Insert (Text, Tick); end if;
    end Agree;
 
+   procedure Set_Symbols (Tick : Integer) is
+   begin
+      Symbols_Tick := Tick;
+   end Set_Symbols;
+
    function Result (E : Natural) return Stat is
       R : Stat;
       All_Text, All_Chess, All_Number : Text_Sets.Set;
@@ -138,6 +145,10 @@ package body Sim_Wordstat is
                if W.K not in Chess | Number then R.Len_Plain (Bucket_Of (T'Length)) := R.Len_Plain (Bucket_Of (T'Length)) + 1; end if;
                if W.K in Chess | Number then R.Token_From (W.Origin) := R.Token_From (W.Origin) + 1; end if;
                if W.Tick > R.Last_Tick then R.Last_Tick := W.Tick; end if;
+               if Symbols_Tick >= 0 and then W.Tick > Symbols_Tick then
+                  R.Since := R.Since + 1;
+                  if W.K in Chess | Number then R.Since_Token := R.Since_Token + 1; end if;
+               end if;
                if not All_Text.Contains (T) then All_Text.Insert (T); end if;
                if W.K = Chess then
                   if not Chess_Seen.Contains (T) then Chess_Seen.Insert (T); end if;

@@ -1,4 +1,4 @@
---  Version: 0.014
+--  Version: 0.015
 --  The shared world of diary_sim: the four entities, the vocabulary (base
 --  words, who knows what, coined words), the bench kernels and the final votes.
 --  One world per run; Init rebuilds it from scratch, so a replay from tick 1
@@ -57,6 +57,10 @@ package Sim_World is
    function Kind_Of (W : Positive) return Natural;       --  0: base or coined word
    function Meaning_Of (W : Positive) return String;
    procedure Learn_From_World (E : Entity_Id; W : Positive);   --  learn W by meeting it (origin "world")
+   --  symbols=1 sessions (docs/EVOLVE.md 9): a SYMBOL word (a chess coordinate string e2e4 or a numeric string 5254, made by an older session)
+   --  is Blocked: it is not learned, not taught (Teachable_*) and not blended; whoever already knows it keeps it.  Off: nothing is blocked.
+   procedure Hide_Symbols (On : Boolean);
+   function Blocked (W : Positive) return Boolean;
    function World_Learned (E : Entity_Id) return Natural;     --  words E learned from the world
    function Taught_Count (E : Entity_Id) return Natural;      --  words E learned in lessons
    function Coined_Count_By (E : Entity_Id) return Natural;

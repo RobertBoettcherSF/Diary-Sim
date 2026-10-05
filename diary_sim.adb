@@ -1,4 +1,4 @@
---  Version: 0.046
+--  Version: 0.047
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.046";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.047";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -277,6 +277,7 @@ procedure Diary_Sim is
    Wordstat_Mode : Boolean := False;             --  --wordstat / make wordstat: the vocabulary report (read-only)
    Chatlog_Mode : Boolean := False;              --  --chatlog / make chatlog: the last chat lines
    Chat_Active : Boolean := False;               --  the session being replayed is a chat=1 session
+   Symbols_Active : Boolean := False;            --  the session being replayed is a symbols=1 session: chess strings are symbols, not words (docs/EVOLVE.md 9)
    Chat_Path : constant String := "diaries/chat.txt";
    Chat_Store : Sim_Store.Store;
    type Chat_In is record
@@ -782,7 +783,7 @@ procedure Diary_Sim is
                Pb : constant Positive := Nth_Known (E, Ib);
                Text : constant String := Word (Pa) & Word (Pb);
             begin
-               if Text'Length <= 24 and then Find (Text) = 0
+               if Text'Length <= 24 and then Find (Text) = 0 and then not Blocked (Pa) and then not Blocked (Pb)
                  and then (not Is_Clean or else (Plain (Pa) and then Plain (Pb) and then not Overlaps (Pa, Pb)))   --  records=1: no chess moves, no part twice
                then
                   declare
@@ -908,18 +909,21 @@ procedure Diary_Sim is
                         Hist (Who) := Hist (Who) / 2 ** Natural (Integer'Max (0, Integer'Min (20, RL ("chess.hist_shift", 2))));
                      end if;
                   end loop;
-                  for T of Str_Vectors.Vector'([To_String (Mv), To_String (Num)]) loop   --  the move and its numeric string are words
-                     declare
-                        W : constant Positive := Sim_Things.Prop_Word (T, Msg ("chess.word"));
-                     begin
-                        Meet (W);
-                        if Sim_Games.Is_Wesen (Partner) and then not Knows (Entity_Id (Partner), W) then
-                           Learn_From_World (Entity_Id (Partner), W);
-                           Ensure (Entity_Id (Partner), Words_File, Words_Line (W, "world", Tick, Meaning_Of (W)));
-                        end if;
-                        if Screen_Active then Sim_Screen.Note (E, W, "chess"); end if;
-                     end;
-                  end loop;
+                  --  symbols=1: the move and its numeric string stay symbols of the board (diaries/chess.txt, the diary line); they are not minted as words
+                  if not Symbols_Active then
+                     for T of Str_Vectors.Vector'([To_String (Mv), To_String (Num)]) loop   --  the move and its numeric string are words
+                        declare
+                           W : constant Positive := Sim_Things.Prop_Word (T, Msg ("chess.word"));
+                        begin
+                           Meet (W);
+                           if Sim_Games.Is_Wesen (Partner) and then not Knows (Entity_Id (Partner), W) then
+                              Learn_From_World (Entity_Id (Partner), W);
+                              Ensure (Entity_Id (Partner), Words_File, Words_Line (W, "world", Tick, Meaning_Of (W)));
+                           end if;
+                           if Screen_Active then Sim_Screen.Note (E, W, "chess"); end if;
+                        end;
+                     end loop;
+                  end if;
                end if;
             end if;
             S.Mood := S.Mood + Got;
@@ -1866,6 +1870,10 @@ procedure Diary_Sim is
       function Any_Of (S : Sim_Wordstat.Stat) return Natural is (S.Any_Var);
       procedure Row_Total is new Row (Total_Of);
       procedure Row_Distinct is new Row (Distinct_Of);
+      function Since_Of (S : Sim_Wordstat.Stat) return Natural is (S.Since);
+      function Since_Token_Of (S : Sim_Wordstat.Stat) return Natural is (S.Since_Token);
+      procedure Row_Since is new Row (Since_Of);
+      procedure Row_Since_Token is new Row (Since_Token_Of);
       function Agreed_After_Of (S : Sim_Wordstat.Stat) return Natural is (S.Agreed_After);
       procedure Row_Agreed is new Row (Agreed_Of);
       procedure Row_Agreed_After is new Row (Agreed_After_Of);
@@ -1881,6 +1889,8 @@ procedure Diary_Sim is
 
       Edges : Sim_Wordstat.Edge_Array;
       Any_Words : Boolean := False;
+      Sym_Tick : Integer := -1;
+      Sym_Sess : Natural := 0;
       Dict_Decided, Dict_Agreed, Dict_Rejected, Dict_Name, Dict_Coined, Dict_Ann, Ann_File : Natural := 0;
       Dict_Means : Str_Vectors.Vector;
    begin
@@ -1924,6 +1934,15 @@ procedure Diary_Sim is
             end;
          end if;
       end loop;
+      Lines.Clear;
+      Read_Lines ("diaries/sessions.txt", Lines, Found);   --  the first symbols=1 session: from its start on chess strings are not minted as words
+      for L of Lines loop
+         if Sym_Tick < 0 and then L'Length > 1 and then L (L'First) = 'S' and then Token (L, "symbols") = "1" then
+            Sym_Tick := Num (Token (L, "start"));
+            Sym_Sess := Num (L (L'First + 1 .. Fx.Index (L, " ") - 1));
+         end if;
+      end loop;
+      Sim_Wordstat.Set_Symbols (Sym_Tick);
       Lines.Clear;
       Read_Lines ("diaries/dictionary.txt", Lines, Found);
       for L of Lines loop
@@ -1997,6 +2016,15 @@ procedure Diary_Sim is
             Row_K ("  " & Msg ("wordstat.k." & Ada.Characters.Handling.To_Lower (Sim_Wordstat.Kind'Image (K))));
          end;
       end loop;
+      TIO.New_Line;
+      Put (Msg ("wordstat.sec.sym"));
+      if Sym_Tick < 0 then
+         for L of Sim_Voice.Wrap (Msg ("wordstat.sym.none"), 77) loop Put ("  " & L); end loop;
+      else
+         for L of Sim_Voice.Wrap (Msg ("wordstat.sym.first", Img (Sym_Sess), Img (Sym_Tick)), 77) loop Put ("  " & L); end loop;
+         Row_Since ("  " & Msg ("wordstat.l.since"));
+         Row_Since_Token ("  " & Msg ("wordstat.l.since_tok"));
+      end if;
       TIO.New_Line;
       Put (Msg ("wordstat.sec.use"));
       Row_Described ("  " & Msg ("wordstat.l.described"));
@@ -3722,6 +3750,7 @@ procedure Diary_Sim is
       Records : Boolean := False;       --  records=1: votes, petitions, dictionary and announcements as record files; a clean word vote (Sim_Records; needs govern=1)
       Visit : Boolean := False;         --  visit=1: Robert stands next to one wesen (vwho=<id>) and talks to it (Sim_Visit, diaries/visit.txt)
       Visit_Who : Natural := 0;
+      Symbols : Boolean := False;       --  symbols=1: chess moves and their numeric strings are symbols, never minted as words (needs chess=1; docs/EVOLVE.md 9)
       Chat : Boolean := False;          --  chat=1: Robert types lines (@name text, /order) and the answers are recorded (Sim_Chat, diaries/chat.txt)
    end record;
    package Session_Vectors is new Ada.Containers.Vectors (Positive, Session_Rec);
@@ -3746,6 +3775,7 @@ procedure Diary_Sim is
       & (if R.Robot then " robot=1" else "") & (if R.Govern then " govern=1" else "") & (if R.Scoin then " scoin=1" else "")
       & (if R.Preport then " preport=1" else "") & (if R.Players4 then " players4=1" else "") & (if R.Nextticks then " nextticks=1" else "") & (if R.Trial then " trial=1" else "") & (if R.Rec2 and then R.Records then " records=2" elsif R.Records then " records=1" else "")
       & (if R.Visit then " visit=1 vwho=" & Name (Entity_Id (R.Visit_Who)) else "")
+      & (if R.Symbols then " symbols=1" else "")
       & (if R.Chat then " chat=1" else ""));
    function Yuga (N : Positive) return String is (Msg ("yuga." & Img ((N - 1) mod 4)));
    --  The four votes of a session that starts after tick Start (state: St, known words).
@@ -3794,6 +3824,7 @@ procedure Diary_Sim is
       R.Rec2 := R.Records and then Token (L, "records") = "2";
       R.Visit := Token (L, "visit") = "1";
       R.Visit_Who := (if R.Visit then Sim_Dharma.Find_Wesen (Token (L, "vwho")) else 0);
+      R.Symbols := R.Chess and then Token (L, "symbols") = "1";
       R.Chat := Token (L, "chat") = "1";
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
         and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0 and then (R.Visit_Who > 0 or else not R.Visit);
@@ -3905,6 +3936,8 @@ procedure Diary_Sim is
       Next_End := -1;
       Visit_Active := False;
       Chat_Active := False;
+      Symbols_Active := False;
+      Sim_World.Hide_Symbols (False);
       Trial_Active := False;
       if not Ada.Directories.Exists (Sessions_Path) then return; end if;
       Read_Lines (Sessions_Path, Lines, Found);
@@ -3967,6 +4000,8 @@ procedure Diary_Sim is
       Trial_Active := R.Trial and then R.Chess and then R.Govern;
       if Trial_Active then Sim_Trial.Begin_Session; end if;
       Chat_Active := R.Chat;
+      Symbols_Active := R.Symbols and then R.Chess;
+      Sim_World.Hide_Symbols (Symbols_Active);   --  old chess strings are not learned, taught or blended any more
       Chat_Session_Count := Chat_Session_Count + 1;
       for E in Entity_Id loop Chat_Start_Mood (E) := St (E).Mood; end loop;
       Visit_Active := R.Visit;
@@ -4210,6 +4245,7 @@ procedure Diary_Sim is
    function Records_Wanted return Boolean is (Govern_Wanted and then Limit ("records.enabled", 1) /= 0);
    function Rec2_Wanted return Boolean is (Records_Wanted and then Limit ("rec.quality", 1) /= 0);   --  records=2: quality rules for word proposals   --  records=1 needs the governance (the D records)
    function Nextticks_Wanted return Boolean is (Govern_Wanted and then Limit ("nextticks.enabled", 1) /= 0);   --  nextticks=1 needs the governance (the open petitions)
+   function Symbols_Wanted return Boolean is (Chess_Wanted and then Limit ("symbols.enabled", 1) /= 0);   --  symbols=1 needs chess=1 (docs/EVOLVE.md 9)
    function Chat_Wanted return Boolean is   --  new sessions carry chat=1 when a line can be typed (a terminal in the foreground, or --chat)
      (Sim_Chat.Enabled and then not Preview and then (Chat_Mode or else Sim_Quit.Lines_On));
 
@@ -4234,7 +4270,7 @@ procedure Diary_Sim is
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
                Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => Visit_Mode, Visit_Who => Visit_Who, Chat => Chat_Wanted);
+               Visit => Visit_Mode, Visit_Who => Visit_Who, Chat => Chat_Wanted, Symbols => Symbols_Wanted);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -4251,7 +4287,7 @@ procedure Diary_Sim is
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
                World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => False, Visit_Who => 0, Chat => Chat_Wanted);
+               Visit => False, Visit_Who => 0, Chat => Chat_Wanted, Symbols => Symbols_Wanted);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);
@@ -4854,6 +4890,8 @@ procedure Diary_Sim is
       Grant_Active := Grant_Wanted;
       Screen_Active := Screen_Wanted;
       Chess_Active := Chess_Wanted;
+      Symbols_Active := Symbols_Wanted;
+      Sim_World.Hide_Symbols (Symbols_Active);
       Robot_Active := Robot_Wanted;
       Govern_Active := Govern_Wanted;
       Scoin_Active := Scoin_Wanted;

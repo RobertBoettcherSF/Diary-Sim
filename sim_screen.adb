@@ -1,4 +1,4 @@
---  Version: 0.004
+--  Version: 0.005
 --  See sim_screen.ads.
 pragma Ada_2022;
 
@@ -182,6 +182,8 @@ package body Sim_Screen is
    begin
       if Knows (V, W) then
          Ignore := Put (V, W, "seen");
+      elsif Blocked (W) then   --  symbols=1: an old chess string on a screen is seen, never learned
+         Ignore := Put (V, W, "seen");
       elsif Int (Roll (Seed_V, Positive (V), Tick, 9150 + J mod 10, 100)) <= Int (Learn_Pct) then
          Learn_Word (V, W, Natural (Owner));
          Learned.Append (Learn_Rec'(Who => V, W => W, From => Natural (Owner), Coined => False));
@@ -209,6 +211,7 @@ package body Sim_Screen is
       Done := False;
       if (if Scoin_On then Ses_Coined (Who) >= Natural (Coin_Cap_S) else Int (Coined_Total) >= Cap_V) or else Text'Length < 3 or else Text'Length > 24
         or else (for some C of Text => C = ' ') or else Find (Text) /= 0
+        or else Blocked (A) or else Blocked (B)
         or else (Is_Clean and then not (Plain (A) and then Plain (B)))   --  records=1: no chess move is blended into a word
       then
          return;

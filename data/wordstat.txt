@@ -1,4 +1,4 @@
-# Version: 0.002
+# Version: 0.003
 # The vocabulary report (make wordstat, --wordstat, Sim_Wordstat): read-only, counts over entities/<id>/words.txt and the diaries.
 # "key = text".  {1}.. are filled in; labels in the tables are cut to 36 letters.  Nothing here changes a diary.
 # upper length of each length class (12 classes, the last one is open)
@@ -27,6 +27,11 @@ wordstat.k.coined = coined or blended
 wordstat.k.chess = chess move, coordinates (e2e4)
 wordstat.k.number = chess move, numbers (5755)
 wordstat.k.other = other
+wordstat.sec.sym = Chess strings as symbols (symbols=1):
+wordstat.sym.none = no symbols=1 session yet: every chess move still makes two words (new sessions get the marker, symbols.enabled).
+wordstat.sym.first = first symbols=1 session: S{1} from tick {2}; since then a chess move is a symbol of the board, not a word.
+wordstat.l.since = words learned since then
+wordstat.l.since_tok = of those, chess or number strings
 wordstat.sec.use = Meaning and use after learning:
 wordstat.l.agreed = same text as an agreed word
 wordstat.l.agreed_after = of those, learned after the vote

@@ -1,5 +1,5 @@
 # Learning in the station: slow core, mixed study, pruning, pondering, notebooks (design only, nothing built)
-Version: 0.004
+Version: 0.005
 
 Status: **proposal for Robert**. No code for any of this exists yet; every number below is a *proposed default* that lives in `data/` when
 built, and every decision is open until Robert answers section 11. Style as `docs/LIFE.md`: what it is, what it is made of, what is recorded.
@@ -226,7 +226,7 @@ a factor of ten with synonyms. The read-only report `make wordstat` (`--wordstat
 **Options (each is new sessions only, behind its own marker, off = byte-identical, the old rule kept for old sessions; nothing of the history is deleted):**
 * **(c) Stop minting meaningless tokens as words (`symbols=1`).** Chess strings and numeric strings stay *symbols*: they are written on the screens and in the chess record exactly as now, but they are not word ids, are not learned, taught or counted in
   `Known_Count`, and they do not enter the dice pools of lessons, coining and favourite words. Effect: 5,353 -> about 2,200 known words per wesen (-58 %), the screen file shrinks (31 % of its 141,000 lines are chess adds, more with the chess tokens seen on other screens), and the pool of distinct texts drops from
-  6,047 to about 2,700. Cost: the word ids and `Teachable` counts change, so the dice of the new sessions differ from a run without the marker: **marker `symbols=1` on the S line, own salt range 19900 .. 19919 (a symbol needs none; the range
+  6,047 to about 2,700. Cost: the word ids and `Teachable` counts change, so the dice of the new sessions differ from a run without the marker: **BUILT as `symbols=1` (build 0.047, see `docs/EVOLVE.md` 9; its salts are reserved at 20850 .. 20869 and it needs no dice; chess strings are also kept off the screens, a screen is a list of words). Original text: marker `symbols=1` on the S line, own salt range 19900 .. 19919 (a symbol needs none; the range
   is for the tie-break of which symbol a screen keeps), new sessions only, an existing save keeps every old byte (no `--fresh`)**, and `make verify` replays old sessions with the old minting rule and new ones with the new rule. Cheap (about 150 Ada lines), safe.
 * **(a) A per-wesen active vocabulary with a cap (`active=1`).** Each wesen keeps at most `vocab.cap` (proposed **500**) *active* words; the others become *dormant* with the pruning rule of section 4 (a word unused for `vocab.idle_sessions` = 6
   sessions and older than `vocab.min_age` = 3 sessions goes first, oldest idle first, at most `vocab.per_session` = 40 per boundary, ties by a seeded die in 19920 .. 19949). A dormant word stays in `entities/<id>/words.txt` (history), is a record line

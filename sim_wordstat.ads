@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  The vocabulary report (make wordstat, --wordstat): READ-ONLY.  The caller feeds the lines of entities/<id>/words.txt and of the diaries
 --  (screens, votes, petitions, dictionary) in; this package sorts every known word of every wesen into one kind (start, world, taught,
 --  screen, coined, chess coordinate, number, other), decides whether it was used again after it was learned, whether the dictionary agreed
@@ -36,6 +36,8 @@ package Sim_Wordstat is
       Suffix_Var  : Natural := 0;   --  words that end with another known word
       Any_Var     : Natural := 0;   --  either (counted once), tokens and stems of tokens left out
       Last_Tick   : Natural := 0;   --  the latest learning tick seen
+      Since       : Natural := 0;   --  words learned at or after the tick of Set_Symbols (all kinds)
+      Since_Token : Natural := 0;   --  of those, chess and number strings
    end record;
 
    function Is_Chess (T : String) return Boolean;    --  e2e4, g7g8q
@@ -52,6 +54,8 @@ package Sim_Wordstat is
    --  The dictionary agreed a meaning for the word text at Tick.  Agreed names are NOT added to the wesen's word lists by the program; a word list
    --  only holds such a text if the world minted the same letters later.
    procedure Agree (Text : String; Tick : Natural);
+   --  The first symbols=1 session starts at Tick (chess strings are no longer minted as words from then on); -1: no such session.
+   procedure Set_Symbols (Tick : Integer);
    function Result (E : Natural) return Stat;   --  E = 0: all wesen together
    function Bucket_Of (Length : Natural) return Positive;
 

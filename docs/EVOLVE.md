@@ -1,5 +1,7 @@
 # Evolutionary pressure on words and on chess (design only, nothing built)
-Version: 0.001
+Version: 0.002
+
+Build state: **step 1 (`symbols=1`) is built** (build 0.047, section 9); everything else is design only.
 
 Status: **proposal for Robert**. No code for any of this exists; every number below is a *proposed default* that lives in `data/` when
 built, and every decision is open until Robert answers section 11. Style as `docs/LIFE.md` and `docs/LEARN.md`: what it is, what it is made
@@ -141,7 +143,7 @@ when a mutation is reverted. `make dictionary` and `make wordstat` stay as they 
 **This file: 20000 .. 20999** (checked free: used so far 9100 .. 9199 screens, 9400 .. 9599 chess, 10000 .. 10699 life, 11000 .. 12999 myth, 13000 .. 13999 being, 14000 .. 14399 records, 15000 .. 15399 company,
 16000 .. 16999 learning, 17000 .. 17999 reserved byte predictor, 18000 .. 18499 voices and chat, 19000 .. 19899 portals, settings, farm, ledger, stories, 19900 .. 19999 vocabulary condensing).
 Word fitness and retirement 20000 .. 20099 (ties only), mutation parents and variants 20100 .. 20199, fresh strings 20200 .. 20299, teaching weights 20300 .. 20399, wake 20400 .. 20449,
-chess mutation pick 20500 .. 20599, chess mutation sign 20600 .. 20699, chess copy 20700 .. 20799, aliases from agreed entries 20800 .. 20849, reserved 20850 .. 20999.
+chess mutation pick 20500 .. 20599, chess mutation sign 20600 .. 20699, chess copy 20700 .. 20799, aliases from agreed entries 20800 .. 20849, `symbols=1` 20850 .. 20869 (reserved, it needs no dice), reserved 20870 .. 20999.
 
 ## 9. Build order and checks
 1. **`make evolve` report only** (no marker): word fitness from the existing records, the same counts as `make wordstat`; check = an independent awk count of one wesen's top word and its points.
@@ -149,7 +151,14 @@ chess mutation pick 20500 .. 20599, chess mutation sign 20600 .. 20699, chess co
 3. **Learning from results** (4.2) + record file + replay verification (`G`, `P`); check: weights stay in bounds, the replay equals the record, a changed line is DRIFT.
 4. **Mutation and revert** (4.3), then **copying** (4.4); check: bounds, determinism (two runs, same bytes), a tampered `M` line is DRIFT.
 5. **A/B on a long run**: same seed with `evolve=0` and `evolve=1` for 287 sessions; accept only if the Elo spread and the tables are readable in `make evolve` and no bound was hit more than the limits say.
-6. **`symbols=1` and `active=1`** (LEARN.md 12, already designed) as prerequisites, then **word fitness live** (`evolve=2`: retirement, no mutants yet), then **mutants and weighted teaching** (3.3, 3.4), then **the agreed-synonym link** (3.5).
+6. **`symbols=1` (BUILT, build 0.047, new sessions only, no `--fresh`).** A session of a `chess=1` save that carries `symbols=1` keeps the move string and the numeric string as
+   symbols of the board (`diaries/chess.txt`, the diary line of the game): they are **not minted as words**, **not put on the screens** (a screen is a list of words, so a symbol has no place there; this
+   is the one change against the idea in LEARN.md 12 (c)), and the chess strings that older sessions made are **not learned, not taught and not blended** from then on (`Sim_World.Blocked`; whoever
+   knows one keeps it). `symbols.enabled = 0` in `data/limits.txt`: the old rule, byte for byte (checked against the previous tip: only the timestamps of the diaries differ). Measured on seed 42, 60 sessions of 300
+   ticks, fresh: known words per wesen 1685 / 1799 / 1643 / 1482 with the marker (no chess word at all) against 2239 / 2567 / 2298 / 2246 without; the words that are not chess strings grow *more* with it
+   (about 1,650 per wesen against 713), because lessons and blends no longer draw from a pool that was 70 % chess strings. A run of 60 sessions took 39.9 s against 44.3 s, `make verify` 14.0 s against
+   15.6 s, the save folder is 11 % smaller. The old words stay in an existing save until the dormant state (`active=1`) retires them.
+   Then `active=1` (LEARN.md 12) as the second prerequisite, then **word fitness live** (`evolve=2`: retirement, no mutants yet), then **mutants and weighted teaching** (3.3, 3.4), then **the agreed-synonym link** (3.5).
 Every step: version headers, README and `--help` current, PROOF-LATER labels on the integer arithmetic (importance 3/10, urgency 2/10, SPARK2), 0 warnings on GNAT 14 and 12, extend `scripts/checks.sh` only.
 
 ## 10. Risks and bounds

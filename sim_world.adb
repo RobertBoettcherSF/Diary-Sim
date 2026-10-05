@@ -1,4 +1,4 @@
---  Version: 0.018
+--  Version: 0.019
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
@@ -161,10 +161,19 @@ package body Sim_World is
       Kind   : Natural := 0;   --  world words: 1 name, 2 property, 3 variant (see the spec)
       Variant : Natural := 0;
       Meaning : Unbounded_String;
+      Symbol : Boolean := False;   --  a chess coordinate string or a numeric string (set from the text when the word is made)
    end record;
    package Word_Vectors is new Ada.Containers.Vectors (Positive, Word_Rec);
    package Bool_Vectors is new Ada.Containers.Vectors (Positive, Boolean);
    Table : Word_Vectors.Vector;
+   Symbols_Hidden : Boolean := False;   --  symbols=1 session: Blocked words are not learned or taught
+
+   function Symbol_Text (T : String) return Boolean is
+     ((T'Length in 4 .. 5
+       and then T (T'First) in 'a' .. 'h' and then T (T'First + 1) in '1' .. '8'
+       and then T (T'First + 2) in 'a' .. 'h' and then T (T'First + 3) in '1' .. '8'
+       and then (T'Length = 4 or else T (T'First + 4) in 'q' | 'r' | 'b' | 'n'))
+      or else (T'Length >= 1 and then (for all C of T => C in '0' .. '9')));
    Known : array (Entity_Id) of Bool_Vectors.Vector;
    Known_N : array (Entity_Id) of Natural := [others => 0];   --  how many words each wesen knows (kept by Init / Learn_Word, not recounted)
    package Nat_Vectors is new Ada.Containers.Vectors (Positive, Natural);
@@ -270,8 +279,16 @@ package body Sim_World is
       Freq (E).Replace_Element (W, Freq (E).Element (W) + Amount);
    end Use_Word;
 
+   procedure Hide_Symbols (On : Boolean) is
+   begin
+      Symbols_Hidden := On;
+   end Hide_Symbols;
+
+   function Blocked (W : Positive) return Boolean is (Symbols_Hidden and then W <= Natural (Table.Length) and then Table (W).Symbol);
+
    procedure Learn_Word (E : Entity_Id; W : Positive; From : Natural := 0) is
    begin
+      if Blocked (W) then return; end if;
       while Natural (Known (E).Length) < W loop
          Known (E).Append (False);
       end loop;
@@ -311,7 +328,7 @@ package body Sim_World is
    function Add_World_Word (Text, Meaning : String; Kind : Positive; Variant_Of : Natural := 0) return Positive is
    begin
       Table.Append (Word_Rec'(Text => To_Unbounded_String (Text), Kind => Kind, Variant => Variant_Of,
-                              Meaning => To_Unbounded_String (Meaning), others => <>));
+                              Meaning => To_Unbounded_String (Meaning), Symbol => Symbol_Text (Text), others => <>));
       return Count;
    end Add_World_Word;
 
@@ -376,7 +393,7 @@ package body Sim_World is
       N : Natural := 0;
    begin
       for W in 1 .. Count loop
-         if Knows (From, W) and then not Knows (To, W) then N := N + 1; end if;
+         if Knows (From, W) and then not Knows (To, W) and then not Blocked (W) then N := N + 1; end if;
       end loop;
       return N;
    end Teachable_Count;
@@ -385,7 +402,7 @@ package body Sim_World is
       K : Natural := 0;
    begin
       for W in 1 .. Count loop
-         if Knows (From, W) and then not Knows (To, W) then
+         if Knows (From, W) and then not Knows (To, W) and then not Blocked (W) then
             K := K + 1;
             if K = N then return W; end if;
          end if;

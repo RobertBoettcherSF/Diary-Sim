@@ -1986,6 +1986,38 @@ ngot=$(row 'announcements of all kinds')
 grep -q 'make wordstat' "$root/Makefile" && grep -q '^wordstat: all' "$root/Makefile" && grep -q -- '--wordstat' "$root/data/help.txt" && grep -q 'make wordstat' "$root/README.md" && grep -q 'wordstat.stem_min' "$root/data/limits.txt" && grep -q 'Condensing the vocabulary' "$root/docs/LEARN.md" \
   && grep -q 'Why the dictionary and the vocabulary differ' "$root/docs/EVOLVE.md" && grep -q '20000 .. 20999' "$root/docs/LEARN.md" && grep -q '20000 .. 20999' "$root/docs/PORTALS.md" && grep -q 'docs/EVOLVE.md' "$root/README.md" && ! grep -q '—' "$root/docs/EVOLVE.md" \
   && ok "README, Makefile, --help, data/limits.txt and docs/LEARN.md describe the vocabulary report; docs/EVOLVE.md (salts 20000 .. 20999 noted in LEARN.md and PORTALS.md) is in the README" || bad "wordstat docs"
+echo "== 51. symbols=1: chess moves stay symbols of the board, they are no longer minted, learned or taught as words =="
+cd "$w/nt" || exit 1
+# a save with the OLD rule (symbols.enabled = 0), then the same save continued by new sessions with the new rule and, as the control, with the old rule
+rm -rf "$w/nt/sd" "$w/nt/sy_old" "$w/nt/sy_new" "$w/nt/sy_ctl"; mkdir -p "$w/nt/sd/bin"; cp "$nb" "$w/nt/sd/bin/"; cp -r "$root/data" "$w/nt/sd/data"; sed -i 's/^symbols.enabled = .*/symbols.enabled = 0/' "$w/nt/sd/data/limits.txt"
+( cd "$w/nt/sd" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/sy_old" --seed 42 --ticks 3000 --yes --every 100000 > "$w/nt/sy_old.txt" 2>&1 )
+cp -r "$w/nt/sy_old" "$w/nt/sy_new"; cp -r "$w/nt/sy_old" "$w/nt/sy_ctl"
+env -u DIARY_VERBOSE "$nb" --home "$w/nt/sy_new" --continuous --session-ticks 300 --max-sessions 6 > "$w/nt/sy_new.txt" 2>&1; rcn=$?
+( cd "$w/nt/sd" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/sy_ctl" --continuous --session-ticks 300 --max-sessions 6 > "$w/nt/sy_ctl.txt" 2>&1 )
+syc() { awk '!/^#/ && NF >= 4 && $4 > 3000 && ($2 ~ /^[a-h][1-8][a-h][1-8][qrbn]?$/ || $2 ~ /^[0-9]+$/) { n++ } END { print n + 0 }' "$1"/entities/*/words.txt; }
+sno=$(syc "$w/nt/sy_old"); snn=$(syc "$w/nt/sy_new"); snc=$(syc "$w/nt/sy_ctl")
+old_bytes=$(wc -c < "$w/nt/sy_old/diaries/chess.txt"); sc_bytes=$(wc -c < "$w/nt/sy_old/diaries/screens.txt")
+env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/sy_new" > syv.txt 2>&1; rcv=$?
+env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/sy_ctl" > syc.txt 2>&1; rcc=$?
+ns=$(grep -c '^S[0-9].* symbols=1' "$w/nt/sy_new/diaries/sessions.txt"); nc=$(grep -c 'symbols' "$w/nt/sy_ctl/diaries/sessions.txt")
+[ "$rcn" = 0 ] && [ "$ns" -ge 5 ] && [ "$nc" = 0 ] && ! grep '^S1 ' "$w/nt/sy_new/diaries/sessions.txt" | grep -q symbols && [ "$sno" = 0 ] && [ "$snn" = 0 ] && [ "$snc" -gt 20 ] \
+  && ok "new sessions carry symbols=1 ($ns of them, the old session 1 does not): they add $snn chess or number words, the same sessions with symbols.enabled = 0 add $snc" || bad "symbols marker/mint (rc $rcn, marked $ns, control marked $nc, words new $snn control $snc old $sno)"
+[ "$rcv" = 0 ] && grep -q '^verify: OK' syv.txt && [ "$rcc" = 0 ] && grep -q '^verify: OK' syc.txt \
+  && cmp -s -n "$old_bytes" "$w/nt/sy_old/diaries/chess.txt" "$w/nt/sy_new/diaries/chess.txt" && cmp -s -n "$sc_bytes" "$w/nt/sy_old/diaries/screens.txt" "$w/nt/sy_new/diaries/screens.txt" \
+  && ok "make verify: OK for the mixed save (old session replayed with the old rule, new ones with symbols=1) and for the control; the old chess and screen records are byte for byte the prefix of the new files" || bad "symbols verify ($rcv $rcc)"
+# tampering: the marker taken from a new session, or put on the old one: the replay no longer fits the records
+rm -rf "$w/nt/sy_t1" "$w/nt/sy_t2"; cp -r "$w/nt/sy_new" "$w/nt/sy_t1"; cp -r "$w/nt/sy_new" "$w/nt/sy_t2"
+sed -i '/^S4 /s/ symbols=1//' "$w/nt/sy_t1/diaries/sessions.txt"; sed -i '/^S1 /s/$/ symbols=1/' "$w/nt/sy_t2/diaries/sessions.txt"
+env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/sy_t1" > syt1.txt 2>&1; r1=$?; env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/sy_t2" > syt2.txt 2>&1; r2=$?
+[ "$r1" = 1 ] && [ "$r2" = 1 ] && grep -q 'DRIFT\|differs' syt1.txt && grep -q 'DRIFT\|differs' syt2.txt \
+  && ok "tampering: symbols=1 removed from session 4, or added to session 1: --verify reports DRIFT (exit 1) in both" || bad "symbols tamper ($r1 $r2: $(head -c 150 syt1.txt))"
+# the report shows the drop
+env -u DIARY_VERBOSE "$nb" --wordstat --home "$w/nt/sy_new" > sy_ws1.txt 2>&1; env -u DIARY_VERBOSE "$nb" --wordstat --home "$w/nt/sy_ctl" > sy_ws0.txt 2>&1
+sw=$(awk '/words learned since then/ { print $NF; exit }' sy_ws1.txt); swt=$(awk '/of those, chess or number strings/ { print $NF; exit }' sy_ws1.txt)
+grep -q '^Chess strings as symbols' sy_ws1.txt && grep -q 'first symbols=1 session: S2 from tick 3000' sy_ws1.txt && [ "$swt" = 0 ] && [ "${sw:-0}" -gt 100 ] && grep -q 'no symbols=1 session yet' sy_ws0.txt && [ "$(awk 'length > 79' sy_ws1.txt | wc -l)" = 0 ] \
+  && ok "--wordstat: symbols section: since the first symbols=1 session $sw words were learned and $swt of them are chess or number strings; the control save says there is no symbols=1 session" || bad "wordstat symbols ($sw $swt)"
+grep -q 'symbols=1' "$root/README.md" && grep -q 'symbols.enabled' "$root/data/limits.txt" && grep -q 'symbols=1' "$root/data/help.txt" && grep -q 'symbols=1' "$root/docs/EVOLVE.md" \
+  && ok "README, --help, data/limits.txt and docs/EVOLVE.md describe symbols=1" || bad "symbols docs"
 cd "$w" || exit 1
 
 
