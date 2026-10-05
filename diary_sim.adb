@@ -1,4 +1,4 @@
---  Version: 0.053
+--  Version: 0.054
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.053";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.054";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -619,7 +619,7 @@ procedure Diary_Sim is
       begin
          if not Knows (E, W) then
             Learn_From_World (E, W);
-            Ensure (E, Words_File, Words_Line (W, "world", Tick, Meaning_Of (W)));
+            if Knows (E, W) then Ensure (E, Words_File, Words_Line (W, "world", Tick, Meaning_Of (W))); end if;   --  a blocked symbol is not learned: no words.txt line
             Append (Learned, (if Length (Learned) > 0 then ", " else "") & Word (W));
          end if;
       end Meet;
@@ -795,7 +795,7 @@ procedure Diary_Sim is
                Pb : constant Positive := Nth_Usable (E, Ib);
                Text : constant String := Word (Pa) & Word (Pb);
             begin
-               if Text'Length <= 24 and then Find (Text) = 0 and then not Blocked (Pa) and then not Blocked (Pb)
+               if Text'Length <= 24 and then Find (Text) = 0 and then not Blocked (Pa) and then not Blocked (Pb) and then not Blocked_Text (Text)
                  and then (not Is_Clean or else (Plain (Pa) and then Plain (Pb) and then not Overlaps (Pa, Pb)))   --  records=1: no chess moves, no part twice
                then
                   declare
@@ -876,7 +876,9 @@ procedure Diary_Sim is
                else
                   Learn_Word (E, W, Natural (Pending_From (E)));
                   Voice_Note (E, W);
-                  Ensure (E, Words_File, Words_Line (W, "taught", Tick, Name (Pending_From (E))));
+                  if Knows (E, W) then   --  a lesson chosen before the word became a symbol (symbols=1 / symstrict=1): not learned, no words.txt line
+                     Ensure (E, Words_File, Words_Line (W, "taught", Tick, Name (Pending_From (E))));
+                  end if;
                   Add (Msg ("detail.learned", Word (W), Name (Pending_From (E))));
                   Pending_Word (E) := 0;
                   Did_Learn := True;
@@ -2327,6 +2329,8 @@ procedure Diary_Sim is
       function Since_Token_Of (S : Sim_Wordstat.Stat) return Natural is (S.Since_Token);
       procedure Row_Since is new Row (Since_Of);
       procedure Row_Since_Token is new Row (Since_Token_Of);
+      function Strict_Token_Of (S : Sim_Wordstat.Stat) return Natural is (S.Strict_Token);
+      procedure Row_Strict_Token is new Row (Strict_Token_Of);
       function Agreed_After_Of (S : Sim_Wordstat.Stat) return Natural is (S.Agreed_After);
       procedure Row_Agreed is new Row (Agreed_Of);
       procedure Row_Agreed_After is new Row (Agreed_After_Of);
@@ -2474,6 +2478,7 @@ procedure Diary_Sim is
                end Tok;
                function Num (X : String) return Natural is (if X'Length in 1 .. 9 and then (for all C of X => C in '0' .. '9') then Natural'Value (X) else 0);
                function Level2 return Boolean is (Tok (To_String (Last_State (Entity_Id'First)), "slow") /= "");   --  the last closed window was active=2
+               function At_Floor return Boolean is (Tok (To_String (Last_State (Entity_Id'First)), "slowat") = "floor");   --  slowfloor=1: mint-slow from the floor up
             begin
                if Ada.Directories.Exists ("diaries/active.txt") then
                   Read_Lines ("diaries/active.txt", Act_Lines, Act_Found);
@@ -2534,7 +2539,7 @@ procedure Diary_Sim is
                      Rrow ("  " & Msg ("evolve.l.dormant_real"), "dormant");
                      Rrow ("  " & Msg ("evolve.l.base_real"), "base");
                      Rrow ("  " & Msg ("evolve.l.woke_real"), "woke");
-                     if Level2 then Rrow ("  " & Msg ("evolve.l.slow_real"), "slow"); end if;
+                     if Level2 then Rrow ("  " & Msg (if At_Floor then "evolve.l.slow_floor" else "evolve.l.slow_real"), "slow"); end if;
                   end;
                   TIO.New_Line;
                   for E in Entity_Id loop
@@ -2552,7 +2557,7 @@ procedure Diary_Sim is
                         N_Slow : Natural := 0;
                      begin
                         for E in Entity_Id loop N_Slow := N_Slow + Num (Tok (To_String (Last_State (E)), "slow")); end loop;
-                        for L of Sim_Voice.Wrap (Msg ("evolve.a.concl.level2", Tok (PL, "floor"), Tok (PL, "cap"), Img (N_Slow)), 79) loop Put (L); end loop;
+                        for L of Sim_Voice.Wrap (Msg ((if At_Floor then "evolve.a.concl.level2f" else "evolve.a.concl.level2"), Tok (PL, "floor"), Tok (PL, "cap"), Img (N_Slow)), 79) loop Put (L); end loop;
                      end;
                   end if;
                   return;
@@ -2876,6 +2881,8 @@ procedure Diary_Sim is
       Any_Words : Boolean := False;
       Sym_Tick : Integer := -1;
       Sym_Sess : Natural := 0;
+      Str_Tick : Integer := -1;   --  the first symstrict=1 session (coined chess strings are symbols too)
+      Str_Sess : Natural := 0;
       Dict_Decided, Dict_Agreed, Dict_Rejected, Dict_Name, Dict_Coined, Dict_Ann, Ann_File : Natural := 0;
       Dict_Means : Str_Vectors.Vector;
    begin
@@ -2926,7 +2933,12 @@ procedure Diary_Sim is
             Sym_Tick := Num (Token (L, "start"));
             Sym_Sess := Num (L (L'First + 1 .. Fx.Index (L, " ") - 1));
          end if;
+         if Str_Tick < 0 and then L'Length > 1 and then L (L'First) = 'S' and then Token (L, "symstrict") = "1" then
+            Str_Tick := Num (Token (L, "start"));
+            Str_Sess := Num (L (L'First + 1 .. Fx.Index (L, " ") - 1));
+         end if;
       end loop;
+      Sim_Wordstat.Set_Strict (Str_Tick);
       Sim_Wordstat.Set_Symbols (Sym_Tick);
       Lines.Clear;
       Read_Lines ("diaries/dictionary.txt", Lines, Found);
@@ -3014,6 +3026,10 @@ procedure Diary_Sim is
          for L of Sim_Voice.Wrap (Msg ("wordstat.sym.first", Img (Sym_Sess), Img (Sym_Tick)), 77) loop Put ("  " & L); end loop;
          Row_Since ("  " & Msg ("wordstat.l.since"));
          Row_Since_Token ("  " & Msg ("wordstat.l.since_tok"));
+         if Str_Tick >= 0 then
+            for L of Sim_Voice.Wrap (Msg ("wordstat.sym.strict", Img (Str_Sess), Img (Str_Tick)), 77) loop Put ("  " & L); end loop;
+            Row_Strict_Token ("  " & Msg ("wordstat.l.strict_tok"));
+         end if;
       end if;
       TIO.New_Line;
       Put (Msg ("wordstat.sec.use"));
@@ -3924,7 +3940,7 @@ procedure Diary_Sim is
       Sim_Visit.Apply (C, Visit_E, Tick, N, St (Visit_E).Mood, St (Visit_E).Energy,
                        (if Govern_Active then Sim_Govern.Open_Of (Visit_E) else 0), Answer, Learned);
       for W of Learned loop
-         Ensure (Visit_E, Words_File, Words_Line (W, "visit", Tick, ""));
+         if Knows (Visit_E, W) then Ensure (Visit_E, Words_File, Words_Line (W, "visit", Tick, "")); end if;   --  a blocked symbol is not learned
          if Screen_Active then Sim_Screen.Note (Visit_E, W, "taught"); end if;
       end loop;
       if Length (Answer) > 0 then Emit_Visit (To_String (Answer), Tick); end if;
@@ -4828,6 +4844,8 @@ procedure Diary_Sim is
       Active : Boolean := False;        --  active=1: an active vocabulary per wesen, dormant words, wake on use (needs screen=1; Sim_Active, docs/EVOLVE.md 13)
       Active_Level : Natural := 1;      --  1 or 2 (active=2: floor and cap, mint-slow, wider wake; docs/EVOLVE.md 14), when Active
       Symbols : Boolean := False;       --  symbols=1: chess moves and their numeric strings are symbols, never minted as words (needs chess=1; docs/EVOLVE.md 9)
+      Symstrict : Boolean := False;     --  symstrict=1 (with symbols=1): a COINED chess or number string (a blend 53+36 = 5336) is a symbol too
+      Slowfloor : Boolean := False;     --  slowfloor=1 (with active=2): mint-slow already from the floor up, the same percents (docs/EVOLVE.md 14)
       Chat : Boolean := False;          --  chat=1: Robert types lines (@name text, /order) and the answers are recorded (Sim_Chat, diaries/chat.txt)
    end record;
    package Session_Vectors is new Ada.Containers.Vectors (Positive, Session_Rec);
@@ -4848,6 +4866,7 @@ procedure Diary_Sim is
      ("S" & Img (R.N) & " start=" & Img (R.Start) & " votes=" & Votes_Text (R.Votes) & " len=" & Img (R.Len)
       & " src=" & (if R.By_Vote then "vote" else "explicit") & (if R.Dharma then " dharma=1" else "")
       & (if R.World then " world=1" else "") & (if R.Rest then " rest=1" else "") & (if R.Grant then " grant=1" else "")
+      & (if R.Symstrict then " symstrict=1" else "") & (if R.Slowfloor then " slowfloor=1" else "")   --  build 0.054, before screen=1: older checks anchor the end
       & (if R.Screen then " screen=1" else "") & (if R.Chess then " chess=1" else "") & (if R.Chessrules then " chessrules=2" else "")
       & (if R.Robot then " robot=1" else "") & (if R.Govern then " govern=1" else "") & (if R.Scoin then " scoin=1" else "")
       & (if R.Preport then " preport=1" else "") & (if R.Players4 then " players4=1" else "") & (if R.Nextticks then " nextticks=1" else "") & (if R.Trial then " trial=1" else "") & (if R.Rec2 and then R.Records then " records=2" elsif R.Records then " records=1" else "")
@@ -4905,6 +4924,8 @@ procedure Diary_Sim is
       R.Symbols := R.Chess and then Token (L, "symbols") = "1";
       R.Active := R.Screen and then (Token (L, "active") = "1" or else Token (L, "active") = "2");
       R.Active_Level := (if Token (L, "active") = "2" then 2 else 1);
+      R.Symstrict := R.Symbols and then Token (L, "symstrict") = "1";
+      R.Slowfloor := R.Active and then R.Active_Level = 2 and then Token (L, "slowfloor") = "1";
       R.Chat := Token (L, "chat") = "1";
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
         and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0 and then (R.Visit_Who > 0 or else not R.Visit);
@@ -5053,7 +5074,7 @@ procedure Diary_Sim is
    --  A liberated wesen of a new session moves to the location its own dice name (record + effect).
    procedure Start_Life (R : Session_Rec) is
    begin
-      Sim_Active.Open (R.N, R.Start, (if R.Active and then R.Screen then R.Active_Level else 0));   --  closes the window of the previous active session (dormancies), opens this one
+      Sim_Active.Open (R.N, R.Start, (if R.Active and then R.Screen then R.Active_Level else 0), R.Slowfloor);   --  closes the window of the previous active session (dormancies), opens this one
       Emit_Active_Lines;
       Sim_Dharma.Begin_Life (Seed, R.Start, R.N, L_Max + 1, R.Dharma, R.Players4);
       World_Active := R.World;
@@ -5083,7 +5104,7 @@ procedure Diary_Sim is
       if Trial_Active then Sim_Trial.Begin_Session; end if;
       Chat_Active := R.Chat;
       Symbols_Active := R.Symbols and then R.Chess;
-      Sim_World.Hide_Symbols (Symbols_Active);   --  old chess strings are not learned, taught or blended any more
+      Sim_World.Hide_Symbols (Symbols_Active, R.Symstrict);   --  old chess strings are not learned, taught or blended any more (symstrict=1: coined ones too)
       Chat_Session_Count := Chat_Session_Count + 1;
       for E in Entity_Id loop Chat_Start_Mood (E) := St (E).Mood; end loop;
       Visit_Active := R.Visit;
@@ -5332,6 +5353,9 @@ procedure Diary_Sim is
    function Symbols_Wanted return Boolean is (Chess_Wanted and then Limit ("symbols.enabled", 1) /= 0);   --  symbols=1 needs chess=1 (docs/EVOLVE.md 9)
    function Active_Wanted return Boolean is (Screen_Wanted and then Limit ("active.enabled", 2) /= 0);   --  active=1/2 needs screen=1 (the uses are read on the screens)
    function Active_Level_Wanted return Natural is (if Limit ("active.enabled", 2) >= 2 then 2 else 1);   --  active.enabled = 2: new sessions carry active=2
+   function Symstrict_Wanted return Boolean is (Symbols_Wanted and then Limit ("symbols.strict", 1) /= 0);   --  symstrict=1: coined chess strings are symbols too
+   function Slowfloor_Wanted return Boolean is   --  slowfloor=1: active=2 mint-slow from the floor up
+     (Active_Wanted and then Active_Level_Wanted = 2 and then Limit ("active.slow_floor", 1) /= 0);
    function Chat_Wanted return Boolean is   --  new sessions carry chat=1 when a line can be typed (a terminal in the foreground, or --chat)
      (Sim_Chat.Enabled and then not Preview and then (Chat_Mode or else Sim_Quit.Lines_On));
 
@@ -5356,7 +5380,7 @@ procedure Diary_Sim is
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
                Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => Visit_Mode, Visit_Who => Visit_Who, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted);
+               Visit => Visit_Mode, Visit_Who => Visit_Who, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -5373,7 +5397,7 @@ procedure Diary_Sim is
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
                World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => False, Visit_Who => 0, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted);
+               Visit => False, Visit_Who => 0, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);
@@ -5977,7 +6001,7 @@ procedure Diary_Sim is
       Screen_Active := Screen_Wanted;
       Chess_Active := Chess_Wanted;
       Symbols_Active := Symbols_Wanted;
-      Sim_World.Hide_Symbols (Symbols_Active);
+      Sim_World.Hide_Symbols (Symbols_Active, Symstrict_Wanted);
       Robot_Active := Robot_Wanted;
       Govern_Active := Govern_Wanted;
       Scoin_Active := Scoin_Wanted;
@@ -6357,6 +6381,8 @@ procedure Diary_Sim is
    Night_Phase : Natural := 0;                  --  0 replaying the history, 1 a session, 2 verifying, 3 between sessions
    Night_Verified : Natural := 0;               --  full replays by the child process
    Q_Said : Boolean := False;
+   Night_Verify_Cut : Boolean := False;         --  the check at the end was cut short by q (the reason stays the limit)
+   Q_Dropped : Boolean := False;                --  a q came when the limit was already reached: dropped, the reason is the limit
    Size0, Size_Now : Int := 0;
    Sess_Total, Last_Dur : Duration := 0.0;      --  wall time of the finished sessions / of the last one
    S_Start, Last_Paint, Last_Poll, Last_Size : Ada.Calendar.Time := Night_T0;
@@ -6638,6 +6664,18 @@ procedure Diary_Sim is
       return R;
    end Chat_Region;
 
+   --  The run ends at its limit after this session anyway (or it has ended and the check at the end runs): a q then changes nothing,
+   --  the reason stays max_sessions / max_hours (a stray q byte of the terminal must not turn a full night into "you pressed q").
+   function Limit_Ending return Boolean is
+     (Night_Phase /= 0 and then not Chat_Mode   --  --chat: q stops the session at the next tick, it is never "the last session anyway"
+      and then ((Night_Max_S > 0 and then Int (Night_Done) + (if Night_Phase = 1 then 1 else 0) >= Night_Max_S)
+                or else (Night_Max_Secs > 0.0 and then Since (Night_T0) >= Night_Max_Secs)));
+
+   function Q_Text return String is
+     (Msg (if Night_Phase = 0 then "night.q.replay"
+           elsif Limit_Ending then (if Night_Phase = 2 then "night.q.limit_verify" else "night.q.limit")
+           elsif Chat_Mode then "night.q.chat" else "night.q"));
+
    --  One piece, written with one call: home, the lines (each cleared to its end), clear below.
    procedure Paint is
       R : Unbounded_String;
@@ -6661,7 +6699,7 @@ procedure Diary_Sim is
       L (Msg ("night.t.4", Now_Text));
       L (Msg ("night.t.5", Img (Night_Done), (if Night_Done > 0 then Tenths_Text (Last_Dur) & " s" else "-"), Avg_Text, Ticks_Per_Sec));
       for T of Tab loop L (" " & T); end loop;
-      L (if Sim_Quit.Key_Q then Msg (if Night_Phase = 0 then "night.q.replay" elsif Chat_Mode then "night.q.chat" else "night.q")
+      L (if Sim_Quit.Key_Q then Q_Text
          elsif Chat_Paused then Msg ("chat.hint.paused", Img (Last_Done))
          elsif Sim_Quit.Lines_On then Msg ("chat.hint")
          else Msg (if Sim_Quit.Watching then "night.keys" else "night.nokeys"));
@@ -6733,7 +6771,7 @@ procedure Diary_Sim is
       No_Session;
       if (Sim_Quit.Key_Q or else Sim_Quit.Requested) and then not Q_Said then
          Q_Said := True;
-         if Tty_Out then Paint; else Con.Put_Line_Now (Msg ((if Night_Phase = 0 then "night.q.replay" elsif Chat_Mode then "night.q.chat" else "night.q"))); Flush_Out; end if;
+         if Tty_Out then Paint; else Con.Put_Line_Now (if Sim_Quit.Key_Q then Q_Text else Msg ((if Night_Phase = 0 then "night.q.replay" elsif Chat_Mode then "night.q.chat" else "night.q"))); Flush_Out; end if;
       end if;
       Refresh;
       if Chat_Paused then   --  /pause: the ticks wait; the screen, the keys and the lines go on
@@ -6872,6 +6910,7 @@ procedure Diary_Sim is
             GNAT.OS_Lib.Kill (Pid, Hard_Kill => True);
             GNAT.OS_Lib.Wait_Process (Pid, OK);
             Append_Log ("NIGHT", "verify: cut short" & ASCII.LF);
+            Night_Verify_Cut := Sim_Quit.Key_Q;
             return True;
          end if;
          delay 0.2;
@@ -6927,6 +6966,8 @@ procedure Diary_Sim is
       Box.Append (Msg ("night.box.time", Elapsed_Text (Since (Night_T0))));
       Box.Append (Msg ("night.box.speed", Avg_Text, Ticks_Per_Sec, Size_Text (Size_Now), Growth_Text));
       if Night_Verified > 0 then Box.Append (Msg ("night.box.verified", Img (Night_Verified))); end if;
+      if Night_Verify_Cut and then Why in "max_sessions" | "max_hours" then Box.Append (Msg ("night.box.verify_cut")); end if;
+      if Q_Dropped and then Why in "max_sessions" | "max_hours" then Box.Append (Msg ("night.box.q_dropped")); end if;
       if Length (Last_Line) > 0 then Box.Append (Msg ("night.box.last", To_String (Last_Line))); end if;
       Box.Append (Msg ("night.box.files"));
       for L of Box loop Wide := Natural'Max (Wide, L'Length); end loop;
@@ -6946,6 +6987,8 @@ procedure Diary_Sim is
       End_Check : constant Boolean := Limit ("night.verify_end", 1) /= 0 and then not Chat_Mode;   --  --chat: one short session, no full check at its end
       Verified_Now : Boolean := False;
       Ok : Boolean := True;
+      function Limit_Reached return Boolean is
+        ((Night_Max_S > 0 and then Int (Night_Done) >= Night_Max_S) or else (Night_Max_Secs > 0.0 and then Since (Night_T0) >= Night_Max_Secs));
    begin
       Night_Done := Night_Done + 1;
       Last_Dur := Since (S_Start);
@@ -6975,15 +7018,23 @@ procedure Diary_Sim is
          Con.Put_Line_Now (Msg ("night.plain", Hms (Since (Night_T0)), Size_Text (Size_Now), Growth_Text, Avg_Text, Ticks_Per_Sec, Left_Text));
          Flush_Out;
       end if;
+      if Sim_Quit.Key_Q and then Limit_Reached then   --  a q in the last session (or a stray q byte of the terminal): the limit ends the run anyway
+         Sim_Quit.Forget_Q;   --  dropped before the check at the end: a q pressed during that check still cuts it short
+         Q_Said := False;
+         Q_Dropped := True;
+         Append_Log ("NIGHT", "q: came in the last session, dropped (the limit ends the run)" & ASCII.LF);
+      end if;
       if Every_N > 0 and then Int (Night_Done) mod Every_N = 0 and then not Sim_Quit.Key_Q and then not Sim_Quit.Requested then
          Ok := Night_Verify;
          Verified_Now := True;
       end if;
+      --  The order: drift, a signal, the limit (sessions, then hours), q.  The limit first: a full night is a full night even when a q
+      --  (or a stray q byte, e.g. of an escape sequence) came in its last session; a q in any earlier session still stops with why=q.
       if not Ok then Night_Why := To_Unbounded_String ("drift");
-      elsif Sim_Quit.Key_Q then Night_Why := To_Unbounded_String ("q");
       elsif Sim_Quit.Requested then Night_Why := To_Unbounded_String ("signal");
       elsif Night_Max_S > 0 and then Int (Night_Done) >= Night_Max_S then Night_Why := To_Unbounded_String ("max_sessions");
       elsif Night_Max_Secs > 0.0 and then Since (Night_T0) >= Night_Max_Secs then Night_Why := To_Unbounded_String ("max_hours");
+      elsif Sim_Quit.Key_Q then Night_Why := To_Unbounded_String ("q");
       end if;
       if Length (Night_Why) = 0 then
          S_Start := Ada.Calendar.Clock;
@@ -6991,9 +7042,8 @@ procedure Diary_Sim is
       end if;
       if Ok and then End_Check and then not Verified_Now and then To_String (Night_Why) in "max_sessions" | "max_hours" then   --  not after q / Ctrl-C: those end at once; make verify does it by hand
          if not Night_Verify then Night_Why := To_Unbounded_String ("drift");
-         elsif Sim_Quit.Key_Q then Night_Why := To_Unbounded_String ("q");   --  cut short by q
          elsif Sim_Quit.Requested then Night_Why := To_Unbounded_String ("signal");
-         end if;
+         end if;   --  cut short by q: the reason stays the limit, the box says the check was cut short (Night_Verify_Cut)
       end if;
       return True;
    end Night_After_Session;

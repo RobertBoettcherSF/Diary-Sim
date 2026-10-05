@@ -1,4 +1,4 @@
-# Version: 0.003
+# Version: 0.004
 # The evolution preview (make evolve, make active, --evolve, --active; Sim_Evolve): read-only, counts over the diaries and entities/*/words.txt.
 # "key = text".  {1}.. are filled in.  The numbers (points, lines, caps) are in data/limits.txt, keys evolve.*.  Nothing here changes a diary.
 err.active = active.txt {1} differs from the replay: {2}
@@ -74,6 +74,7 @@ evolve.concl.3 = {1} weight changes ran into the limit of the table.
 evolve.concl.nochess = Chess: no games in this save.
 evolve.l.woke_real = woke again (all sessions)
 evolve.l.slow_real = at the cap (mint-slow next)
+evolve.l.slow_floor = at floor or above (mint-slow next)
 evolve.a.real = Active vocabulary (active={3}; the state at the end of session {1}, tick {2}; diaries/active.txt)
 evolve.l.active_real = active words
 evolve.l.dormant_real = dormant words
@@ -81,6 +82,7 @@ evolve.l.base_real = of those: base words (never go)
 evolve.a.params = Numbers of the first active=1 session (kept for the life of the save): {1}
 evolve.a.params2 = Numbers of the first active=2 session (floor {1}, cap {2}, the mint-slow percents; kept for the life of the save): {3}
 evolve.a.concl.real = At the end of the last closed active session the four wesen hold {1} active words in all and {2} are dormant; {3} chess and number strings are symbols and stay out of the pool; the {4} base words never go.
+evolve.a.concl.level2f = active=2: idle words may go dormant down to the floor of {1} active words, above the cap of {2} the lowest fitness goes first; mint-slow also at the floor (slowfloor=1, the same percents): {3} of the four wesen held at least the floor at the last session end and get new words slowly in the next session (a lesson of a dormant word wakes it instead).
 evolve.a.concl.level2 = active=2: idle words may go dormant down to the floor of {1} active words, above the cap of {2} the lowest fitness goes first; {3} of the four wesen held the cap at the last session end and get new words slowly in the next session (a lesson of a dormant word wakes it instead).
 evolve.a.title = Active vocabulary preview (active=1; a cap of {1} words per wesen, nothing is changed), tick {2}, {3} sessions
 evolve.a.rules = Rules (docs/LEARN.md 12 (a), docs/EVOLVE.md 3.2): every wesen keeps at most {1} active words; above that the lowest fitness goes first (fitness as in make evolve), after the probation, at most {2} words a session; base words never go, chess and number strings are symbols and are left out. A dormant word stays in words.txt.

@@ -1,4 +1,4 @@
---  Version: 0.007
+--  Version: 0.008
 --  See sim_screen.ads.
 pragma Ada_2022;
 
@@ -214,6 +214,7 @@ package body Sim_Screen is
       if (if Scoin_On then Ses_Coined (Who) >= Natural (Coin_Cap_S) else Int (Coined_Total) >= Cap_V) or else Text'Length < 3 or else Text'Length > 24
         or else (for some C of Text => C = ' ') or else Find (Text) /= 0
         or else Blocked (A) or else Blocked (B) or else Asleep (Who, A) or else Asleep (Who, B)   --  active=1: no blend from a dormant word
+        or else Blocked_Text (Text)   --  symstrict=1: a blend that would read as a chess or number string (53+36 = 5336) is not made
         or else (Is_Clean and then not (Plain (A) and then Plain (B)))   --  records=1: no chess move is blended into a word
         or else not Slow_Pass (Seed_V, Who, Tick, Slow_Blend)   --  active=2 mint-slow: a wesen at the cap (salt 20873)
       then

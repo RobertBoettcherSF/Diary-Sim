@@ -1,4 +1,4 @@
---  Version: 0.004
+--  Version: 0.005
 --  See sim_wordstat.ads.  Read-only counting over strings; no I/O here.
 pragma Ada_2022;
 
@@ -39,6 +39,7 @@ package body Sim_Wordstat is
    package Log_Vectors is new Ada.Containers.Vectors (Positive, Log_Event);
    Log : Log_Vectors.Vector;
    Symbols_Tick : Integer := -1;   --  start of the first symbols=1 session (-1: none)
+   Strict_Tick : Integer := -1;    --  start of the first symstrict=1 session (-1: none)
    Agreed_Set : Tick_Maps.Map;   --  agreed text -> tick of the first agreement
    Min_Stem : Natural := 3;
    Class_Edges : Edge_Array := [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15];
@@ -80,6 +81,7 @@ package body Sim_Wordstat is
       Agreed_Set.Clear;
       Log.Clear;
       Symbols_Tick := -1;
+      Strict_Tick := -1;
       Min_Stem := Natural'Max (1, Stem_Min);
       Class_Edges := Edges;
    end Reset;
@@ -133,6 +135,11 @@ package body Sim_Wordstat is
       Symbols_Tick := Tick;
    end Set_Symbols;
 
+   procedure Set_Strict (Tick : Integer) is
+   begin
+      Strict_Tick := Tick;
+   end Set_Strict;
+
    function Result (E : Natural) return Stat is
       R : Stat;
       All_Text, All_Chess, All_Number : Text_Sets.Set;
@@ -162,6 +169,7 @@ package body Sim_Wordstat is
                   R.Since := R.Since + 1;
                   if W.K in Chess | Number then R.Since_Token := R.Since_Token + 1; end if;
                end if;
+               if Strict_Tick >= 0 and then W.Tick > Strict_Tick and then W.K in Chess | Number then R.Strict_Token := R.Strict_Token + 1; end if;
                if not All_Text.Contains (T) then All_Text.Insert (T); end if;
                if W.K = Chess then
                   if not Chess_Seen.Contains (T) then Chess_Seen.Insert (T); end if;

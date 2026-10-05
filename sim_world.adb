@@ -1,4 +1,4 @@
---  Version: 0.021
+--  Version: 0.022
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
@@ -162,11 +162,13 @@ package body Sim_World is
       Variant : Natural := 0;
       Meaning : Unbounded_String;
       Symbol : Boolean := False;   --  a chess coordinate string or a numeric string (set from the text when the word is made)
+      Sym_Text : Boolean := False;   --  the text is a chess or number string, whatever made it (a coined word too, e.g. a blend 53+36)
    end record;
    package Word_Vectors is new Ada.Containers.Vectors (Positive, Word_Rec);
    package Bool_Vectors is new Ada.Containers.Vectors (Positive, Boolean);
    Table : Word_Vectors.Vector;
    Symbols_Hidden : Boolean := False;   --  symbols=1 session: Blocked words are not learned or taught
+   Symbols_Strict : Boolean := False;   --  symstrict=1 session: a COINED chess or number string is blocked too (not only a world word)
 
    function Symbol_Text (T : String) return Boolean is
      ((T'Length in 4 .. 5
@@ -258,7 +260,7 @@ package body Sim_World is
       Wake_Teach := False;
       Table.Clear;
       for W of Base_Words loop
-         Table.Append (Word_Rec'(Text => To_Unbounded_String (W), others => <>));
+         Table.Append (Word_Rec'(Text => To_Unbounded_String (W), Sym_Text => Symbol_Text (W), others => <>));
       end loop;
       Base := Natural (Table.Length);
       for E in Entity_Id loop
@@ -290,12 +292,15 @@ package body Sim_World is
       Freq (E).Replace_Element (W, Freq (E).Element (W) + Amount);
    end Use_Word;
 
-   procedure Hide_Symbols (On : Boolean) is
+   procedure Hide_Symbols (On : Boolean; Strict : Boolean := False) is
    begin
       Symbols_Hidden := On;
+      Symbols_Strict := On and then Strict;
    end Hide_Symbols;
 
-   function Blocked (W : Positive) return Boolean is (Symbols_Hidden and then W <= Natural (Table.Length) and then Table (W).Symbol);
+   function Blocked (W : Positive) return Boolean is
+     (Symbols_Hidden and then W <= Natural (Table.Length) and then (Table (W).Symbol or else (Symbols_Strict and then Table (W).Sym_Text)));
+   function Blocked_Text (Text : String) return Boolean is (Symbols_Strict and then Symbol_Text (Text));
 
    procedure Use_Dormant (On : Boolean) is
    begin
@@ -375,14 +380,14 @@ package body Sim_World is
 
    function Add_Coined (Text : String; P1, P2 : Natural; By : Entity_Id) return Positive is
    begin
-      Table.Append (Word_Rec'(Text => To_Unbounded_String (Text), P1 => P1, P2 => P2, Coiner => Positive (By), others => <>));
+      Table.Append (Word_Rec'(Text => To_Unbounded_String (Text), P1 => P1, P2 => P2, Coiner => Positive (By), Sym_Text => Symbol_Text (Text), others => <>));
       return Count;
    end Add_Coined;
 
    function Add_World_Word (Text, Meaning : String; Kind : Positive; Variant_Of : Natural := 0) return Positive is
    begin
       Table.Append (Word_Rec'(Text => To_Unbounded_String (Text), Kind => Kind, Variant => Variant_Of,
-                              Meaning => To_Unbounded_String (Meaning), Symbol => Symbol_Text (Text), others => <>));
+                              Meaning => To_Unbounded_String (Meaning), Symbol => Symbol_Text (Text), Sym_Text => Symbol_Text (Text), others => <>));
       return Count;
    end Add_World_Word;
 

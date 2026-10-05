@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  See the spec.  Counting only: integer arithmetic, no dice, no clock, no files.
 pragma Ada_2022;
 
@@ -25,10 +25,15 @@ package body Sim_Active is
    Window : Boolean := False;
    Cur : Natural := 0;            --  the session of the open window
    Cur_Level : Natural := 0;      --  its level
+   Cur_Floor : Boolean := False;  --  its session carries slowfloor=1: mint-slow from the floor up (else from the cap up)
    Params_Done : array (1 .. 2) of Boolean := [others => False];
    Last_Active : array (Entity_Id) of Natural := [others => 0];   --  active words at the last session end (mint-slow)
    Out_Lines : Str_Vectors.Vector;
    N_Dorm, N_Wake : array (Entity_Id) of Natural := [others => 0];
+
+   --  active=2: N active words at a session end make the wesen slow in the next session (the cap; slowfloor=1: already the floor).
+   function Slow_At (N : Natural) return Boolean is
+     ((Lv2.Cap > 0 and then N >= Lv2.Cap) or else (Cur_Floor and then Lv2.Min_Active > 0 and then N >= Lv2.Min_Active));
 
    procedure Reset (Pr : Sim_Evolve.Word_Params; Pr2 : Sim_Evolve.Word_Params; Slow : Slow_Pcts) is
    begin
@@ -39,6 +44,7 @@ package body Sim_Active is
       Window := False;
       Cur := 0;
       Cur_Level := 0;
+      Cur_Floor := False;
       Params_Done := [others => False];
       Last_Active := [others => 0];
       Use_Wake_Teach (False);
@@ -319,11 +325,11 @@ package body Sim_Active is
       Out_Lines.Append ("t=" & Img (Tick) & " s=" & Img (Cur) & " " & Name (E) & " state known=" & Img (Known_W) & " symbols=" & Img (Symbols)
                         & " active=" & Img (Active) & " dormant=" & Img (Dormant_Count (E)) & " base=" & Img (Base_N)
                         & " went=" & Img (Pr.Retire_Max - Left) & " woke=" & Img (N_Wake (E))
-                        & (if Cur_Level = 2 then " slow=" & (if Active >= Lv2.Cap and then Lv2.Cap > 0 then "1" else "0") else ""));
+                        & (if Cur_Level = 2 then " slow=" & (if Slow_At (Active) then "1" else "0") & (if Cur_Floor then " slowat=floor" else "") else ""));
       Last_Active (E) := Active;
    end Close_One;
 
-   procedure Open (N : Positive; Tick : Int; Level : Natural) is
+   procedure Open (N : Positive; Tick : Int; Level : Natural; Floor : Boolean := False) is
       On : constant Boolean := Level in 1 .. 2;
    begin
       if Window then
@@ -332,6 +338,7 @@ package body Sim_Active is
       Window := On;
       Cur := N;
       Cur_Level := (if On then Level else 0);
+      Cur_Floor := Cur_Level = 2 and then Floor;
       if On and then not Params_Done (Level) then
          Params_Done (Level) := True;
          if Level = 2 then
@@ -344,7 +351,7 @@ package body Sim_Active is
       Use_Dormant (On);
       Use_Wake_Teach (Cur_Level = 2);
       for E in Entity_Id loop
-         Set_Slow (E, Cur_Level = 2 and then Lv2.Cap > 0 and then Last_Active (E) >= Lv2.Cap);
+         Set_Slow (E, Cur_Level = 2 and then Slow_At (Last_Active (E)));
       end loop;
    end Open;
 

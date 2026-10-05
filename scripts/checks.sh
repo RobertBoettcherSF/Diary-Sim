@@ -2300,7 +2300,7 @@ ms=$(mint "$w/nt/a2"); mf=$(mint "$w/nt/a2f")
   && ok "mint-slow: $capn wesen held the cap of 500 when active=2 began; in that first session $ms new words were minted against $mf with every slow percent at 100" || bad "mint-slow ($capn $ms $mf '$st')"
 env -u DIARY_VERBOSE "$nb" --active --home "$w/nt/a2" > a2a.txt 2>&1
 grep -q '^Active vocabulary (active=2;' a2a.txt && grep -q '^Numbers of the first active=1 session' a2a.txt && grep -q '^Numbers of the first active=2 session (floor 300, cap 500' a2a.txt \
-  && grep -q 'at the cap (mint-slow next)' a2a.txt && [ "$(awk 'length > 79' a2a.txt | wc -l)" = 0 ] \
+  && grep -q 'at the cap (mint-slow next)\|at floor or above (mint-slow next)' a2a.txt && [ "$(awk 'length > 79' a2a.txt | wc -l)" = 0 ] \
   && grep -q 'active=2' "$root/README.md" && grep -q 'active.floor' "$root/data/limits.txt" && grep -q 'active=2' "$root/data/help.txt" && grep -q '20870' "$root/docs/PORTALS.md" && grep -q 'active=2' "$root/docs/LEARN.md" \
   && ok "make active on the active=2 save: level 2, both params lines (floor 300, cap 500), who is at the cap; README, --help, limits.txt, EVOLVE.md, LEARN.md and PORTALS.md (salts 20870 .. 20873) describe active=2" || bad "active=2 report and docs"
 cd "$w" || exit 1
@@ -2331,6 +2331,108 @@ rm -rf "$w/nt/ck3"; cp -r "$w/nt/a2" "$w/nt/ck3"
 ( env -u DIARY_VERBOSE "$nb" --home "$w/nt/ck3" --continuous --session-ticks 60 --max-sessions 1 > ck3.txt 2>&1 < /dev/null & p=$!; sleep 2; kill -TERM $p; wait $p )
 grep -q '^| replay not finished: no new session ran' ck3.txt && ! grep -q '^replay done' ck3.txt && grep -q 'make checkin' "$root/README.md" && grep -q '^checkin:' "$root/Makefile" && grep -q 'replay done' "$root/data/help.txt" \
   && ok "a night stopped during the replay says 'replay not finished: no new session ran' in its box; README, Makefile and --help describe make checkin and the replay line" || bad "replay not finished"
+cd "$w" || exit 1
+
+echo "== 58. a capped night (--max-sessions N) ends with why=max_sessions: a q (or a stray q byte) in its last session or in the end check does not change the reason; escape sequences are no q =="
+cd "$w/nt" || exit 1
+cat > "$w/nt/ptycap.py" <<'PY'
+import os, pty, re, select, sys, time
+mode, exe, home = sys.argv[1:4]
+extra = sys.argv[4:]
+pid, fd = pty.fork()
+if pid == 0:
+    os.chdir("/")
+    os.execv(exe, [exe, "--continuous", "--home", home] + extra)
+# last: q in the last session (after the first one is done); verify: q while the end check runs; esc / esc_plain: F2 (ESC O Q) split
+# over two writes, ESC [ 1 ; 2 Q and a legacy mouse report at column 81 (byte q) during the first session of three
+trigger = {"last": rb"\ns\d+ t\d+ ", "verify": rb"verifying the whole history", "esc": rb"session \d+, tick \d+ of", "esc_plain": rb"session \d+, tick \d+ of"}[mode]
+out = b""; sent = False; t0 = time.time()
+while time.time() - t0 < 180:
+    r, _, _ = select.select([fd], [], [], 0.05)
+    if r:
+        try: d = os.read(fd, 65536)
+        except OSError: break
+        if not d: break
+        out += d
+    if not sent and re.search(trigger, out):
+        sent = True
+        if mode in ("last", "verify"): os.write(fd, b"q")
+        else:
+            os.write(fd, b"\x1b"); time.sleep(0.4); os.write(fd, b"OQ"); time.sleep(0.2)
+            os.write(fd, b"\x1b[1;2Q"); time.sleep(0.2); os.write(fd, b"\x1b[M q!")
+try:
+    _, st = os.waitpid(pid, 0)
+except ChildProcessError:
+    st = 0
+plain = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", out.decode("utf-8", "replace"))
+print(plain)
+print("SENT=%d" % sent); print("EXIT=%d" % os.waitstatus_to_exitcode(st))
+PY
+big="$w/nt/big"; [ -d "$big" ] || env -u DIARY_VERBOSE "$nb" --home "$big" --seed 42 --ticks 6000 --yes --every 100000 > /dev/null 2>&1
+# 1. q in the last session of --max-sessions 2: the reason stays max_sessions, the live line does not say "stopping", the end check runs
+rm -rf "$w/nt/cq"; cp -r "$big" "$w/nt/cq"
+python3 "$w/nt/ptycap.py" last "$nb" "$w/nt/cq" --session-ticks 3000 --max-sessions 2 > cq.txt 2>&1
+grep -q '^SENT=1' cq.txt && grep -q '^EXIT=0' cq.txt && grep -q '^| stopped: the number of sessions was reached' cq.txt && ! grep -q 'stopped: you pressed q' cq.txt && ! grep -q 'q pressed: stopping' cq.txt \
+  && grep -q 'q pressed: this is the last session anyway' cq.txt && grep -q '^| a q came in the last session: ignored' cq.txt && grep -q '^stop: reason=max_sessions sessions=2 ' "$w/nt/cq/run_log.txt" \
+  && grep -q '^verify: ok ' "$w/nt/cq/run_log.txt" && grep -q 'came in the last session, dropped' "$w/nt/cq/run_log.txt" \
+  && ok "q in the LAST session of --max-sessions 2: box 'stopped: the number of sessions was reached' (not q), the live line says it is the last session anyway, run_log reason=max_sessions, the end check still runs" || bad "q in the last capped session"
+# 2. q while the end check runs: it is cut short, the reason stays max_sessions, the box says so
+rm -rf "$w/nt/cv"; cp -r "$big" "$w/nt/cv"
+python3 "$w/nt/ptycap.py" verify "$nb" "$w/nt/cv" --session-ticks 300 --max-sessions 1 > cv.txt 2>&1
+grep -q '^SENT=1' cv.txt && grep -q '^EXIT=0' cv.txt && grep -q '^| stopped: the number of sessions was reached' cv.txt && grep -q '^| end check cut short by q' cv.txt && ! grep -q 'stopped: you pressed q' cv.txt \
+  && grep -q '^stop: reason=max_sessions sessions=1 ' "$w/nt/cv/run_log.txt" && grep -q '^verify: cut short' "$w/nt/cv/run_log.txt" \
+  && ok "q during the end check of a capped night: the check is cut short (the box says so), the reason stays max_sessions" || bad "q during the end check"
+# 3. escape sequences with a Q byte (F2 split over two reads, Shift-F2, a mouse report at column 81) are no q: chat line mode and plain key mode
+rm -rf "$w/nt/ce"; cp -r "$big" "$w/nt/ce"
+python3 "$w/nt/ptycap.py" esc "$nb" "$w/nt/ce" --session-ticks 3000 --max-sessions 3 > ce.txt 2>&1
+rm -rf "$w/nt/nc"; mkdir -p "$w/nt/nc/bin"; cp "$nb" "$w/nt/nc/bin/"; cp -r "$root/data" "$w/nt/nc/data"; sed -i 's/^chat.enabled = .*/chat.enabled = 0/' "$w/nt/nc/data/limits.txt"
+rm -rf "$w/nt/cp"; cp -r "$big" "$w/nt/cp"
+python3 "$w/nt/ptycap.py" esc_plain "$w/nt/nc/bin/diary_sim" "$w/nt/cp" --session-ticks 3000 --max-sessions 3 > cp.txt 2>&1
+grep -q '^SENT=1' ce.txt && grep -q '^SENT=1' cp.txt && grep -q '^| stopped: the number of sessions was reached' ce.txt && grep -q '^| stopped: the number of sessions was reached' cp.txt \
+  && ! grep -q 'q pressed\|a q came' ce.txt && ! grep -q 'q pressed\|a q came' cp.txt && grep -q '^stop: reason=max_sessions sessions=3 ' "$w/nt/ce/run_log.txt" && grep -q '^stop: reason=max_sessions sessions=3 ' "$w/nt/cp/run_log.txt" \
+  && grep -q '^start: .* keys=q$' "$w/nt/cp/run_log.txt" && grep -q 'Forget_Q' "$root/sim_quit.ads" \
+  && ok "F2 (ESC O Q, split over two reads), Shift-F2 and a mouse report with a q byte in the first of 3 sessions are no q (with and without the chat line): all 3 sessions run, why=max_sessions" || bad "escape sequences counted as q"
+cd "$w" || exit 1
+
+echo "== 59. build 0.054: active=2 mint-slow also at the floor (slowfloor=1); symstrict=1 closes the leak of coined chess strings after symbols=1 =="
+cd "$w/nt" || exit 1
+# 1. floor: the active=2 save of scenario 56 goes on 3 sessions with the default data (slowfloor=1) and, as the control, with active.slow_floor = 0
+rm -rf "$w/nt/fl_on" "$w/nt/fl_off" "$w/nt/fl_d"; cp -r "$w/nt/a2" "$w/nt/fl_on"; cp -r "$w/nt/a2" "$w/nt/fl_off"
+mkdir -p "$w/nt/fl_d/bin"; cp "$nb" "$w/nt/fl_d/bin/"; cp -r "$root/data" "$w/nt/fl_d/data"; sed -i 's/^active.slow_floor = .*/active.slow_floor = 0/' "$w/nt/fl_d/data/limits.txt"
+fl_n0=$(grep -c '^S' "$w/nt/a2/diaries/sessions.txt")
+env -u DIARY_VERBOSE "$nb" --home "$w/nt/fl_on" --continuous --session-ticks 300 --max-sessions 3 > fl_on.txt 2>&1; rcf=$?
+( cd "$w/nt/fl_d" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/fl_off" --continuous --session-ticks 300 --max-sessions 3 > "$w/nt/fl_off.txt" 2>&1 )
+kn() { grep ' state known=' "$1/diaries/active.txt" | tail -4 | sed 's/.* state known=\([0-9]*\) .*/\1/' | awk '{ s += $1 } END { print s + 0 }'; }
+k_on=$(kn "$w/nt/fl_on"); k_off=$(kn "$w/nt/fl_off"); k0=$(kn "$w/nt/a2")
+nf_on=$(grep '^S' "$w/nt/fl_on/diaries/sessions.txt" | tail -3 | grep -c ' slowfloor=1 .* active=2$'); nf_off=$(grep '^S' "$w/nt/fl_off/diaries/sessions.txt" | tail -3 | grep -c 'slowfloor=1')
+env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/fl_on" > fl_v.txt 2>&1; rcfv=$?
+env -u DIARY_VERBOSE "$nb" --active --home "$w/nt/fl_on" > fl_a.txt 2>&1
+[ "$rcf" = 0 ] && [ "$nf_on" = 3 ] && [ "$nf_off" = 0 ] && [ "$k_on" -gt "$k0" ] && [ $((k_on - k0)) -lt $((k_off - k0)) ] && grep -q ' slowat=floor$' "$w/nt/fl_on/diaries/active.txt" \
+  && [ "$rcfv" = 0 ] && grep -q '^  at floor or above (mint-slow next)' fl_a.txt && grep -q 'mint-slow also at the floor' fl_a.txt && [ "$(awk 'length > 79' fl_a.txt | wc -l)" = 0 ] \
+  && grep -q '^active.slow_floor = 1' "$root/data/limits.txt" && grep -q 'slowfloor=1' "$root/docs/EVOLVE.md" \
+  && ok "slowfloor=1: 3 new active=2 sessions carry it (control: none), the state lines say slowat=floor, the known words grow by $((k_on - k0)) against $((k_off - k0)) with mint-slow at the cap only; make verify OK; make active says 'at floor or above' and 'mint-slow also at the floor'" || bad "slowfloor ($rcf $nf_on $nf_off $k0 $k_on $k_off $rcfv)"
+# 2. symstrict: a save that coined number strings under the old rules (symbols.enabled = 0, records.enabled = 0), one session with
+# symbols=1 but symbols.strict = 0 (the leak of builds before 0.054: an old blend or coin like 71634866 is taught again), then the default
+rm -rf "$w/nt/ss" "$w/nt/ss_o" "$w/nt/ss_l"; mkdir -p "$w/nt/ss_o/bin" "$w/nt/ss_l/bin"; cp "$nb" "$w/nt/ss_o/bin/"; cp "$nb" "$w/nt/ss_l/bin/"
+cp -r "$root/data" "$w/nt/ss_o/data"; cp -r "$root/data" "$w/nt/ss_l/data"
+sed -i 's/^symbols.enabled = .*/symbols.enabled = 0/; s/^records.enabled = .*/records.enabled = 0/; s/^active.slow_floor = .*/active.slow_floor = 0/' "$w/nt/ss_o/data/limits.txt"
+sed -i 's/^symbols.strict = .*/symbols.strict = 0/; s/^active.slow_floor = .*/active.slow_floor = 0/' "$w/nt/ss_l/data/limits.txt"   # the rules of build 0.053
+( cd "$w/nt/ss_o" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/ss" --seed 2 --ticks 6000 --yes --every 100000 > /dev/null 2>&1 )
+( cd "$w/nt/ss_l" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/ss" --continuous --session-ticks 3000 --max-sessions 1 > /dev/null 2>&1 )
+sym_after() { awk -v t="$2" '$4 > t && ($2 ~ /^[0-9]+$/ || $2 ~ /^[a-h][1-8][a-h][1-8][qrbn]?$/)' "$1"/entities/*/words.txt | wc -l; }
+ss_c=$(awk '$3 == "coined" && $2 ~ /^[0-9]+$/' "$w/nt/ss"/entities/*/words.txt | wc -l); ss_leak=$(sym_after "$w/nt/ss" 6000)
+rm -rf "$w/nt/ss_c" "$w/nt/ss_l2"; cp -r "$w/nt/ss" "$w/nt/ss_c"; cp -r "$w/nt/ss_l" "$w/nt/ss_l2"; cp -r "$root/data/limits.txt" "$w/nt/ss_l2/data/limits.txt"
+sed -i 's/^symbols.strict = .*/symbols.strict = 0/' "$w/nt/ss_l2/data/limits.txt"   # the control: today's rules but symbols.strict = 0
+( cd "$w/nt/ss_l2" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/ss_c" --continuous --session-ticks 3000 --max-sessions 3 > /dev/null 2>&1 )
+env -u DIARY_VERBOSE "$nb" --home "$w/nt/ss" --continuous --session-ticks 3000 --max-sessions 3 > ss.txt 2>&1; rcs=$?
+ss_new=$(sym_after "$w/nt/ss" 9000); ss_ctl=$(sym_after "$w/nt/ss_c" 9000)
+env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/ss" > ss_v.txt 2>&1; rcsv=$?
+env -u DIARY_VERBOSE "$nb" --wordstat --home "$w/nt/ss" > ss_w.txt 2>&1
+ss_row=$(grep '^  chess or number strings ' ss_w.txt | awk '{ print $NF }')
+[ "$ss_c" -gt 0 ] && [ "$ss_leak" -ge 1 ] && [ "$rcs" = 0 ] && [ "$ss_new" = 0 ] && [ "$ss_ctl" -ge 1 ] && [ "$rcsv" = 0 ] && [ "$(grep -c '^S2 .* symstrict=1 ' "$w/nt/ss/diaries/sessions.txt")" = 0 ] \
+  && [ "$(grep -c '^S[345] .* symstrict=1 ' "$w/nt/ss/diaries/sessions.txt")" = 3 ] && grep -q 'first symstrict=1 session: S3 from tick 9000' ss_w.txt && [ "$ss_row" = 0 ] && [ "$(awk 'length > 79' ss_w.txt | wc -l)" = 0 ] \
+  && grep -q '^symbols.strict = 1' "$root/data/limits.txt" && grep -q 'symstrict=1' "$root/docs/EVOLVE.md" \
+  && ok "symstrict=1: $ss_c number strings were coined under the old rules and $ss_leak leaked into words.txt after symbols=1 without it; 3 new sessions carry symstrict=1 and add 0 chess or number strings (the same 3 sessions with symbols.strict = 0: $ss_ctl); make verify OK on the mixed save; make wordstat counts 0 since the first symstrict=1 session" || bad "symstrict ($ss_c $ss_leak $rcs $ss_new $ss_ctl $rcsv '$ss_row')"
 cd "$w" || exit 1
 
 

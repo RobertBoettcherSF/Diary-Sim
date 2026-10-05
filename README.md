@@ -157,7 +157,7 @@ For a run you leave alone and read in the morning, and for the loop *Robert runs
   sessions, inbox, records of every kind): one `verify: OK ...` line, or the DRIFT text and exit status 1; it writes nothing. A night run
   that stops at `MAX_SESSIONS` or `MAX_HOURS` runs it in a child process at its end (`night.verify_end = 1`; the box says so), and every
   `night.verify_every` sessions if that is set (default 0 = never). After q or Ctrl-C it is not run (those end at once): run
-  `make verify` by hand. q during the check stops the check.
+  `make verify` by hand. q during the check stops the check (the box says `end check cut short by q`, the reason stays the limit).
 * **Stopping:** press **`q`** (no Enter needed, any case) **at any time**; it is looked at between ticks, so it takes effect within a
   fraction of a second at every stage, and the header says `q pressed: stopping...` at once.
   * *During the first replay* (nothing new exists yet): it stops at once, nothing is lost, the files are as they were, the message says at
@@ -165,6 +165,11 @@ For a run you leave alone and read in the morning, and for the loop *Robert runs
   * *Once new ticks exist*: the session in progress finishes (300 ticks take a fraction of a second; with a very large
     `SESSION_TICKS` it takes as long as those ticks), everything is written (diaries, entities, summaries, `trend.txt`, `run_log.txt` with
     `stop: reason=q`), the final box is shown. Exit status 0.
+  * *In the last session of a capped night* (`MAX_SESSIONS` / `MAX_HOURS` reached after it) or during its end check: the limit wins.
+    The live line says `q pressed: this is the last session anyway`, the box says `stopped: the number of sessions was reached` (or the
+    time limit) with a line `a q came in the last session: ignored`, `run_log.txt` says `reason=max_sessions` (or `max_hours`).
+  * Only a q typed as a key counts: the bytes of a terminal escape sequence (F2 is `ESC O Q`, a mouse report can carry a `q`) are
+    skipped, also when the terminal delivers the sequence in two pieces.
   * *Ctrl-C, SIGTERM, SIGHUP*: stop at the next tick (the files are always consistent, a rerun resumes there, exit status 130). **SIGHUP**
     is what a closed terminal window sends: it is caught like Ctrl-C, so closing the terminal during a night run stops it cleanly; if the
     process is killed without a signal it can catch (`kill -9`, power off), `debug.txt` keeps a `RUN` stub and the next run resumes (a half
@@ -284,6 +289,7 @@ A line input under the voices, in `make night` on a terminal and in a session of
 * **What it does.** A new `screen=1` session with `active.enabled = 1` carries `active=1`. At the end of each such session every wesen keeps at most `evolve.cap` (500) **active** words: a word whose fitness (the same rule as `make evolve`: uses, granted petitions, an agreed meaning; running average per session) stays at or under `evolve.line10` (0.3) for `evolve.idle_sessions` (6) sessions after `evolve.probation` (3) goes **dormant**, and above the cap the lowest fitness goes first; at most `evolve.retire_max` (40) a session, never a start word, never a chess or number string (symbols stay out of the pool). A dormant word stays in `words.txt` and in `Known_Count`, but it is not taught, not coined or blended from, not put on a screen and not a favourite. It **wakes** when a record line (a screen, a vote, a petition or a dictionary meaning) uses it again.
 * **What is recorded.** Every decision is an A line of `diaries/active.txt` (the params of the first active=1 session, each dormant word, each wake, the state of each wesen at a session end). The replay regenerates them; a change is DRIFT. Old sessions without the marker replay as they did. A save keeps the numbers of its first active=1 session (the params line), so a later change of `data/limits.txt` does not rewrite history.
 * **`active=2` (the default now, `active.enabled = 2`).** New sessions carry `active=2`; an existing save simply goes on (no `--fresh`): its `active=1` sessions replay unchanged with their own params line, the first `active=2` session writes a second one (`params level=2 ... floor=300 cap=500 slow_lesson=25 slow_coin=50 slow_screen=50`). Three changes: (1) a **floor** under the cap: idle words may go dormant down to `active.floor` (300), above `active.cap` (500) the lowest fitness goes first; (2) **mint-slow**: a wesen that held the cap at the last session end gets a new word only when a die lets it through (lessons `active.slow_lesson_pct` 25 %, coined words and screen blends `active.slow_coin_pct` 50 %, words from a screen `active.slow_screen_pct` 50 %; salts 20870 .. 20873); (3) a **wider wake**: a lesson of a word the pupil has dormant wakes it instead of minting (`by=lesson:<teacher>` in `diaries/active.txt`, "remembered the word ... again" in the diary), a screen show or read wakes it for the other wesen of the line too, a petition naming the word wakes it for every wesen that has it dormant. `active.enabled = 1` keeps new sessions at `active=1`.
+* **Mint-slow also at the floor (`slowfloor=1`, build 0.054, `active.slow_floor = 1`).** New `active=2` sessions carry `slowfloor=1`: the mint-slow dice apply already to a wesen that held at least the floor (300 active words) at the last session end, with the same three percents, so the known words stop climbing freely while the active words sit at the floor (measured: about 45 % fewer new words over 10 sessions of 300 ticks). The state lines of `diaries/active.txt` say `slowat=floor`; `make active` says "at floor or above (mint-slow next)" and "mint-slow also at the floor". Older `active=2` sessions keep mint-slow at the cap only (an existing save replays unchanged and goes on). `active.slow_floor = 0`: only at the cap.
 * **`make active`.** On an `active=1` or `active=2` save it prints the last closed session's state from `diaries/active.txt` (known, symbols, active, dormant, base, woken; on `active=2` also who is at the cap) and the params line of each level (floor and cap). On an older save it stays the would-be preview of the 500 cap (nothing changed).
 
 ## The evolution preview (`make evolve`, `make active`; read-only, docs/EVOLVE.md)
@@ -572,6 +578,11 @@ wesen may play each other too (`chess.player_pct`), so wesen and players (Jehova
   sessions replay with the old rule (`make verify` OK); the marker removed from a new session or added to an old one is DRIFT. The word counts
   stop growing by about 19 words per wesen and session; `make wordstat` has a section "Chess strings as symbols" (words learned since the
   first `symbols=1` session, and how many of them are chess or number strings: 0).
+  **`symstrict=1` (build 0.054, `symbols.strict = 1`):** a save with a long history before `symbols=1` could still show a few there (Robert's:
+  Adam 1, Ruth 1): a word COINED before the marker whose text is a number or move string (a screen blend 53+36 = `5336`, a coin
+  `7163` & `4866`) was not flagged as a symbol and stayed teachable. New sessions carry `symstrict=1`: such coined strings are symbols too,
+  no new coined word may read as one, and a lesson chosen before a word became a symbol writes no `words.txt` line. Old sessions replay
+  unchanged (the old lines stay in the history); `make wordstat` adds a row "since the first symstrict=1 session" that stays 0.
 * **All the rules (`chessrules=2`, `chessrules.enabled`):** a session that carries the marker (new sessions of a `chess=1` save) adds
   the rest of the FIDE draw rules; without the marker (old sessions, or `chessrules.enabled = 0`) the rules above are replayed
   exactly as before. Order after mate / stalemate: (1) *insufficient material* is automatic - K v K, K+B v K, K+N v K, K+B v K+B with

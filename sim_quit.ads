@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 --  Ctrl-C (SIGINT), SIGTERM and SIGHUP (the terminal was closed) only set a flag; the tick loop of diary_sim checks it
 --  between ticks and stops cleanly (diaries are already flushed).  Standard library
 --  only (Ada.Interrupts).  SIGKILL cannot be caught: debug.txt then keeps the
@@ -7,6 +7,8 @@
 --  switches the terminal to single-key mode only for the moment of the call and puts it back, so the terminal is never left changed).
 --  It does nothing unless Watch_Keys (True) was called, stdin is a terminal and this process is in the foreground of it (a job in
 --  the background must not change the terminal modes: it would be stopped).
+--  Only a q typed as a key counts: the bytes of a terminal escape sequence (ESC [ ... final byte, ESC O x such as F2 = ESC O Q, the
+--  legacy mouse report ESC [ M and its three bytes) are skipped, also when the sequence is split between two polls.
 --  Typed lines (the chat, B2): after Set_Lines (True) Poll also edits one input line.  A line starts with @ or / (a bare q on an empty
 --  line still quits, any other first key is dropped); Backspace deletes, Ctrl-U clears, Enter sends the line to the queue (Pending / Take),
 --  Esc cancels the line, arrow and other escape sequences are ignored.  For this the terminal is switched, once, to "no echo, no line
@@ -22,6 +24,7 @@ package Sim_Quit is
    procedure Poll;                     --  read the typed keys; q or Q sets Key_Q; other keys are dropped
    function Key_Q return Boolean;
    procedure Ask_Quit;                 --  the same as the key q (the order /quit)
+   procedure Forget_Q;                 --  a q seen so far is dropped (make night: the session limit was reached, a later q still counts)
    procedure Set_Lines (On : Boolean; Max_Len : Positive := 120);   --  accept typed lines (needs Watching; the terminal is switched, see above)
    function Lines_On return Boolean;
    function Typing return String;      --  the line being typed ("" when none)

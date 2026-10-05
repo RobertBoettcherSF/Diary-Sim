@@ -1,4 +1,4 @@
---  Version: 0.017
+--  Version: 0.018
 --  The shared world of diary_sim: the four entities, the vocabulary (base
 --  words, who knows what, coined words), the bench kernels and the final votes.
 --  One world per run; Init rebuilds it from scratch, so a replay from tick 1
@@ -59,8 +59,11 @@ package Sim_World is
    procedure Learn_From_World (E : Entity_Id; W : Positive);   --  learn W by meeting it (origin "world")
    --  symbols=1 sessions (docs/EVOLVE.md 9): a SYMBOL word (a chess coordinate string e2e4 or a numeric string 5254, made by an older session)
    --  is Blocked: it is not learned, not taught (Teachable_*) and not blended; whoever already knows it keeps it.  Off: nothing is blocked.
-   procedure Hide_Symbols (On : Boolean);
+   --  Strict (symstrict=1 sessions, build 0.054): a COINED word whose text is a chess or number string (a blend 53+36 = 5336 made before
+   --  symbols=1, or 7163 & 4866) is blocked too; without it such a word stayed teachable and leaked into words.txt as a new chess string.
+   procedure Hide_Symbols (On : Boolean; Strict : Boolean := False);
    function Blocked (W : Positive) return Boolean;
+   function Blocked_Text (Text : String) return Boolean;   --  symstrict=1: a NEW coined word with this text would be a symbol (not coined)
    --  active=1 sessions (Sim_Active, docs/EVOLVE.md 13): a DORMANT word of E stays known (words.txt, Known_Count) but while dormancy
    --  is on it is Asleep: not taught (Teachable_*), not coined or blended from (Nth_Usable), not learned from E's screen, not put on a
    --  screen by init, not a favourite.  Off: nothing is asleep and every count and pick is the old one.

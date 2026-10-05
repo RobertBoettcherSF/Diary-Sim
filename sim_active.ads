@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  active=1 sessions (docs/EVOLVE.md 12 and 13, docs/LEARN.md 12 (a)): every wesen keeps an ACTIVE vocabulary.  The fitness of each
 --  word is counted from the record lines the replay emits (screens K, votes V, petitions P, dictionary L: the same inputs and points as
 --  make evolve), a running average per session.  At the end of an active=1 session a word whose fitness stayed at or under the line
@@ -35,7 +35,9 @@ package Sim_Active is
 
    --  The start of session N at Tick: the window of the previous active session is closed (dormancies, state lines) with the
    --  numbers of its level, then the new window opens if Level is 1 or 2 (0: no window).  The lines go to Drain.
-   procedure Open (N : Positive; Tick : Int; Level : Natural);
+   --  Floor (slowfloor=1 sessions, build 0.054): mint-slow already from the floor up (a wesen that held at least the floor of active
+   --  words at the last session end), with the same percents; without it only from the cap up.
+   procedure Open (N : Positive; Tick : Int; Level : Natural; Floor : Boolean := False);
    function Is_Open return Boolean;
    function Level return Natural;   --  the level of the open window (0: none)
    --  active=2: a lesson of word W by By (a wesen id) to E, who has W dormant: it wakes ("by=lesson:<teacher>").  False if nothing woke.

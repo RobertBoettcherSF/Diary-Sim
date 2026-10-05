@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 pragma Ada_2022;
 
 with Ada.Directories, Ada.Finalization, Ada.Interrupts.Names, Ada.Strings.Unbounded, Ada.Text_IO, GNAT.OS_Lib, Sim_Util, System;
@@ -46,6 +46,7 @@ package body Sim_Quit is
    function Watching return Boolean is (Enabled and then Sim_Util.Foreground);
    function Key_Q return Boolean is (Q);
    procedure Ask_Quit is begin Q := True; end Ask_Quit;
+   procedure Forget_Q is begin Q := False; end Forget_Q;
 
    --  ---- typed lines -------------------------------------------------------------------------------------------------------
    Lines_Mode : Boolean := False;
@@ -54,7 +55,10 @@ package body Sim_Quit is
    Active : Boolean := False;              --  a line is open (its first key was @ or /)
    Queue : Sim_Util.Str_Vectors.Vector;    --  finished lines
    Version : Natural := 0;
-   Esc_State : Natural := 0;               --  0 normal, 1 after Esc, 2 inside an escape sequence
+   Esc_State : Natural := 0;               --  0 normal, 1 after Esc, 2 inside an escape sequence, 3 the bytes of a mouse report
+   Esc_Late : Boolean := False;            --  the last poll ended with a lone Esc: a '[' or 'O' first in this poll still starts a sequence
+   Seq_Len : Natural := 0;                 --  bytes of the sequence after ESC [ (a legacy mouse report is ESC [ M and three bytes)
+   Skip : Natural := 0;                    --  mouse report bytes still to skip
    Raw_On : Boolean := False;
    Saved : Unbounded_String;               --  the terminal settings before (stty -g)
 
@@ -157,24 +161,57 @@ package body Sim_Quit is
       Active := False;
    end Cancel;
 
-   --  One typed key of the line editor.
-   procedure Feed (C : Character) is
+   --  The bytes of an escape sequence: True while C belongs to one (it is not a key).  ESC [ ... ends with a byte in '@' .. '~' (an arrow
+   --  key and the like), ESC O x is one more byte (F1 .. F4: ESC O P .. S), ESC [ M is a legacy mouse report with three more bytes.
+   --  After a lone Esc (Esc_State 1) any other byte is a key again; the caller decides what the lone Esc meant.
+   function Skip_Sequence (C : Character) return Boolean is
    begin
+      if Esc_Late then   --  a lone Esc ended the last poll: a '[' or 'O' now is the rest of a split sequence
+         Esc_Late := False;
+         if C in '[' | 'O' then
+            Esc_State := 2;
+            Seq_Len := (if C = 'O' then 99 else 0);
+            return True;
+         end if;
+      end if;
       case Esc_State is
          when 1 =>
             if C in '[' | 'O' then
                Esc_State := 2;
-               return;
+               Seq_Len := (if C = 'O' then 99 else 0);   --  99: ESC O x, the next byte ends it
+               return True;
             end if;
-            Esc_State := 0;
-            Cancel;                       --  Esc and then an ordinary key: the line is cancelled, the key counts
+            return False;
          when 2 =>
-            if C in '@' .. '~' then Esc_State := 0; end if;   --  the last byte of an arrow key and the like
-            return;
-         when others => null;
+            Seq_Len := Seq_Len + 1;
+            if Seq_Len = 100 then Esc_State := 0;   --  ESC O x
+            elsif C = 'M' and then Seq_Len = 1 then Esc_State := 3; Skip := 3;   --  ESC [ M: a legacy mouse report
+            elsif C in '@' .. '~' then Esc_State := 0;
+            end if;
+            return True;
+         when 3 =>
+            Skip := Skip - 1;
+            if Skip = 0 then Esc_State := 0; end if;
+            return True;
+         when others =>
+            if C = ASCII.ESC then
+               Esc_State := 1;
+               return True;
+            end if;
+            return False;
       end case;
+   end Skip_Sequence;
+
+   --  One typed key of the line editor.
+   procedure Feed (C : Character) is
+   begin
+      if Skip_Sequence (C) then return; end if;
+      if Esc_State = 1 then
+         Esc_State := 0;
+         Cancel;                       --  Esc and then an ordinary key: the line is cancelled, the key counts
+      end if;
       case C is
-         when ASCII.ESC => Esc_State := 1;
+         when ASCII.ESC => Esc_State := 1;   --  Esc Esc: the first one cancelled the line, the second starts again
          when ASCII.LF | ASCII.CR =>
             if Active and then Length (Buf) > 0 then Queue.Append (To_String (Buf)); end if;
             Cancel;
@@ -207,11 +244,17 @@ package body Sim_Quit is
       loop
          Ada.Text_IO.Get_Immediate (C, Av);
          exit when not Av;
-         if Lines_Mode then Feed (C); elsif C in 'q' | 'Q' then Q := True; end if;
+         if Lines_Mode then
+            Feed (C);
+         elsif not Skip_Sequence (C) then
+            Esc_State := (if C = ASCII.ESC then 1 else 0);
+            if C in 'q' | 'Q' then Q := True; end if;   --  only a q typed as a key (not a byte of an escape sequence)
+         end if;
       end loop;
-      if Lines_Mode and then Esc_State = 1 then   --  a lone Esc
+      if Esc_State = 1 then   --  a lone Esc: the line is cancelled now; a '[' or 'O' first in the next poll is still a split sequence
          Esc_State := 0;
-         Cancel;
+         Esc_Late := True;
+         if Lines_Mode then Cancel; end if;
       end if;
    exception
       when others => Enabled := False;   --  end of input or a terminal that cannot be read: no keys any more

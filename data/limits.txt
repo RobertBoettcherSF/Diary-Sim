@@ -193,6 +193,11 @@ screen.coin_cap = 8
 # symbols (docs/EVOLVE.md 9, docs/LEARN.md 12 (c)): 1 = new chess sessions carry symbols=1: the move text (e2e4) and its numeric string (5254) stay symbols of
 # the board (diaries/chess.txt, the diary line); they are NOT minted as words, are not learned or taught and are not put on the screens.  0 = the old rule.  Existing sessions keep their rule.
 symbols.enabled = 1
+# symbols.strict (build 0.054): 1 = new symbols=1 sessions also carry symstrict=1: a COINED word whose text is a chess or number string (a blend
+# 53+36 = 5336 or 7163 & 4866 made before symbols=1) is a symbol too: not taught, not learned from a screen, not blended from, and no new coined
+# word may read as one.  Without it such old coined strings stayed teachable and showed up in make wordstat as chess strings learned after
+# symbols=1.  0 = the old rule.  Existing sessions keep their rule (a save goes on, make verify stays OK).
+symbols.strict = 1
 # active (docs/EVOLVE.md 13, docs/LEARN.md 12 (a); Sim_Active): 1 = new screen=1 sessions carry active=1: every wesen keeps an active vocabulary of
 # about evolve.cap words (500, the rule of make active: floor and cap); a word whose fitness (evolve.* above) stays at or under evolve.line10 for
 # evolve.idle_sessions sessions after evolve.probation goes DORMANT at the end of a session, above the cap the lowest fitness goes first, at most
@@ -212,6 +217,10 @@ active.cap = 500
 active.slow_lesson_pct = 25
 active.slow_coin_pct = 50
 active.slow_screen_pct = 50
+# active.slow_floor (build 0.054): 1 = new active=2 sessions carry slowfloor=1: mint-slow already from the FLOOR up (a wesen that held at least
+# active.floor active words at the last session end), with the same three percents, so the known words stop climbing freely; the state lines of
+# diaries/active.txt say slowat=floor, make active says "at floor or above".  0 = mint-slow only from the cap up.  Existing sessions keep their rule.
+active.slow_floor = 1
 chess.enabled = 1
 chess.gap = 6
 chess.start_pct = 50
