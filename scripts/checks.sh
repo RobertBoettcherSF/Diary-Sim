@@ -2028,9 +2028,9 @@ env -u DIARY_VERBOSE "$nb" --evolve --home "$ev" > ev2.txt 2>&1
 env -u DIARY_VERBOSE "$nb" --active --home "$ev" > ea1.txt 2>&1; rca=$?
 e1=$(sumf "$ev")
 erow() { awk -v k="$2" 'index($0, k) > 0 { print $NF; exit }' "$1"; }
-ewk=$(awk '!/^#/ && NF >= 4 && !seen[FILENAME, $2]++ { n++ } END { print n + 0 }' \"$ev\"/entities/*/words.txt)
-esy=$(awk '!/^#/ && NF >= 4 && !seen[FILENAME, $2]++ && ($2 ~ /^[a-h][1-8][a-h][1-8][qrbn]?$/ || $2 ~ /^[0-9]+$/) { n++ } END { print n + 0 }' \"$ev\"/entities/*/words.txt)
-ebs=$(awk '!/^#/ && NF >= 4 && !seen[FILENAME, $2]++ && $3 == "start" && $2 !~ /^[0-9]+$/ && $2 !~ /^[a-h][1-8][a-h][1-8][qrbn]?$/ { n++ } END { print n + 0 }' \"$ev\"/entities/*/words.txt)
+ewk=$(awk '!/^#/ && NF >= 4 && !seen[FILENAME, $2]++ { n++ } END { print n + 0 }' "$ev"/entities/*/words.txt)
+esy=$(awk '!/^#/ && NF >= 4 && !seen[FILENAME, $2]++ && ($2 ~ /^[a-h][1-8][a-h][1-8][qrbn]?$/ || $2 ~ /^[0-9]+$/) { n++ } END { print n + 0 }' "$ev"/entities/*/words.txt)
+ebs=$(awk '!/^#/ && NF >= 4 && !seen[FILENAME, $2]++ && $3 == "start" && $2 !~ /^[0-9]+$/ && $2 !~ /^[a-h][1-8][a-h][1-8][qrbn]?$/ { n++ } END { print n + 0 }' "$ev"/entities/*/words.txt)
 gk=$(erow ev1.txt 'words known'); gs=$(erow ev1.txt 'chess/number strings'); gb=$(erow ev1.txt 'of those: base words'); ga=$(erow ev1.txt 'would be active'); gd=$(erow ev1.txt 'would be dormant'); go=$(erow ev1.txt 'other words')
 [ "$rce" = 0 ] && [ "$rca" = 0 ] && [ "$e0" = "$e1" ] && cmp -s ev1.txt ev2.txt && [ "$gk" = "$ewk" ] && [ "$gs" = "$esy" ] && [ "$gb" = "$ebs" ] && [ "$((ga + gd))" = "$go" ] && [ "$((gs + go))" = "$gk" ] && [ "$esy" -gt 50 ] \
   && ok "--evolve: words known $gk, chess/number strings $gs and base words $gb equal an independent awk count of words.txt, active $ga + dormant $gd = the $go other words; the save folder is byte for byte unchanged, the same text on every run (a word listed twice under two ids counts once)" || bad "evolve words (rc $rce $rca: $gk/$ewk $gs/$esy $gb/$ebs $ga+$gd vs $go, before/after $e0 $e1)"
