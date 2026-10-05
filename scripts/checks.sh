@@ -755,7 +755,7 @@ sed -i 's/^screen.enabled = .*/screen.enabled = 1/' "$w/sc/data/limits.txt"; sb=
 cd "$w/sc/h" || exit 1; export DIARY_HOME="$w/sc/h"
 "$sb" --seed 42 --ticks 300 --yes --every 5000 > c1.txt 2>&1; "$sb" --more 300 --every 5000 > c2.txt 2>&1
 n_k=$(grep -c '^K[0-9]' diaries/screens.txt)
-grep -q '^S1 .* screen=1$' diaries/sessions.txt && grep -q '^S2 .* screen=1$' diaries/sessions.txt && head -1 diaries/screens.txt | grep -q '^# seed 42$' && [ "$n_k" -gt 500 ] && grep -q '^K1 t=1 ada add w=[0-9]* src=' diaries/screens.txt \
+grep -Eq '^S1 .* screen=1( active=1)?$' diaries/sessions.txt && grep -Eq '^S2 .* screen=1( active=1)?$' diaries/sessions.txt && head -1 diaries/screens.txt | grep -q '^# seed 42$' && [ "$n_k" -gt 500 ] && grep -q '^K1 t=1 ada add w=[0-9]* src=' diaries/screens.txt \
   && ok "new sessions carry screen=1; every change of a screen is a K line in diaries/screens.txt ($n_k lines)" || bad "screens.txt ($n_k)"
 t_sum=$(sed -n 's/.*taught from a screen \([0-9]*\), coined.*/\1/p' run_report.txt | awk '{ s += $1 } END { print s + 0 }'); c_sum=$(sed -n 's/.*coined from a screen \([0-9]*\)$/\1/p' run_report.txt | awk '{ s += $1 } END { print s + 0 }')
 t_k=$(grep ' l=' diaries/screens.txt | sed 's/.* l=\([^ ]*\) .*/\1/' | grep -v '^-$' | tr ',' '\n' | wc -l); c_k=$(grep -c ' blend a=' diaries/screens.txt)
@@ -849,7 +849,7 @@ cp "$bin" "$w/rb/bin/"; cp -r "$idata" "$w/rb/data"; sed -i 's/^screen.enabled =
 cd "$w/rb/h" || exit 1; export DIARY_HOME="$w/rb/h"
 "$rbn" --seed 42 --ticks 300 --yes --every 5000 > r1.txt 2>&1; "$rbn" --more 300 --every 5000 > r2.txt 2>&1
 n_q=$(grep -c '^Q[0-9]' diaries/robot.txt); n_x=$(grep -c ' exec ' diaries/robot.txt); n_c=$(grep -c ' cmd ' diaries/robot.txt)
-grep -q '^S1 .* robot=1$' diaries/sessions.txt && grep -q '^S2 .* robot=1$' diaries/sessions.txt && head -1 diaries/robot.txt | grep -q '^# seed 42$' && [ "$n_c" -ge 10 ] && [ "$n_x" -ge 5 ] \
+grep -Eq '^S1 .* robot=1( active=1)?$' diaries/sessions.txt && grep -Eq '^S2 .* robot=1( active=1)?$' diaries/sessions.txt && head -1 diaries/robot.txt | grep -q '^# seed 42$' && [ "$n_c" -ge 10 ] && [ "$n_x" -ge 5 ] \
   && ok "new sessions carry robot=1; commands, executions and shared screens are Q lines in diaries/robot.txt ($n_q lines, $n_c commands, $n_x executions)" || bad "robot.txt ($n_q $n_c $n_x)"
 np=$(grep ' exec ' diaries/robot.txt | sed -E 's/.* pos=([-0-9,]+) .*/\1/' | sort -u | wc -l); nb=$(grep ' exec ' diaries/robot.txt | sed -E 's/.* bat=([0-9]+) .*/\1/' | sort -u | wc -l)
 up=$(grep ' exec ' diaries/robot.txt | sed -E 's/.* bat=([0-9]+) .*/\1/' | awk 'NR>1 && $1>p {n++} {p=$1} END{print n+0}'); dn=$(grep ' exec ' diaries/robot.txt | sed -E 's/.* bat=([0-9]+) .*/\1/' | awk 'NR>1 && $1<p {n++} {p=$1} END{print n+0}')
