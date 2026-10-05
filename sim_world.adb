@@ -1,4 +1,4 @@
---  Version: 0.019
+--  Version: 0.020
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
@@ -181,6 +181,9 @@ package body Sim_World is
    Taught : array (Entity_Id) of Nat_Vectors.Vector;   --  per word: the teacher's entity id, else 0
    Via_World : array (Entity_Id) of Bool_Vectors.Vector;   --  per word: learned by meeting it in the world
    Base  : Natural := 0;
+   Dormant : array (Entity_Id) of Bool_Vectors.Vector;   --  active=1: per word, dormant for the wesen
+   Dormant_N : array (Entity_Id) of Natural := [others => 0];
+   Dormant_On : Boolean := False;
 
    --  Petitions (see the spec): topic table, filed petitions, per-entity bookkeeping.
    Max_Topics : constant := 40;
@@ -247,6 +250,7 @@ package body Sim_World is
       Lean_Few_Words := Clamp (Integer (Limit ("lean.few_words", 20)), 0, 1000);
       Few_Words_N := Clamp (Integer (Limit ("lean.few_words_n", 100)), 1, 100_000);
       Cache_Steps := [others => -1];
+      Dormant_On := False;
       Table.Clear;
       for W of Base_Words loop
          Table.Append (Word_Rec'(Text => To_Unbounded_String (W), others => <>));
@@ -258,6 +262,8 @@ package body Sim_World is
          Taught (E).Clear;
          Via_World (E).Clear;
          Freq (E).Clear;
+         Dormant (E).Clear;
+         Dormant_N (E) := 0;
          for W in 1 .. Base loop
             Known (E).Append (Int (Roll (Seed, Positive (E), 0, 1000 + W, 100)) <= Start_Percent);
             if Known (E) (W) then Known_N (E) := Known_N (E) + 1; end if;
@@ -285,6 +291,29 @@ package body Sim_World is
    end Hide_Symbols;
 
    function Blocked (W : Positive) return Boolean is (Symbols_Hidden and then W <= Natural (Table.Length) and then Table (W).Symbol);
+
+   procedure Use_Dormant (On : Boolean) is
+   begin
+      Dormant_On := On;
+   end Use_Dormant;
+
+   function Is_Dormant (E : Entity_Id; W : Positive) return Boolean is
+     (W <= Natural (Dormant (E).Length) and then Dormant (E) (W));
+
+   procedure Set_Dormant (E : Entity_Id; W : Positive; On : Boolean) is
+   begin
+      while Natural (Dormant (E).Length) < W loop
+         Dormant (E).Append (False);
+      end loop;
+      if Dormant (E) (W) /= On then
+         Dormant (E) (W) := On;
+         if On then Dormant_N (E) := Dormant_N (E) + 1; else Dormant_N (E) := Dormant_N (E) - 1; end if;
+      end if;
+   end Set_Dormant;
+
+   function Asleep (E : Entity_Id; W : Positive) return Boolean is (Dormant_On and then Is_Dormant (E, W));
+   function Dormant_Count (E : Entity_Id) return Natural is (Dormant_N (E));
+   function Is_Symbol (W : Positive) return Boolean is (W <= Natural (Table.Length) and then Symbol_Text (To_String (Table (W).Text)));
 
    procedure Learn_Word (E : Entity_Id; W : Positive; From : Natural := 0) is
    begin
@@ -389,11 +418,32 @@ package body Sim_World is
       return 1;
    end Nth_Known;
 
+   function Usable_Count (E : Entity_Id) return Natural is
+     (if Dormant_On then Known_N (E) - Natural'Min (Known_N (E), Dormant_N (E)) else Known_N (E));
+
+   function Nth_Usable (E : Entity_Id; N : Positive) return Positive is
+      K : Natural := 0;
+   begin
+      if not Dormant_On then return Nth_Known (E, N); end if;
+      for W in 1 .. Count loop
+         if Knows (E, W) and then not Is_Dormant (E, W) then
+            K := K + 1;
+            if K = N then return W; end if;
+         end if;
+      end loop;
+      return 1;
+   end Nth_Usable;
+
+   function Is_Start (E : Entity_Id; W : Positive) return Boolean is
+     (W <= Base and then Table (W).Coiner /= Positive (E)
+      and then not (W <= Natural (Taught (E).Length) and then Taught (E).Element (W) /= 0)
+      and then not (W <= Natural (Via_World (E).Length) and then Via_World (E).Element (W)));
+
    function Teachable_Count (From, To : Entity_Id) return Natural is
       N : Natural := 0;
    begin
       for W in 1 .. Count loop
-         if Knows (From, W) and then not Knows (To, W) and then not Blocked (W) then N := N + 1; end if;
+         if Knows (From, W) and then not Knows (To, W) and then not Blocked (W) and then not Asleep (From, W) then N := N + 1; end if;
       end loop;
       return N;
    end Teachable_Count;
@@ -402,7 +452,7 @@ package body Sim_World is
       K : Natural := 0;
    begin
       for W in 1 .. Count loop
-         if Knows (From, W) and then not Knows (To, W) and then not Blocked (W) then
+         if Knows (From, W) and then not Knows (To, W) and then not Blocked (W) and then not Asleep (From, W) then
             K := K + 1;
             if K = N then return W; end if;
          end if;
@@ -820,6 +870,7 @@ package body Sim_World is
          Is_Start : constant Boolean := Origin (E, W) = "start";
       begin
          if Clean_On and then not Plain (W) then return 0; end if;   --  records=1: a chess move is no favourite word
+         if Asleep (E, W) then return 0; end if;   --  active=1: a dormant word is no favourite
          return (1 + F) * (if Mood >= Tone_Hi and then not Is_Start then 3
                            elsif Mood <= Tone_Lo and then Is_Start then 3 else 1);
       end Weight;

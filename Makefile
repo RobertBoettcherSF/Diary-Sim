@@ -1,4 +1,4 @@
-# Version: 0.039
+# Version: 0.040
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -23,7 +23,7 @@
 #                 suffix variants, and one conclusion line with the biggest source; wording in data/wordstat.txt; make share includes it
 # make evolve    the evolution preview (read-only, docs/EVOLVE.md): word fitness (top words, the words that would go dormant), the weight table each chess
 #                 competitor would hold after learning from the recorded games, the Elo curve; numbers in data/limits.txt evolve.*, wording in data/evolve.txt
-# make active    the active-vocabulary preview (read-only): how many words each wesen would keep active under a cap of evolve.cap (500) and how many go dormant
+# make active    the active vocabulary: on an active=1 save the real state of diaries/active.txt (active, dormant, woken per wesen); on an older save the read-only preview under a cap of evolve.cap (500)
 # make voices     print the four wesen messages (what the night header shows, one line each, at most voice.max_chars) for the last tick of the
 #                 save; deterministic, read-only, replay-verified; data/voices.txt holds the templates
 # make night      sessions back to back, for the night: SESSION_TICKS=300 (ticks per session), MAX_SESSIONS=n, MAX_HOURS=n (default 12;
@@ -126,7 +126,7 @@ all:
 	@rm -f b~*
 
 version-check:
-	@bad=0; for f in Makefile diary_sim.adb sim_util.ads sim_util.adb sim_world.ads sim_world.adb sim_quit.ads sim_quit.adb sim_menu.ads sim_menu.adb sim_dharma.ads sim_dharma.adb sim_things.ads sim_things.adb sim_ledger.ads sim_ledger.adb sim_store.ads sim_store.adb sim_screen.ads sim_screen.adb sim_chess.ads sim_chess.adb sim_games.ads sim_games.adb sim_robot.ads sim_robot.adb sim_govern.ads sim_govern.adb sim_preport.ads sim_preport.adb sim_next.ads sim_next.adb sim_visit.ads sim_visit.adb sim_chat.ads sim_chat.adb sim_voice.ads sim_voice.adb sim_wordstat.ads sim_wordstat.adb sim_evolve.ads sim_evolve.adb sim_trial.ads sim_trial.adb sim_records.ads sim_records.adb; do \
+	@bad=0; for f in Makefile diary_sim.adb sim_util.ads sim_util.adb sim_world.ads sim_world.adb sim_quit.ads sim_quit.adb sim_menu.ads sim_menu.adb sim_dharma.ads sim_dharma.adb sim_things.ads sim_things.adb sim_ledger.ads sim_ledger.adb sim_store.ads sim_store.adb sim_screen.ads sim_screen.adb sim_chess.ads sim_chess.adb sim_games.ads sim_games.adb sim_robot.ads sim_robot.adb sim_govern.ads sim_govern.adb sim_preport.ads sim_preport.adb sim_next.ads sim_next.adb sim_visit.ads sim_visit.adb sim_chat.ads sim_chat.adb sim_voice.ads sim_voice.adb sim_wordstat.ads sim_wordstat.adb sim_evolve.ads sim_evolve.adb sim_active.ads sim_active.adb sim_trial.ads sim_trial.adb sim_records.ads sim_records.adb; do \
 	  head -1 $$f | grep -Eq 'Version: [0-9]+\.[0-9]{3}' || { echo "no version header: $$f"; bad=1; }; done; \
 	  v=$$(head -1 diary_sim.adb | grep -Eo '[0-9]+\.[0-9]{3}'); \
 	  grep -q "Build : constant String := \"$$v\"" diary_sim.adb || { echo "Build constant differs from diary_sim.adb header $$v"; bad=1; }; \

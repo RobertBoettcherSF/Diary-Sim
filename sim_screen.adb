@@ -1,4 +1,4 @@
---  Version: 0.005
+--  Version: 0.006
 --  See sim_screen.ads.
 pragma Ada_2022;
 
@@ -182,7 +182,7 @@ package body Sim_Screen is
    begin
       if Knows (V, W) then
          Ignore := Put (V, W, "seen");
-      elsif Blocked (W) then   --  symbols=1: an old chess string on a screen is seen, never learned
+      elsif Blocked (W) or else Asleep (Owner, W) then   --  symbols=1: an old chess string is seen, never learned; active=1: nor a word dormant for the owner
          Ignore := Put (V, W, "seen");
       elsif Int (Roll (Seed_V, Positive (V), Tick, 9150 + J mod 10, 100)) <= Int (Learn_Pct) then
          Learn_Word (V, W, Natural (Owner));
@@ -211,7 +211,7 @@ package body Sim_Screen is
       Done := False;
       if (if Scoin_On then Ses_Coined (Who) >= Natural (Coin_Cap_S) else Int (Coined_Total) >= Cap_V) or else Text'Length < 3 or else Text'Length > 24
         or else (for some C of Text => C = ' ') or else Find (Text) /= 0
-        or else Blocked (A) or else Blocked (B)
+        or else Blocked (A) or else Blocked (B) or else Asleep (Who, A) or else Asleep (Who, B)   --  active=1: no blend from a dormant word
         or else (Is_Clean and then not (Plain (A) and then Plain (B)))   --  records=1: no chess move is blended into a word
       then
          return;
@@ -298,8 +298,8 @@ package body Sim_Screen is
       if not Started (E) then
          Started (E) := True;
          for I in 1 .. Start_N loop
-            if Known_Count (E) > 0 then
-               Ignore := Put (E, Nth_Known (E, Roll (Seed_V, Eid, Tick, 9100 + I, Known_Count (E))), "init");
+            if Usable_Count (E) > 0 then
+               Ignore := Put (E, Nth_Usable (E, Roll (Seed_V, Eid, Tick, 9100 + I, Usable_Count (E))), "init");   --  active=1: no dormant word
             end if;
          end loop;
       end if;

@@ -1,4 +1,4 @@
---  Version: 0.015
+--  Version: 0.016
 --  The shared world of diary_sim: the four entities, the vocabulary (base
 --  words, who knows what, coined words), the bench kernels and the final votes.
 --  One world per run; Init rebuilds it from scratch, so a replay from tick 1
@@ -61,6 +61,18 @@ package Sim_World is
    --  is Blocked: it is not learned, not taught (Teachable_*) and not blended; whoever already knows it keeps it.  Off: nothing is blocked.
    procedure Hide_Symbols (On : Boolean);
    function Blocked (W : Positive) return Boolean;
+   --  active=1 sessions (Sim_Active, docs/EVOLVE.md 13): a DORMANT word of E stays known (words.txt, Known_Count) but while dormancy
+   --  is on it is Asleep: not taught (Teachable_*), not coined or blended from (Nth_Usable), not learned from E's screen, not put on a
+   --  screen by init, not a favourite.  Off: nothing is asleep and every count and pick is the old one.
+   procedure Use_Dormant (On : Boolean);
+   procedure Set_Dormant (E : Entity_Id; W : Positive; On : Boolean);
+   function Is_Dormant (E : Entity_Id; W : Positive) return Boolean;   --  the flag, whether dormancy is on or not
+   function Asleep (E : Entity_Id; W : Positive) return Boolean;       --  dormant and dormancy on
+   function Dormant_Count (E : Entity_Id) return Natural;
+   function Usable_Count (E : Entity_Id) return Natural;               --  Known_Count without the asleep words
+   function Nth_Usable (E : Entity_Id; N : Positive) return Positive;  --  Nth_Known over the words that are not asleep
+   function Is_Start (E : Entity_Id; W : Positive) return Boolean;     --  a base word of E's start slice (never dormant)
+   function Is_Symbol (W : Positive) return Boolean;                   --  a chess coordinate or number text (out of the pool)
    function World_Learned (E : Entity_Id) return Natural;     --  words E learned from the world
    function Taught_Count (E : Entity_Id) return Natural;      --  words E learned in lessons
    function Coined_Count_By (E : Entity_Id) return Natural;

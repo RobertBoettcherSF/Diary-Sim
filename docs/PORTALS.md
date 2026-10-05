@@ -1,5 +1,5 @@
 # Settings, portals, the farm market and the books (design only, nothing built)
-Version: 0.003
+Version: 0.004
 
 Status: **proposal for Robert**. No code for any of this exists; every number below is a *proposed default* that lives in `data/` when
 built, and every decision is open until Robert answers section 12. Style as `docs/LIFE.md` and `docs/MYTH.md`: what it is, what it is
@@ -231,3 +231,5 @@ Order: S1, A1 (can start right after C2 of LIFE.md), S2, F1, I1, P1, V1, M1, T1.
 16. **Flower list: which ones?** *Recommend:* the eight in section 5 as placeholders in `flowers.txt`; Robert may replace them freely (rules there are numbers only; the game makes no food-safety claims).
 
 *End of the proposal; nothing here changes the program until the steps of section 11 are started.*
+
+active=1 (EVOLVE.md 13) uses no dice, so no salt of the 20000 .. 20999 band is taken.

@@ -1,5 +1,5 @@
 # Learning in the station: slow core, mixed study, pruning, pondering, notebooks (design only, nothing built)
-Version: 0.005
+Version: 0.006
 
 Status: **proposal for Robert**. No code for any of this exists yet; every number below is a *proposed default* that lives in `data/` when
 built, and every decision is open until Robert answers section 11. Style as `docs/LIFE.md`: what it is, what it is made of, what is recorded.

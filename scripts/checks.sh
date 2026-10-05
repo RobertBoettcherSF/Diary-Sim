@@ -1989,7 +1989,7 @@ grep -q 'make wordstat' "$root/Makefile" && grep -q '^wordstat: all' "$root/Make
 echo "== 51. symbols=1: chess moves stay symbols of the board, they are no longer minted, learned or taught as words =="
 cd "$w/nt" || exit 1
 # a save with the OLD rule (symbols.enabled = 0), then the same save continued by new sessions with the new rule and, as the control, with the old rule
-rm -rf "$w/nt/sd" "$w/nt/sy_old" "$w/nt/sy_new" "$w/nt/sy_ctl"; mkdir -p "$w/nt/sd/bin"; cp "$nb" "$w/nt/sd/bin/"; cp -r "$root/data" "$w/nt/sd/data"; sed -i 's/^symbols.enabled = .*/symbols.enabled = 0/' "$w/nt/sd/data/limits.txt"
+rm -rf "$w/nt/sd" "$w/nt/sy_old" "$w/nt/sy_new" "$w/nt/sy_ctl"; mkdir -p "$w/nt/sd/bin"; cp "$nb" "$w/nt/sd/bin/"; cp -r "$root/data" "$w/nt/sd/data"; sed -i 's/^symbols.enabled = .*/symbols.enabled = 0/' "$w/nt/sd/data/limits.txt"; sed -i 's/^active.enabled = .*/active.enabled = 0/' "$w/nt/sd/data/limits.txt"
 ( cd "$w/nt/sd" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/sy_old" --seed 42 --ticks 3000 --yes --every 100000 > "$w/nt/sy_old.txt" 2>&1 )
 cp -r "$w/nt/sy_old" "$w/nt/sy_new"; cp -r "$w/nt/sy_old" "$w/nt/sy_ctl"
 env -u DIARY_VERBOSE "$nb" --home "$w/nt/sy_new" --continuous --session-ticks 300 --max-sessions 6 > "$w/nt/sy_new.txt" 2>&1; rcn=$?
@@ -2058,6 +2058,100 @@ rm -rf "$w/nt/emp"; mkdir -p "$w/nt/emp"; env -u DIARY_VERBOSE "$nb" --evolve --
   && ok "--evolve on a folder without word lists: one clear line, exit 2, nothing created" || bad "evolve empty ($rcm: $(head -c 100 eme.txt))"
 grep -q 'make evolve' "$root/Makefile" && grep -q '^evolve: all' "$root/Makefile" && grep -q '^active: all' "$root/Makefile" && grep -q -- '--evolve' "$root/data/help.txt" && grep -q -- '--active' "$root/data/help.txt" && grep -q 'make evolve' "$root/README.md" && grep -q 'evolve.cap' "$root/data/limits.txt" && grep -q 'make evolve' "$root/docs/EVOLVE.md" \
   && ok "README, Makefile, --help, data/limits.txt and docs/EVOLVE.md describe make evolve and make active" || bad "evolve docs"
+echo "== 53. active=1: dormant vocabulary, wake on use, diaries/active.txt (Sim_Active, docs/EVOLVE.md 13) =="
+cd "$w/nt" || exit 1
+# a save with the OLD rule (active.enabled = 0), then the same save continued with the new rule and, as the control, with the old rule
+rm -rf "$w/nt/ad" "$w/nt/ac_old" "$w/nt/ac_new" "$w/nt/ac_ctl"; mkdir -p "$w/nt/ad/bin"; cp "$nb" "$w/nt/ad/bin/"; cp -r "$root/data" "$w/nt/ad/data"; sed -i 's/^active.enabled = .*/active.enabled = 0/' "$w/nt/ad/data/limits.txt"
+( cd "$w/nt/ad" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/ac_old" --seed 42 --ticks 2400 --yes --every 100000 > "$w/nt/ac_old.txt" 2>&1 )
+cp -r "$w/nt/ac_old" "$w/nt/ac_new"; cp -r "$w/nt/ac_old" "$w/nt/ac_ctl"
+env -u DIARY_VERBOSE "$nb" --home "$w/nt/ac_new" --continuous --session-ticks 200 --max-sessions 14 > "$w/nt/ac_new.txt" 2>&1; rcn=$?
+( cd "$w/nt/ad" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/ac_ctl" --continuous --session-ticks 200 --max-sessions 14 > "$w/nt/ac_ctl.txt" 2>&1 )
+na=$(grep -c ' active=1' "$w/nt/ac_new/diaries/sessions.txt"); nc=$(grep -c 'active' "$w/nt/ac_ctl/diaries/sessions.txt")
+[ "$rcn" = 0 ] && [ "$na" -ge 12 ] && [ "$nc" = 0 ] && ! grep '^S1 ' "$w/nt/ac_new/diaries/sessions.txt" | grep -q active && [ -f "$w/nt/ac_new/diaries/active.txt" ] && [ ! -f "$w/nt/ac_ctl/diaries/active.txt" ] \
+  && ok "new sessions carry active=1 ($na of them, the old session 1 does not); the control with active.enabled = 0 has no marker and no active.txt" || bad "active marker ($rcn $na $nc)"
+env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/ac_new" > acv.txt 2>&1; rcv=$?
+env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/ac_ctl" > acc.txt 2>&1; rcc=$?
+old_bytes=$(wc -c < "$w/nt/ac_old/diaries/screens.txt")
+[ "$rcv" = 0 ] && grep -q '^verify: OK' acv.txt && [ "$rcc" = 0 ] && grep -q '^verify: OK' acc.txt \
+  && cmp -s -n "$old_bytes" "$w/nt/ac_old/diaries/screens.txt" "$w/nt/ac_new/diaries/screens.txt" \
+  && ok "make verify: OK for the mixed save and for the control; the old screen record is byte for byte the prefix of the new one" || bad "active verify ($rcv $rcc)"
+# tampering: marker taken from a new session, or a dormant / wake line changed: DRIFT
+rm -rf "$w/nt/at"; cp -r "$w/nt/ac_new" "$w/nt/at"; sed -i '/^S3 /s/ active=1//' "$w/nt/at/diaries/sessions.txt"
+env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/at" > at1.txt 2>&1; r1=$?
+rm -rf "$w/nt/at"; cp -r "$w/nt/ac_new" "$w/nt/at"; sed -i '0,/ dormant w=/{s/ dormant w=\([0-9]*\)/ dormant w=9\1/}' "$w/nt/at/diaries/active.txt"
+env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/at" > at2.txt 2>&1; r2=$?
+rm -rf "$w/nt/at"; cp -r "$w/nt/ac_new" "$w/nt/at"; sed -i '0,/ dormant w=/{/ dormant w=/d}' "$w/nt/at/diaries/active.txt"
+env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/at" > at3.txt 2>&1; r3=$?
+[ "$r1" = 1 ] && [ "$r2" = 1 ] && [ "$r3" = 1 ] && grep -q 'import FAILED' at1.txt && grep -q 'active.txt' at2.txt && grep -q 'active.txt' at3.txt \
+  && ok "tampering: active=1 removed from session 3, a dormant word id changed, or a dormant line deleted: --verify reports DRIFT (exit 1) in each" || bad "active tamper ($r1 $r2 $r3)"
+# independent check of the record: dormant words were not taught / coined from / blended; every wake has a matching record line; the last state matches the counts
+python3 - "$w/nt/ac_new" <<'PY' > acp.txt 2>&1
+import sys, re, os
+d = sys.argv[1]
+def tok(l, k):
+    m = re.search(r'(?:^| )' + re.escape(k) + r'=(\S*)', l)
+    return m.group(1) if m else ''
+names = ['ada', 'gemini', 'replika', 'robert']
+A = [l.rstrip('\n') for l in open(os.path.join(d, 'diaries/active.txt')) if l.startswith('A')]
+iv = {}; nd = {e: 0 for e in names}; nw = {e: 0 for e in names}; wakes = []; last = {}; cnt = {}
+for l in A:
+    f = l.split()
+    if len(f) < 5: continue
+    e, op = f[3], f[4]; t = int(tok(l, 't'))
+    if op == 'dormant':
+        iv.setdefault((e, int(tok(l, 'w'))), []).append([t, 10**12]); nd[e] += 1
+    elif op == 'wake':
+        w = int(tok(l, 'w')); iv[(e, w)][-1][1] = t; nw[e] += 1; wakes.append((e, w, t, tok(l, 'by'), tok(l, 'word')))
+    elif op == 'state':
+        last[e] = l; cnt[e] = (nd[e], nw[e])
+def asleep(e, w, t):
+    return any(a < t < b for a, b in iv.get((e, w), []))
+ids = {}; words = {}
+for e in names:
+    words[e] = [l.split() for l in open(os.path.join(d, 'entities', e, 'words.txt')) if not l.startswith('#') and len(l.split()) >= 4]
+    for f in words[e]: ids.setdefault(f[1], int(f[0]))
+taught_bad = coined_bad = blend_bad = 0
+for p in names:
+    for f in words[p]:
+        if f[2] == 'taught' and len(f) >= 5 and asleep(f[4], int(f[0]), int(f[3])): taught_bad += 1
+        if f[2] == 'coined' and len(f) >= 5:
+            for part in f[4].split('+'):
+                if part in ids and asleep(p, ids[part], int(f[3])): coined_bad += 1
+recs = {}
+for fn in ['screens', 'votes', 'petitions', 'dictionary']:
+    pth = os.path.join(d, 'diaries', fn + '.txt')
+    if not os.path.exists(pth): continue
+    for l in open(pth):
+        if l[:1].isalpha() and l[:1] != '#':
+            recs[(fn, l.split(' ', 1)[0])] = l.rstrip('\n')
+            if fn == 'screens':
+                f = l.split()
+                if len(f) > 3 and f[3] == 'blend':
+                    t = int(tok(l, 't'))
+                    for x in ('a', 'b'):
+                        if asleep(f[2], int(tok(l, x)), t): blend_bad += 1
+wake_ok = 0
+for e, w, t, by, word in wakes:
+    fn = {'K': 'screens', 'V': 'votes', 'P': 'petitions', 'L': 'dictionary'}.get(by[:1])
+    l = recs.get((fn, by))
+    if l and int(tok(l, 't')) == t and (str(w) in re.split(r'[^0-9]+', l) or re.search(r'\b' + re.escape(word) + r'\b', l)):
+        wake_ok += 1
+state_bad = 0; ndorm = sum(nd.values())
+for e in names:
+    if e not in last: continue
+    l = last[e]; dm = int(tok(l, 'dormant')); ac = int(tok(l, 'active')); kn = int(tok(l, 'known')); sy = int(tok(l, 'symbols'))
+    if dm != cnt[e][0] - cnt[e][1] or kn != sy + ac + dm: state_bad += 1
+    if ac > 500 + 40: state_bad += 1   # a little headroom for births in the last unfinished session
+print('ok' if taught_bad == 0 and coined_bad == 0 and blend_bad == 0 and wake_ok == len(wakes) and state_bad == 0 and ndorm > 40 else
+      f'fail taught={taught_bad} coined={coined_bad} blend={blend_bad} wake={wake_ok}/{len(wakes)} state={state_bad} dorm={ndorm}')
+PY
+[ "$(cat acp.txt)" = ok ] && ok "--active record: dormant words were not taught, coined from or blended; every wake has a matching record line; the last state equals the counts; more than 40 dormancies" || bad "active record ($(cat acp.txt))"
+env -u DIARY_VERBOSE "$nb" --active --home "$w/nt/ac_new" > aca.txt 2>&1; rca=$?
+env -u DIARY_VERBOSE "$nb" --active --home "$w/nt/ac_ctl" > acb.txt 2>&1
+[ "$rca" = 0 ] && grep -q 'diaries/active.txt' aca.txt && grep -q 'active words' aca.txt && grep -q 'Active vocabulary preview' acb.txt && [ "$(awk 'length > 79' aca.txt acb.txt | wc -l)" = 0 ] \
+  && ok "make active: the real state on the active=1 save (diaries/active.txt), the would-be preview on the control; every line <= 79 columns" || bad "active report ($rca)"
+grep -q 'active=1' "$root/README.md" && grep -q 'active.enabled' "$root/data/limits.txt" && grep -q -- '--active' "$root/data/help.txt" && grep -q 'active=1' "$root/docs/EVOLVE.md" && grep -q 'sim_active.ads' "$root/Makefile" \
+  && ok "README, --help, data/limits.txt, docs/EVOLVE.md and the Makefile describe active=1" || bad "active docs"
 cd "$w" || exit 1
 
 

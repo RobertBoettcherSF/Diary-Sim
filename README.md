@@ -256,6 +256,18 @@ A line input under the voices, in `make night` on a terminal and in a session of
   (150), `chat.session_ticks`, `chat.tps`, `chat.trend_step`, `chat.trend_max`, `chat.log_tail`, and for the voices `voice.shown_chat`.
 * **Layout** (24 rows): header 6 + tables 10 + hint 1 + one voice (2 lines) + night status line 1 + chat window 2 + input line 1 + 1 free row.
 
+## The active vocabulary (`active=1`; `make active`, docs/EVOLVE.md 13)
+
+    make night / make run   # new sessions carry active=1 (and symbols=1) when the keys in data/limits.txt are on; no --fresh
+    make active             # the real state of an active=1 save (diaries/active.txt), or the read-only preview on an older save
+    make evolve             # the would-be fitness and the chess weight tables (read-only)
+    make wordstat           # still useful: known words, symbols section, and so on
+    make verify             # DRIFT if a line of diaries/active.txt was changed
+
+* **What it does.** A new `screen=1` session with `active.enabled = 1` carries `active=1`. At the end of each such session every wesen keeps at most `evolve.cap` (500) **active** words: a word whose fitness (the same rule as `make evolve`: uses, granted petitions, an agreed meaning; running average per session) stays at or under `evolve.line10` (0.3) for `evolve.idle_sessions` (6) sessions after `evolve.probation` (3) goes **dormant**, and above the cap the lowest fitness goes first; at most `evolve.retire_max` (40) a session, never a start word, never a chess or number string (symbols stay out of the pool). A dormant word stays in `words.txt` and in `Known_Count`, but it is not taught, not coined or blended from, not put on a screen and not a favourite. It **wakes** when a record line (a screen, a vote, a petition or a dictionary meaning) uses it again.
+* **What is recorded.** Every decision is an A line of `diaries/active.txt` (the params of the first active=1 session, each dormant word, each wake, the state of each wesen at a session end). The replay regenerates them; a change is DRIFT. Old sessions without the marker replay as they did. A save keeps the numbers of its first active=1 session (the params line), so a later change of `data/limits.txt` does not rewrite history.
+* **`make active`.** On an `active=1` save it prints the last closed session's state from `diaries/active.txt` (known, symbols, active, dormant, base, woken). On an older save it stays the would-be preview of the 500 cap (nothing changed).
+
 ## The evolution preview (`make evolve`, `make active`; read-only, docs/EVOLVE.md)
 
     make evolve        # word fitness, the words that would go dormant, the chess weight tables, the Elo curve

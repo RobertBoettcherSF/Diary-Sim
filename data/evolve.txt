@@ -1,6 +1,7 @@
-# Version: 0.001
+# Version: 0.002
 # The evolution preview (make evolve, make active, --evolve, --active; Sim_Evolve): read-only, counts over the diaries and entities/*/words.txt.
 # "key = text".  {1}.. are filled in.  The numbers (points, lines, caps) are in data/limits.txt, keys evolve.*.  Nothing here changes a diary.
+err.active = active.txt {1} differs from the replay: {2}
 evolve.comp.5 = iris
 evolve.comp.6 = sol
 evolve.comp.7 = noor
@@ -71,6 +72,13 @@ evolve.concl.1 = {1} of the {2} words ({3} percent; without the {4} chess and nu
 evolve.concl.2 = Chess: {1} moves of {2} games were counted again. The biggest weight is {3} for "{4}" ({5}). Elo now runs from {6} to {7}. A one-move-ahead chooser with a weight table cannot find deep tactics: read the table as a hint, not as a proof.
 evolve.concl.3 = {1} weight changes ran into the limit of the table.
 evolve.concl.nochess = Chess: no games in this save.
+evolve.l.woke_real = woke again (all sessions)
+evolve.a.real = Active vocabulary (active=1; the state at the end of session {1}, tick {2}; diaries/active.txt)
+evolve.l.active_real = active words
+evolve.l.dormant_real = dormant words
+evolve.l.base_real = of those: base words (never go)
+evolve.a.params = Numbers of the first active=1 session (kept for the life of the save): {1}
+evolve.a.concl.real = At the end of the last closed active session the four wesen hold {1} active words in all and {2} are dormant; {3} chess and number strings are symbols and stay out of the pool; the {4} base words never go.
 evolve.a.title = Active vocabulary preview (active=1; a cap of {1} words per wesen, nothing is changed), tick {2}, {3} sessions
 evolve.a.rules = Rules (docs/LEARN.md 12 (a), docs/EVOLVE.md 3.2): every wesen keeps at most {1} active words; above that the lowest fitness goes first (fitness as in make evolve), after the probation, at most {2} words a session; base words never go, chess and number strings are symbols and are left out. A dormant word stays in words.txt.
 evolve.a.sec = Active and dormant words:

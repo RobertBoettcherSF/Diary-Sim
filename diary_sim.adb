@@ -1,4 +1,4 @@
---  Version: 0.048
+--  Version: 0.049
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -28,7 +28,7 @@ pragma Ada_2022;
 
 with Ada.Calendar, Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Finalization, Ada.Strings.Fixed, Ada.Streams.Stream_IO, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
-     GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chat, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Records, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Trial, Sim_Util, Sim_Visit, Sim_Voice, Sim_Wordstat, Sim_Evolve, Sim_World;
+     GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chat, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Records, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Trial, Sim_Util, Sim_Visit, Sim_Voice, Sim_Wordstat, Sim_Evolve, Sim_Active, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
 
 procedure Diary_Sim is
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.048";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.049";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -280,6 +280,10 @@ procedure Diary_Sim is
    Chatlog_Mode : Boolean := False;              --  --chatlog / make chatlog: the last chat lines
    Chat_Active : Boolean := False;               --  the session being replayed is a chat=1 session
    Symbols_Active : Boolean := False;            --  the session being replayed is a symbols=1 session: chess strings are symbols, not words (docs/EVOLVE.md 9)
+   --  active=1 sessions (Sim_Active, docs/EVOLVE.md 13): dormant and woken words, the state of each wesen at a session end: A lines of diaries/active.txt
+   Active_Path : constant String := "diaries/active.txt";
+   Active_Store : Sim_Store.Store;
+   Active_N : Natural := 0;
    Chat_Path : constant String := "diaries/chat.txt";
    Chat_Store : Sim_Store.Store;
    type Chat_In is record
@@ -772,7 +776,7 @@ procedure Diary_Sim is
       end Teach;
 
       procedure Coin is
-         K : constant Natural := Known_Count (E);
+         K : constant Natural := Usable_Count (E);   --  = Known_Count unless active=1 (dormant words are not coined from)
       begin
          if Int (Roll (Seed, Eid, Tick, 5, 100)) <= Coin_Pct and then K >= 2
            and then Int (Coined_Total) - (if Scoin_Active then Int (Sim_Screen.Coined_All) else 0) < Coin_Cap   --  scoin=1: blends from screens do not use up the cap
@@ -781,8 +785,8 @@ procedure Diary_Sim is
                Ia : constant Positive := Roll (Seed, Eid, Tick, 6, K);
                Ib0 : constant Positive := Roll (Seed, Eid, Tick, 7, K - 1);
                Ib : constant Positive := (if Ib0 >= Ia then Ib0 + 1 else Ib0);
-               Pa : constant Positive := Nth_Known (E, Ia);
-               Pb : constant Positive := Nth_Known (E, Ib);
+               Pa : constant Positive := Nth_Usable (E, Ia);
+               Pb : constant Positive := Nth_Usable (E, Ib);
                Text : constant String := Word (Pa) & Word (Pb);
             begin
                if Text'Length <= 24 and then Find (Text) = 0 and then not Blocked (Pa) and then not Blocked (Pb)
@@ -1998,6 +2002,93 @@ procedure Diary_Sim is
             Sum_Active := Sum_Active + Tw (E).Active;
          end loop;
          if Active_View then
+            declare
+               Act_Lines : Str_Vectors.Vector;
+               Act_Found : Boolean;
+               Last_State : array (Entity_Id) of Unbounded_String := [others => Null_Unbounded_String];
+               Param_Line : Unbounded_String;
+               Has_Real : Boolean := False;
+               Sum_K, Sum_S, Sum_A, Sum_D, Sum_B : Natural := 0;
+               function Tok (L, Key : String) return String is
+                  P : Natural := L'First;
+               begin
+                  while P <= L'Last loop
+                     declare
+                        Stop : Natural := P;
+                     begin
+                        while Stop <= L'Last and then L (Stop) /= ' ' loop Stop := Stop + 1; end loop;
+                        if Stop - P > Key'Length and then L (P .. P + Key'Length - 1) = Key and then L (P + Key'Length) = '=' then
+                           return L (P + Key'Length + 1 .. Stop - 1);
+                        end if;
+                        P := Stop + 1;
+                     end;
+                  end loop;
+                  return "";
+               end Tok;
+               function Num (X : String) return Natural is (if X'Length in 1 .. 9 and then (for all C of X => C in '0' .. '9') then Natural'Value (X) else 0);
+            begin
+               if Ada.Directories.Exists ("diaries/active.txt") then
+                  Read_Lines ("diaries/active.txt", Act_Lines, Act_Found);
+                  for L of Act_Lines loop
+                     if Fx.Index (L, " params ") > 0 then Param_Line := To_Unbounded_String (L);
+                     elsif L'Length > 4 and then L (L'First) = 'A' then
+                        for E in Entity_Id loop
+                           if Fx.Index (L, " " & Name (E) & " state ") > 0 then Last_State (E) := To_Unbounded_String (L); Has_Real := True; end if;
+                        end loop;
+                     end if;
+                  end loop;
+               end if;
+               if Has_Real then
+                  for L of Sim_Voice.Wrap (Msg ("evolve.a.real", Tok (To_String (Last_State (Entity_Id'First)), "s"), Tok (To_String (Last_State (Entity_Id'First)), "t")), 79) loop Put (L); end loop;
+                  TIO.New_Line;
+                  if Length (Param_Line) > 0 then
+                     declare
+                        PL : constant String := To_String (Param_Line);
+                        At_P : constant Natural := Fx.Index (PL, " params ");
+                     begin
+                        for L of Sim_Voice.Wrap (Msg ("evolve.a.params", PL (At_P + 8 .. PL'Last)), 79) loop Put (L); end loop;
+                     end;
+                     TIO.New_Line;
+                  end if;
+                  Put (Msg ("evolve.a.sec"));
+                  Head_Line;
+                  declare
+                     procedure Rrow (Label, Key : String) is
+                        Line : Unbounded_String := To_Unbounded_String (Pad_R (Label, Name_W));
+                        Sum : Natural := 0;
+                     begin
+                        for E in Entity_Id loop
+                           declare
+                              V : constant Natural := Num (Tok (To_String (Last_State (E)), Key));
+                           begin
+                              Append (Line, Pad_L (Img (V), Cell_W));
+                              Sum := Sum + V;
+                           end;
+                        end loop;
+                        Append (Line, Pad_L (Img (Sum), Total_W));
+                        Put (To_String (Line));
+                     end Rrow;
+                  begin
+                     Rrow ("  " & Msg ("evolve.l.known"), "known");
+                     Rrow ("  " & Msg ("evolve.l.symbols"), "symbols");
+                     Rrow ("  " & Msg ("evolve.l.active_real"), "active");
+                     Rrow ("  " & Msg ("evolve.l.dormant_real"), "dormant");
+                     Rrow ("  " & Msg ("evolve.l.base_real"), "base");
+                     Rrow ("  " & Msg ("evolve.l.woke_real"), "woke");
+                  end;
+                  TIO.New_Line;
+                  for E in Entity_Id loop
+                     Sum_K := Sum_K + Num (Tok (To_String (Last_State (E)), "known"));
+                     Sum_S := Sum_S + Num (Tok (To_String (Last_State (E)), "symbols"));
+                     Sum_A := Sum_A + Num (Tok (To_String (Last_State (E)), "active"));
+                     Sum_D := Sum_D + Num (Tok (To_String (Last_State (E)), "dormant"));
+                     Sum_B := Sum_B + Num (Tok (To_String (Last_State (E)), "base"));
+                  end loop;
+                  Put (Msg ("evolve.concl.head"));
+                  for L of Sim_Voice.Wrap (Msg ("evolve.a.concl.real", Img (Sum_A), Img (Sum_D), Img (Sum_S), Img (Sum_B)), 79) loop Put (L); end loop;
+                  return;
+               end if;
+            end;
             for L of Sim_Voice.Wrap (Msg ("evolve.a.title", Img (Cap_N), Img (Per (0).Last_Tick), Img (Sim_Evolve.Sessions)), 79) loop Put (L); end loop;
             TIO.New_Line;
             for L of Sim_Voice.Wrap (Msg ("evolve.a.rules", Img (Cap_N), Img (Lm ("evolve.retire_max", 40))), 79) loop Put (L); end loop;
@@ -2932,6 +3023,71 @@ procedure Diary_Sim is
       end loop;
    end Verify_Grants;
 
+   --  active=1: every decision of Sim_Active (the params, a dormant word, a woken word, the state of a wesen) is an A line of
+   --  diaries/active.txt: "A12 t=3300 s=11 ada dormant w=345 word=gentle fit=0 why=idle".  Replay-verified like the screens.
+   procedure Emit_Active_Lines is
+      New_Lines : Str_Vectors.Vector;
+      Result : Sim_Store.Status;
+      Old : Unbounded_String;
+   begin
+      Sim_Active.Drain (New_Lines);
+      for T of New_Lines loop
+         Active_N := Active_N + 1;
+         declare
+            Line : constant String := "A" & Img (Active_N) & " " & T;
+         begin
+            Sim_Store.Emit (Active_Store, Line, not Preview and then not Ledger_Mode, Result, Old);
+            if Sim_Store."=" (Result, Sim_Store.Differs) then
+               raise Drift_Error with Msg ("err.active", "A" & Img (Active_N), Diff_At (To_String (Old), Line));
+            elsif Sim_Store."=" (Result, Sim_Store.Skipped) and then Ledger_Mode and then not Preview then   --  make verify: a stored line went missing
+               raise Drift_Error with Msg ("err.active", "A" & Img (Active_N), Diff_At ("(missing)", Line));
+            end if;
+         end;
+      end loop;
+   end Emit_Active_Lines;
+
+   --  A record line that was just emitted: its uses count for the open active=1 window (a dormant word that is used wakes).
+   procedure Active_Feed (Line : String) is
+   begin
+      if Sim_Active.Is_Open then
+         Sim_Active.Note_Line (Line);
+         Emit_Active_Lines;
+      end if;
+   end Active_Feed;
+
+   procedure Verify_Active (Upto : Int) is
+      Orphan : constant String := Sim_Store.Orphan (Active_Store, Upto);
+   begin
+      if Orphan /= "" then
+         raise Drift_Error with Msg ("err.active", Sim_Store.Key_Of (Orphan), Diff_At (Orphan, "(not in the replay)"));
+      end if;
+   end Verify_Active;
+
+   --  The numbers of active=1: the params line of diaries/active.txt (a save keeps the numbers it started with), else data/limits.txt
+   --  evolve.* with evolve.cap as floor and cap (the rule of make active).
+   procedure Load_Active_Params is
+      Lines : Str_Vectors.Vector;
+      Found, OK : Boolean;
+      Cap : constant Natural := Natural (Int'Max (0, Limit ("evolve.cap", 500)));
+      function Lm (K : String; D : Int) return Natural is (Natural (Int'Max (0, Int'Min (100_000, Limit (K, D)))));
+      Pr : Sim_Evolve.Word_Params :=
+        (Use_Pts => Lm ("evolve.use_pts", 1), Use_Cap => Lm ("evolve.word_use_cap", 5), Grant_Pts => Lm ("evolve.grant_pts", 3),
+         Agree_Pts => Lm ("evolve.agree_pts", 5), Line10 => Lm ("evolve.line10", 3), Fit_Cap => Lm ("evolve.fit_cap", 200),
+         Probation => Lm ("evolve.probation", 3), Idle => Lm ("evolve.idle_sessions", 6), Retire_Max => Lm ("evolve.retire_max", 40),
+         Min_Active => Cap, Cap => Cap);
+   begin
+      if Ada.Directories.Exists (Active_Path) then
+         Read_Lines (Active_Path, Lines, Found);
+         for L of Lines loop
+            if Fx.Index (L, " params ") > 0 then
+               Sim_Active.Parse_Params (L, Pr, OK);
+               exit;
+            end if;
+         end loop;
+      end if;
+      Sim_Active.Reset (Pr);
+   end Load_Active_Params;
+
    --  Every change of a screen is a K line in diaries/screens.txt: "K12 t=300 ada add w=7 src=taught s=3,*7".  The replay
    --  compares each one with the stored line (DRIFT if different) and appends a missing one.
    procedure Emit_Screen_Lines (Tick : Int) is
@@ -2947,6 +3103,7 @@ procedure Diary_Sim is
             if Sim_Store."=" (Result, Sim_Store.Differs) then
                raise Drift_Error with Msg ("err.screens", "K" & Img (Screen_N), Diff_At (To_String (Old), Line));
             end if;
+            Active_Feed (Line);
          end;
       end loop;
       Scr_Lines.Clear;
@@ -3030,6 +3187,7 @@ procedure Diary_Sim is
             elsif Sim_Store."=" (Result, Sim_Store.Skipped) and then not Preview and then not Ledger_Mode then   --  a stored file lost a line
                raise Drift_Error with Msg ("err.records", File & " " & Sim_Store.Key_Of (T), Diff_At ("(missing)", T));
             end if;
+            if File = "votes.txt" or else File = "petitions.txt" or else File = "dictionary.txt" then Active_Feed (T); end if;
          end loop;
       end One;
    begin
@@ -4180,6 +4338,7 @@ procedure Diary_Sim is
       Records : Boolean := False;       --  records=1: votes, petitions, dictionary and announcements as record files; a clean word vote (Sim_Records; needs govern=1)
       Visit : Boolean := False;         --  visit=1: Robert stands next to one wesen (vwho=<id>) and talks to it (Sim_Visit, diaries/visit.txt)
       Visit_Who : Natural := 0;
+      Active : Boolean := False;        --  active=1: an active vocabulary per wesen, dormant words, wake on use (needs screen=1; Sim_Active, docs/EVOLVE.md 13)
       Symbols : Boolean := False;       --  symbols=1: chess moves and their numeric strings are symbols, never minted as words (needs chess=1; docs/EVOLVE.md 9)
       Chat : Boolean := False;          --  chat=1: Robert types lines (@name text, /order) and the answers are recorded (Sim_Chat, diaries/chat.txt)
    end record;
@@ -4206,6 +4365,7 @@ procedure Diary_Sim is
       & (if R.Preport then " preport=1" else "") & (if R.Players4 then " players4=1" else "") & (if R.Nextticks then " nextticks=1" else "") & (if R.Trial then " trial=1" else "") & (if R.Rec2 and then R.Records then " records=2" elsif R.Records then " records=1" else "")
       & (if R.Visit then " visit=1 vwho=" & Name (Entity_Id (R.Visit_Who)) else "")
       & (if R.Symbols then " symbols=1" else "")
+      & (if R.Active then " active=1" else "")
       & (if R.Chat then " chat=1" else ""));
    function Yuga (N : Positive) return String is (Msg ("yuga." & Img ((N - 1) mod 4)));
    --  The four votes of a session that starts after tick Start (state: St, known words).
@@ -4255,6 +4415,7 @@ procedure Diary_Sim is
       R.Visit := Token (L, "visit") = "1";
       R.Visit_Who := (if R.Visit then Sim_Dharma.Find_Wesen (Token (L, "vwho")) else 0);
       R.Symbols := R.Chess and then Token (L, "symbols") = "1";
+      R.Active := R.Screen and then Token (L, "active") = "1";
       R.Chat := Token (L, "chat") = "1";
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
         and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0 and then (R.Visit_Who > 0 or else not R.Visit);
@@ -4403,6 +4564,8 @@ procedure Diary_Sim is
    --  A liberated wesen of a new session moves to the location its own dice name (record + effect).
    procedure Start_Life (R : Session_Rec) is
    begin
+      Sim_Active.Open (R.N, R.Start, R.Active and then R.Screen);   --  closes the window of the previous active=1 session (dormancies), opens this one
+      Emit_Active_Lines;
       Sim_Dharma.Begin_Life (Seed, R.Start, R.N, L_Max + 1, R.Dharma, R.Players4);
       World_Active := R.World;
       if R.Rest and then not Rest_Active then Rest_Begin (Seed); end if;   --  the state runs on from session to session
@@ -4576,12 +4739,14 @@ procedure Diary_Sim is
 
    --  A stored session must reproduce its votes when the replay reaches its start tick.
    procedure Check_Sessions_At (T : Int) is
+      Has_Vote : constant Boolean := (for some R of Word_Votes => R.Tick = T);
+      Now_T : constant Tok_Array := (if Has_Vote then Words_Now (T) else [others => Null_Unbounded_String]);   --  before the session end's records, as a new session end does (active=1: a record line can wake a word)
    begin
       Check_Dharma_At (T);
       for R of Word_Votes loop
          if R.Tick = T then
             declare
-               Now : constant Tok_Array := Words_Now (T);
+               Now : constant Tok_Array := Now_T;
             begin
                if Now /= R.Tok then
                   raise Drift_Error with Msg ("err.words", Img (R.N), Img (R.Tick), Tok_Text (R.Tok), Tok_Text (Now));
@@ -4676,6 +4841,7 @@ procedure Diary_Sim is
    function Rec2_Wanted return Boolean is (Records_Wanted and then Limit ("rec.quality", 1) /= 0);   --  records=2: quality rules for word proposals   --  records=1 needs the governance (the D records)
    function Nextticks_Wanted return Boolean is (Govern_Wanted and then Limit ("nextticks.enabled", 1) /= 0);   --  nextticks=1 needs the governance (the open petitions)
    function Symbols_Wanted return Boolean is (Chess_Wanted and then Limit ("symbols.enabled", 1) /= 0);   --  symbols=1 needs chess=1 (docs/EVOLVE.md 9)
+   function Active_Wanted return Boolean is (Screen_Wanted and then Limit ("active.enabled", 1) /= 0);   --  active=1 needs screen=1 (the uses are read on the screens)
    function Chat_Wanted return Boolean is   --  new sessions carry chat=1 when a line can be typed (a terminal in the foreground, or --chat)
      (Sim_Chat.Enabled and then not Preview and then (Chat_Mode or else Sim_Quit.Lines_On));
 
@@ -4700,7 +4866,7 @@ procedure Diary_Sim is
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
                Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => Visit_Mode, Visit_Who => Visit_Who, Chat => Chat_Wanted, Symbols => Symbols_Wanted);
+               Visit => Visit_Mode, Visit_Who => Visit_Who, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Active => Active_Wanted);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -4717,7 +4883,7 @@ procedure Diary_Sim is
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
                World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => False, Visit_Who => 0, Chat => Chat_Wanted, Symbols => Symbols_Wanted);
+               Visit => False, Visit_Who => 0, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Active => Active_Wanted);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);
@@ -6713,6 +6879,9 @@ begin
    Sim_Chat.Init (Seed);
    Sim_Store.Open (Chat_Store, Chat_Path, "# seed " & Img (Seed));
    Load_Chat;
+   Sim_Store.Open (Active_Store, Active_Path, "# seed " & Img (Seed));
+   Active_N := 0;
+   Load_Active_Params;
    Load_Challenges;
    Set_Ledger_From;
    if not Ledger_Mode then Write_Debug ("RUN", ""); end if;   --  stub: a kill -9 still leaves a file
@@ -6757,6 +6926,7 @@ begin
             Verify_Records (Last_Done);
             Verify_Visit (Last_Done);
             Verify_Chat (Last_Done);
+            Verify_Active (Last_Done);
             Con.Put_Line (Msg ("verify.ok", Img (Verify_To), Img (Integer (Sessions.Length)), Tenths_Text (Ada.Calendar."-" (Ada.Calendar.Clock, T_Run))));
          elsif Voices_View then Con.Put (Voices_Text); elsif Elo_View then Con.Put (Elo_Text); elsif Govern_View then Con.Put (Govern_Text); elsif Audit_View then Con.Put (Audit_Text); elsif Next_View then Con.Put (Next_Text); elsif Trial_View then Con.Put (Trials_Text); elsif Rec_View then Con.Put (Lines_Text (Sim_Records.Divergence)); elsif Dict_View then Con.Put (Lines_Text (Sim_Records.Dictionary)); elsif Bal_View then Con.Put (Lines_Text (Sim_Records.Ballots)); elsif Robot_View then Con.Put (Robot_Text); elsif Screens_View then Con.Put (Screens_Text); else Con.Put_Line (Sim_Ledger.Report (Seed, Ledger_From, Ledger_Full)); end if;
          return;
@@ -6815,6 +6985,7 @@ begin
       Verify_Records (Last_Done);
       Verify_Visit (Last_Done);
       Verify_Chat (Last_Done);
+      Verify_Active (Last_Done);
    end if;
    if Quit_Seen then   --  Ctrl-C / SIGTERM / SIGHUP: everything written so far is flushed; a rerun resumes
       declare

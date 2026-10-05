@@ -193,6 +193,13 @@ screen.coin_cap = 8
 # symbols (docs/EVOLVE.md 9, docs/LEARN.md 12 (c)): 1 = new chess sessions carry symbols=1: the move text (e2e4) and its numeric string (5254) stay symbols of
 # the board (diaries/chess.txt, the diary line); they are NOT minted as words, are not learned or taught and are not put on the screens.  0 = the old rule.  Existing sessions keep their rule.
 symbols.enabled = 1
+# active (docs/EVOLVE.md 13, docs/LEARN.md 12 (a); Sim_Active): 1 = new screen=1 sessions carry active=1: every wesen keeps an active vocabulary of
+# about evolve.cap words (500, the rule of make active: floor and cap); a word whose fitness (evolve.* above) stays at or under evolve.line10 for
+# evolve.idle_sessions sessions after evolve.probation goes DORMANT at the end of a session, above the cap the lowest fitness goes first, at most
+# evolve.retire_max a session, never a start word, never a chess or number string.  A dormant word is not taught, coined or blended from, not put on a
+# screen and not a favourite; it wakes when a record line uses it again.  Lines in diaries/active.txt (replay-verified); a save keeps the numbers of
+# its first active=1 session (the params line).  0 = the old rule.  Existing sessions keep their rule.
+active.enabled = 1
 chess.enabled = 1
 chess.gap = 6
 chess.start_pct = 50

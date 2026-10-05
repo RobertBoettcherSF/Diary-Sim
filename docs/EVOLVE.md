@@ -1,7 +1,7 @@
 # Evolutionary pressure on words and on chess (previews built, the rest design)
-Version: 0.003
+Version: 0.004
 
-Build state: **step 1 (`symbols=1`) is built** (build 0.047), **step 2 (`make evolve`) and step 3 (`make active`) are built as read-only previews** (build 0.048, sections 9 and 12); everything else is design only.
+Build state: **step 1 (`symbols=1`) is built** (build 0.047), **step 1 (`symbols=1`)**, **step 2 (`make evolve` preview)** and **step 3 (`make active` preview)** are built (build 0.048); **the real `active=1` (section 13) is built** (build 0.049); everything else is design only.
 
 Status: **proposal for Robert**. No code for any of this exists; every number below is a *proposed default* that lives in `data/` when
 built, and every decision is open until Robert answers section 11. Style as `docs/LIFE.md` and `docs/LEARN.md`: what it is, what it is made
@@ -195,3 +195,6 @@ Measured on the 287-session seed-42 run (old rule, 12,605 chess strings = 58 per
 * **Cap of 500.** 500 active words per wesen (2,000 in all), 6,809 dormant, the cap is reached in session 28 (at 40 retirements a session), 952 dormant words were used again later. Active / dormant by kind: start 264 / 0, world 245 / 1,821, taught 1,238 / 3,770, screen 145 / 699, coined 108 / 519. The taught and world words carry most of the pressure.
 * **Chess.** 98,575 moves of 3,519 games were counted again. Weights still saturate at +-8 for several features (credit follows the length of the game) and 185 changes ran into the limit of the table: the 4.2 rule needs a smaller step or a result-only credit before it is switched on. Elo now runs from 1,129 to 1,289.
 * **Speed.** `make evolve` takes about 2.2 s and `make active` 1.4 s on the 287-session save at -O0; a normal run is not changed (the previews are only called by `--evolve` / `--active`).
+
+## 13. The real active vocabulary (`active=1`, BUILT, build 0.049, new sessions only, no `--fresh`)
+A new `screen=1` session with `active.enabled = 1` carries the marker `active=1` (session line). Off or an older session: the replay is byte-identical to the previous build (`active.enabled = 0`). The rule is the one of `make active` (section 12): floor = cap = `evolve.cap` (500); fitness, probation, idle, retire_max as `evolve.*`; chess and number strings are symbols and left out; base (start) words never go. A dormant word is not taught, not coined or blended from, not put on a screen and not a favourite (`Sim_World.Asleep`); it wakes when a K, V, P or L record line uses it again. Every decision is an A line of `diaries/active.txt` (params of the first active=1 session, dormant, wake, state); the replay regenerates them (DRIFT on a change). No die is rolled, so no salt is taken (the 20000 .. 20999 band stays free for mutation and decay of the chess table). `make active` prints the real last state on an `active=1` save and the would-be preview on an older one. Checks: scenario 53.
