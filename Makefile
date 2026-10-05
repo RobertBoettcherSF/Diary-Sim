@@ -1,4 +1,4 @@
-# Version: 0.040
+# Version: 0.041
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -24,6 +24,8 @@
 # make evolve    the evolution preview (read-only, docs/EVOLVE.md): word fitness (top words, the words that would go dormant), the weight table each chess
 #                 competitor would hold after learning from the recorded games, the Elo curve; numbers in data/limits.txt evolve.*, wording in data/evolve.txt
 # make active    the active vocabulary: on an active=1 save the real state of diaries/active.txt (active, dormant, woken per wesen); on an older save the read-only preview under a cap of evolve.cap (500)
+# make frustration  the MiniMax report (read-only): per wesen refused petitions and the lowest mood, the worst session and the
+#                 smallest worst case; per player the petitions decided in one session (load); the grant rate is not changed
 # make voices     print the four wesen messages (what the night header shows, one line each, at most voice.max_chars) for the last tick of the
 #                 save; deterministic, read-only, replay-verified; data/voices.txt holds the templates
 # make night      sessions back to back, for the night: SESSION_TICKS=300 (ticks per session), MAX_SESSIONS=n, MAX_HOURS=n (default 12;
@@ -110,7 +112,7 @@ OPT ?= -O2
 JOBS ?= -j0
 FLAGS = -g $(OPT) -gnatwa -gnat2022 -gnata $(JOBS)
 
-.PHONY: chat chatlog voices wordstat evolve active all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog trend night verify bench share small footprint
+.PHONY: chat chatlog voices wordstat evolve active frustration all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog trend night verify bench share small footprint
 export WESEN PLAYER TEXT AS
 
 EVERY ?= 100
@@ -226,6 +228,9 @@ evolve: all
 
 active: all
 	bin/diary_sim --active
+
+frustration: all
+	bin/diary_sim --frustration
 
 veto: all
 	bin/diary_sim --veto $(DECISION) $(if $(AS),--as $(AS))

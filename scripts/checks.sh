@@ -2185,6 +2185,55 @@ ksum=$(sed -n '/^  active words now/,/^  of those: used again/p' aw1.txt | awk '
   && ok "--wordstat active-only section: $aw_tot active words now (= an independent count of words.txt minus the dormant words of active.txt), the kinds add up, most used and themes listed; not shown on the control save" || bad "wordstat active ($rcw '$aw_tot' '$aw_ind' '$ksum')"
 cd "$w" || exit 1
 
+echo "== 55. make frustration (--frustration): MiniMax report, refusals and mood per wesen, player load; read-only =="
+cd "$w/nt" || exit 1
+fh="$w/nt/ac_new"
+sum0=$(cd "$fh" && find . -type f | sort | xargs md5sum | md5sum)
+env -u DIARY_VERBOSE "$nb" --frustration --home "$fh" > fr1.txt 2>&1; rcf=$?
+env -u DIARY_VERBOSE "$nb" --frustration --home "$fh" > fr2.txt 2>&1
+sum1=$(cd "$fh" && find . -type f | sort | xargs md5sum | md5sum)
+mkdir -p "$w/nt/fr_empty"; env -u DIARY_VERBOSE "$nb" --frustration --home "$w/nt/fr_empty" > fr3.txt 2>&1; rce=$?
+fr_ind=$(python3 - "$fh" <<'PY'
+import sys, os, re, json
+d = os.path.join(sys.argv[1], 'diaries')
+ses = []
+for l in open(os.path.join(d, 'sessions.txt')):
+    m = re.match(r'S(\d+) start=(\d+) .*len=(\d+)', l)
+    if m: ses.append([int(m[2]) + 1, int(m[2]) + int(m[3])])
+    m = re.match(r'W(\d+) tick=(\d+)', l)
+    if m and int(m[1]) <= len(ses): ses[int(m[1]) - 1][1] = int(m[2])
+pets = [l for l in open(os.path.join(d, 'petitions.txt')) if re.match(r'P\d', l) and ' out=' in l]
+ref = sum(1 for l in pets if ' out=refuse' in l)
+worst = []
+for e in ['ada', 'gemini', 'replika', 'robert']:
+    low = {}
+    for l in open(os.path.join(d, e + '.jsonl')):
+        try: j = json.loads(l)
+        except ValueError: continue
+        t, m = j.get('tick', 0), j.get('state', {}).get('mood', 0)
+        for i, (a, b) in enumerate(ses):
+            if a <= t <= b: low[i + 1] = min(low.get(i + 1, m), m); break
+    rs = {}
+    for l in pets:
+        if ' wesen=%s ' % e in l and ' out=refuse' in l:
+            s = int(re.search(r' s=(\d+)', l)[1]); rs[s] = rs.get(s, 0) + 1
+    worst.append(max(10 * rs.get(s, 0) + max(0, -low.get(s, 0)) for s in range(1, len(ses) + 1)))
+print(len(ses), len(pets), ref, max(worst), min(worst))
+PY
+)
+set -- $fr_ind
+fr_head=$(head -1 fr1.txt); fr_ref=$(sed -n 's/^Report only: \([0-9]*\) of \([0-9]*\) petitions.*/\1 \2/p' fr1.txt)
+fr_w=$(sed -n 's/^Worst wesen: [^,]*, score \([0-9]*\) .*/\1/p' fr1.txt); fr_m=$(sed -n 's/^MiniMax: .* belongs to [^,]*, score \([0-9]*\) .*/\1/p' fr1.txt)
+fr_col=$(awk '/^ +asked/ { on = 1; next } on && NF == 8 { s += $5 } /^$/ { on = 0 } END { print s + 0 }' fr1.txt)
+[ "$rcf" = 0 ] && [ "$fr_head" = "Frustration (MiniMax, read-only): $1 sessions, $2 decided petitions." ] && [ "$fr_ref" = "$3 $2" ] && [ "$fr_col" = "$3" ] \
+  && [ "$fr_w" = "$4" ] && [ "$fr_m" = "$5" ] && grep -q '^Worst player load: ' fr1.txt && [ "$(awk 'length > 79' fr1.txt | wc -l)" = 0 ] \
+  && ok "--frustration: $1 sessions, $2 petitions, $3 refused (column and conclusion), worst score $4 and MiniMax $5 equal an independent count; player load listed; every line <= 79 columns" || bad "frustration counts ($rcf '$fr_head' '$fr_ref' '$fr_col' '$fr_w' '$fr_m' / $fr_ind)"
+[ "$sum0" = "$sum1" ] && cmp -s fr1.txt fr2.txt && [ "$rce" = 2 ] && grep -q 'no sessions' fr3.txt && grep -q 'grant rate is not' fr1.txt \
+  && ok "--frustration is read-only (the folder checksum is unchanged), the same twice, exit 2 on an empty folder, says the grant rate is not changed" || bad "frustration read-only ($rce)"
+grep -q 'make frustration' "$root/README.md" && grep -q -- '--frustration' "$root/data/help.txt" && grep -q '^frustration:' "$root/Makefile" && grep -q 'frustration.refuse_weight' "$root/data/limits.txt" \
+  && [ -f "$root/data/frustration.txt" ] && ok "README, --help, the Makefile, data/limits.txt and data/frustration.txt describe make frustration" || bad "frustration docs"
+cd "$w" || exit 1
+
 
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="

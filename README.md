@@ -289,6 +289,21 @@ save today (`--evolve`, `--active`; wording in `data/evolve.txt`, every number i
 * **`make active`** is the same word rule with a cap: above `evolve.cap` (500) active words the lowest fitness goes first, at most 40 a session; it prints known, symbols, base
   words, active, dormant, the session in which the cap is reached, the split by kind and how many dormant words were used again later.
 
+## The frustration report (`make frustration`, `--frustration`; MiniMax, read-only)
+
+    make frustration   # which wesen had the worst session (refused petitions + low mood), and which player carried the most petitions
+
+Nothing is simulated or written and nothing changes the grant rate: the report counts over `diaries/petitions.txt` (every decided P line: `s=`, `wesen=`,
+`player=`, `out=grant|partial|refuse`), `diaries/sessions.txt` (the session ranges) and the mood of `diaries/<id>.jsonl`. Wording in `data/frustration.txt`,
+the one number in `data/limits.txt`; every line at most 79 columns.
+
+* **Per wesen.** Petitions decided, granted, partly granted, refused, the lowest mood of all sessions, and the **worst session**: score =
+  `frustration.refuse_weight` (10) x refused petitions in that session + the depth of the lowest mood below 0 in it.
+* **MiniMax.** The worst wesen is the one with the largest worst-session score; the MiniMax line names the wesen whose worst case is the smallest, and the gap.
+* **Per player.** Petitions decided, refused and the refused share, the most petitions decided in one session (the load) and in which session, the mean per
+  session. The worst player load is the largest of those maxima.
+* **Conclusion.** How many petitions were refused in all. A report only: the grant rate stays as `data/limits.txt` sets it.
+
 ## The vocabulary report (`make wordstat`, `--wordstat`; read-only, also in `make share`)
 
     make wordstat      # per wesen and total: how many words are known, and where they came from

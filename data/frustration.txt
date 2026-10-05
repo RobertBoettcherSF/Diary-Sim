@@ -1,0 +1,25 @@
+# Version: 0.001
+# The MiniMax frustration report (make frustration, --frustration): read-only, counts over diaries/petitions.txt,
+# diaries/sessions.txt and diaries/<id>.jsonl.  Nothing is simulated or written; the grant rate is not changed.
+# Numbers: frustration.refuse_weight in data/limits.txt.  {1} {2} ... are filled in by the program.
+frust.none = no sessions in {1}: run make run or make night first
+frust.title = Frustration (MiniMax, read-only): {1} sessions, {2} decided petitions.
+frust.wesen.head = Per wesen: petitions decided, granted, partly granted, refused, the lowest mood of all sessions (0 if it never went below 0), and the worst session. Session score = {1} x refused petitions + the depth of the lowest mood below 0.
+frust.col.pet = asked
+frust.col.grant = granted
+frust.col.part = partly
+frust.col.ref = refused
+frust.col.low = low mood
+frust.col.worst = worst
+frust.col.in = session
+frust.col.dec = decided
+frust.col.share = share
+frust.col.max = max/ses
+frust.col.mean = mean/ses
+frust.worst = Worst wesen: {1}, score {2} in session {3} ({4} refused, lowest mood {5}).
+frust.minimax = MiniMax: the smallest worst case belongs to {1}, score {2} in session {3}; the gap to the worst wesen is {4}.
+frust.player.head = Per player (who decides the petitions): decided, refused, refused share, the most petitions in one session, in which session, and the mean per session.
+frust.load = Worst player load: {1}, {2} petitions in session {3} ({4} in all, {5}% refused).
+frust.load.none = Worst player load: no petition was decided yet.
+frust.concl.head = Conclusion:
+frust.concl = Report only: {1} of {2} petitions were refused ({3}%). The grant rate is not changed by this report; it stays as data/limits.txt sets it.

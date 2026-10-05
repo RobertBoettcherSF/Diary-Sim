@@ -495,6 +495,12 @@ chat.log_tail = 30
 voice.shown_chat = 1
 # The vocabulary report (make wordstat): shortest stem that makes a word a prefix or suffix variant of another word the wesen knows.
 wordstat.stem_min = 3
+# Active words only (make wordstat on an active=1/2 save): how many most used words per wesen, how many themes (shared first three letters).
+wordstat.act_top = 6
+wordstat.act_themes = 10
+# The MiniMax frustration report (make frustration, data/frustration.txt): READ-ONLY.  Session score of a wesen = refuse_weight x its refused
+# petitions in that session + the depth of its lowest mood below 0.  Nothing here changes the grant rate.
+frustration.refuse_weight = 10
 
 # Evolution preview (make evolve, make active; Sim_Evolve, data/evolve.txt, docs/EVOLVE.md): READ-ONLY, nothing here changes a save.
 # Words: points per mention (use_pts), most use points per word and session (word_use_cap), a mention in a granted petition (grant_pts), the meaning of an

@@ -62,6 +62,11 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
 --active       the active vocabulary (make active): on an active=1 save the
                real state from diaries/active.txt; on an older save the
                would-be preview under a cap of evolve.cap (docs/EVOLVE.md 13)
+--frustration  the MiniMax report (make frustration; read-only): per wesen
+               refused petitions, the lowest mood and the worst session
+               (refusals x frustration.refuse_weight + the low mood), the
+               smallest worst case; per player the most petitions decided in
+               one session; the grant rate is not changed (frustration.txt)
 --voices       the four wesen messages the night header shows (make voices;
                data/voices.txt; read-only)
 --verify       replay the whole history from the files and compare it with

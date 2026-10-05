@@ -1,4 +1,4 @@
---  Version: 0.050
+--  Version: 0.051
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.050";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.051";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -274,6 +274,7 @@ procedure Diary_Sim is
    --  chat=1 sessions (Sim_Chat): Robert's typed lines and every answer are C lines of diaries/chat.txt (record-first, replay-verified)
    Chat_Mode : Boolean := False;                 --  --chat / make chat: one session with the input line, paced
    Chat_Script_Opt : Unbounded_String;           --  --chat-script FILE: lines "<ticks into the session> <text>" typed by a script (tests)
+   Frust_Mode : Boolean := False;                --  --frustration / make frustration: the MiniMax report (read-only; data/frustration.txt)
    Evolve_Mode : Boolean := False;               --  --evolve / make evolve: the evolution preview (read-only; Sim_Evolve, docs/EVOLVE.md)
    Active_Mode : Boolean := False;               --  --active / make active: the active-vocabulary preview with a cap (read-only)
    Wordstat_Mode : Boolean := False;             --  --wordstat / make wordstat: the vocabulary report (read-only)
@@ -467,7 +468,7 @@ procedure Diary_Sim is
       Read_Lines (Data_Path ("limits.txt"), Lines, Found);
       if not Found then Warn (Msg ("warn.limits_file")); end if;
       Read_Lines (Data_Path ("menu.txt"), Lines, Found);   --  menu text: keys only, a missing file shows the keys
-      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt", "screens.txt", "chess.txt", "robot.txt", "govern.txt", "preport.txt", "ticks.txt", "visit.txt", "voices.txt", "wordstat.txt", "evolve.txt", "chat.txt", "trial.txt", "records.txt"]) loop   --  the Buddhism layer: numbers, wording, players
+      for F of Str_Vectors.Vector'(["karma.txt", "dharma.txt", "players.txt", "things.txt", "ledger.txt", "screens.txt", "chess.txt", "robot.txt", "govern.txt", "preport.txt", "ticks.txt", "visit.txt", "voices.txt", "wordstat.txt", "evolve.txt", "frustration.txt", "chat.txt", "trial.txt", "records.txt"]) loop   --  the Buddhism layer: numbers, wording, players
          Read_Lines (Data_Path (F), Lines, Found);
          if not Found then Warn (Msg ("warn.dharma_file", F)); end if;
       end loop;
@@ -1765,6 +1766,265 @@ procedure Diary_Sim is
          when others => null;   --  stdout is a closed pipe (| head)
       end;
    end Print_Chatlog;
+
+   --  --frustration: the MiniMax report (data/frustration.txt); READ-ONLY, nothing is simulated or written.
+   --  Sources: diaries/petitions.txt (P lines: s=, wesen=, player=, out=grant|partial|refuse), diaries/sessions.txt (S start= len=,
+   --  W tick=: the session ranges) and diaries/<id>.jsonl ("tick", state "mood").  The score of a wesen in a session is
+   --  frustration.refuse_weight (10) x its refused petitions + the depth of its lowest mood below 0; the worst wesen holds the
+   --  largest such score, the MiniMax line names the wesen whose worst case is the smallest.  The player load is the number of
+   --  petitions a player decided in one session.  Nothing changes the grant rate: this is a report only.
+   procedure Print_Frustration is
+      type Nat_Array is array (Positive range <>) of Natural;
+      Lines : Str_Vectors.Vector;
+      Found : Boolean;
+      Max_S : constant := 5_000;   --  sessions counted (the rest of a longer save is left out)
+      W_Ref : constant Natural := Natural (Int'Max (0, Limit ("frustration.refuse_weight", 10)));
+      N_S : Natural := 0;   --  sessions found
+      Name_W : constant := 12;
+      Cell_W : constant := 9;
+
+      function Field (L, Key : String) return String is   --  value of " key=" (or "key=" at the start), "" if none
+         K : constant String := Key & "=";
+      begin
+         for I in L'First .. L'Last - K'Length + 1 loop
+            if L (I .. I + K'Length - 1) = K and then (I = L'First or else L (I - 1) = ' ') then
+               declare
+                  J : Natural := I + K'Length;
+               begin
+                  while J <= L'Last and then L (J) /= ' ' loop J := J + 1; end loop;
+                  return L (I + K'Length .. J - 1);
+               end;
+            end if;
+         end loop;
+         return "";
+      end Field;
+
+      function Num (S : String) return Natural is
+        (if S'Length in 1 .. 9 and then (for all C of S => C in '0' .. '9') then Natural'Value (S) else 0);
+
+      function Pad_L (S : String; W : Positive) return String is
+        (Fx."*" (Natural'Max (0, W - S'Length), ' ') & S);
+      function Pad_R (S : String; W : Positive) return String is
+        (if S'Length >= W then S (S'First .. S'First + W - 1) else S & Fx."*" (W - S'Length, ' '));
+      function Cell (S : String) return String is (Pad_L (S, Cell_W));
+      function Pct (A, B : Natural) return Natural is (if B = 0 then 0 else Natural (Int (A) * 100 / Int (B)));
+      procedure Put (S : String) is begin TIO.Put_Line (S); end Put;
+      procedure Para (S : String) is
+      begin
+         for L of Sim_Voice.Wrap (S, 79) loop Put (L); end loop;
+      end Para;
+   begin
+      Read_Lines ("diaries/sessions.txt", Lines, Found);
+      for L of Lines loop
+         if L'Length > 1 and then L (L'First) = 'S' and then L (L'First + 1) in '0' .. '9' then N_S := Natural'Min (Max_S, N_S + 1); end if;
+      end loop;
+      if N_S = 0 then
+         TIO.Put_Line (TIO.Standard_Error, Msg ("frust.none", Ada.Directories.Full_Name ("diaries/sessions.txt")));
+         Ada.Command_Line.Set_Exit_Status (2);
+         return;
+      end if;
+      declare
+         First, Last : Nat_Array (1 .. N_S) := [others => 0];   --  ticks First .. Last belong to session n
+         type Wesen_Session is array (Entity_Id, 1 .. N_S) of Natural;
+         Refused : Wesen_Session := [others => [others => 0]];
+         Low : array (Entity_Id, 1 .. N_S) of Int := [others => [others => 0]];
+         Seen : array (Entity_Id, 1 .. N_S) of Boolean := [others => [others => False]];
+         Tot_Pet, Tot_Grant, Tot_Part, Tot_Ref : array (Entity_Id) of Natural := [others => 0];
+         Low_All : array (Entity_Id) of Int := [others => 0];
+         Worst, Worst_S : array (Entity_Id) of Natural := [others => 0];
+         Players : Str_Vectors.Vector;   --  internal player ids in order of first appearance
+         Max_P : constant := 16;
+         P_Load : array (1 .. Max_P, 1 .. N_S) of Natural := [others => [others => 0]];
+         P_Tot, P_Ref : array (1 .. Max_P) of Natural := [others => 0];
+         All_Pet, All_Ref : Natural := 0;
+         K : Natural := 0;
+
+         function Session_Of (T : Natural) return Natural is
+         begin
+            for S in 1 .. N_S loop
+               if T >= First (S) and then T <= Last (S) then return S; end if;
+            end loop;
+            return 0;
+         end Session_Of;
+
+         function Player_Index (P : String) return Natural is
+         begin
+            for I in 1 .. Natural (Players.Length) loop
+               if Players (I) = P then return I; end if;
+            end loop;
+            if Natural (Players.Length) >= Max_P then return 0; end if;
+            Players.Append (P);
+            return Natural (Players.Length);
+         end Player_Index;
+
+         function Score (E : Entity_Id; S : Positive) return Natural is
+           (W_Ref * Refused (E, S) + Natural (Int'Max (0, -Low (E, S))));
+      begin
+         for L of Lines loop   --  S<n> start=<t> ... len=<ticks>, then W<n> tick=<end>
+            if L'Length > 1 and then L (L'First) in 'S' | 'W' and then L (L'First + 1) in '0' .. '9' then
+               declare
+                  Sp : Natural := L'First + 1;
+               begin
+                  while Sp <= L'Last and then L (Sp) /= ' ' loop Sp := Sp + 1; end loop;
+                  K := Num (L (L'First + 1 .. Sp - 1));
+                  if K in 1 .. N_S then
+                     if L (L'First) = 'S' then
+                        First (K) := Num (Field (L, "start")) + 1;
+                        Last (K) := Num (Field (L, "start")) + Num (Field (L, "len"));
+                     elsif Num (Field (L, "tick")) > 0 then
+                        Last (K) := Num (Field (L, "tick"));
+                     end if;
+                  end if;
+               end;
+            end if;
+         end loop;
+         Lines.Clear;
+         Read_Lines ("diaries/petitions.txt", Lines, Found);
+         for L of Lines loop   --  P<n> t=<tick> s=<session> ... wesen=<id> ... player=<id> out=grant|partial|refuse
+            if L'Length > 1 and then L (L'First) = 'P' and then L (L'First + 1) in '0' .. '9' then
+               declare
+                  Out_V : constant String := Field (L, "out");
+                  S : Natural := Num (Field (L, "s"));
+                  E : Natural := 0;
+                  P : constant Natural := Player_Index (Field (L, "player"));
+               begin
+                  if S not in 1 .. N_S then S := Session_Of (Num (Field (L, "t"))); end if;
+                  for X in Entity_Id loop
+                     if Name (X) = Field (L, "wesen") then E := Natural (X); end if;
+                  end loop;
+                  if Out_V'Length > 0 then
+                     All_Pet := All_Pet + 1;
+                     if Out_V = "refuse" then All_Ref := All_Ref + 1; end if;
+                     if E > 0 then
+                        Tot_Pet (Entity_Id (E)) := Tot_Pet (Entity_Id (E)) + 1;
+                        if Out_V = "grant" then Tot_Grant (Entity_Id (E)) := Tot_Grant (Entity_Id (E)) + 1;
+                        elsif Out_V = "partial" then Tot_Part (Entity_Id (E)) := Tot_Part (Entity_Id (E)) + 1;
+                        elsif Out_V = "refuse" then
+                           Tot_Ref (Entity_Id (E)) := Tot_Ref (Entity_Id (E)) + 1;
+                           if S > 0 then Refused (Entity_Id (E), S) := Refused (Entity_Id (E), S) + 1; end if;
+                        end if;
+                     end if;
+                     if P > 0 then
+                        P_Tot (P) := P_Tot (P) + 1;
+                        if Out_V = "refuse" then P_Ref (P) := P_Ref (P) + 1; end if;
+                        if S > 0 then P_Load (P, S) := P_Load (P, S) + 1; end if;
+                     end if;
+                  end if;
+               end;
+            end if;
+         end loop;
+         Lines.Clear;
+         for E in Entity_Id loop   --  the lowest mood of each session, streamed: {"tick":N, ... "mood":M, ...}
+            if Ada.Directories.Exists (Path (E)) then
+               declare
+                  F : TIO.File_Type;
+                  S : Natural := 1;
+               begin
+                  TIO.Open (F, TIO.In_File, Path (E));
+                  while not TIO.End_Of_File (F) loop
+                     declare
+                        L : constant String := TIO.Get_Line (F);
+                        T_At : constant Natural := Fx.Index (L, """tick"":");
+                        M_At : constant Natural := Fx.Index (L, """mood"":");
+                        T : Natural := 0;
+                        M : Int := 0;
+                        Neg : Boolean := False;
+                        J : Natural;
+                     begin
+                        if T_At > 0 and then M_At > 0 then
+                           J := T_At + 7;
+                           while J <= L'Last and then L (J) in '0' .. '9' loop
+                              if T < 100_000_000 then T := T * 10 + Character'Pos (L (J)) - Character'Pos ('0'); end if;
+                              J := J + 1;
+                           end loop;
+                           J := M_At + 7;
+                           if J <= L'Last and then L (J) = '-' then Neg := True; J := J + 1; end if;
+                           while J <= L'Last and then L (J) in '0' .. '9' loop
+                              if M < 100_000 then M := M * 10 + Int (Character'Pos (L (J)) - Character'Pos ('0')); end if;
+                              J := J + 1;
+                           end loop;
+                           if Neg then M := -M; end if;
+                           if S > N_S or else T < First (S) or else T > Last (S) then S := Natural'Max (1, Session_Of (T)); end if;
+                           if T >= First (S) and then T <= Last (S) then
+                              if not Seen (E, S) or else M < Low (E, S) then Low (E, S) := M; end if;
+                              Seen (E, S) := True;
+                           end if;
+                        end if;
+                     end;
+                  end loop;
+                  TIO.Close (F);
+               exception
+                  when others => if TIO.Is_Open (F) then TIO.Close (F); end if;
+               end;
+            end if;
+         end loop;
+         for E in Entity_Id loop
+            for S in 1 .. N_S loop
+               if Seen (E, S) and then Low (E, S) < Low_All (E) then Low_All (E) := Low (E, S); end if;
+               if Worst_S (E) = 0 or else Score (E, S) > Worst (E) then Worst (E) := Score (E, S); Worst_S (E) := S; end if;
+            end loop;
+         end loop;
+         begin
+            Put (Msg ("frust.title", Img (N_S), Img (All_Pet)));
+            Put ("");
+            Para (Msg ("frust.wesen.head", Img (W_Ref)));
+            Put (Pad_R ("", Name_W) & Cell (Msg ("frust.col.pet")) & Cell (Msg ("frust.col.grant")) & Cell (Msg ("frust.col.part"))
+                 & Cell (Msg ("frust.col.ref")) & Cell (Msg ("frust.col.low")) & Cell (Msg ("frust.col.worst")) & Cell (Msg ("frust.col.in")));
+            for E in Entity_Id loop
+               Put (Pad_R (Display (E), Name_W) & Cell (Img (Tot_Pet (E))) & Cell (Img (Tot_Grant (E))) & Cell (Img (Tot_Part (E)))
+                    & Cell (Img (Tot_Ref (E))) & Cell (Img (Low_All (E))) & Cell (Img (Worst (E))) & Cell ("s" & Img (Worst_S (E))));
+            end loop;
+            declare
+               Hi, Lo : Entity_Id := Entity_Id'First;
+            begin
+               for E in Entity_Id loop
+                  if Worst (E) > Worst (Hi) then Hi := E; end if;
+                  if Worst (E) < Worst (Lo) then Lo := E; end if;
+               end loop;
+               Put ("");
+               Para (Msg ("frust.worst", Display (Hi), Img (Worst (Hi)), Img (Worst_S (Hi)), Img (Refused (Hi, Worst_S (Hi))),
+                          Img (Low (Hi, Worst_S (Hi)))));
+               Para (Msg ("frust.minimax", Display (Lo), Img (Worst (Lo)), Img (Worst_S (Lo)), Img (Worst (Hi) - Worst (Lo))));
+            end;
+            Put ("");
+            Para (Msg ("frust.player.head"));
+            Put (Pad_R ("", Name_W) & Cell (Msg ("frust.col.dec")) & Cell (Msg ("frust.col.ref")) & Cell (Msg ("frust.col.share"))
+                 & Cell (Msg ("frust.col.max")) & Cell (Msg ("frust.col.in")) & Cell (Msg ("frust.col.mean")));
+            declare
+               Hi : Natural := 0;
+               Hi_Max, Hi_S : Natural := 0;
+            begin
+               for P in 1 .. Natural (Players.Length) loop
+                  declare
+                     Mx, Ms, Busy : Natural := 0;
+                  begin
+                     for S in 1 .. N_S loop
+                        if P_Load (P, S) > Mx then Mx := P_Load (P, S); Ms := S; end if;
+                        if P_Load (P, S) > 0 then Busy := Busy + 1; end if;
+                     end loop;
+                     Put (Pad_R (Sim_World.Show (Players (P)), Name_W) & Cell (Img (P_Tot (P))) & Cell (Img (P_Ref (P)))
+                          & Cell (Img (Pct (P_Ref (P), P_Tot (P))) & "%") & Cell (Img (Mx)) & Cell ("s" & Img (Ms))
+                          & Cell (Img (P_Tot (P) / Natural'Max (1, N_S)) & "." & Img ((P_Tot (P) * 10 / Natural'Max (1, N_S)) mod 10)));
+                     if Hi = 0 or else Mx > Hi_Max or else (Mx = Hi_Max and then P_Tot (P) > P_Tot (Hi)) then
+                        Hi := P; Hi_Max := Mx; Hi_S := Ms;
+                     end if;
+                  end;
+               end loop;
+               Put ("");
+               if Hi > 0 then
+                  Para (Msg ("frust.load", Sim_World.Show (Players (Hi)), Img (Hi_Max), Img (Hi_S), Img (P_Tot (Hi)), Img (Pct (P_Ref (Hi), P_Tot (Hi)))));
+               else
+                  Para (Msg ("frust.load.none"));
+               end if;
+            end;
+            Put ("");
+            Put (Msg ("frust.concl.head"));
+            Para (Msg ("frust.concl", Img (All_Ref), Img (All_Pet), Img (Pct (All_Ref, All_Pet))));
+         exception
+            when others => null;   --  stdout is a closed pipe (| head)
+         end;
+      end;
+   end Print_Frustration;
 
    --  --wordstat: the vocabulary report (Sim_Wordstat, data/wordstat.txt); READ-ONLY, nothing is simulated or written.
    --  Sources: entities/<id>/words.txt (what is known, how, when), and the later use of a word: diaries/screens.txt (show, read, pin, cmd,
@@ -6743,6 +7003,7 @@ begin
          elsif Opt = "--chatlog" then Chatlog_Mode := True;
          elsif Opt = "--wordstat" then Wordstat_Mode := True;
          elsif Opt = "--evolve" then Evolve_Mode := True;
+         elsif Opt = "--frustration" then Frust_Mode := True;
          elsif Opt = "--active" then Active_Mode := True;
          elsif Opt = "--session-ticks" then Night_Ticks := Number (Opt, Val);
          elsif Opt = "--max-sessions" then Night_Sessions := Number (Opt, Val);
@@ -6851,7 +7112,7 @@ begin
    end if;
    Menu_Wanted := Menu_Opt or else (Ada.Command_Line.Argument_Count = 0 and then Is_Tty (0) and then Is_Tty (1));
    if Menu_Opt and then not (Is_Tty (0) and then Is_Tty (1)) then raise Usage_Error with Msg ("err.menu_tty"); end if;
-   Resolve_Home (Header => not (Menu_Wanted or else Inbox_Mode or else Map_Mode or else Ledger_Mode or else Grant_Mode or else Veto_Mode or else Challenge_Mode or else Next_Ticks_Mode or else Say_Mode or else Answer_Mode or else Report_Mode or else Runlog_Mode or else Trend_Mode or else Folder_Mode or else Wordstat_Mode or else Evolve_Mode or else Active_Mode or else (Length (Section_Opt) > 0 and then not Preview)));
+   Resolve_Home (Header => not (Menu_Wanted or else Inbox_Mode or else Map_Mode or else Ledger_Mode or else Grant_Mode or else Veto_Mode or else Challenge_Mode or else Next_Ticks_Mode or else Say_Mode or else Answer_Mode or else Report_Mode or else Runlog_Mode or else Trend_Mode or else Folder_Mode or else Wordstat_Mode or else Evolve_Mode or else Active_Mode or else Frust_Mode or else (Length (Section_Opt) > 0 and then not Preview)));
    Saved_Line := To_Unbounded_String (Msg ("saved", To_String (Home_Path)));
    if Map_Mode then
       Do_Map;
@@ -6874,6 +7135,9 @@ begin
       return;
    elsif Evolve_Mode or else Active_Mode then   --  make evolve / make active: the evolution preview (read-only)
       Print_Wordstat (Evolve_Mode, Active_Mode);
+      return;
+   elsif Frust_Mode then   --  make frustration: the MiniMax report, refusals and mood per wesen, the load per player (read-only)
+      Print_Frustration;
       return;
    elsif Night_Mode then    --  make night: sessions back to back, in this process (Night_Begin ... Night_End)
       if not Ada.Directories.Exists (Self_Exe) then raise Usage_Error with Msg ("night.err.exe", Self_Exe); end if;
