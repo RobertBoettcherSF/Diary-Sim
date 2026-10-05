@@ -33,6 +33,7 @@ hdr.words = # id word how tick extra   (how: start | taught (extra: teacher) | c
 hdr.bench = # tick kernel steps result checksum
 detail.taught = taught {1} the word '{2}'
 detail.learned = learned the word '{1}' from {2}
+detail.woke = remembered the word '{1}' again in a lesson from {2}
 detail.coined = coined '{1}' from {2} + {3}
 detail.bench = bench {1}: {2} steps, result {3}, checksum {4}
 loc.0 = office

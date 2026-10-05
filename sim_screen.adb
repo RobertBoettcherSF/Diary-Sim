@@ -1,4 +1,4 @@
---  Version: 0.006
+--  Version: 0.007
 --  See sim_screen.ads.
 pragma Ada_2022;
 
@@ -184,7 +184,9 @@ package body Sim_Screen is
          Ignore := Put (V, W, "seen");
       elsif Blocked (W) or else Asleep (Owner, W) then   --  symbols=1: an old chess string is seen, never learned; active=1: nor a word dormant for the owner
          Ignore := Put (V, W, "seen");
-      elsif Int (Roll (Seed_V, Positive (V), Tick, 9150 + J mod 10, 100)) <= Int (Learn_Pct) then
+      elsif Int (Roll (Seed_V, Positive (V), Tick, 9150 + J mod 10, 100)) <= Int (Learn_Pct)
+        and then Slow_Pass (Seed_V, V, Tick + Int (J), Slow_Screen)   --  active=2 mint-slow: a viewer at the cap (salt 20872)
+      then
          Learn_Word (V, W, Natural (Owner));
          Learned.Append (Learn_Rec'(Who => V, W => W, From => Natural (Owner), Coined => False));
          C_Taught (V) := C_Taught (V) + 1;
@@ -213,6 +215,7 @@ package body Sim_Screen is
         or else (for some C of Text => C = ' ') or else Find (Text) /= 0
         or else Blocked (A) or else Blocked (B) or else Asleep (Who, A) or else Asleep (Who, B)   --  active=1: no blend from a dormant word
         or else (Is_Clean and then not (Plain (A) and then Plain (B)))   --  records=1: no chess move is blended into a word
+        or else not Slow_Pass (Seed_V, Who, Tick, Slow_Blend)   --  active=2 mint-slow: a wesen at the cap (salt 20873)
       then
          return;
       end if;

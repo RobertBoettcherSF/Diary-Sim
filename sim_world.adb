@@ -1,4 +1,4 @@
---  Version: 0.020
+--  Version: 0.021
 pragma Ada_2022;
 
 with Ada.Characters.Handling, Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
@@ -184,6 +184,9 @@ package body Sim_World is
    Dormant : array (Entity_Id) of Bool_Vectors.Vector;   --  active=1: per word, dormant for the wesen
    Dormant_N : array (Entity_Id) of Natural := [others => 0];
    Dormant_On : Boolean := False;
+   Slow : array (Entity_Id) of Boolean := [others => False];   --  active=2: at the cap at the last session end
+   Slow_P : array (Slow_Kind) of Natural := [others => 100];
+   Wake_Teach : Boolean := False;                               --  active=2: an asleep word of the pupil is teachable
 
    --  Petitions (see the spec): topic table, filed petitions, per-entity bookkeeping.
    Max_Topics : constant := 40;
@@ -251,6 +254,8 @@ package body Sim_World is
       Few_Words_N := Clamp (Integer (Limit ("lean.few_words_n", 100)), 1, 100_000);
       Cache_Steps := [others => -1];
       Dormant_On := False;
+      Slow := [others => False];
+      Wake_Teach := False;
       Table.Clear;
       for W of Base_Words loop
          Table.Append (Word_Rec'(Text => To_Unbounded_String (W), others => <>));
@@ -312,6 +317,26 @@ package body Sim_World is
    end Set_Dormant;
 
    function Asleep (E : Entity_Id; W : Positive) return Boolean is (Dormant_On and then Is_Dormant (E, W));
+
+   procedure Set_Slow (E : Entity_Id; On : Boolean) is
+   begin
+      Slow (E) := On;
+   end Set_Slow;
+
+   function Is_Slow (E : Entity_Id) return Boolean is (Slow (E));
+
+   procedure Set_Slow_Pct (K : Slow_Kind; Pct : Natural) is
+   begin
+      Slow_P (K) := Natural'Min (100, Pct);
+   end Set_Slow_Pct;
+
+   function Slow_Pass (Seed : Int; E : Entity_Id; Tick : Int; K : Slow_Kind) return Boolean is
+     (not Slow (E) or else Int (Roll (Seed, Positive (E), Tick, 20870 + Slow_Kind'Pos (K), 100)) <= Int (Slow_P (K)));
+
+   procedure Use_Wake_Teach (On : Boolean) is
+   begin
+      Wake_Teach := On;
+   end Use_Wake_Teach;
    function Dormant_Count (E : Entity_Id) return Natural is (Dormant_N (E));
    function Is_Symbol (W : Positive) return Boolean is (W <= Natural (Table.Length) and then Symbol_Text (To_String (Table (W).Text)));
 
@@ -443,7 +468,7 @@ package body Sim_World is
       N : Natural := 0;
    begin
       for W in 1 .. Count loop
-         if Knows (From, W) and then not Knows (To, W) and then not Blocked (W) and then not Asleep (From, W) then N := N + 1; end if;
+         if Knows (From, W) and then (not Knows (To, W) or else (Wake_Teach and then Asleep (To, W))) and then not Blocked (W) and then not Asleep (From, W) then N := N + 1; end if;
       end loop;
       return N;
    end Teachable_Count;
@@ -452,7 +477,7 @@ package body Sim_World is
       K : Natural := 0;
    begin
       for W in 1 .. Count loop
-         if Knows (From, W) and then not Knows (To, W) and then not Blocked (W) and then not Asleep (From, W) then
+         if Knows (From, W) and then (not Knows (To, W) or else (Wake_Teach and then Asleep (To, W))) and then not Blocked (W) and then not Asleep (From, W) then
             K := K + 1;
             if K = N then return W; end if;
          end if;

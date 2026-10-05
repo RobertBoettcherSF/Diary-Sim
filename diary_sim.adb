@@ -1,4 +1,4 @@
---  Version: 0.051
+--  Version: 0.052
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.051";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.052";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -585,6 +585,8 @@ procedure Diary_Sim is
    function Words_Line (W : Positive; How : String; Tick : Int; Extra : String) return String is
      (Img (W) & " " & Word (W) & " " & How & " " & Img (Tick) & (if Extra = "" then "" else " " & Extra));
 
+   procedure Emit_Active_Lines;   --  below: the new lines of Sim_Active as A lines of diaries/active.txt (a lesson wake in Step)
+
    --  Advance entity E by one tick; returns its diary line.  Teaching, coining and
    --  bench happen here; their working-folder lines are ensured as they occur.
    function Step (E : Entity_Id; Tick : Int) return String is
@@ -767,6 +769,8 @@ procedure Diary_Sim is
                W0 : constant Positive := Nth_Teachable (E, P, Roll (Seed, Eid, Tick, 4, N));
                W : constant Positive := (if World_Mode then Sim_Things.Mutate (W0, E, Tick) else W0);
             begin
+               --  active=2 mint-slow: a pupil at the cap gets a NEW word only when the die lets it through (a word it has asleep is no new word)
+               if not Asleep (P, W) and then not Slow_Pass (Seed, P, Tick, Slow_Lesson) then return; end if;
                Pending_Word (P) := W;
                Pending_From (P) := E;
                Did_Teach := True;
@@ -781,6 +785,7 @@ procedure Diary_Sim is
       begin
          if Int (Roll (Seed, Eid, Tick, 5, 100)) <= Coin_Pct and then K >= 2
            and then Int (Coined_Total) - (if Scoin_Active then Int (Sim_Screen.Coined_All) else 0) < Coin_Cap   --  scoin=1: blends from screens do not use up the cap
+           and then Slow_Pass (Seed, E, Tick, Slow_Coin)   --  active=2 mint-slow (salt 20871)
          then
             declare
                Ia : constant Positive := Roll (Seed, Eid, Tick, 6, K);
@@ -859,14 +864,24 @@ procedure Diary_Sim is
          when Learn =>
             declare
                W : constant Positive := Pending_Word (E);
+               Woke : Boolean;
             begin
-               Learn_Word (E, W, Natural (Pending_From (E)));
-               Voice_Note (E, W);
-               Ensure (E, Words_File, Words_Line (W, "taught", Tick, Name (Pending_From (E))));
-               Add (Msg ("detail.learned", Word (W), Name (Pending_From (E))));
-               Pending_Word (E) := 0;
-               Did_Learn := True;
-               if Screen_Active then Sim_Screen.Note (E, W, "taught"); end if;
+               Sim_Active.Wake (Positive (E), W, Tick, Name (Pending_From (E)), Woke);   --  active=2: a lesson of a dormant word wakes it
+               if Woke then
+                  Emit_Active_Lines;
+                  Use_Word (E, W);
+                  Add (Msg ("detail.woke", Word (W), Name (Pending_From (E))));
+                  Pending_Word (E) := 0;
+                  Did_Learn := True;
+               else
+                  Learn_Word (E, W, Natural (Pending_From (E)));
+                  Voice_Note (E, W);
+                  Ensure (E, Words_File, Words_Line (W, "taught", Tick, Name (Pending_From (E))));
+                  Add (Msg ("detail.learned", Word (W), Name (Pending_From (E))));
+                  Pending_Word (E) := 0;
+                  Did_Learn := True;
+                  if Screen_Active then Sim_Screen.Note (E, W, "taught"); end if;
+               end if;
             end;
          when Bench =>
             declare
@@ -2438,7 +2453,7 @@ procedure Diary_Sim is
                Act_Lines : Str_Vectors.Vector;
                Act_Found : Boolean;
                Last_State : array (Entity_Id) of Unbounded_String := [others => Null_Unbounded_String];
-               Param_Line : Unbounded_String;
+               Param_Line, Param_Line2 : Unbounded_String;   --  the params lines of active=1 and active=2
                Has_Real : Boolean := False;
                Sum_K, Sum_S, Sum_A, Sum_D, Sum_B : Natural := 0;
                function Tok (L, Key : String) return String is
@@ -2458,11 +2473,13 @@ procedure Diary_Sim is
                   return "";
                end Tok;
                function Num (X : String) return Natural is (if X'Length in 1 .. 9 and then (for all C of X => C in '0' .. '9') then Natural'Value (X) else 0);
+               function Level2 return Boolean is (Tok (To_String (Last_State (Entity_Id'First)), "slow") /= "");   --  the last closed window was active=2
             begin
                if Ada.Directories.Exists ("diaries/active.txt") then
                   Read_Lines ("diaries/active.txt", Act_Lines, Act_Found);
                   for L of Act_Lines loop
-                     if Fx.Index (L, " params ") > 0 then Param_Line := To_Unbounded_String (L);
+                     if Fx.Index (L, " params level=2 ") > 0 then Param_Line2 := To_Unbounded_String (L);
+                     elsif Fx.Index (L, " params ") > 0 then Param_Line := To_Unbounded_String (L);
                      elsif L'Length > 4 and then L (L'First) = 'A' then
                         for E in Entity_Id loop
                            if Fx.Index (L, " " & Name (E) & " state ") > 0 then Last_State (E) := To_Unbounded_String (L); Has_Real := True; end if;
@@ -2471,7 +2488,8 @@ procedure Diary_Sim is
                   end loop;
                end if;
                if Has_Real then
-                  for L of Sim_Voice.Wrap (Msg ("evolve.a.real", Tok (To_String (Last_State (Entity_Id'First)), "s"), Tok (To_String (Last_State (Entity_Id'First)), "t")), 79) loop Put (L); end loop;
+                  for L of Sim_Voice.Wrap (Msg ("evolve.a.real", Tok (To_String (Last_State (Entity_Id'First)), "s"), Tok (To_String (Last_State (Entity_Id'First)), "t"),
+                                                (if Level2 then "2" else "1")), 79) loop Put (L); end loop;
                   TIO.New_Line;
                   if Length (Param_Line) > 0 then
                      declare
@@ -2479,6 +2497,15 @@ procedure Diary_Sim is
                         At_P : constant Natural := Fx.Index (PL, " params ");
                      begin
                         for L of Sim_Voice.Wrap (Msg ("evolve.a.params", PL (At_P + 8 .. PL'Last)), 79) loop Put (L); end loop;
+                     end;
+                     TIO.New_Line;
+                  end if;
+                  if Length (Param_Line2) > 0 then
+                     declare
+                        PL : constant String := To_String (Param_Line2);
+                        At_P : constant Natural := Fx.Index (PL, " params level=2 ");
+                     begin
+                        for L of Sim_Voice.Wrap (Msg ("evolve.a.params2", Tok (PL, "floor"), Tok (PL, "cap"), PL (At_P + 16 .. PL'Last)), 79) loop Put (L); end loop;
                      end;
                      TIO.New_Line;
                   end if;
@@ -2507,6 +2534,7 @@ procedure Diary_Sim is
                      Rrow ("  " & Msg ("evolve.l.dormant_real"), "dormant");
                      Rrow ("  " & Msg ("evolve.l.base_real"), "base");
                      Rrow ("  " & Msg ("evolve.l.woke_real"), "woke");
+                     if Level2 then Rrow ("  " & Msg ("evolve.l.slow_real"), "slow"); end if;
                   end;
                   TIO.New_Line;
                   for E in Entity_Id loop
@@ -2518,6 +2546,15 @@ procedure Diary_Sim is
                   end loop;
                   Put (Msg ("evolve.concl.head"));
                   for L of Sim_Voice.Wrap (Msg ("evolve.a.concl.real", Img (Sum_A), Img (Sum_D), Img (Sum_S), Img (Sum_B)), 79) loop Put (L); end loop;
+                  if Level2 then
+                     declare
+                        PL : constant String := To_String (Param_Line2);
+                        N_Slow : Natural := 0;
+                     begin
+                        for E in Entity_Id loop N_Slow := N_Slow + Num (Tok (To_String (Last_State (E)), "slow")); end loop;
+                        for L of Sim_Voice.Wrap (Msg ("evolve.a.concl.level2", Tok (PL, "floor"), Tok (PL, "cap"), Img (N_Slow)), 79) loop Put (L); end loop;
+                     end;
+                  end if;
                   return;
                end if;
             end;
@@ -3508,17 +3545,34 @@ procedure Diary_Sim is
          Agree_Pts => Lm ("evolve.agree_pts", 5), Line10 => Lm ("evolve.line10", 3), Fit_Cap => Lm ("evolve.fit_cap", 200),
          Probation => Lm ("evolve.probation", 3), Idle => Lm ("evolve.idle_sessions", 6), Retire_Max => Lm ("evolve.retire_max", 40),
          Min_Active => Cap, Cap => Cap);
+      --  active=2 (docs/EVOLVE.md 14): the same points with its own floor and cap, and the mint-slow percents
+      Pr2 : Sim_Evolve.Word_Params := (Pr with delta Min_Active => Lm ("active.floor", 300), Cap => Lm ("active.cap", 500));
+      Slow : Sim_Active.Slow_Pcts := (Lesson => Lm ("active.slow_lesson_pct", 25), Coin => Lm ("active.slow_coin_pct", 50),
+                                      Screen => Lm ("active.slow_screen_pct", 50));
+      Have : array (1 .. 2) of Boolean := [others => False];
    begin
       if Ada.Directories.Exists (Active_Path) then
          Read_Lines (Active_Path, Lines, Found);
-         for L of Lines loop
+         for L of Lines loop   --  the params line of the first session of each level (a save keeps its numbers)
             if Fx.Index (L, " params ") > 0 then
-               Sim_Active.Parse_Params (L, Pr, OK);
-               exit;
+               declare
+                  Lv : constant Positive := Sim_Active.Params_Level (L);
+               begin
+                  if not Have (Lv) then
+                     if Lv = 2 then
+                        Sim_Active.Parse_Params (L, Pr2, OK);
+                        Sim_Active.Parse_Slow (L, Slow);
+                     else
+                        Sim_Active.Parse_Params (L, Pr, OK);
+                     end if;
+                     Have (Lv) := True;
+                  end if;
+               end;
+               exit when Have (1) and then Have (2);
             end if;
          end loop;
       end if;
-      Sim_Active.Reset (Pr);
+      Sim_Active.Reset (Pr, Pr2, Slow);
    end Load_Active_Params;
 
    --  Every change of a screen is a K line in diaries/screens.txt: "K12 t=300 ada add w=7 src=taught s=3,*7".  The replay
@@ -4772,6 +4826,7 @@ procedure Diary_Sim is
       Visit : Boolean := False;         --  visit=1: Robert stands next to one wesen (vwho=<id>) and talks to it (Sim_Visit, diaries/visit.txt)
       Visit_Who : Natural := 0;
       Active : Boolean := False;        --  active=1: an active vocabulary per wesen, dormant words, wake on use (needs screen=1; Sim_Active, docs/EVOLVE.md 13)
+      Active_Level : Natural := 1;      --  1 or 2 (active=2: floor and cap, mint-slow, wider wake; docs/EVOLVE.md 14), when Active
       Symbols : Boolean := False;       --  symbols=1: chess moves and their numeric strings are symbols, never minted as words (needs chess=1; docs/EVOLVE.md 9)
       Chat : Boolean := False;          --  chat=1: Robert types lines (@name text, /order) and the answers are recorded (Sim_Chat, diaries/chat.txt)
    end record;
@@ -4798,7 +4853,7 @@ procedure Diary_Sim is
       & (if R.Preport then " preport=1" else "") & (if R.Players4 then " players4=1" else "") & (if R.Nextticks then " nextticks=1" else "") & (if R.Trial then " trial=1" else "") & (if R.Rec2 and then R.Records then " records=2" elsif R.Records then " records=1" else "")
       & (if R.Visit then " visit=1 vwho=" & Name (Entity_Id (R.Visit_Who)) else "")
       & (if R.Symbols then " symbols=1" else "")
-      & (if R.Active then " active=1" else "")
+      & (if R.Active then " active=" & Img (R.Active_Level) else "")
       & (if R.Chat then " chat=1" else ""));
    function Yuga (N : Positive) return String is (Msg ("yuga." & Img ((N - 1) mod 4)));
    --  The four votes of a session that starts after tick Start (state: St, known words).
@@ -4848,7 +4903,8 @@ procedure Diary_Sim is
       R.Visit := Token (L, "visit") = "1";
       R.Visit_Who := (if R.Visit then Sim_Dharma.Find_Wesen (Token (L, "vwho")) else 0);
       R.Symbols := R.Chess and then Token (L, "symbols") = "1";
-      R.Active := R.Screen and then Token (L, "active") = "1";
+      R.Active := R.Screen and then (Token (L, "active") = "1" or else Token (L, "active") = "2");
+      R.Active_Level := (if Token (L, "active") = "2" then 2 else 1);
       R.Chat := Token (L, "chat") = "1";
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
         and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0 and then (R.Visit_Who > 0 or else not R.Visit);
@@ -4997,7 +5053,7 @@ procedure Diary_Sim is
    --  A liberated wesen of a new session moves to the location its own dice name (record + effect).
    procedure Start_Life (R : Session_Rec) is
    begin
-      Sim_Active.Open (R.N, R.Start, R.Active and then R.Screen);   --  closes the window of the previous active=1 session (dormancies), opens this one
+      Sim_Active.Open (R.N, R.Start, (if R.Active and then R.Screen then R.Active_Level else 0));   --  closes the window of the previous active session (dormancies), opens this one
       Emit_Active_Lines;
       Sim_Dharma.Begin_Life (Seed, R.Start, R.N, L_Max + 1, R.Dharma, R.Players4);
       World_Active := R.World;
@@ -5274,7 +5330,8 @@ procedure Diary_Sim is
    function Rec2_Wanted return Boolean is (Records_Wanted and then Limit ("rec.quality", 1) /= 0);   --  records=2: quality rules for word proposals   --  records=1 needs the governance (the D records)
    function Nextticks_Wanted return Boolean is (Govern_Wanted and then Limit ("nextticks.enabled", 1) /= 0);   --  nextticks=1 needs the governance (the open petitions)
    function Symbols_Wanted return Boolean is (Chess_Wanted and then Limit ("symbols.enabled", 1) /= 0);   --  symbols=1 needs chess=1 (docs/EVOLVE.md 9)
-   function Active_Wanted return Boolean is (Screen_Wanted and then Limit ("active.enabled", 1) /= 0);   --  active=1 needs screen=1 (the uses are read on the screens)
+   function Active_Wanted return Boolean is (Screen_Wanted and then Limit ("active.enabled", 2) /= 0);   --  active=1/2 needs screen=1 (the uses are read on the screens)
+   function Active_Level_Wanted return Natural is (if Limit ("active.enabled", 2) >= 2 then 2 else 1);   --  active.enabled = 2: new sessions carry active=2
    function Chat_Wanted return Boolean is   --  new sessions carry chat=1 when a line can be typed (a terminal in the foreground, or --chat)
      (Sim_Chat.Enabled and then not Preview and then (Chat_Mode or else Sim_Quit.Lines_On));
 
@@ -5299,7 +5356,7 @@ procedure Diary_Sim is
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
                Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => Visit_Mode, Visit_Who => Visit_Who, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Active => Active_Wanted);
+               Visit => Visit_Mode, Visit_Who => Visit_Who, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -5316,7 +5373,7 @@ procedure Diary_Sim is
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
                World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => False, Visit_Who => 0, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Active => Active_Wanted);
+               Visit => False, Visit_Who => 0, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);

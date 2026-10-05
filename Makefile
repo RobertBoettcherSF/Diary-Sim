@@ -1,4 +1,4 @@
-# Version: 0.041
+# Version: 0.042
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -23,7 +23,7 @@
 #                 suffix variants, and one conclusion line with the biggest source; wording in data/wordstat.txt; make share includes it
 # make evolve    the evolution preview (read-only, docs/EVOLVE.md): word fitness (top words, the words that would go dormant), the weight table each chess
 #                 competitor would hold after learning from the recorded games, the Elo curve; numbers in data/limits.txt evolve.*, wording in data/evolve.txt
-# make active    the active vocabulary: on an active=1 save the real state of diaries/active.txt (active, dormant, woken per wesen); on an older save the read-only preview under a cap of evolve.cap (500)
+# make active    the active vocabulary: on an active=1/2 save the real state of diaries/active.txt (active, dormant, woken per wesen; both params lines, floor and cap; who is at the cap); on an older save the read-only preview under a cap of evolve.cap (500)
 # make frustration  the MiniMax report (read-only): per wesen refused petitions and the lowest mood, the worst session and the
 #                 smallest worst case; per player the petitions decided in one session (load); the grant rate is not changed
 # make voices     print the four wesen messages (what the night header shows, one line each, at most voice.max_chars) for the last tick of the

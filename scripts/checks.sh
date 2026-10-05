@@ -755,7 +755,7 @@ sed -i 's/^screen.enabled = .*/screen.enabled = 1/' "$w/sc/data/limits.txt"; sb=
 cd "$w/sc/h" || exit 1; export DIARY_HOME="$w/sc/h"
 "$sb" --seed 42 --ticks 300 --yes --every 5000 > c1.txt 2>&1; "$sb" --more 300 --every 5000 > c2.txt 2>&1
 n_k=$(grep -c '^K[0-9]' diaries/screens.txt)
-grep -Eq '^S1 .* screen=1( active=1)?$' diaries/sessions.txt && grep -Eq '^S2 .* screen=1( active=1)?$' diaries/sessions.txt && head -1 diaries/screens.txt | grep -q '^# seed 42$' && [ "$n_k" -gt 500 ] && grep -q '^K1 t=1 ada add w=[0-9]* src=' diaries/screens.txt \
+grep -Eq '^S1 .* screen=1( active=[12])?$' diaries/sessions.txt && grep -Eq '^S2 .* screen=1( active=[12])?$' diaries/sessions.txt && head -1 diaries/screens.txt | grep -q '^# seed 42$' && [ "$n_k" -gt 500 ] && grep -q '^K1 t=1 ada add w=[0-9]* src=' diaries/screens.txt \
   && ok "new sessions carry screen=1; every change of a screen is a K line in diaries/screens.txt ($n_k lines)" || bad "screens.txt ($n_k)"
 t_sum=$(sed -n 's/.*taught from a screen \([0-9]*\), coined.*/\1/p' run_report.txt | awk '{ s += $1 } END { print s + 0 }'); c_sum=$(sed -n 's/.*coined from a screen \([0-9]*\)$/\1/p' run_report.txt | awk '{ s += $1 } END { print s + 0 }')
 t_k=$(grep ' l=' diaries/screens.txt | sed 's/.* l=\([^ ]*\) .*/\1/' | grep -v '^-$' | tr ',' '\n' | wc -l); c_k=$(grep -c ' blend a=' diaries/screens.txt)
@@ -849,7 +849,7 @@ cp "$bin" "$w/rb/bin/"; cp -r "$idata" "$w/rb/data"; sed -i 's/^screen.enabled =
 cd "$w/rb/h" || exit 1; export DIARY_HOME="$w/rb/h"
 "$rbn" --seed 42 --ticks 300 --yes --every 5000 > r1.txt 2>&1; "$rbn" --more 300 --every 5000 > r2.txt 2>&1
 n_q=$(grep -c '^Q[0-9]' diaries/robot.txt); n_x=$(grep -c ' exec ' diaries/robot.txt); n_c=$(grep -c ' cmd ' diaries/robot.txt)
-grep -Eq '^S1 .* robot=1( active=1)?$' diaries/sessions.txt && grep -Eq '^S2 .* robot=1( active=1)?$' diaries/sessions.txt && head -1 diaries/robot.txt | grep -q '^# seed 42$' && [ "$n_c" -ge 10 ] && [ "$n_x" -ge 5 ] \
+grep -Eq '^S1 .* robot=1( active=[12])?$' diaries/sessions.txt && grep -Eq '^S2 .* robot=1( active=[12])?$' diaries/sessions.txt && head -1 diaries/robot.txt | grep -q '^# seed 42$' && [ "$n_c" -ge 10 ] && [ "$n_x" -ge 5 ] \
   && ok "new sessions carry robot=1; commands, executions and shared screens are Q lines in diaries/robot.txt ($n_q lines, $n_c commands, $n_x executions)" || bad "robot.txt ($n_q $n_c $n_x)"
 np=$(grep ' exec ' diaries/robot.txt | sed -E 's/.* pos=([-0-9,]+) .*/\1/' | sort -u | wc -l); nb=$(grep ' exec ' diaries/robot.txt | sed -E 's/.* bat=([0-9]+) .*/\1/' | sort -u | wc -l)
 up=$(grep ' exec ' diaries/robot.txt | sed -E 's/.* bat=([0-9]+) .*/\1/' | awk 'NR>1 && $1>p {n++} {p=$1} END{print n+0}'); dn=$(grep ' exec ' diaries/robot.txt | sed -E 's/.* bat=([0-9]+) .*/\1/' | awk 'NR>1 && $1<p {n++} {p=$1} END{print n+0}')
@@ -2064,7 +2064,9 @@ cd "$w/nt" || exit 1
 rm -rf "$w/nt/ad" "$w/nt/ac_old" "$w/nt/ac_new" "$w/nt/ac_ctl"; mkdir -p "$w/nt/ad/bin"; cp "$nb" "$w/nt/ad/bin/"; cp -r "$root/data" "$w/nt/ad/data"; sed -i 's/^active.enabled = .*/active.enabled = 0/' "$w/nt/ad/data/limits.txt"
 ( cd "$w/nt/ad" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/ac_old" --seed 42 --ticks 2400 --yes --every 100000 > "$w/nt/ac_old.txt" 2>&1 )
 cp -r "$w/nt/ac_old" "$w/nt/ac_new"; cp -r "$w/nt/ac_old" "$w/nt/ac_ctl"
-env -u DIARY_VERBOSE "$nb" --home "$w/nt/ac_new" --continuous --session-ticks 200 --max-sessions 14 > "$w/nt/ac_new.txt" 2>&1; rcn=$?
+# active.enabled = 1 (the default is 2 now, scenario 56 continues this save with active=2)
+rm -rf "$w/nt/a1d"; mkdir -p "$w/nt/a1d/bin"; cp "$nb" "$w/nt/a1d/bin/"; cp -r "$root/data" "$w/nt/a1d/data"; sed -i 's/^active.enabled = .*/active.enabled = 1/' "$w/nt/a1d/data/limits.txt"
+( cd "$w/nt/a1d" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/ac_new" --continuous --session-ticks 200 --max-sessions 14 > "$w/nt/ac_new.txt" 2>&1 ); rcn=$?
 ( cd "$w/nt/ad" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/ac_ctl" --continuous --session-ticks 200 --max-sessions 14 > "$w/nt/ac_ctl.txt" 2>&1 )
 na=$(grep -c ' active=1' "$w/nt/ac_new/diaries/sessions.txt"); nc=$(grep -c 'active' "$w/nt/ac_ctl/diaries/sessions.txt")
 [ "$rcn" = 0 ] && [ "$na" -ge 12 ] && [ "$nc" = 0 ] && ! grep '^S1 ' "$w/nt/ac_new/diaries/sessions.txt" | grep -q active && [ -f "$w/nt/ac_new/diaries/active.txt" ] && [ ! -f "$w/nt/ac_ctl/diaries/active.txt" ] \
@@ -2232,6 +2234,75 @@ fr_col=$(awk '/^ +asked/ { on = 1; next } on && NF == 8 { s += $5 } /^$/ { on = 
   && ok "--frustration is read-only (the folder checksum is unchanged), the same twice, exit 2 on an empty folder, says the grant rate is not changed" || bad "frustration read-only ($rce)"
 grep -q 'make frustration' "$root/README.md" && grep -q -- '--frustration' "$root/data/help.txt" && grep -q '^frustration:' "$root/Makefile" && grep -q 'frustration.refuse_weight' "$root/data/limits.txt" \
   && [ -f "$root/data/frustration.txt" ] && ok "README, --help, the Makefile, data/limits.txt and data/frustration.txt describe make frustration" || bad "frustration docs"
+cd "$w" || exit 1
+
+echo "== 56. active=2: floor 300 under the cap 500, mint-slow at the cap, wider wake; an active=1 save goes on (docs/EVOLVE.md 14) =="
+cd "$w/nt" || exit 1
+# the active=1 save of scenario 53 continued with the default data (active.enabled = 2), and as the control with every mint-slow percent at 100
+rm -rf "$w/nt/a2" "$w/nt/a2f" "$w/nt/a2fd"; cp -r "$w/nt/ac_new" "$w/nt/a2"; cp -r "$w/nt/ac_new" "$w/nt/a2f"
+mkdir -p "$w/nt/a2fd/bin"; cp "$nb" "$w/nt/a2fd/bin/"; cp -r "$root/data" "$w/nt/a2fd/data"; sed -i 's/^active.slow_\(.*\)_pct = .*/active.slow_\1_pct = 100/' "$w/nt/a2fd/data/limits.txt"
+env -u DIARY_VERBOSE "$nb" --home "$w/nt/a2" --continuous --session-ticks 200 --max-sessions 6 > "$w/nt/a2.txt" 2>&1; rc2=$?
+( cd "$w/nt/a2fd" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/a2f" --continuous --session-ticks 200 --max-sessions 1 > "$w/nt/a2f.txt" 2>&1 )
+n1=$(grep -c ' active=1$' "$w/nt/ac_new/diaries/sessions.txt"); n2=$(grep -c ' active=2$' "$w/nt/a2/diaries/sessions.txt"); n21=$(grep -c ' active=1$' "$w/nt/a2/diaries/sessions.txt")
+p1=$(grep -c ' params use_pts=.* floor=500 cap=500$' "$w/nt/a2/diaries/active.txt"); p2=$(grep -c ' params level=2 use_pts=.* floor=300 cap=500 slow_lesson=25 slow_coin=50 slow_screen=50$' "$w/nt/a2/diaries/active.txt")
+pre_ok=1; for f in diaries/sessions.txt diaries/active.txt diaries/screens.txt; do cmp -s -n "$(wc -c < "$w/nt/ac_new/$f")" "$w/nt/ac_new/$f" "$w/nt/a2/$f" || pre_ok=0; done
+[ "$rc2" = 0 ] && [ "$n2" = 6 ] && [ "$n21" = "$n1" ] && [ "$p1" = 1 ] && [ "$p2" = 1 ] && [ "$pre_ok" = 1 ] \
+  && ok "the active=1 save goes on with active=2 (no --fresh): $n2 new sessions carry active=2, the $n1 old ones keep active=1; one params line each (level 2: floor=300 cap=500 slow 25/50/50); sessions, active and screen records of the old part are byte for byte the prefix" || bad "active=2 marker ($rc2 $n2 $n21/$n1 $p1 $p2 $pre_ok)"
+env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/a2" > a2v.txt 2>&1; rcv=$?
+s2=$(grep '^S' "$w/nt/a2/diaries/sessions.txt" | grep ' active=2$' | head -1 | cut -d' ' -f1)
+rm -rf "$w/nt/a2t"; cp -r "$w/nt/a2" "$w/nt/a2t"; sed -i "/^$s2 /s/ active=2\$/ active=1/" "$w/nt/a2t/diaries/sessions.txt"
+env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/a2t" > /dev/null 2>&1; t1=$?
+rm -rf "$w/nt/a2t"; cp -r "$w/nt/a2" "$w/nt/a2t"; ln=$(grep -n 'by=lesson:' "$w/nt/a2t/diaries/active.txt" | head -1 | cut -d: -f1)
+[ -n "$ln" ] && sed -i "${ln}d" "$w/nt/a2t/diaries/active.txt"
+env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/a2t" > /dev/null 2>&1; t2=$?
+rm -rf "$w/nt/a2t"; cp -r "$w/nt/a2" "$w/nt/a2t"; sed -i '/ params level=2 /s/ floor=300 / floor=500 /' "$w/nt/a2t/diaries/active.txt"
+env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/a2t" > /dev/null 2>&1; t3=$?
+[ "$rcv" = 0 ] && grep -q '^verify: OK' a2v.txt && [ -n "$ln" ] && [ "$t1" = 1 ] && [ "$t2" = 1 ] && [ "$t3" = 1 ] \
+  && ok "make verify: OK for the active=1 + active=2 save; DRIFT (exit 1) when $s2 says active=1, when a lesson wake line is deleted, when the level=2 floor is set to 500 (other dormancies)" || bad "active=2 verify ($rcv '$ln' $t1 $t2 $t3)"
+a2py=$(python3 - "$w/nt/a2" <<'PY'
+import sys, os, re
+d = sys.argv[1]
+keys = set()
+for f in ['screens.txt', 'votes.txt', 'petitions.txt', 'dictionary.txt']:
+    p = os.path.join(d, 'diaries', f)
+    if os.path.exists(p):
+        for l in open(p):
+            if l[:1].isalpha(): keys.add(l.split()[0])
+lv2 = set(int(m[1]) for m in re.finditer(r'^S(\d+) .* active=2$', open(os.path.join(d, 'diaries/sessions.txt')).read(), re.M))
+bad = 0; lesson = 0; other2 = 0; floor_bad = 0; st2 = 0; slow = 0; wake_lines = 0
+for l in open(os.path.join(d, 'diaries/active.txt')):
+    f = l.split()
+    if len(f) < 5: continue
+    s = int(f[2][2:]) if f[2].startswith('s=') else 0
+    if f[4] == 'wake':
+        wake_lines += 1
+        by = re.search(r' by=(\S+)', l).group(1)
+        if by.startswith('lesson:'):
+            if s not in lv2 or by[7:] not in ('ada', 'gemini', 'replika', 'robert'): bad += 1
+            lesson += 1
+        elif by not in keys: bad += 1
+    elif f[4] == 'state' and s in lv2:
+        st2 += 1
+        kv = dict(x.split('=', 1) for x in f[5:])
+        if 'slow' not in kv: bad += 1
+        slow += int(kv.get('slow', '0'))
+        if int(kv['went']) > 0 and int(kv['active']) < 300: floor_bad += 1
+print(bad, lesson, st2, floor_bad, wake_lines)
+PY
+)
+set -- $a2py
+[ "${1:-x}" = 0 ] && [ "${2:-0}" -ge 1 ] && [ "${3:-0}" -ge 16 ] && [ "${4:-x}" = 0 ] \
+  && ok "active=2 record: every wake has a record line or is a lesson of an active=2 session ($2 lesson wakes of $5 wakes), $3 level-2 state lines carry slow=, no dormancy below the floor of 300" || bad "active=2 record ($a2py)"
+st=$(grep "^$s2 " "$w/nt/a2/diaries/sessions.txt" | sed 's/.* start=\([0-9]*\) .*/\1/'); capn=$(grep " s=$((${s2#S} - 1)) .* state .* active=500 " "$w/nt/a2/diaries/active.txt" | wc -l)
+mint() { n=0; for e in ada gemini replika robert; do k=$(awk -v a="$st" -v b=$((st + 200)) '$4 > a && $4 <= b && ($3 == "taught" || $3 == "coined" || $3 == "screen")' "$1/entities/$e/words.txt" | wc -l); n=$((n + k)); done; echo $n; }
+ms=$(mint "$w/nt/a2"); mf=$(mint "$w/nt/a2f")
+[ "$capn" -ge 1 ] && [ "$ms" -lt "$mf" ] && grep -q 'mint-slow' "$root/docs/EVOLVE.md" \
+  && ok "mint-slow: $capn wesen held the cap of 500 when active=2 began; in that first session $ms new words were minted against $mf with every slow percent at 100" || bad "mint-slow ($capn $ms $mf '$st')"
+env -u DIARY_VERBOSE "$nb" --active --home "$w/nt/a2" > a2a.txt 2>&1
+grep -q '^Active vocabulary (active=2;' a2a.txt && grep -q '^Numbers of the first active=1 session' a2a.txt && grep -q '^Numbers of the first active=2 session (floor 300, cap 500' a2a.txt \
+  && grep -q 'at the cap (mint-slow next)' a2a.txt && [ "$(awk 'length > 79' a2a.txt | wc -l)" = 0 ] \
+  && grep -q 'active=2' "$root/README.md" && grep -q 'active.floor' "$root/data/limits.txt" && grep -q 'active=2' "$root/data/help.txt" && grep -q '20870' "$root/docs/PORTALS.md" && grep -q 'active=2' "$root/docs/LEARN.md" \
+  && ok "make active on the active=2 save: level 2, both params lines (floor 300, cap 500), who is at the cap; README, --help, limits.txt, EVOLVE.md, LEARN.md and PORTALS.md (salts 20870 .. 20873) describe active=2" || bad "active=2 report and docs"
 cd "$w" || exit 1
 
 

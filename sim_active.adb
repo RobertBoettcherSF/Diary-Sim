@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  See the spec.  Counting only: integer arithmetic, no dice, no clock, no files.
 pragma Ada_2022;
 
@@ -20,27 +20,39 @@ package body Sim_Active is
    end record;
    package State_Vectors is new Ada.Containers.Vectors (Positive, Word_State);
    States : array (Entity_Id) of State_Vectors.Vector;
-   Pr : Sim_Evolve.Word_Params;
+   Lv1, Lv2 : Sim_Evolve.Word_Params;   --  the numbers of active=1 and of active=2
+   Sl : Slow_Pcts;
    Window : Boolean := False;
    Cur : Natural := 0;            --  the session of the open window
-   Params_Done : Boolean := False;
+   Cur_Level : Natural := 0;      --  its level
+   Params_Done : array (1 .. 2) of Boolean := [others => False];
+   Last_Active : array (Entity_Id) of Natural := [others => 0];   --  active words at the last session end (mint-slow)
    Out_Lines : Str_Vectors.Vector;
    N_Dorm, N_Wake : array (Entity_Id) of Natural := [others => 0];
 
-   procedure Reset (Pr : Sim_Evolve.Word_Params) is
+   procedure Reset (Pr : Sim_Evolve.Word_Params; Pr2 : Sim_Evolve.Word_Params; Slow : Slow_Pcts) is
    begin
-      Sim_Active.Pr := Pr;
-      for E in Entity_Id loop States (E).Clear; end loop;
+      Lv1 := Pr;
+      Lv2 := Pr2;
+      Sl := Slow;
+      for E in Entity_Id loop States (E).Clear; Set_Slow (E, False); end loop;
       Window := False;
       Cur := 0;
-      Params_Done := False;
+      Cur_Level := 0;
+      Params_Done := [others => False];
+      Last_Active := [others => 0];
+      Use_Wake_Teach (False);
+      Set_Slow_Pct (Slow_Lesson, Sl.Lesson);
+      Set_Slow_Pct (Slow_Coin, Sl.Coin);
+      Set_Slow_Pct (Slow_Screen, Sl.Screen);
+      Set_Slow_Pct (Slow_Blend, Sl.Coin);
       Out_Lines.Clear;
       N_Dorm := [others => 0];
       N_Wake := [others => 0];
       Use_Dormant (False);
    end Reset;
 
-   function Params return Sim_Evolve.Word_Params is (Pr);
+   function Params return Sim_Evolve.Word_Params is (Lv1);
 
    function Params_Text (Pr : Sim_Evolve.Word_Params) return String is
      ("use_pts=" & Img (Pr.Use_Pts) & " use_cap=" & Img (Pr.Use_Cap) & " grant_pts=" & Img (Pr.Grant_Pts) & " agree_pts=" & Img (Pr.Agree_Pts)
@@ -103,6 +115,15 @@ package body Sim_Active is
              Min_Active => Num (Tok (Line, "floor")), Cap => Num (Tok (Line, "cap")));
    end Parse_Params;
 
+   function Params_Level (Line : String) return Positive is (if Tok (Line, "level") = "2" then 2 else 1);
+
+   procedure Parse_Slow (Line : String; Slow : in out Slow_Pcts) is
+   begin
+      if Tok (Line, "slow_lesson") /= "" then Slow.Lesson := Num (Tok (Line, "slow_lesson")); end if;
+      if Tok (Line, "slow_coin") /= "" then Slow.Coin := Num (Tok (Line, "slow_coin")); end if;
+      if Tok (Line, "slow_screen") /= "" then Slow.Screen := Num (Tok (Line, "slow_screen")); end if;
+   end Parse_Slow;
+
    function Ent_Of (S : String) return Natural is
    begin
       for E in Entity_Id loop
@@ -119,9 +140,11 @@ package body Sim_Active is
    type Kind is (Use_K, Grant_K, Agree_K);
 
    --  One use of word W by E, made by the record line Key at tick T.
-   procedure Event (E : Entity_Id; W : Positive; K : Kind; T : String; Key : String) is
+   --  Only_Dormant (active=2, the other wesen of a petition): nothing happens unless W is dormant for E.
+   procedure Event (E : Entity_Id; W : Positive; K : Kind; T : String; Key : String; Only_Dormant : Boolean := False) is
    begin
       if W > Count or else not Knows (E, W) or else Is_Symbol (W) then return; end if;
+      if Only_Dormant and then not Is_Dormant (E, W) then return; end if;
       Ensure (E, W);
       declare
          S : Word_State renames States (E) (W);
@@ -159,7 +182,7 @@ package body Sim_Active is
       end loop;
    end Ids;
 
-   procedure Texts (E : Natural; List : String; K : Kind; T, Key : String) is   --  letters and digits make a word, anything else separates
+   procedure Texts (E : Natural; List : String; K : Kind; T, Key : String; Only_Dormant : Boolean := False) is   --  letters and digits make a word, anything else separates
       From : Natural := 0;
    begin
       if E = 0 then return; end if;
@@ -171,7 +194,7 @@ package body Sim_Active is
                declare
                   W : constant Natural := Find (Ada.Characters.Handling.To_Lower (List (From .. I - 1)));
                begin
-                  if W > 0 then Event (Entity_Id (E), W, K, T, Key); end if;
+                  if W > 0 then Event (Entity_Id (E), W, K, T, Key, Only_Dormant); end if;
                end;
             end if;
             From := 0;
@@ -195,12 +218,20 @@ package body Sim_Active is
                   if Op = "show" or else Op = "read" or else Op = "pin" or else Op = "cmd" or else Op = "leave" or else Op = "blend" then
                      Ids (E, Tok (Line, "w"), Use_K, T, Key);
                      if Op = "blend" then Ids (E, Tok (Line, "a"), Use_K, T, Key); Ids (E, Tok (Line, "b"), Use_K, T, Key); end if;
+                     if Cur_Level = 2 and then (Op = "show" or else Op = "read") then   --  active=2: the other wesen of the line meets the words too
+                        Ids (Ent_Of (Field (Line, 5)), Tok (Line, "w"), Use_K, T, Key);
+                     end if;
                   end if;
                end;
             when 'V' =>   --  a favourite word vote
                if Tok (Line, "kind") = "favourite" then Texts (Ent_Of (Tok (Line, "voter")), Tok (Line, "choice"), Use_K, T, Key); end if;
             when 'P' =>   --  a decided petition
                Texts (Ent_Of (Tok (Line, "wesen")), Tok (Line, "req"), (if Tok (Line, "out") = "grant" then Grant_K else Use_K), T, Key);
+               if Cur_Level = 2 then   --  active=2: a petition naming a word wakes it for every wesen that has it dormant
+                  for O in Entity_Id loop
+                     if Natural (O) /= Ent_Of (Tok (Line, "wesen")) then Texts (Natural (O), Tok (Line, "req"), Use_K, T, Key, Only_Dormant => True); end if;
+                  end loop;
+               end if;
             when 'L' =>   --  a dictionary decision: only the meaning (a base word) is a word of the lists
                Texts (Ent_Of (Tok (Line, "by")), Tok (Line, "mean"), (if Tok (Line, "st") = "A" then Agree_K else Use_K), T, Key);
             when others => null;
@@ -218,6 +249,7 @@ package body Sim_Active is
 
    --  The end of the window of session Cur at Tick, for E: the fitness of the session, then the dormancies.
    procedure Close_One (E : Entity_Id; Tick : Int) is
+      Pr : constant Sim_Evolve.Word_Params := (if Cur_Level = 2 then Lv2 else Lv1);   --  the numbers of the window's level
       Active, Known_W, Symbols, Base_N : Natural := 0;
       Idle_C, Cap_C : Cand_Vectors.Vector;
       Left : Natural := Pr.Retire_Max;
@@ -286,24 +318,45 @@ package body Sim_Active is
       end if;
       Out_Lines.Append ("t=" & Img (Tick) & " s=" & Img (Cur) & " " & Name (E) & " state known=" & Img (Known_W) & " symbols=" & Img (Symbols)
                         & " active=" & Img (Active) & " dormant=" & Img (Dormant_Count (E)) & " base=" & Img (Base_N)
-                        & " went=" & Img (Pr.Retire_Max - Left) & " woke=" & Img (N_Wake (E)));
+                        & " went=" & Img (Pr.Retire_Max - Left) & " woke=" & Img (N_Wake (E))
+                        & (if Cur_Level = 2 then " slow=" & (if Active >= Lv2.Cap and then Lv2.Cap > 0 then "1" else "0") else ""));
+      Last_Active (E) := Active;
    end Close_One;
 
-   procedure Open (N : Positive; Tick : Int; On : Boolean) is
+   procedure Open (N : Positive; Tick : Int; Level : Natural) is
+      On : constant Boolean := Level in 1 .. 2;
    begin
       if Window then
          for E in Entity_Id loop Close_One (E, Tick); end loop;
       end if;
       Window := On;
       Cur := N;
-      if On and then not Params_Done then
-         Params_Done := True;
-         Out_Lines.Append ("t=" & Img (Tick) & " s=" & Img (N) & " params " & Params_Text (Pr));
+      Cur_Level := (if On then Level else 0);
+      if On and then not Params_Done (Level) then
+         Params_Done (Level) := True;
+         if Level = 2 then
+            Out_Lines.Append ("t=" & Img (Tick) & " s=" & Img (N) & " params level=2 " & Params_Text (Lv2) & " slow_lesson=" & Img (Sl.Lesson)
+                              & " slow_coin=" & Img (Sl.Coin) & " slow_screen=" & Img (Sl.Screen));
+         else
+            Out_Lines.Append ("t=" & Img (Tick) & " s=" & Img (N) & " params " & Params_Text (Lv1));
+         end if;
       end if;
       Use_Dormant (On);
+      Use_Wake_Teach (Cur_Level = 2);
+      for E in Entity_Id loop
+         Set_Slow (E, Cur_Level = 2 and then Lv2.Cap > 0 and then Last_Active (E) >= Lv2.Cap);
+      end loop;
    end Open;
 
    function Is_Open return Boolean is (Window);
+   function Level return Natural is (Cur_Level);
+
+   procedure Wake (E : Positive; W : Positive; Tick : Int; By : String; Woke : out Boolean) is
+      X : constant Entity_Id := Entity_Id (E);
+   begin
+      Woke := Window and then Cur_Level = 2 and then W <= Count and then Knows (X, W) and then Is_Dormant (X, W) and then not Is_Symbol (W);
+      if Woke then Event (X, W, Use_K, Img (Tick), "lesson:" & By); end if;
+   end Wake;
 
    procedure Drain (Into : in out Str_Vectors.Vector) is
    begin

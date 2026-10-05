@@ -1,5 +1,5 @@
 # Learning in the station: slow core, mixed study, pruning, pondering, notebooks (design only, nothing built)
-Version: 0.006
+Version: 0.007
 
 Status: **proposal for Robert**. No code for any of this exists yet; every number below is a *proposed default* that lives in `data/` when
 built, and every decision is open until Robert answers section 11. Style as `docs/LIFE.md`: what it is, what it is made of, what is recorded.
@@ -232,7 +232,8 @@ a factor of ten with synonyms. The read-only report `make wordstat` (`--wordstat
   sessions and older than `vocab.min_age` = 3 sessions goes first, oldest idle first, at most `vocab.per_session` = 40 per boundary, ties by a seeded die in 19920 .. 19949). A dormant word stays in `entities/<id>/words.txt` (history), is a record line
   (`diaries/vocab.txt`, planned, `Sim_Store`, status `D` for dormant and `W` for woken, with `h=`; replay-verified: a changed, removed or invented line is DRIFT), is not in `Nth_Known`, is not taught, and wakes when the wesen meets or is taught it again. Words of
   `data/vocab.txt` and words with an open proposal are never dormant (as in section 4). Effect: the *active* vocabulary is about 500 per wesen (x10 against 5,353) while "ever known" keeps counting upward in the report. This one changes the dice pools, so it is
-  new sessions only (marker `active=1`).
+  new sessions only (marker `active=1`). **BUILT** as `active=1` (build 0.049, `docs/EVOLVE.md` 13) and `active=2` (build 0.052, `docs/EVOLVE.md` 14: floor
+  300 under the cap 500, mint-slow at the cap with salts 20870 .. 20873, a lesson, screen show or petition wakes a dormant word).
 * **(b) Synonym classes (display and later use).** A word gets a **canonical head** from (1) the agreed dictionary meaning (`st=A`: words with the same meaning are one class), then (2) shared parents of coined blends (`a+b` and `a+c` share `a`), then
   (3) exact prefix/suffix variants. Aliases map to the head in reports and screens (a dictionary status `st=S word=<alias> head=<word>`, records=2). **The data say this saves little on its own:** the 85 agreed names are dictionary entries that no wesen ever learned (they are synonyms of base words, so they can only be classes if they are taught first), and the
   prefix/suffix variants are 26 % of the non-token words, so classes give about 1.3x on those. Keep it as a *view* of `make wordstat` (the variants line) until the dictionary has meaning to build classes on.

@@ -256,17 +256,18 @@ A line input under the voices, in `make night` on a terminal and in a session of
   (150), `chat.session_ticks`, `chat.tps`, `chat.trend_step`, `chat.trend_max`, `chat.log_tail`, and for the voices `voice.shown_chat`.
 * **Layout** (24 rows): header 6 + tables 10 + hint 1 + one voice (2 lines) + night status line 1 + chat window 2 + input line 1 + 1 free row.
 
-## The active vocabulary (`active=1`; `make active`, docs/EVOLVE.md 13)
+## The active vocabulary (`active=1`, `active=2`; `make active`, docs/EVOLVE.md 13 and 14)
 
-    make night / make run   # new sessions carry active=1 (and symbols=1) when the keys in data/limits.txt are on; no --fresh
-    make active             # the real state of an active=1 save (diaries/active.txt), or the read-only preview on an older save
+    make night / make run   # new sessions carry active=2 (and symbols=1) when the keys in data/limits.txt are on; no --fresh
+    make active             # the real state of an active=1/2 save (diaries/active.txt), or the read-only preview on an older save
     make evolve             # the would-be fitness and the chess weight tables (read-only)
     make wordstat           # still useful: known words, symbols section, and so on
     make verify             # DRIFT if a line of diaries/active.txt was changed
 
 * **What it does.** A new `screen=1` session with `active.enabled = 1` carries `active=1`. At the end of each such session every wesen keeps at most `evolve.cap` (500) **active** words: a word whose fitness (the same rule as `make evolve`: uses, granted petitions, an agreed meaning; running average per session) stays at or under `evolve.line10` (0.3) for `evolve.idle_sessions` (6) sessions after `evolve.probation` (3) goes **dormant**, and above the cap the lowest fitness goes first; at most `evolve.retire_max` (40) a session, never a start word, never a chess or number string (symbols stay out of the pool). A dormant word stays in `words.txt` and in `Known_Count`, but it is not taught, not coined or blended from, not put on a screen and not a favourite. It **wakes** when a record line (a screen, a vote, a petition or a dictionary meaning) uses it again.
 * **What is recorded.** Every decision is an A line of `diaries/active.txt` (the params of the first active=1 session, each dormant word, each wake, the state of each wesen at a session end). The replay regenerates them; a change is DRIFT. Old sessions without the marker replay as they did. A save keeps the numbers of its first active=1 session (the params line), so a later change of `data/limits.txt` does not rewrite history.
-* **`make active`.** On an `active=1` save it prints the last closed session's state from `diaries/active.txt` (known, symbols, active, dormant, base, woken). On an older save it stays the would-be preview of the 500 cap (nothing changed).
+* **`active=2` (the default now, `active.enabled = 2`).** New sessions carry `active=2`; an existing save simply goes on (no `--fresh`): its `active=1` sessions replay unchanged with their own params line, the first `active=2` session writes a second one (`params level=2 ... floor=300 cap=500 slow_lesson=25 slow_coin=50 slow_screen=50`). Three changes: (1) a **floor** under the cap: idle words may go dormant down to `active.floor` (300), above `active.cap` (500) the lowest fitness goes first; (2) **mint-slow**: a wesen that held the cap at the last session end gets a new word only when a die lets it through (lessons `active.slow_lesson_pct` 25 %, coined words and screen blends `active.slow_coin_pct` 50 %, words from a screen `active.slow_screen_pct` 50 %; salts 20870 .. 20873); (3) a **wider wake**: a lesson of a word the pupil has dormant wakes it instead of minting (`by=lesson:<teacher>` in `diaries/active.txt`, "remembered the word ... again" in the diary), a screen show or read wakes it for the other wesen of the line too, a petition naming the word wakes it for every wesen that has it dormant. `active.enabled = 1` keeps new sessions at `active=1`.
+* **`make active`.** On an `active=1` or `active=2` save it prints the last closed session's state from `diaries/active.txt` (known, symbols, active, dormant, base, woken; on `active=2` also who is at the cap) and the params line of each level (floor and cap). On an older save it stays the would-be preview of the 500 cap (nothing changed).
 
 ## The evolution preview (`make evolve`, `make active`; read-only, docs/EVOLVE.md)
 

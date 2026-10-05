@@ -1,4 +1,4 @@
---  Version: 0.016
+--  Version: 0.017
 --  The shared world of diary_sim: the four entities, the vocabulary (base
 --  words, who knows what, coined words), the bench kernels and the final votes.
 --  One world per run; Init rebuilds it from scratch, so a replay from tick 1
@@ -73,11 +73,21 @@ package Sim_World is
    function Nth_Usable (E : Entity_Id; N : Positive) return Positive;  --  Nth_Known over the words that are not asleep
    function Is_Start (E : Entity_Id; W : Positive) return Boolean;     --  a base word of E's start slice (never dormant)
    function Is_Symbol (W : Positive) return Boolean;                   --  a chess coordinate or number text (out of the pool)
+   --  active=2 sessions (Sim_Active, docs/EVOLVE.md 14): MINT-SLOW and WAKE BY LESSON.  A wesen that held at least the cap of active
+   --  words at the last session end is Slow: a new word reaches it only when a die lets it through (Slow_Pass: salt 20870 a lesson,
+   --  20871 a coined word, 20872 a word learned from a screen, 20873 a screen blend; the percent of each kind, the params line of
+   --  active.txt).  Wake_Teach: a word the pupil has asleep may be taught again (it wakes, nothing new is minted).  Off: the old rule.
+   type Slow_Kind is (Slow_Lesson, Slow_Coin, Slow_Screen, Slow_Blend);
+   procedure Set_Slow (E : Entity_Id; On : Boolean);
+   function Is_Slow (E : Entity_Id) return Boolean;
+   procedure Set_Slow_Pct (K : Slow_Kind; Pct : Natural);
+   function Slow_Pass (Seed : Int; E : Entity_Id; Tick : Int; K : Slow_Kind) return Boolean;   --  not slow, or the die lets it through
+   procedure Use_Wake_Teach (On : Boolean);
    function World_Learned (E : Entity_Id) return Natural;     --  words E learned from the world
    function Taught_Count (E : Entity_Id) return Natural;      --  words E learned in lessons
    function Coined_Count_By (E : Entity_Id) return Natural;
    function Coined_Total return Natural;                      --  coined words of everybody
-   --  Words E knows / words From knows and To lacks, and the N-th of each.
+   --  Words E knows / words From knows and To lacks (active=2: or To has asleep, Use_Wake_Teach), and the N-th of each.
    function Known_Count (E : Entity_Id) return Natural;
    function Nth_Known (E : Entity_Id; N : Positive) return Positive;
    function Teachable_Count (From, To : Entity_Id) return Natural;

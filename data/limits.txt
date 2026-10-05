@@ -199,7 +199,19 @@ symbols.enabled = 1
 # evolve.retire_max a session, never a start word, never a chess or number string.  A dormant word is not taught, coined or blended from, not put on a
 # screen and not a favourite; it wakes when a record line uses it again.  Lines in diaries/active.txt (replay-verified); a save keeps the numbers of
 # its first active=1 session (the params line).  0 = the old rule.  Existing sessions keep their rule.
-active.enabled = 1
+# 2 = new sessions carry active=2 (docs/EVOLVE.md 14): the same rule with a FLOOR under the cap (active.floor 300: idle words may go down to it,
+# active.cap 500: above it the lowest fitness goes first) and MINT-SLOW: a wesen that held at least active.cap active words at the last session
+# end gets a new word only when a die lets it through (active.slow_lesson_pct for a lesson, salt 20870; active.slow_coin_pct for a coined word,
+# 20871, and a screen blend, 20873; active.slow_screen_pct for a word learned from a screen, 20872).  Wider wake: a lesson of a word the pupil
+# has dormant wakes it (nothing new is minted), a screen show or read wakes it for the other wesen of the line too, a petition naming the word
+# wakes it for every wesen that has it dormant.  The numbers are kept in a second params line (level=2) at the first active=2 session; the
+# active=1 sessions of a save replay with their own line.  No --fresh: an existing save goes on with active=2.
+active.enabled = 2
+active.floor = 300
+active.cap = 500
+active.slow_lesson_pct = 25
+active.slow_coin_pct = 50
+active.slow_screen_pct = 50
 chess.enabled = 1
 chess.gap = 6
 chess.start_pct = 50

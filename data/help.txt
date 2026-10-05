@@ -59,9 +59,10 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
                the words that would go dormant, the chess weight table each
                competitor would hold after its games, the Elo curve
                (docs/EVOLVE.md; data/evolve.txt, limits.txt evolve.*)
---active       the active vocabulary (make active): on an active=1 save the
-               real state from diaries/active.txt; on an older save the
-               would-be preview under a cap of evolve.cap (docs/EVOLVE.md 13)
+--active       the active vocabulary (make active): on an active=1/2 save the
+               real state from diaries/active.txt (level, floor, cap, who is
+               at the cap); on an older save the would-be preview under a cap
+               of evolve.cap (docs/EVOLVE.md 13 and 14; limits.txt active.*)
 --frustration  the MiniMax report (make frustration; read-only): per wesen
                refused petitions, the lowest mood and the worst session
                (refusals x frustration.refuse_weight + the low mood), the
@@ -199,6 +200,10 @@ keeps about evolve.cap (500) active words; an idle word goes dormant (at most
 evolve.retire_max a session, never a start word) and is not taught, coined
 from or shown; it wakes when it is used again. Lines in diaries/active.txt
 (replay-verified); make active shows the state. 0 = the old rule.
+active=2 (active.enabled = 2, the default; an existing save goes on, no
+--fresh): a floor of active.floor (300) under the cap of active.cap (500);
+a wesen at the cap mints new words slowly (active.slow_*_pct); a lesson,
+a screen show or read and a petition naming a dormant word wake it.
 Trial by chess (trial=1 session; needs chess and govern; make trials): a
 dispute (clashing petitions, an appeal against a refusal, rival claims to a
 coined word, rest against work) between two wesen, a wesen and a player or two
