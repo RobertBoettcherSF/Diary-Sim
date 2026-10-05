@@ -1,4 +1,4 @@
-# Version: 0.003
+# Version: 0.004
 # The vocabulary report (make wordstat, --wordstat, Sim_Wordstat): read-only, counts over entities/<id>/words.txt and the diaries.
 # "key = text".  {1}.. are filled in; labels in the tables are cut to 36 letters.  Nothing here changes a diary.
 # upper length of each length class (12 classes, the last one is open)
@@ -85,6 +85,12 @@ wordstat.route.screen = from screens
 wordstat.route.coined = by coining
 wordstat.route.other = another way
 wordstat.concl.head = Conclusion:
+wordstat.act.title = Active words only (active=1/2 saves; the dormant words of diaries/active.txt left out, words learned since the last session end included):
+wordstat.act.active = active words now
+wordstat.act.used = of those: used again
+wordstat.act.top = Most used active words (uses in the records):
+wordstat.act.themes = Themes of the active words (shared first three letters, all wesen, at least two words): {1}
+wordstat.act.concl = Active now: {1} words of the four wesen, {2} dormant, {3} of the active words were used again.
 wordstat.concl.1 = The biggest source is {1}: {2} of the {3} words ({4} %).
 wordstat.concl.2 = Chess and number tokens together are {1} words ({2} %), most of them {3}. Never used again after learning: {4} % of all words.
 wordstat.concl.3 = Without the chess and number tokens a wesen would know about {1} words, and about {2} if the prefix and suffix variants were also folded into the word they extend.

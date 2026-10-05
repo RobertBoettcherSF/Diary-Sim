@@ -1,4 +1,4 @@
---  Version: 0.049
+--  Version: 0.050
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -26,7 +26,7 @@ pragma Interrupt_State (SIGINT, USER);
 pragma Interrupt_State (SIGTERM, USER);
 pragma Ada_2022;
 
-with Ada.Calendar, Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
+with Ada.Calendar, Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Maps, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Finalization, Ada.Strings.Fixed, Ada.Streams.Stream_IO, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
      GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chat, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Records, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Trial, Sim_Util, Sim_Visit, Sim_Voice, Sim_Wordstat, Sim_Evolve, Sim_Active, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.049";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.050";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -1778,6 +1778,7 @@ procedure Diary_Sim is
       Cell_W : constant := 7;
       Total_W : constant := 8;
 
+
       function Nth (L : String; N : Positive) return String is   --  N-th blank-separated field, "" if none
          Pos : Natural := L'First;
          Count : Natural := 0;
@@ -1849,6 +1850,177 @@ procedure Diary_Sim is
       Head : Unbounded_String;
 
       procedure Put (S : String) is begin TIO.Put_Line (S); end Put;
+
+      --  active=1/2 saves (diaries/active.txt): the live active words only, by kind, the most used ones and the shared beginnings
+      --  (themes); a word counts as dormant from its dormant line until a wake line.  Nothing is printed on an older save.
+      procedure Active_Only is
+         package Count_Maps is new Ada.Containers.Indefinite_Hashed_Maps (String, Natural, Ada.Strings.Hash, "=");
+         AL : Str_Vectors.Vector;
+         AF : Boolean;
+         Any_State : Boolean := False;
+         Dorm : Str_Sets.Set;
+         type Kind_List is array (Positive range <>) of Sim_Wordstat.Kind;
+         Kinds : constant Kind_List := [Sim_Wordstat.Start, Sim_Wordstat.World, Sim_Wordstat.Taught, Sim_Wordstat.Screen, Sim_Wordstat.Coined, Sim_Wordstat.Other];
+         Cnt : array (Entity_Id, Kinds'Range) of Natural := [others => [others => 0]];
+         Act, Used_A : array (Entity_Id) of Natural := [others => 0];
+         Fam : Count_Maps.Map;
+         use type Sim_Wordstat.Kind;
+         function Field (L : String; N : Positive) return String is
+            P : Natural := L'First;
+            K : Natural := 0;
+         begin
+            while P <= L'Last loop
+               declare
+                  Stop : Natural := P;
+               begin
+                  while Stop <= L'Last and then L (Stop) /= ' ' loop Stop := Stop + 1; end loop;
+                  K := K + 1;
+                  if K = N then return L (P .. Stop - 1); end if;
+                  P := Stop + 1;
+               end;
+            end loop;
+            return "";
+         end Field;
+         procedure Row (Label : String; V : access function (E : Entity_Id) return Natural) is
+            Line : Unbounded_String := To_Unbounded_String (Pad_R (Label, Name_W));
+            Sum : Natural := 0;
+         begin
+            for E in Entity_Id loop
+               Append (Line, Pad_L (Img (V (E)), Cell_W));
+               Sum := Sum + V (E);
+            end loop;
+            Append (Line, Pad_L (Img (Sum), Total_W));
+            Put (To_String (Line));
+         end Row;
+         function Act_Of (E : Entity_Id) return Natural is (Act (E));
+         function Used_Of (E : Entity_Id) return Natural is (Used_A (E));
+      begin
+         if not Ada.Directories.Exists ("diaries/active.txt") then return; end if;
+         Read_Lines ("diaries/active.txt", AL, AF);
+         for L of AL loop
+            if L'Length > 2 and then L (L'First) = 'A' then
+               declare
+                  Op : constant String := Field (L, 5);
+                  Key : constant String := Field (L, 4) & ":" & Token (L, "word");
+               begin
+                  if Op = "dormant" then Dorm.Include (Key);
+                  elsif Op = "wake" then Dorm.Exclude (Key);
+                  elsif Op = "state" then Any_State := True;
+                  end if;
+               end;
+            end if;
+         end loop;
+         if not Any_State then return; end if;
+         declare
+            package Nat_V is new Ada.Containers.Vectors (Positive, Natural);
+            Uses : array (Entity_Id) of Nat_V.Vector;
+         begin
+            for E in Entity_Id loop Uses (E) := Nat_V.To_Vector (0, Ada.Containers.Count_Type (Natural'Max (1, Sim_Wordstat.Word_Count (Positive (E))))); end loop;
+            for J in 1 .. Sim_Wordstat.Event_Count loop
+               declare
+                  Ev : constant Sim_Wordstat.Log_Event := Sim_Wordstat.Event_At (J);
+               begin
+                  if Ev.E in 1 .. 4 and then Ev.Index in 1 .. Natural (Uses (Entity_Id (Ev.E)).Length) then
+                     Uses (Entity_Id (Ev.E)).Replace_Element (Ev.Index, Uses (Entity_Id (Ev.E)).Element (Ev.Index) + 1);
+                  end if;
+               end;
+            end loop;
+            TIO.New_Line;
+            for L of Sim_Voice.Wrap (Msg ("wordstat.act.title"), 79) loop Put (L); end loop;
+            Put (Pad_R ("", Name_W) & Pad_L (Sim_World.Show (Name (1)), Cell_W) & Pad_L (Sim_World.Show (Name (2)), Cell_W)
+                 & Pad_L (Sim_World.Show (Name (3)), Cell_W) & Pad_L (Sim_World.Show (Name (4)), Cell_W) & Pad_L (Msg ("wordstat.col.total"), Total_W));
+            for E in Entity_Id loop
+               for I in 1 .. Sim_Wordstat.Word_Count (Positive (E)) loop
+                  declare
+                     K : constant Sim_Wordstat.Kind := Sim_Wordstat.Word_Kind (Positive (E), I);
+                     T : constant String := Sim_Wordstat.Word_Text (Positive (E), I);
+                  begin
+                     if K not in Sim_Wordstat.Chess | Sim_Wordstat.Number and then not Dorm.Contains (Name (E) & ":" & T) then
+                        Act (E) := Act (E) + 1;
+                        if Uses (E) (I) > 0 then Used_A (E) := Used_A (E) + 1; end if;
+                        for J in Kinds'Range loop
+                           if Kinds (J) = K then Cnt (E, J) := Cnt (E, J) + 1; end if;
+                        end loop;
+                        if T'Length >= 4 and then (for all C of T (T'First .. T'First + 2) => C in 'a' .. 'z') then
+                           declare
+                              F : constant String := T (T'First .. T'First + 2);
+                           begin
+                              if Fam.Contains (F) then Fam.Replace (F, Fam.Element (F) + 1); else Fam.Insert (F, 1); end if;
+                           end;
+                        end if;
+                     end if;
+                  end;
+               end loop;
+            end loop;
+            Row ("  " & Msg ("wordstat.act.active"), Act_Of'Access);
+            for J in Kinds'Range loop
+               declare
+                  function Of_K (E : Entity_Id) return Natural is (Cnt (E, J));
+               begin
+                  Row ("    " & Msg ("wordstat.k." & Ada.Characters.Handling.To_Lower (Sim_Wordstat.Kind'Image (Kinds (J)))), Of_K'Access);
+               end;
+            end loop;
+            Row ("  " & Msg ("wordstat.act.used"), Used_Of'Access);
+            TIO.New_Line;
+            Put (Msg ("wordstat.act.top"));
+            for E in Entity_Id loop
+               declare
+                  Line : Unbounded_String;
+                  Taken : array (1 .. Natural'Max (1, Sim_Wordstat.Word_Count (Positive (E)))) of Boolean := [others => False];
+               begin
+                  for R in 1 .. Natural (Limit ("wordstat.act_top", 6)) loop
+                     declare
+                        Best, Best_U : Natural := 0;
+                     begin
+                        for I in 1 .. Sim_Wordstat.Word_Count (Positive (E)) loop
+                           if not Taken (I) and then Uses (E) (I) > Best_U
+                             and then Sim_Wordstat.Word_Kind (Positive (E), I) not in Sim_Wordstat.Chess | Sim_Wordstat.Number
+                             and then not Dorm.Contains (Name (E) & ":" & Sim_Wordstat.Word_Text (Positive (E), I))
+                           then
+                              Best := I;
+                              Best_U := Uses (E) (I);
+                           end if;
+                        end loop;
+                        exit when Best = 0;
+                        Taken (Best) := True;
+                        Append (Line, (if R = 1 then "" else ", ") & Sim_Wordstat.Word_Text (Positive (E), Best) & " " & Img (Best_U));
+                     end;
+                  end loop;
+                  for L of Sim_Voice.Wrap ("  " & Sim_World.Show (Name (E)) & ": " & (if Length (Line) = 0 then "-" else To_String (Line)), 79) loop Put (L); end loop;
+               end;
+            end loop;
+            declare
+               Line : Unbounded_String;
+               Done : Str_Sets.Set;
+            begin
+               for R in 1 .. Natural (Limit ("wordstat.act_themes", 10)) loop
+                  declare
+                     Best : Unbounded_String;
+                     Best_N : Natural := 0;
+                  begin
+                     for C in Fam.Iterate loop
+                        declare
+                           K : constant String := Count_Maps.Key (C);
+                           N : constant Natural := Count_Maps.Element (C);
+                        begin
+                           if not Done.Contains (K) and then (N > Best_N or else (N = Best_N and then N > 0 and then K < To_String (Best))) then
+                              Best := To_Unbounded_String (K);
+                              Best_N := N;
+                           end if;
+                        end;
+                     end loop;
+                     exit when Best_N < 2;
+                     Done.Include (To_String (Best));
+                     Append (Line, (if R = 1 then "" else ", ") & To_String (Best) & "- " & Img (Best_N));
+                  end;
+               end loop;
+               TIO.New_Line;
+               for L of Sim_Voice.Wrap (Msg ("wordstat.act.themes", (if Length (Line) = 0 then "-" else To_String (Line))), 79) loop Put (L); end loop;
+               for L of Sim_Voice.Wrap (Msg ("wordstat.act.concl", Img (Act (1) + Act (2) + Act (3) + Act (4)), Img (Natural (Dorm.Length)),
+                                             Img (Used_A (1) + Used_A (2) + Used_A (3) + Used_A (4))), 79) loop Put (L); end loop;
+            end;
+         end;
+      end Active_Only;
 
       --  One row: the label and the value of every wesen, then the total.
       generic
@@ -2647,6 +2819,7 @@ procedure Diary_Sim is
             & " " & Msg ("wordstat.concl.4", Img (T.Distinct), Img (T.Chess_Dist + T.Number_Dist)));
          Put (Msg ("wordstat.concl.head"));
          for L of Sim_Voice.Wrap (To_String (Para), 79) loop Put (L); end loop;
+         Active_Only;
       end;
    exception
       when TIO.Layout_Error | TIO.Device_Error | TIO.Status_Error => null;   --  stdout is a closed pipe (| head)

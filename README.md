@@ -315,6 +315,8 @@ in `data/limits.txt`.
   Without them a wesen knows about 2,200 words; see `docs/LEARN.md` ("Condensing the vocabulary by an order of magnitude").
 * `make share` adds `wordstat.txt` to the archive and its conclusion to `share_info.txt` and to the console.
 
+* **Active words only** (an `active=1` or `active=2` save): a last section counts the live active words alone (the dormant words of `diaries/active.txt` left out, words learned since the last session end included): by kind (start, world, taught, screen, coined), how many were used again, the most used ones per wesen and the themes (shared first three letters, `wordstat.act_themes` in limits.txt, default 10; `wordstat.act_top` most used, default 6).
+
 ## The Buddhism layer and the players (record-first)
 
 Everything below is **recorded, not acted on**: none of it changes the action table or any

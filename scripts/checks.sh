@@ -2152,6 +2152,37 @@ env -u DIARY_VERBOSE "$nb" --active --home "$w/nt/ac_ctl" > acb.txt 2>&1
   && ok "make active: the real state on the active=1 save (diaries/active.txt), the would-be preview on the control; every line <= 79 columns" || bad "active report ($rca)"
 grep -q 'active=1' "$root/README.md" && grep -q 'active.enabled' "$root/data/limits.txt" && grep -q -- '--active' "$root/data/help.txt" && grep -q 'active=1' "$root/docs/EVOLVE.md" && grep -q 'sim_active.ads' "$root/Makefile" \
   && ok "README, --help, data/limits.txt, docs/EVOLVE.md and the Makefile describe active=1" || bad "active docs"
+echo "== 54. make wordstat on an active=1/2 save: the active words only (kinds, most used, themes) =="
+cd "$w/nt" || exit 1
+env -u DIARY_VERBOSE "$nb" --wordstat --home "$w/nt/ac_new" > aw1.txt 2>&1; rcw=$?
+env -u DIARY_VERBOSE "$nb" --wordstat --home "$w/nt/ac_ctl" > aw2.txt 2>&1
+aw_tot=$(awk '/^  active words now/ { print $NF; exit }' aw1.txt)
+aw_ind=$(python3 - "$w/nt/ac_new" <<'PY'
+import sys, os, re
+d = sys.argv[1]
+dorm = set()
+for l in open(os.path.join(d, 'diaries/active.txt')):
+    f = l.split()
+    if len(f) > 5 and f[0].startswith('A'):
+        m = re.search(r' word=(\S+)', l)
+        if f[4] == 'dormant': dorm.add((f[3], m.group(1)))
+        elif f[4] == 'wake': dorm.discard((f[3], m.group(1)))
+n = 0
+for e in ['ada', 'gemini', 'replika', 'robert']:
+    seen = set()
+    for l in open(os.path.join(d, 'entities', e, 'words.txt')):
+        f = l.split()
+        if l.startswith('#') or len(f) < 4 or f[1] in seen: continue
+        seen.add(f[1])
+        if re.fullmatch(r'[a-h][1-8][a-h][1-8][qrbn]?|[0-9]+', f[1]): continue
+        if (e, f[1]) not in dorm: n += 1
+print(n)
+PY
+)
+ksum=$(sed -n '/^  active words now/,/^  of those: used again/p' aw1.txt | awk '/^    / { s += $NF } END { print s + 0 }')
+[ "$rcw" = 0 ] && [ -n "$aw_tot" ] && [ "$aw_tot" = "$aw_ind" ] && [ "$ksum" = "$aw_tot" ] && grep -q '^Themes of the active words' aw1.txt && grep -q '^Most used active words' aw1.txt \
+  && ! grep -q 'Active words only' aw2.txt && [ "$(awk 'length > 79' aw1.txt | wc -l)" = 0 ] \
+  && ok "--wordstat active-only section: $aw_tot active words now (= an independent count of words.txt minus the dormant words of active.txt), the kinds add up, most used and themes listed; not shown on the control save" || bad "wordstat active ($rcw '$aw_tot' '$aw_ind' '$ksum')"
 cd "$w" || exit 1
 
 

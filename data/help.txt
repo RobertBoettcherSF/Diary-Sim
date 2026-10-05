@@ -53,7 +53,8 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
                taught, screen, coined, chess coordinates, chess numbers), used
                again or not, the dictionary (agreed, rejected, announced),
                lengths, prefix/suffix variants, a conclusion (make wordstat;
-               data/wordstat.txt; read-only)
+               data/wordstat.txt; read-only); on an active=1/2 save also the
+               active words only (kinds, most used, themes)
 --evolve       the evolution preview, read-only (make evolve): word fitness,
                the words that would go dormant, the chess weight table each
                competitor would hold after its games, the Elo curve
