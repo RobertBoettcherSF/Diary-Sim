@@ -1,4 +1,4 @@
---  Version: 0.052
+--  Version: 0.053
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.052";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.053";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -6352,6 +6352,7 @@ procedure Diary_Sim is
    Night_T0 : Ada.Calendar.Time := Ada.Calendar.Clock;
    Night_Why : Unbounded_String;
    Night_Done, Night_First_S, Night_Last_S, Night_Last_Tick : Natural := 0;
+   Night_Replay_Line : Unbounded_String;   --  the history replay has finished, the new sessions begin (shown in the box; plain: at once)
    Base_S, Base_T : Natural := 0;               --  the sessions and ticks the save had at the start
    Night_Phase : Natural := 0;                  --  0 replaying the history, 1 a session, 2 verifying, 3 between sessions
    Night_Verified : Natural := 0;               --  full replays by the child process
@@ -6922,6 +6923,7 @@ procedure Diary_Sim is
       else
          Box.Append (Msg ("night.box.sessions", Img (Night_Done), Img (Night_First_S), Img (Night_Last_S), Img (Night_Last_Tick)));
       end if;
+      Box.Append (if Length (Night_Replay_Line) > 0 then To_String (Night_Replay_Line) else Msg ("night.box.replay_no"));
       Box.Append (Msg ("night.box.time", Elapsed_Text (Since (Night_T0))));
       Box.Append (Msg ("night.box.speed", Avg_Text, Ticks_Per_Sec, Size_Text (Size_Now), Growth_Text));
       if Night_Verified > 0 then Box.Append (Msg ("night.box.verified", Img (Night_Verified))); end if;
@@ -7438,6 +7440,17 @@ begin
       Verify_Edits (Int (Verify_To));
       Decide_Session;
       Set_Ledger_From;
+      if Night_On and then Night_Done = 0 and then not Sessions.Is_Empty then   --  make night / checkin: the replay is over, the NEW sessions begin
+         declare
+            Lv : constant String := Token (Session_Line (Sessions.Last_Element), "active");
+         begin
+            Night_Replay_Line := To_Unbounded_String
+              (Msg ("night.replay_done", Img (Verify_To), Img (Base_S), Tenths_Text (Since (Night_T0)), Img (Sessions.Last_Element.N), Img (Verify_To + 1),
+                    (if Lv = "" then Msg ("night.active_off") else "active=" & Lv)));
+            Append_Log ("NIGHT", To_String (Night_Replay_Line) & ASCII.LF);
+            if not Tty_Out then Con.Put_Line_Now (To_String (Night_Replay_Line)); Flush_Out; end if;
+         end;
+      end if;
       Con.Put_Line (To_String (Kalpa_Line));
       if Visit_Mode and then Visit_Active then Con.Put_Line (Msg ("visit.start", Name (Visit_E), Img (Visit_End - Visit_Start))); end if;
    end if;

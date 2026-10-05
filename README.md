@@ -5,6 +5,11 @@ Four independent entities (the *wesen*) write one diary line per tick. Their int
 display names from `data/names.txt` (default: Adam, Eve, Abel, Ruth; see "Display names" below).
 Plain Ada, standard library only. Not pushed anywhere yet (local git repo).
 
+**Wall time of every command.** Each `make` target that runs the program or a script (`make night`, `make run`, `make wordstat`, `make active`,
+`make frustration`, `make verify`, `make chat`, `make share`, `make check`, ...) ends with one line such as `make wordstat wall time: 0m12s (12s)`:
+the whole make command from its start, the up-to-date check (or rebuild) included, so every paste carries its duration. The exit status of the
+program is kept (a failing `make verify` still fails). No need to type `time make ...` (scripts/timed.sh, `TIMED` in the Makefile).
+
 ## Where saves live and how to update
 
 The save is NOT inside the source folder. Everything the program writes (`diaries/`,
@@ -108,6 +113,18 @@ For a run you leave alone and read in the morning, and for the loop *Robert runs
     make night SESSION_TICKS=200 MAX_SESSIONS=40 MAX_HOURS=8
     make trend                                  # the last 40 lines of trend.txt
     make share                                  # ONE zip to send back
+    make checkin                                # ONE paste: a night of 40 sessions (no q needed), then active, wordstat, frustration, evolve, verify
+    make checkin CHECKIN_SESSIONS=10 CHECKIN_TICKS=300 SEED=42
+
+* **`make checkin`** runs `make night` with a FIXED number of sessions (`CHECKIN_SESSIONS`, default 40, of `CHECKIN_TICKS`, default 300,
+  ticks; q still works), then `make active`, `make wordstat`, `make frustration`, `make evolve` and `make verify`. Each part starts with a
+  `=== make <x> ===` line and ends with its own `make <x> wall time: ...` line; the very last line is the wall time of the whole checkin.
+  Copy the whole terminal and paste it. The single targets stay as they are.
+* **Replay done.** Every night run (and so every checkin) says when the history replay has finished and the NEW sessions begin:
+  `replay done: 17400 ticks in 8.2 s; NEW from s50, tick 17401 (active=2)` (the history replayed and verified, the first new
+  session and its marker). Without a
+  terminal the line comes at once; on a terminal it is in the final box (and always in `run_log.txt`). A night stopped during the replay
+  says `replay not finished: no new session ran` in its box, so a paste shows whether the new sessions (and `active=2`) ran at all.
 
 * **`make night`** (`bin/diary_sim --continuous [--session-ticks N] [--max-sessions N] [--max-hours H]`, defaults `night.session_ticks`,
   `night.max_sessions`, `night.max_hours` in `data/limits.txt`; 0 means no limit, `H` may have decimals) runs normal sessions back to back,

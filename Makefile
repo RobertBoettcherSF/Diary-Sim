@@ -1,4 +1,4 @@
-# Version: 0.042
+# Version: 0.043
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -103,6 +103,9 @@
 #                 as it is); the only difference: no symbols, so a crash report shows addresses instead of names.  make footprint: the
 #                 sizes (source, data, per unit, stripped / unstripped, debug share) of the files that exist
 # make check      version headers + the resume/replay/drift/crash checks
+# make checkin    ONE paste for Robert: a night run of CHECKIN_SESSIONS (40) sessions of CHECKIN_TICKS (300) ticks (no q needed; it says
+#                 when the history replay is done and the new sessions begin), then active, wordstat, frustration, evolve, verify,
+#                 each after "=== make <x> ===" with its own wall-time line; the last line is the wall time of the whole checkin.
 GNATMAKE ?= gnatmake
 # The default is -O2: the program replays the whole history on every start, and -O2 runs that about 2.2 times faster than -O0 (same
 # output, byte for byte).  A clean build takes ~50 s with -j0; for quick edit-and-test builds use make all OPT=-O0 (~12 s).
@@ -112,8 +115,22 @@ OPT ?= -O2
 JOBS ?= -j0
 FLAGS = -g $(OPT) -gnatwa -gnat2022 -gnata $(JOBS)
 
-.PHONY: chat chatlog voices wordstat evolve active frustration all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog trend night verify bench share small footprint
+.PHONY: checkin chat chatlog voices wordstat evolve active frustration all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog trend night verify bench share small footprint
 export WESEN PLAYER TEXT AS
+
+# Every user-facing target prints its wall time as the LAST line (scripts/timed.sh), e.g. "make wordstat wall time: 0m12s (12s)":
+# the whole make command from its start, the up-to-date check (or rebuild) of `all` included; the exit status of the program is kept.
+# The command line is still echoed first (not with make -s).
+T0 := $(shell date +%s)
+TIMED = @scripts/timed.sh "$(if $(filter 1,$(words $(MAKECMDGOALS))),$(MAKECMDGOALS),$@)" $(T0) $(if $(findstring s,$(firstword -$(MAKEFLAGS))),1,0)
+# One step of make checkin: its own wall time (from the start of that step), labelled like the single target.
+STEP = @scripts/timed.sh
+QUIET = $(if $(findstring s,$(firstword -$(MAKEFLAGS))),1,0)
+# make checkin: one paste with everything.  A night run with a FIXED number of sessions (no q needed), then make active, wordstat,
+# frustration, evolve and verify, each after a "=== make <x> ===" line and with its own wall-time line; the total comes last.
+#   make checkin CHECKIN_SESSIONS=10 CHECKIN_TICKS=300 SEED=42
+CHECKIN_SESSIONS ?= 40
+CHECKIN_TICKS ?= 300
 
 EVERY ?= 100
 
@@ -135,126 +152,142 @@ version-check:
 	  [ $$bad = 0 ] && echo "version-check: PASS"
 
 portable:
-	scripts/portable_check.sh
+	$(TIMED) scripts/portable_check.sh
 
 run: all
-	bin/diary_sim $(if $(SECTION),--debug-section $(SECTION),$(if $(TICKS),--more $(TICKS),$$(bin/diary_sim --next-ticks 2>/dev/null | tail -n 1 | grep -E '^[0-9]+$$' | sed 's/^/--more /')) --every $(EVERY) $(if $(SEED),--seed $(SEED),) $(if $(YES),--yes,) $(if $(DEBUG),--debug,) $(if $(VERBOSE),--verbose,))
+	$(TIMED) bin/diary_sim $(if $(SECTION),--debug-section $(SECTION),$(if $(TICKS),--more $(TICKS),$$(bin/diary_sim --next-ticks 2>/dev/null | tail -n 1 | grep -E '^[0-9]+$$' | sed 's/^/--more /')) --every $(EVERY) $(if $(SEED),--seed $(SEED),) $(if $(YES),--yes,) $(if $(DEBUG),--debug,) $(if $(VERBOSE),--verbose,))
 
 play: run
 
 menu: all
-	bin/diary_sim --menu
+	$(TIMED) bin/diary_sim --menu
 
 demo: all
-	bin/diary_sim --preview --ticks 200 $(if $(SECTION),--debug-section $(SECTION),$(if $(DEBUG),--debug,))
+	$(TIMED) bin/diary_sim --preview --ticks 200 $(if $(SECTION),--debug-section $(SECTION),$(if $(DEBUG),--debug,))
 
 say: all
-	bin/diary_sim --say "$${PLAYER:-$${WESEN:-all}}" --text "$$TEXT" $(if $(AS),--as "$$AS",)
+	$(TIMED) bin/diary_sim --say "$${PLAYER:-$${WESEN:-all}}" --text "$$TEXT" $(if $(AS),--as "$$AS",)
 
 answer: all
-	bin/diary_sim --answer --text "$$TEXT" $(if $(AS),--as "$$AS",)
+	$(TIMED) bin/diary_sim --answer --text "$$TEXT" $(if $(AS),--as "$$AS",)
 
 inbox: all
-	bin/diary_sim --inbox
+	$(TIMED) bin/diary_sim --inbox
 
 map: all
-	bin/diary_sim --map
+	$(TIMED) bin/diary_sim --map
 
 grant: all
-	bin/diary_sim --grant $(PETITION) $(if $(AS),--as $(AS))
+	$(TIMED) bin/diary_sim --grant $(PETITION) $(if $(AS),--as $(AS))
 
 elo: all
-	bin/diary_sim --elo
+	$(TIMED) bin/diary_sim --elo
 
 trials: all
-	bin/diary_sim --trials
+	$(TIMED) bin/diary_sim --trials
 
 divergence: all
-	bin/diary_sim --divergence
+	$(TIMED) bin/diary_sim --divergence
 
 dictionary: all
-	bin/diary_sim --dictionary
+	$(TIMED) bin/diary_sim --dictionary
 
 ballots: all
-	bin/diary_sim --ballots
+	$(TIMED) bin/diary_sim --ballots
 
 report: all
-	bin/diary_sim --report
+	$(TIMED) bin/diary_sim --report
 
 runlog: all
-	bin/diary_sim --runlog
+	$(TIMED) bin/diary_sim --runlog
 
 trend: all
-	bin/diary_sim --trend
+	$(TIMED) bin/diary_sim --trend
 
 night: all
-	bin/diary_sim --continuous $(if $(SESSION_TICKS),--session-ticks $(SESSION_TICKS),) $(if $(MAX_SESSIONS),--max-sessions $(MAX_SESSIONS),) $(if $(MAX_HOURS),--max-hours $(MAX_HOURS),) $(if $(SEED),--seed $(SEED),)
+	$(TIMED) bin/diary_sim --continuous $(if $(SESSION_TICKS),--session-ticks $(SESSION_TICKS),) $(if $(MAX_SESSIONS),--max-sessions $(MAX_SESSIONS),) $(if $(MAX_HOURS),--max-hours $(MAX_HOURS),) $(if $(SEED),--seed $(SEED),)
 
 verify: all
-	bin/diary_sim --verify
+	$(TIMED) bin/diary_sim --verify
 
 bench: all
-	scripts/bench.sh bin/diary_sim
+	$(TIMED) scripts/bench.sh bin/diary_sim
 
 share: all
-	scripts/share.sh bin/diary_sim
+	$(TIMED) scripts/share.sh bin/diary_sim
 
 perft: all
-	bin/diary_sim --perft
+	$(TIMED) bin/diary_sim --perft
 
 screens: all
-	bin/diary_sim --screens
+	$(TIMED) bin/diary_sim --screens
 
 robot: all
-	bin/diary_sim --robot
+	$(TIMED) bin/diary_sim --robot
 
 govern: all
-	bin/diary_sim --govern
+	$(TIMED) bin/diary_sim --govern
 
 voices: all
-	bin/diary_sim --voices
+	$(TIMED) bin/diary_sim --voices
 
 chat: all
-	bin/diary_sim --chat $(if $(SESSION_TICKS),--session-ticks $(SESSION_TICKS),) $(if $(SEED),--seed $(SEED),)
+	$(TIMED) bin/diary_sim --chat $(if $(SESSION_TICKS),--session-ticks $(SESSION_TICKS),) $(if $(SEED),--seed $(SEED),)
 
 chatlog: all
-	bin/diary_sim --chatlog
+	$(TIMED) bin/diary_sim --chatlog
 
 wordstat: all
-	bin/diary_sim --wordstat
+	$(TIMED) bin/diary_sim --wordstat
 
 evolve: all
-	bin/diary_sim --evolve
+	$(TIMED) bin/diary_sim --evolve
 
 active: all
-	bin/diary_sim --active
+	$(TIMED) bin/diary_sim --active
 
 frustration: all
-	bin/diary_sim --frustration
+	$(TIMED) bin/diary_sim --frustration
 
 veto: all
-	bin/diary_sim --veto $(DECISION) $(if $(AS),--as $(AS))
+	$(TIMED) bin/diary_sim --veto $(DECISION) $(if $(AS),--as $(AS))
 
 approve: all
-	bin/diary_sim --approve $(DECISION) $(if $(AS),--as $(AS))
+	$(TIMED) bin/diary_sim --approve $(DECISION) $(if $(AS),--as $(AS))
 
 audit: all
-	bin/diary_sim --audit
+	$(TIMED) bin/diary_sim --audit
 
 next: all
-	bin/diary_sim --next
+	$(TIMED) bin/diary_sim --next
 
 visit: all
-	bin/diary_sim --visit "$(WHO)" $(if $(TICKS),--more $(TICKS),) $(if $(SEED),--seed $(SEED),) $(if $(YES),--yes,) $(if $(SCRIPT),--visit-script "$(SCRIPT)",) $(if $(EVERY),--every $(EVERY),)
+	$(TIMED) bin/diary_sim --visit "$(WHO)" $(if $(TICKS),--more $(TICKS),) $(if $(SEED),--seed $(SEED),) $(if $(YES),--yes,) $(if $(SCRIPT),--visit-script "$(SCRIPT)",) $(if $(EVERY),--every $(EVERY),)
 
 challenge: all
-	bin/diary_sim --challenge "$(PLAYER)" $(if $(AS),--as $(AS))
+	$(TIMED) bin/diary_sim --challenge "$(PLAYER)" $(if $(AS),--as $(AS))
 
 ledger: all
-	bin/diary_sim --ledger$(if $(FULL),=full)
+	$(TIMED) bin/diary_sim --ledger$(if $(FULL),=full)
+
+checkin: all
+	@echo "=== make night (checkin: $(CHECKIN_SESSIONS) sessions of $(CHECKIN_TICKS) ticks) ==="
+	$(STEP) "night" $$(date +%s) $(QUIET) bin/diary_sim --continuous --session-ticks $(CHECKIN_TICKS) --max-sessions $(CHECKIN_SESSIONS) $(if $(SEED),--seed $(SEED),)
+	@echo "=== make active ==="
+	$(STEP) "active" $$(date +%s) $(QUIET) bin/diary_sim --active
+	@echo "=== make wordstat ==="
+	$(STEP) "wordstat" $$(date +%s) $(QUIET) bin/diary_sim --wordstat
+	@echo "=== make frustration ==="
+	$(STEP) "frustration" $$(date +%s) $(QUIET) bin/diary_sim --frustration
+	@echo "=== make evolve ==="
+	$(STEP) "evolve" $$(date +%s) $(QUIET) bin/diary_sim --evolve
+	@echo "=== make verify ==="
+	$(STEP) "verify" $$(date +%s) $(QUIET) bin/diary_sim --verify
+	@echo "=== checkin done ==="
+	@scripts/timed.sh "checkin" $(T0) 1 true
 
 check: version-check all
-	scripts/checks.sh
+	$(TIMED) scripts/checks.sh
 
 small:
 	mkdir -p obj_small bin
@@ -263,7 +296,7 @@ small:
 	@ls -l bin/diary_sim_small | awk '{ printf "bin/diary_sim_small: %d bytes (%d KB)\n", $$5, $$5 / 1024 }'
 
 footprint:
-	@scripts/footprint.sh
+	$(TIMED) scripts/footprint.sh
 
 clean:
 	rm -rf obj obj_small bin diaries diaries_old_* entities summary.txt summary.jsonl run_report.txt run_report_prev.txt run_log.txt trend.txt night_console.txt night_verify.txt voice_log.txt debug.txt debug.tmp debug_digest.txt debug_digest.prev debug_full.txt last_error.txt

@@ -1427,7 +1427,7 @@ unset DIARY_HOME
 
 echo "== 45. make small: the small binary (-Os, no -g, gc-sections, stripped) is smaller and gives the same output; make footprint =="
 rm -rf "$w/sm"; mkdir -p "$w/sm/src/scripts" "$w/sm/a/bin" "$w/sm/b/bin"
-cp "$root"/Makefile "$root"/*.ads "$root"/*.adb "$w/sm/src/"; cp -r "$root/data" "$w/sm/src/data"; cp "$root/scripts/footprint.sh" "$w/sm/src/scripts/"
+cp "$root"/Makefile "$root"/*.ads "$root"/*.adb "$w/sm/src/"; cp -r "$root/data" "$w/sm/src/data"; cp "$root/scripts/footprint.sh" "$root/scripts/timed.sh" "$w/sm/src/scripts/"
 ( cd "$w/sm/src" && make small > "$w/sm/build.txt" 2>&1 ); rc=$?
 sm="$w/sm/src/bin/diary_sim_small"
 [ $rc = 0 ] && [ -x "$sm" ] && ! grep -qi 'warning' "$w/sm/build.txt" && ok "make small builds bin/diary_sim_small (no warnings)" || bad "make small ($rc)"
@@ -2303,6 +2303,34 @@ grep -q '^Active vocabulary (active=2;' a2a.txt && grep -q '^Numbers of the firs
   && grep -q 'at the cap (mint-slow next)' a2a.txt && [ "$(awk 'length > 79' a2a.txt | wc -l)" = 0 ] \
   && grep -q 'active=2' "$root/README.md" && grep -q 'active.floor' "$root/data/limits.txt" && grep -q 'active=2' "$root/data/help.txt" && grep -q '20870' "$root/docs/PORTALS.md" && grep -q 'active=2' "$root/docs/LEARN.md" \
   && ok "make active on the active=2 save: level 2, both params lines (floor 300, cap 500), who is at the cap; README, --help, limits.txt, EVOLVE.md, LEARN.md and PORTALS.md (salts 20870 .. 20873) describe active=2" || bad "active=2 report and docs"
+cd "$w" || exit 1
+
+echo "== 57. every make target prints its wall time as the last line (scripts/timed.sh); the exit status is kept; make checkin; the replay-done line =="
+cd "$w/nt" || exit 1
+DIARY_HOME="$w/nt/a2" make -C "$root" wordstat > mt1.txt 2>&1; rcm=$?
+DIARY_HOME="$w/nt/a2" make -s -C "$root" frustration > mt2.txt 2>&1; rcm2=$?
+rm -rf "$w/nt/a2t"; cp -r "$w/nt/a2" "$w/nt/a2t"; sed -i '/ params level=2 /s/ floor=300 / floor=500 /' "$w/nt/a2t/diaries/active.txt"
+DIARY_HOME="$w/nt/a2t" make -C "$root" verify > mt3.txt 2>&1; rcm3=$?
+mkdir -p "$w/nt/mt_empty"; DIARY_HOME="$w/nt/mt_empty" make -C "$root" frustration > mt4.txt 2>&1; rcm4=$?
+tl() { grep -v '^make\(\[[0-9]*\]\)\?: ' "$1" | tail -n 1; }
+[ "$rcm" = 0 ] && tl mt1.txt | grep -Eq '^make wordstat wall time: [0-9]+m[0-5][0-9]s \([0-9]+s\)$' && grep -q '^bin/diary_sim --wordstat$' mt1.txt && grep -q '^Active words only' mt1.txt \
+  && [ "$rcm2" = 0 ] && tl mt2.txt | grep -Eq '^make frustration wall time: ' && ! grep -q '^bin/diary_sim' mt2.txt \
+  && ok "make wordstat / make -s frustration: the command line first (not with -s), the report, then 'make <target> wall time: XmYYs (Ns)' last" || bad "make wall time ($rcm $rcm2)"
+[ "$rcm3" != 0 ] && tl mt3.txt | grep -Eq '^make verify wall time: ' && grep -q 'differs from the replay' mt3.txt && [ "$rcm4" != 0 ] && tl mt4.txt | grep -Eq '^make frustration wall time: ' \
+  && [ "$(grep -c '^	$(TIMED) ' "$root/Makefile")" -ge 40 ] && grep -q 'wall time' "$root/README.md" \
+  && ok "a failing command keeps its exit status (make verify on a tampered save: $rcm3, make frustration on an empty folder: $rcm4) and still prints the wall time; the Makefile times $(grep -c '^	$(TIMED) ' "$root/Makefile") recipe lines; README says so" || bad "make wall time on failure ($rcm3 $rcm4)"
+rm -rf "$w/nt/ck"; cp -r "$w/nt/a2" "$w/nt/ck"; ckt=$(grep -h '^S' "$w/nt/ck/diaries/sessions.txt" | tail -1 | sed 's/.* start=\([0-9]*\) .* len=\([0-9]*\) .*/\1 \2/' | awk '{ print $1 + $2 }'); ckn=$(grep -c '^S' "$w/nt/ck/diaries/sessions.txt")
+DIARY_HOME="$w/nt/ck" make -C "$root" checkin CHECKIN_SESSIONS=1 CHECKIN_TICKS=60 > ck.txt 2>&1 < /dev/null; rck=$?
+secs=$(grep -E '^=== make (night|active|wordstat|frustration|evolve|verify)' ck.txt | awk '{ print $3 }' | tr '\n' ' ')
+walls=$(grep -E '^make [a-z]+ wall time: [0-9]+m[0-5][0-9]s \([0-9]+s\)$' ck.txt | awk '{ print $2 }' | tr '\n' ' ')
+[ "$rck" = 0 ] && [ "$secs" = "night active wordstat frustration evolve verify " ] && [ "$walls" = "night active wordstat frustration evolve verify checkin " ] \
+  && tl ck.txt | grep -q '^make checkin wall time: ' && grep -q "^replay done: $ckt ticks in [0-9.]* s; NEW from s$((ckn + 1)), tick $((ckt + 1)) (active=2)\$" ck.txt && [ "$(awk 'length > 79' ck.txt | grep -c 'replay done')" = 0 ] \
+  && grep -q '^| replay done: ' ck.txt && grep -q '^verify: OK' ck.txt && grep -q "replay done: $ckt ticks" "$w/nt/ck/run_log.txt" \
+  && ok "make checkin: night (new session $((ckn + 1)) after the replay line 'replay done: $ckt ticks in ... s; NEW from s$((ckn + 1)), tick $((ckt + 1)) (active=2)', <= 79 columns, also in the box and run_log.txt), then active, wordstat, frustration, evolve, verify, each with === and its wall time; the checkin total last" || bad "make checkin ($rck '$secs' '$walls' $ckt $ckn)"
+rm -rf "$w/nt/ck3"; cp -r "$w/nt/a2" "$w/nt/ck3"
+( env -u DIARY_VERBOSE "$nb" --home "$w/nt/ck3" --continuous --session-ticks 60 --max-sessions 1 > ck3.txt 2>&1 < /dev/null & p=$!; sleep 2; kill -TERM $p; wait $p )
+grep -q '^| replay not finished: no new session ran' ck3.txt && ! grep -q '^replay done' ck3.txt && grep -q 'make checkin' "$root/README.md" && grep -q '^checkin:' "$root/Makefile" && grep -q 'replay done' "$root/data/help.txt" \
+  && ok "a night stopped during the replay says 'replay not finished: no new session ran' in its box; README, Makefile and --help describe make checkin and the replay line" || bad "replay not finished"
 cd "$w" || exit 1
 
 
