@@ -1584,7 +1584,7 @@ sed -n 4p save/run_log.txt | grep -q "^report: .*/save/run_report.txt$" && sed -
 cmp -s <(sed -n 6,7p save/run_log.txt) <(head -2 save/run_report.txt) || l_ok=0
 [ "$nst" = 2 ] && [ "$nl" = 8 ] && [ "$l_ok" = 1 ] && ok "run_log.txt: one entry per run (2), each 'YYYY-MM-DD HH:MM:SS RUN', the @@TRACE and @@SECTIONS lines (the same as run_report.txt lines 1-2) and 'report: <path>'" || bad "run_log.txt ($nst $nl $l_ok)"
 # the clock is only in run_log.txt: no replay-verified file has the date in it
-! grep -rl "$(date +%Y-%m-%d)" save --include='*.txt' 2> /dev/null | grep -v 'run_log.txt\|trend.txt\|debug\|last_error' | grep -q . && ok "the time stamp is only in run_log.txt and trend.txt (no entity, summary, report or diary-record file carries it; only the jsonl "ts" fields, as before)" || bad "clock in a sim file"
+! grep -rl "$(date +%Y-%m-%d)" save --include='*.txt' 2> /dev/null | grep -v 'run_log.txt\|trend.txt\|ckpt_log.txt\|debug\|last_error' | grep -q . && ok "the time stamp is only in run_log.txt, trend.txt and ckpt_log.txt (no entity, summary, report or diary-record file carries it; only the jsonl "ts" fields, as before)" || bad "clock in a sim file"
 badsec=0; for pr in $(sed -n 2p save/run_report.txt | sed 's/^@@SECTIONS //; s/,/ /g'); do n=${pr%%=*}; l=${pr##*=}; [ "$(sed -n "${l}p" save/run_report.txt)" = "== $n ==" ] || badsec=$((badsec + 1)); done
 nsec=$(sed -n 2p save/run_report.txt | tr ',' '\n' | wc -l); nh=$(grep -c '^== [a-z]* ==$' save/run_report.txt)
 [ "$badsec" = 0 ] && [ "$nsec" = "$nh" ] && [ "$nsec" -ge 12 ] && ok "section headers: every '== name ==' line is where @@SECTIONS says ($nsec sections)" || bad "sections ($badsec $nsec $nh)"
@@ -1624,7 +1624,7 @@ echo "== 49. make night (--continuous): sessions back to back, q, limits, DRIFT;
 rm -rf "$w/nt"; mkdir -p "$w/nt/bin"; cp "$bin" "$w/nt/bin/"; cp -r "$root/data" "$w/nt/data"
 nb="$w/nt/bin/diary_sim"; cd "$w/nt" || exit 1
 env -u DIARY_VERBOSE "$nb" --continuous --home "$w/nt/night" --session-ticks 60 --max-sessions 3 --seed 42 < /dev/null > night.txt 2>&1; rcn=$?
-mkdir -p "$w/nt/hand"; for k in 1 2 3; do env -u DIARY_VERBOSE "$nb" --home "$w/nt/hand" --seed 42 --more 60 --every 100 --yes > /dev/null 2>&1; done
+mkdir -p "$w/nt/hand"; for k in 1 2 3; do rm -f "$w/nt/hand/state.ckpt"; env -u DIARY_VERBOSE "$nb" --home "$w/nt/hand" --seed 42 --more 60 --every 100 --yes > /dev/null 2>&1; done
 ns=$(grep -c '^s[0-9]* t[0-9]* [0-9][0-9]:[0-9][0-9]:[0-9][0-9] | ' night.txt); nlines=$(wc -l < night.txt)
 [ "$rcn" = 0 ] && [ "$ns" = 3 ] && grep -q '^night run: sessions of 60 ticks; max sessions: 3; max hours: 12' night.txt && grep -q '^+-- night run finished' night.txt && grep -q '^| stopped: the number of sessions was reached' night.txt \
   && ! grep -q '^@@\|Full report\|^report:\|^treadmill' night.txt && [ "$nlines" -le 24 ] && [ "$(grep -c "^  [0-9]h[0-9][0-9]m[0-9][0-9]s | .* KB (+.* KB) | .*/session | .* tick/s | left " night.txt)" = 3 ] && grep -v '^Save folder\|^Saved to' night.txt | awk 'length > 79 { n++ } END { exit n > 0 }' \
@@ -2471,6 +2471,16 @@ ckn="$w/nt/spn/checkin.txt"; keys() { sed -n '3,/^wall time: /p' "$1" | grep -v 
   && grep -q '^night: sessions of 60 ticks; max sessions: 1; max hours: 12$' "$ck" && [ "$(keys "$ckn")" = "$(keys "$ck")" ] && grep -qF '== night box == reason=max_hours' "$ckn" && grep -q '^roles (s[0-9]*-s[0-9]*): ' "$ckn" && grep -qF '== early signals: ' "$ckn" \
   && grep -q '^make night-ship wall time: ' spn.txt && grep -q '^# make night-ship ' "$root/Makefile" && grep -q '^night-ship: all' "$root/Makefile" && grep -q 'make night-ship' "$root/README.md" \
   && ok "make night-ship (no session limit, a tiny time limit): VERDICT: PASS, stop reason max_hours, the same checkin.txt and the same verdict lines as make ship; Makefile and README describe it" || bad "make night-ship ($rcn)"
+# make slice (0.058): make night-ship with the budget in minutes; on the night-ship save it loads the checkpoint that night wrote
+DIARY_HOME="$w/nt/spn" make --no-print-directory -C "$root" slice SLICE_MINUTES=0.15 NIGHT_SHIP_TICKS=30 NIGHT_SHIP_RESERVE=0 > sps.txt 2>&1 < /dev/null; rcs=$?
+[ "$rcs" = 0 ] && sed -n 1p "$ckn" | grep -q '^diary-sim checkin (make slice): attach this ONE file' && sed -n 3p "$ckn" | grep -q '^VERDICT: PASS$' \
+  && grep -q '^stop reason: max_hours (the time limit was reached)$' "$ckn" && grep -q '^night: sessions of 30 ticks; max sessions: no limit; one budget of 0.15 min$' "$ckn" \
+  && grep -q '^budget: 0.15 min; stop [0-9:]*, reserve 0m00s; due [0-9:]*, written [0-9:]* ' "$ckn" && [ "$(keys "$ckn")" = "$(keys "$ck")" ] \
+  && grep -q '^checkpoint: state.ckpt of tick [0-9]*, [0-9]* MB: the start loads it if it fits the files$' sps.txt \
+  && grep -q '^checkpoint: start loaded t[0-9]* [0-9.]* s, ready [0-9.]* s; end t[0-9]* [0-9]* KB [0-9.]* s$' "$ckn" && grep -q '^checkpoint: start ' sps.txt \
+  && grep -q '^slice_post_secs=[0-9]*$' "$w/nt/spn/ship_stamp.txt" && grep -q '^post_secs=[0-9]*$' "$w/nt/spn/ship_stamp.txt" && grep -q '^make slice wall time: ' sps.txt \
+  && grep -q '^slice: all' "$root/Makefile" && grep -q '^# make slice ' "$root/Makefile" && grep -q 'make slice SLICE_MINUTES=10' "$root/README.md" \
+  && ok "make slice SLICE_MINUTES=0.15: the night-ship job with a budget in minutes, VERDICT: PASS, says first that state.ckpt is there, the verdict line 'checkpoint: start loaded ...' (time) and what the end wrote; its own reserve (slice_post_secs) beside post_secs" || bad "make slice ($rcs)"
 cd "$w" || exit 1
 
 echo "== 61. make ship by day = reports only: no night, no q, the save untouched, the same verdict lines; verify skipped on a big save =="
