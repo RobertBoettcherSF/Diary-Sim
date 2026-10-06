@@ -484,6 +484,11 @@ night.verify_end = 1
 night.verify_every = 0
 # Status lines of finished sessions kept under the header (a terminal); the rest of the screen is for the voices and the chat line.
 night.recent = 2
+# The state checkpoint (build 0.058, state.ckpt in the save folder): enabled 1 = every run that wrote sessions and every clean stop writes it and
+# a start loads it when build, data/ and the record files fit (0 = never: every start replays the whole history); a night writes it after a
+# session when ckpt_seconds have passed since the last one, and always before it stops.
+ckpt.enabled = 1
+night.ckpt_seconds = 60
 # The voices of the wesen under the night header (Sim_Voice, data/voices.txt): display only, they never change the simulation.
 # enabled 0/1; refresh_seconds: a new rotation step (the next wesen) every N seconds; shown: messages on screen at once (1 .. 4, two lines
 # each); max_chars: a message is cut at a word boundary to this length (the whole message, name included); low_energy: energy at or below

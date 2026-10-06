@@ -79,6 +79,12 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
                data/voices.txt; read-only)
 --verify       replay the whole history from the files and compare it with
                everything stored; one OK line (make verify; writes nothing)
+--replay       replay the whole history at the start even if the state
+               checkpoint (state.ckpt in the save folder) fits; without it a
+               start loads the checkpoint (seconds) and replays only newer
+               ticks; a stale or broken one is refused: full replay, and the
+               start says why ('replay: checkpoint stale ...').  make slice:
+               a night with a budget of SLICE_MINUTES (20) minutes + reports
   --debug        also write debug_digest.txt (make run|demo DEBUG=1)
   --debug-section=NAME  print one block of debug_full.txt (drift trace players
                  inbox run ledger preport status); nothing is simulated

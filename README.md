@@ -105,15 +105,50 @@ diaries, entities and summary files are byte for byte the same.
   of the run, `warnings:n`, `export-failed`. It is information only; nothing in the simulation reads it (`data/limits.txt`).
   `@@SECTIONS` gives the line of each header in `run_report.txt`.
 
+## The state checkpoint: `state.ckpt` (build 0.058)
+
+A start used to replay the whole history (every tick since tick 1) to rebuild the state, minutes on a save of a few hundred thousand
+ticks. Now every run that wrote sessions (night, checkin, chat, run) and every clean stop (q, SIGHUP/SIGTERM, the time limit) writes
+`state.ckpt` in the save folder: a text header (format `diary-sim-ckpt 1`, build, a hash of `data/*.txt`, seed, tick, the size of
+every diary, counts of the inputs and records up to that tick, the line count of every record store, a hash of the binary part and one
+fingerprint line per record file), then everything the replay rebuilds, in binary. It is written to `state.ckpt.tmp` and renamed, so
+a crash leaves the old one; the times go to `ckpt_log.txt` (`checkpoint: tick N, K KB, written in S s`, the last 200 lines).
+
+A start loads it only if everything fits, and replays only the ticks after it; the first console line says which:
+`start: checkpoint of tick 300300 loaded in 2.00 s (+0 ticks replayed)` or `replay: checkpoint missing - 300300 ticks replayed`
+(also `stale (...)`, `version`, `corrupt`, `forced`, `off`). Refused, and replayed from scratch, are: another build or data, a record file
+that is shorter or changed in its recorded part, inputs or records added behind the checkpoint's tick (the counts), a store whose lines
+do not fit its tick, a broken payload (hash) and a section marker or end state that does not fit. A refused checkpoint never touches the
+files; the run replays and writes a new one. `--replay` replays anyway; `make verify` always replays the whole history and then compares
+the checkpoint with the replayed state byte for byte (`verify: checkpoint of tick N = the replayed state, byte for byte`; a difference
+is a FAIL and renames it to `state.ckpt.bad`). `ckpt.enabled = 0` (`data/limits.txt`) switches it off; a night writes it after a session
+every `night.ckpt_seconds` (60) and before it stops.
+
+**The fingerprint** must be cheap on a 1 GB save: files up to 1 MB (Robert's inputs, ballots, votes) are hashed whole; bigger ones
+(the diaries, the big record stores) by their size, the last 64 KB of the recorded part and 32 sampled 4 KB blocks, about 2 MB read for
+the whole save instead of 1 GB. The record files only grow, so a longer file is fine (its new ticks are replayed). An edit in the middle
+of a big file that keeps its size and misses the sampled blocks is not seen by the start; `make verify` (full replay) finds it.
+
+Measured (box, build 0.058): a save of 300000 ticks / 1000 sessions / 365 MB starts in about 2 s with the checkpoint (27 MB, written in
+0.3-0.5 s) against about 12.7 minutes of full replay; a small save of 300 ticks: 0.2-0.9 MB, written and loaded in under 0.1 s.
+
 ## Overnight: `make night`, `trend.txt`, `make trend`, `make share`
 
-**Robert's loop (three steps, build 0.057):**
+**Robert's loop (three steps, build 0.058):**
 
 1. Unzip `diary-sim.zip` over `~/Downloads/diary-sim` (the save in `~/Downloads/diary-data` stays):
    `cd ~/Downloads && rm -rf diary-sim && unzip -o diary-sim.zip && cd diary-sim`
-2. ONE command: `make ship` by day (reports only, seconds, no q) or `make night-ship` overnight (ONE budget of 9 hours for everything)
+2. ONE command: `make slice` by day (a short night of 20 minutes for everything, `make slice SLICE_MINUTES=10` for another
+   budget), `make ship` by day (reports only, seconds, no q) or `make night-ship` overnight (ONE budget of 9 hours for everything)
 3. Paste the short summary from the terminal and attach ONE file: `~/Downloads/diary-data/checkin.txt`
 
+* **`make slice`** (by day, build 0.058) is `make night-ship` with a budget of `SLICE_MINUTES` (20) MINUTES from the start of make
+  for the whole job: the night, then the same reports and the same `checkin.txt` (VERDICT, vocabulary line, exit status 0 = PASS),
+  finished inside the budget (the reserve for the end is learned per mode: `slice_post_secs` in `ship_stamp.txt`). It says first
+  whether the save has a state checkpoint (`checkpoint: state.ckpt of tick N, M MB: the start loads it if it fits the files`), and the
+  verdict line `checkpoint:` says how the start went (`start loaded t300300 2.0 s, ready 2.1 s` or `start full replay (missing),
+  ready 760 s`) and what the end wrote (`end t300600 27180 KB 0.3 s`). The end check and `make verify` replay only saves of at most
+  `SLICE_VERIFY_TICKS` (30000) ticks. The first run of a new build replays the history once (the checkpoint belongs to its build).
 * **`make ship`** (by day) runs NO night and needs no q: it builds if needed, then `make active`, `make wordstat`,
   `make frustration` and `make evolve` on the save as it is, and `make verify` only if the save has at most `SHIP_VERIFY_TICKS`
   (150000) ticks: verify replays the whole history, which takes minutes on a big save, so above that the end check of the last

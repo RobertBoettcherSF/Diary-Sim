@@ -1,4 +1,4 @@
-# Version: 0.047
+# Version: 0.048
 # make ship       ROBERT'S DAY COMMAND (after unzipping over the source folder; the save in ../diary-data stays): REPORTS ONLY, no
 #                 night, no q, seconds: build if needed, then active, wordstat, frustration, evolve on the save as it is, and verify if the
 #                 save has at most SHIP_VERIFY_TICKS (150000) ticks (verify replays the whole history, minutes on a big save; the
@@ -20,6 +20,14 @@
 #                 checkin.txt is still written (the console also goes to ship_log.txt).  NIGHT_SHIP_DETACH=1: run detached, no live screen.
 #                 Stop reason max_hours (or max_sessions) = PASS; q still works (FAIL: stopped by hand, the reports still run).
 #                 Reports (both ships) cover the sessions since the last ship stamp; SHIP_FULL=1: the whole save.
+# make slice      THE DAYTIME SLICE (build 0.058): make night-ship with a budget of SLICE_MINUTES (20) MINUTES for the whole job (any
+#                 value: make slice SLICE_MINUTES=10); the same reserve, reports, checkin.txt with VERDICT and vocabulary line, exit status.
+#                 It says first whether the save has a state checkpoint (state.ckpt); the start loads it (seconds) instead of replaying
+#                 the history (minutes on a big save); the verdict line "checkpoint:" says loaded or full replay (and why), the startup
+#                 time and what the end wrote.  The end check / verify replay only saves of at most SLICE_VERIFY_TICKS (30000) ticks.
+# state.ckpt      (0.058) every run that wrote sessions and every clean stop (q, SIGHUP/SIGTERM, time limit) writes the checkpoint;
+#                 a start uses it only if build, data/ and the record files fit, else it replays and says why.  --replay (make verify)
+#                 always replays from scratch.  ckpt.enabled = 0 in data/limits.txt switches it off.
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -136,7 +144,7 @@ OPT ?= -O2
 JOBS ?= -j0
 FLAGS = -g $(OPT) -gnatwa -gnat2022 -gnata $(JOBS)
 
-.PHONY: ship night-ship checkin chat chatlog voices wordstat evolve active frustration all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog trend night verify bench share small footprint
+.PHONY: ship night-ship slice checkin chat chatlog voices wordstat evolve active frustration all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog trend night verify bench share small footprint
 export WESEN PLAYER TEXT AS
 
 # Every user-facing target prints its wall time as the LAST line (scripts/timed.sh), e.g. "make wordstat wall time: 0m12s (12s)":
@@ -161,6 +169,9 @@ SHIP_COLD_SESSIONS ?= 10
 NIGHT_SHIP_SESSIONS ?= 0
 NIGHT_SHIP_TICKS ?= 300
 NIGHT_SHIP_HOURS ?= 9
+# make slice: the daytime form of make night-ship, the budget in minutes (any value: make slice SLICE_MINUTES=10)
+SLICE_MINUTES ?= 20
+SLICE_VERIFY_TICKS ?= 30000
 export SHIP_FULL NIGHT_SHIP_RESERVE NIGHT_SHIP_RESERVE_FACTOR NIGHT_SHIP_RESERVE_MARGIN NIGHT_SHIP_DETACH SHIP_VOCAB_GOAL
 
 EVERY ?= 100
@@ -306,6 +317,9 @@ ship: all
 
 night-ship: all
 	$(TIMED) scripts/ship.sh night-ship $(NIGHT_SHIP_SESSIONS) $(NIGHT_SHIP_TICKS) $(NIGHT_SHIP_HOURS) $(T0) "$(SEED)" $(SHIP_VERIFY) $(SHIP_VERIFY_TICKS) 0
+
+slice: all
+	$(TIMED) scripts/ship.sh slice $(NIGHT_SHIP_SESSIONS) $(NIGHT_SHIP_TICKS) $(SLICE_MINUTES) $(T0) "$(SEED)" $(SHIP_VERIFY) $(SLICE_VERIFY_TICKS) 0
 
 checkin: all
 	@echo "=== make night (checkin: $(CHECKIN_SESSIONS) sessions of $(CHECKIN_TICKS) ticks) ==="
