@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  See sim_ckpt.ads.
 pragma Ada_2022;
 
@@ -54,6 +54,18 @@ package body Sim_Ckpt is
    begin
       S.Pos := 0;
    end Rewind;
+
+   --  the bytes of a string (a loop: GNAT 12 rejects the iterated aggregate over a String here)
+   function To_Bytes (S : String) return Stream_Element_Array is
+      R : Stream_Element_Array (1 .. Stream_Element_Offset (S'Length));
+      K : Stream_Element_Offset := 0;
+   begin
+      for C of S loop
+         K := K + 1;
+         R (K) := Stream_Element (Character'Pos (C));
+      end loop;
+      return R;
+   end To_Bytes;
 
    function Hash (A : Stream_Element_Array; H : Hash_T := Hash_Start) return Hash_T is
       R : Hash_T := H;
@@ -184,7 +196,7 @@ package body Sim_Ckpt is
             Size : constant Long_Long_Integer := File_Size (P);
             F : SIO.File_Type;
          begin
-            H := Hash ([for C of N => Stream_Element (Character'Pos (C))], H);
+            H := Hash (To_Bytes (N), H);
             if Size > 0 then
                declare
                   B : Stream_Element_Array (1 .. Stream_Element_Offset (Size));
@@ -211,7 +223,7 @@ package body Sim_Ckpt is
       Tmp : constant String := Path & ".tmp";
    begin
       SIO.Create (F, SIO.Out_File, Tmp);
-      SIO.Write (F, [for C of Head => Stream_Element (Character'Pos (C))]);
+      SIO.Write (F, To_Bytes (Head));
       if S.Buf /= null and then S.Last > 0 then SIO.Write (F, S.Buf (1 .. S.Last)); end if;
       SIO.Close (F);
       if Ada.Directories.Exists (Path) then Ada.Directories.Delete_File (Path); end if;
