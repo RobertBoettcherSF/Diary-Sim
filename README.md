@@ -114,7 +114,8 @@ format change (format 3; a 0.061 checkpoint loads with +0 ticks replayed, `tests
   carry=1, relief below 20 kept) teaches the learner 1 + energy/25 words (cap `carry.words_cap` 5; the learner's energy) of the
   words the learner lacks and all the others know; in the same meeting the learner teaches back up to 1 + (teacher's energy)/25
   words the teacher lacks and all the others know. If anything came back the favour is settled at once, else it stays owed.
-  Coining is unchanged. Not done: a preference for words of the same topic (the words follow the table order).
+  In a moodrest=1 session a teacher is at or below its own resting mood (+ `carry.teacher_rest_margin` 0) instead of at or
+  below `carry.teacher_mood` 0 (with resting moods of 60..80 nobody would teach). Coining is unchanged. Not done: a preference for words of the same topic (the words follow the table order).
 * `moodrest=1` (`moodrest.enabled`): every wesen has a resting mood in 60..80 (`moodrest.band_lo/hi`), derived from its birth
   personality (the share of 1-bits in its Rule 30 row, `core_lo/hi` 30..70 mapped onto the band), so a new wesen gets one; a
   `moodrest.<name> = N` line overrides it. Each tick the mood drifts towards it (`pull_pct` 5 %, above the band `pull_high_pct`

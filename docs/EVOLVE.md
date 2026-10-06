@@ -224,7 +224,8 @@ unrealistic: reaching a good mood is the goal, staying above it is unnatural.
 * **carry=2.** A lesson is an exchange: the teacher teaches 1 + (learner's energy)/25 words (cap `carry.words_cap`), the learner
   repays in the same meeting with 1 + (teacher's energy)/25 words the teacher lacks (from the teacher's all-but-one set, salt 23104).
   Words back settle the favour at once (`detail.exchanged`), none back leaves it owed (`detail.exchanged0`). Teacher choice and
-  relief as in carry=1. The first word is learned at the learner's next step as before, the others at once (words.txt "taught").
+  relief as in carry=1, except that in a moodrest=1 session the mood bound of a teacher is its own resting mood
+  (+ `carry.teacher_rest_margin`), since `mood <= 0` never happens there. The first word is learned at the learner's next step as before, the others at once (words.txt "taught").
   Open: same-topic preference.
 * **moodrest=1.** Resting mood per wesen in `moodrest.band_lo..band_hi` (60..80) from `Core_Percent` of its birth Rule 30 row
   (30..70 % mapped linearly, clamped); override `moodrest.<name>`. After every step: soft bounds (a gain above the middle shrinks
