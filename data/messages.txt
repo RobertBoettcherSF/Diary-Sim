@@ -270,3 +270,5 @@ err.grant_fx = grants.txt {1}: the stored effect differs from the replay: {2}
 warn.grants_bad = grants.txt: a line is not a grant and is ignored: {1}
 detail.carried = carried the word '{2}' to {1}, who owes me a favour now
 detail.favour = {1} returned a favour and helped me with the work
+detail.exchanged = exchanged words with {1}: taught {2}; learned {3} back, the favour settled
+detail.exchanged0 = exchanged words with {1}: taught {2}; learned nothing back, a favour owed

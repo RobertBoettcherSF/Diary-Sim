@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  Word carrying (carry=1 sessions): see sim_carry.ads.
 pragma Ada_2022;
 
@@ -13,13 +13,14 @@ package body Sim_Carry is
    type Standing_Table is array (Entity_Id) of Natural;
 
    On : Boolean := False;
+   Lvl : Positive := 1;   --  not streamed (Set_Level)
    N_Lessons, N_Acts, N_Spent : Natural := 0;
    Fav : Favour_Table := [others => [others => 0]];
    Stand : Standing_Table := [others => 0];
 
    Loaded : Boolean := False;
    T_Relief, T_Energy, T_Mood : Integer := 0;
-   T_Pull, T_Cap, T_Gain, T_Spend, T_Help : Natural := 0;
+   T_Pull, T_Cap, T_Gain, T_Spend, T_Help, T_Per, T_Wcap : Natural := 0;
 
    procedure Load is
       function Nat (Key : String; Default : Int) return Natural is (Natural (Int'Max (0, Int'Min (100_000, Limit (Key, Default)))));
@@ -34,12 +35,15 @@ package body Sim_Carry is
       T_Gain := Natural'Min (20, Nat ("carry.mood_gain", 2));
       T_Spend := Natural'Min (100, Nat ("carry.spend_pct", 50));
       T_Help := Natural'Min (20, Nat ("carry.help_energy", 1));
+      T_Per := Natural'Max (1, Nat ("carry.words_per_energy", 25));
+      T_Wcap := Natural'Max (1, Natural'Min (50, Nat ("carry.words_cap", 5)));
       Loaded := True;
    end Load;
 
    procedure Reset is
    begin
       On := False;
+      Lvl := 1;
       N_Lessons := 0;
       N_Acts := 0;
       N_Spent := 0;
@@ -52,11 +56,31 @@ package body Sim_Carry is
       and then (for all L in Entity_Id => (for all T in Entity_Id => Fav (L, T) = 0))
       and then (for all E in Entity_Id => Stand (E) = 0));
 
-   procedure Begin_Session (On : Boolean) is
+   procedure Begin_Session (On : Boolean; Level : Positive := 1) is
    begin
       Sim_Carry.On := On;
+      Lvl := Level;
       N_Lessons := 0;
    end Begin_Session;
+
+   procedure Set_Level (Level : Positive) is
+   begin
+      Lvl := Level;
+   end Set_Level;
+
+   function Level return Positive is (Lvl);
+
+   function Words_For (Energy : Integer) return Natural is
+   begin
+      Load;
+      return Natural'Min (T_Wcap, 1 + Natural'Max (0, Energy) / T_Per);
+   end Words_For;
+
+   procedure Settled (Learner, Teacher : Entity_Id) is
+   begin
+      Spend (Learner, Teacher);
+      Stand (Learner) := Stand (Learner) + 1;
+   end Settled;
 
    function Active return Boolean is (On);
    function Lessons return Natural is (N_Lessons);

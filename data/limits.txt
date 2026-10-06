@@ -557,8 +557,9 @@ evolve.big_elo = 16
 evolve.w_max = 8
 evolve.sess_max = 3
 evolve.sess_total = 12
-# 0.061 word carrying (carry=1 sessions; Sim_Carry, docs/EVOLVE.md 15): 0 = new sessions without carry=1
-carry.enabled = 1
+# 0.061 word carrying (Sim_Carry, docs/EVOLVE.md 15): 0 = new sessions without carrying, 1 = carry=1 (one word a lesson),
+# 2 = carry=2 (0.062: a lesson is an exchange of several words both ways, docs/EVOLVE.md 16)
+carry.enabled = 2
 # below this energy a wesen rests instead of teaching (relief)
 carry.relief_energy = 20
 # a teacher has at least this energy and at most this mood; the die of the pull in percent
@@ -571,3 +572,23 @@ carry.session_cap = 24
 carry.mood_gain = 2
 carry.spend_pct = 50
 carry.help_energy = 1
+# carry=2: words a lesson = 1 + energy / words_per_energy, at most words_cap (the learner's energy for the words it gets, the
+# teacher's for the words it gets back)
+carry.words_per_energy = 25
+carry.words_cap = 5
+# 0.062 resting moods (moodrest=1 sessions, docs/EVOLVE.md 16): 0 = new sessions without moodrest=1.  Every wesen rests at a mood in
+# the band band_lo .. band_hi, from its birth row (the Rule 30 personality: core_lo .. core_hi percent of 1-bits map onto the band;
+# moodrest.<id> = N sets one by hand).  Each tick a gain shrinks as the mood nears +100 (above 0), a loss as it nears -100 (below
+# 0) (moodrest.soft = 0: no shrinking); then the mood drifts pull_pct percent of the way back to the resting mood, pull_high_pct
+# above the band.  The mood goal of checkin.txt: every wesen at least goal_pct percent of the window within goal_near of the band,
+# none below 0 for goal_pct percent or more.  Changing a number changes the replay of the moodrest=1 sessions (make verify-full).
+moodrest.enabled = 1
+moodrest.band_lo = 60
+moodrest.band_hi = 80
+moodrest.core_lo = 30
+moodrest.core_hi = 70
+moodrest.pull_pct = 5
+moodrest.pull_high_pct = 15
+moodrest.soft = 1
+moodrest.goal_near = 10
+moodrest.goal_pct = 50

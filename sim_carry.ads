@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  Word carrying of diary_sim (build 0.061, carry=1 sessions only; older sessions never call it, so they replay byte for byte).
 --  The wesen plan it among themselves; no player (god) takes part and no grant is credited:
 --    target   the wesen missing the most of the words every other wesen knows (Sim_World.Missing_By_One; any number of wesen)
@@ -22,7 +22,14 @@ package Sim_Carry is
 
    procedure Reset;                              --  everything zero (a new save, or a checkpoint without the section)
    function Zero return Boolean;                 --  the state of Reset
-   procedure Begin_Session (On : Boolean);       --  a session starts: carry=1 or not; the lesson count of the session is 0
+   procedure Begin_Session (On : Boolean; Level : Positive := 1);   --  a session starts: carry=1/2 or not; its lesson count is 0
+   --  0.062: carry=2 (Level 2): a lesson is an exchange: the teacher gives Words_For (learner's energy) words, the learner gives
+   --  Words_For (teacher's energy) words back in the same meeting and so settles the favour (Settled).  The level is no state of
+   --  its own: Begin_Session sets it, and after a checkpoint load Set_Level from the session records.
+   procedure Set_Level (Level : Positive);
+   function Level return Positive;
+   function Words_For (Energy : Integer) return Natural;   --  1 + Energy / carry.words_per_energy (25), at most carry.words_cap (5)
+   procedure Settled (Learner, Teacher : Entity_Id);       --  the favour of a lesson repaid in the same meeting (standing to the learner)
 
    function Active return Boolean;
    function Lessons return Natural;              --  carried lessons in the current session

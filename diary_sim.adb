@@ -1,4 +1,4 @@
---  Version: 0.061
+--  Version: 0.062
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.061";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.062";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -642,7 +642,60 @@ procedure Diary_Sim is
    --  Relief: below the relief energy a wesen rests instead of talking (teaching).  Pull: a wesen with spare energy and a low mood
    --  teaches the target (the wesen missing the most words all the others know) one of those words: Carry_To (E) and Carry_W (E)
    --  name the lesson for Teach in the same step.  Its own dice (salts 23101, 23102); older sessions return Base untouched.
+   package Word_Lists is new Ada.Containers.Vectors (Positive, Positive);   --  0.062: the words of an exchange
    Carry_To : array (Entity_Id) of Natural := [others => 0];
+   Carry_R : array (Entity_Id) of Positive := [others => 1];   --  0.062: the index of the planned word among the carriable ones
+
+   --  0.062, moodrest=1 sessions (Robert: reaching a good mood is the goal; staying above it all the time is unnatural): every wesen
+   --  has a resting mood inside the band moodrest.band_lo .. band_hi (60 .. 80), derived from its birth row (Core_Percent, the
+   --  constant Rule 30 personality: moodrest.core_lo .. core_hi maps onto the band), so every wesen, a new one too, gets its own;
+   --  moodrest.<id> sets one by hand.  Each tick a gain shrinks with the distance to the upper bound (above the middle of the
+   --  range), a loss with the distance to the lower bound (below it); then the mood drifts moodrest.pull_pct percent of the way
+   --  back to the resting mood, moodrest.pull_high_pct above the band (adaptation).  Set by Start_Life, derived from the sessions
+   --  after a checkpoint load (no state of its own).
+   Moodrest_Active : Boolean := False;
+   Rest_Mood_Known : Boolean := False;
+   Rest_Mood_Of : array (Entity_Id) of Integer := [others => 0];
+   function Rest_Mood (E : Entity_Id) return Integer is
+   begin
+      if not Rest_Mood_Known then
+         declare
+            Lo : constant Integer := Integer (Limit ("moodrest.band_lo", 60));
+            Hi : constant Integer := Integer'Max (Lo, Integer (Limit ("moodrest.band_hi", 80)));
+            C_Lo : constant Integer := Integer (Limit ("moodrest.core_lo", 30));
+            C_Hi : constant Integer := Integer'Max (C_Lo + 1, Integer (Limit ("moodrest.core_hi", 70)));
+         begin
+            for X in Entity_Id loop
+               declare
+                  P : constant Integer := Clamp (Integer (Core_Percent (Seed, X)), C_Lo, C_Hi);
+               begin
+                  Rest_Mood_Of (X) := Clamp (Integer (Limit ("moodrest." & Name (X), Int (Lo + (Hi - Lo) * (P - C_Lo) / (C_Hi - C_Lo)))), M_Min, M_Max);
+               end;
+            end loop;
+         end;
+         Rest_Mood_Known := True;
+      end if;
+      return Rest_Mood_Of (E);
+   end Rest_Mood;
+   --  the mood after one tick of moodrest=1: From the mood before the tick, To after it (bounds M_Min .. M_Max)
+   function Mood_Rest_Step (E : Entity_Id; From, To : Integer) return Integer is
+      Mid : constant Integer := (M_Max + M_Min) / 2;
+      D : constant Integer := To - From;
+      Soft : constant Boolean := Limit ("moodrest.soft", 1) /= 0;
+      M : Integer := From + D;
+   begin
+      if Soft and then D > 0 and then From > Mid and then M_Max > Mid then M := From + D * (M_Max - From) / (M_Max - Mid);
+      elsif Soft and then D < 0 and then From < Mid and then Mid > M_Min then M := From + D * (From - M_Min) / (Mid - M_Min);
+      end if;
+      declare
+         Diff : constant Integer := Rest_Mood (E) - M;
+         Pct : constant Integer := Integer (Int'Max (0, Int'Min (100,
+           (if M > Integer (Limit ("moodrest.band_hi", 80)) then Limit ("moodrest.pull_high_pct", 15) else Limit ("moodrest.pull_pct", 5)))));
+      begin
+         M := M + (Diff * Pct + (if Diff >= 0 then 50 else -50)) / 100;
+      end;
+      return Clamp (M, M_Min, M_Max);
+   end Mood_Rest_Step;
    Carry_W : array (Entity_Id) of Positive := [others => 1];
    function Carry_Choice (E : Entity_Id; Tick : Int; Base : Action) return Action is
       Eid : constant Positive := Positive (E);
@@ -668,7 +721,8 @@ procedure Diary_Sim is
                begin
                   if N > 0 then
                      Carry_To (E) := T;
-                     Carry_W (E) := Nth_Carry (E, Entity_Id (T), Roll (Seed, Eid, Tick, 23102, N));
+                     Carry_R (E) := Roll (Seed, Eid, Tick, 23102, N);
+                     Carry_W (E) := Nth_Carry (E, Entity_Id (T), Carry_R (E));
                      return Talk;
                   end if;
                end;
@@ -847,7 +901,55 @@ procedure Diary_Sim is
                Did_Teach := True;
                Use_Word (E, W);
                Sim_Carry.Carried (E, L);
-               Add (Msg ("detail.carried", Name (L), Word (W)));
+               if Sim_Carry.Level < 2 then
+                  Add (Msg ("detail.carried", Name (L), Word (W)));
+               else   --  0.062 carry=2: an exchange; more words by the learner's energy, words back by the teacher's
+                  declare
+                     K1 : constant Natural := Sim_Carry.Words_For (St (L).Energy);   --  with W (learned at the learner's next step)
+                     K2 : constant Natural := Sim_Carry.Words_For (Pre_En);
+                     N1 : constant Natural := Carry_Count (E, L);
+                     Outs : Unbounded_String := To_Unbounded_String ("'" & Word (W) & "'");
+                     Backs : Unbounded_String;
+                     Got : Natural := 1;
+                     Back_N : Natural := 0;
+                     Ws : Word_Lists.Vector;
+                  begin
+                     for J in 0 .. N1 - 1 loop   --  the next carriable words after W in table order (wrapping)
+                        exit when Got >= K1;
+                        declare
+                           X : constant Positive := Nth_Carry (E, L, (Carry_R (E) - 1 + J) mod N1 + 1);
+                        begin
+                           if X /= W then Ws.Append (X); Got := Got + 1; end if;
+                        end;
+                     end loop;
+                     for X of Ws loop
+                        Learn_Word (L, X, Natural (E));
+                        if Knows (L, X) then Ensure (L, Words_File, Words_Line (X, "taught", Tick, Name (E))); end if;
+                        Use_Word (E, X);
+                        Append (Outs, " '" & Word (X) & "'");
+                     end loop;
+                     Ws.Clear;
+                     declare
+                        N2 : constant Natural := Carry_Count (L, E);   --  what the learner can give back: missing by one at E
+                        R2 : constant Positive := Roll (Seed, Eid, Tick, 23104, Natural'Max (1, N2));
+                     begin
+                        for J in 0 .. Natural'Min (K2, N2) - 1 loop Ws.Append (Nth_Carry (L, E, (R2 - 1 + J) mod N2 + 1)); end loop;
+                     end;
+                     for X of Ws loop
+                        Learn_Word (E, X, Natural (L));
+                        if Knows (E, X) then Ensure (E, Words_File, Words_Line (X, "taught", Tick, Name (L))); end if;
+                        Use_Word (L, X);
+                        Append (Backs, (if Back_N > 0 then " '" else "'") & Word (X) & "'");
+                        Back_N := Back_N + 1;
+                     end loop;
+                     if Back_N > 0 then
+                        Sim_Carry.Settled (L, E);
+                        Add (Msg ("detail.exchanged", Name (L), To_String (Outs), To_String (Backs)));
+                     else
+                        Add (Msg ("detail.exchanged0", Name (L), To_String (Outs)));
+                     end if;
+                  end;
+               end if;
             end;
             return;
          end if;
@@ -1129,6 +1231,14 @@ procedure Diary_Sim is
             S.Mood := S.Mood + Got;
             Gov_Fx := Got;
             Gov_Nom := Want;
+         end;
+      end if;
+      if Moodrest_Active then   --  0.062 moodrest=1: soft bounds and the drift to the resting mood (ledger: in the rest-model part)
+         declare
+            M : constant Integer := Mood_Rest_Step (E, Pre_Mo, S.Mood);
+         begin
+            M_After_Base := M_After_Base + (M - S.Mood);
+            S.Mood := M;
          end;
       end if;
       Sim_Ledger.Add (E, Tick, A, Verb, S.Location, M_Base, M_After_Base - Pre_Mo - M_Base, S.Mood - M_After_Base - Chess_Fx - Gov_Fx,
@@ -5214,6 +5324,8 @@ procedure Diary_Sim is
       Slowfloor : Boolean := False;     --  slowfloor=1 (with active=2): mint-slow already from the floor up, the same percents (docs/EVOLVE.md 14)
       Chat : Boolean := False;          --  chat=1: Robert types lines (@name text, /order) and the answers are recorded (Sim_Chat, diaries/chat.txt)
       Carry : Boolean := False;         --  carry=1 (0.061): word carrying among the wesen: target, teacher pull, relief, favours (Sim_Carry)
+      Carry2 : Boolean := False;        --  carry=2 (0.062, with Carry): a lesson is an exchange of several words both ways
+      Moodrest : Boolean := False;      --  moodrest=1 (0.062): resting moods, soft bounds (Mood_Rest_Step)
    end record;
    package Session_Vectors is new Ada.Containers.Vectors (Positive, Session_Rec);
    Sessions : Session_Vectors.Vector;
@@ -5234,7 +5346,7 @@ procedure Diary_Sim is
       & " src=" & (if R.By_Vote then "vote" else "explicit") & (if R.Dharma then " dharma=1" else "")
       & (if R.World then " world=1" else "") & (if R.Rest then " rest=1" else "") & (if R.Grant then " grant=1" else "")
       & (if R.Symstrict then " symstrict=1" else "") & (if R.Slowfloor then " slowfloor=1" else "")   --  build 0.054, before screen=1: older checks anchor the end
-      & (if R.Carry then " carry=1" else "")   --  build 0.061, also before screen=1
+      & (if R.Carry then (if R.Carry2 then " carry=2" else " carry=1") else "") & (if R.Moodrest then " moodrest=1" else "")   --  0.061 / 0.062, before screen=1
       & (if R.Screen then " screen=1" else "") & (if R.Chess then " chess=1" else "") & (if R.Chessrules then " chessrules=2" else "")
       & (if R.Robot then " robot=1" else "") & (if R.Govern then " govern=1" else "") & (if R.Scoin then " scoin=1" else "")
       & (if R.Preport then " preport=1" else "") & (if R.Players4 then " players4=1" else "") & (if R.Nextticks then " nextticks=1" else "") & (if R.Trial then " trial=1" else "") & (if R.Rec2 and then R.Records then " records=2" elsif R.Records then " records=1" else "")
@@ -5295,7 +5407,9 @@ procedure Diary_Sim is
       R.Symstrict := R.Symbols and then Token (L, "symstrict") = "1";
       R.Slowfloor := R.Active and then R.Active_Level = 2 and then Token (L, "slowfloor") = "1";
       R.Chat := Token (L, "chat") = "1";
-      R.Carry := Token (L, "carry") = "1";
+      R.Carry := Token (L, "carry") = "1" or else Token (L, "carry") = "2";
+      R.Carry2 := Token (L, "carry") = "2";
+      R.Moodrest := Token (L, "moodrest") = "1";
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
         and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0 and then (R.Visit_Who > 0 or else not R.Visit);
       while OK and then K < 4 loop
@@ -5450,6 +5564,7 @@ procedure Diary_Sim is
       Scoin_Active := False;
       Preport_Active := False;
       Sim_Carry.Reset;
+      Moodrest_Active := False;
       Preport_End := -1;
       Next_Active := False;
       Next_End := -1;
@@ -5502,7 +5617,8 @@ procedure Diary_Sim is
       Grant_Active := R.Grant;
       Screen_Active := R.Screen;
       Chess_Active := R.Chess;
-      Sim_Carry.Begin_Session (R.Carry);
+      Sim_Carry.Begin_Session (R.Carry, (if R.Carry2 then 2 else 1));
+      Moodrest_Active := R.Moodrest;
       Sim_Games.Set_Rules (if R.Chessrules then 2 else 0);
       Robot_Active := R.Robot;
       Govern_Active := R.Govern;
@@ -5791,7 +5907,9 @@ procedure Diary_Sim is
    function Chat_Wanted return Boolean is   --  new sessions carry chat=1 when a line can be typed (a terminal in the foreground, or --chat)
      (Sim_Chat.Enabled and then not Preview and then (Chat_Mode or else Sim_Quit.Lines_On));
 
-   function Carry_Wanted return Boolean is (Limit ("carry.enabled", 1) /= 0);   --  carry=1 (0.061): word carrying in new sessions
+   function Carry_Wanted return Boolean is (Limit ("carry.enabled", 2) /= 0);   --  carry=1 (0.061): word carrying in new sessions
+   function Carry2_Wanted return Boolean is (Limit ("carry.enabled", 2) >= 2);  --  carry=2 (0.062): exchanges (carry.enabled = 1: carry=1)
+   function Moodrest_Wanted return Boolean is (Limit ("moodrest.enabled", 1) /= 0);   --  moodrest=1 (0.062)
 
    function Preport_Wanted return Boolean is (Govern_Wanted and then Limit ("preport.enabled", 1) /= 0);   --  preport=1 needs the governance (the D records)
 
@@ -5814,7 +5932,7 @@ procedure Diary_Sim is
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
                Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => Visit_Mode, Visit_Who => Visit_Who, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted);
+               Visit => Visit_Mode, Visit_Who => Visit_Who, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted, Carry2 => Carry2_Wanted, Moodrest => Moodrest_Wanted);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -5831,7 +5949,7 @@ procedure Diary_Sim is
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
                World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => False, Visit_Who => 0, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted);
+               Visit => False, Visit_Who => 0, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted, Carry2 => Carry2_Wanted, Moodrest => Moodrest_Wanted);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);
@@ -6440,7 +6558,8 @@ procedure Diary_Sim is
       Govern_Active := Govern_Wanted;
       Scoin_Active := Scoin_Wanted;
       Sim_Screen.Begin_Session (Scoin_Active);
-      Sim_Carry.Begin_Session (Carry_Wanted);
+      Sim_Carry.Begin_Session (Carry_Wanted, (if Carry2_Wanted then 2 else 1));
+      Moodrest_Active := Moodrest_Wanted;
       if Rest_Active then Rest_Begin (Seed); end if;
       Con.Put (To_String (Pending));
       Con.Put_Line (Msg ("preview.head", Img (Seed), Img (Total)));
@@ -7987,6 +8106,18 @@ procedure Diary_Sim is
 
    --  After every Load_* of the start: the files must still give the counts of the checkpoint, then its payload replaces the state of
    --  ticks 1 .. C.  Anything that does not fit puts the state back as it was (Pristine) and the start replays everything.
+   --  0.062: the session flags that are no state of their own (carry=2, moodrest=1): from the last session begun before tick C
+   procedure Derive_Session_Flags (C : Int) is
+      Lvl : Positive := 1;
+      Mr : Boolean := False;
+   begin
+      for R of Sessions loop
+         if R.Start < C then Lvl := (if R.Carry2 then 2 else 1); Mr := R.Moodrest; end if;
+      end loop;
+      Sim_Carry.Set_Level (Lvl);
+      Moodrest_Active := Mr;
+   end Derive_Session_Flags;
+
    procedure Ckpt_Restore is
       Pristine : aliased Sim_Ckpt.Mem_Stream;
       Pristine_L : Layout;
@@ -8026,6 +8157,7 @@ procedure Diary_Sim is
             All_State_Read (Ckpt_Data'Access, Ckpt_L);
             Sim_Games.Reindex;   --  0.060: the derived indices of the modules
             Sim_World.Reindex;
+            Derive_Session_Flags (C);
             if Last_Done /= C then Fail := To_Unbounded_String ("tick");
             elsif World_Flushed > Natural (World_Stored.Length) then Fail := To_Unbounded_String ("world.txt");
             end if;
@@ -8039,6 +8171,7 @@ procedure Diary_Sim is
             All_State_Read (Pristine'Access, Pristine_L);
             Sim_Games.Reindex;   --  0.060: the derived indices of the modules
             Sim_World.Reindex;
+            Derive_Session_Flags (0);
          end if;
          Sim_Ckpt.Clear (Pristine);
       end if;
