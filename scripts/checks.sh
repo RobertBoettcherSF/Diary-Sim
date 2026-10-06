@@ -2429,9 +2429,11 @@ sed -i 's/^symbols.strict = .*/symbols.strict = 0/; s/^active.slow_floor = .*/ac
 sym_after() { awk -v t="$2" '$4 > t && ($2 ~ /^[0-9]+$/ || $2 ~ /^[a-h][1-8][a-h][1-8][qrbn]?$/)' "$1"/entities/*/words.txt | wc -l; }
 ss_c=$(awk '$3 == "coined" && $2 ~ /^[0-9]+$/' "$w/nt/ss"/entities/*/words.txt | wc -l); ss_leak=$(sym_after "$w/nt/ss" 6000)
 rm -rf "$w/nt/ss_c" "$w/nt/ss_l2"; cp -r "$w/nt/ss" "$w/nt/ss_c"; cp -r "$w/nt/ss_l" "$w/nt/ss_l2"; cp -r "$root/data/limits.txt" "$w/nt/ss_l2/data/limits.txt"
-sed -i 's/^symbols.strict = .*/symbols.strict = 0/' "$w/nt/ss_l2/data/limits.txt"   # the control: today's rules but symbols.strict = 0
+sed -i 's/^symbols.strict = .*/symbols.strict = 0/; s/^carry.enabled = .*/carry.enabled = 0/' "$w/nt/ss_l2/data/limits.txt"   # the control: today's rules but symbols.strict = 0
+# 0.061: test and control without word carrying (its own dice; scenario 65), so the two differ only in symbols.strict
+rm -rf "$w/nt/ss_n"; mkdir -p "$w/nt/ss_n"; cp -r "$root/data" "$w/nt/ss_n/data"; sed -i 's/^carry.enabled = .*/carry.enabled = 0/' "$w/nt/ss_n/data/limits.txt"
 ( cd "$w/nt/ss_l2" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/ss_c" --continuous --session-ticks 3000 --max-sessions 3 > /dev/null 2>&1 )
-env -u DIARY_VERBOSE "$nb" --home "$w/nt/ss" --continuous --session-ticks 3000 --max-sessions 3 > ss.txt 2>&1; rcs=$?
+( cd "$w/nt/ss_n" && env -u DIARY_VERBOSE "$nb" --home "$w/nt/ss" --continuous --session-ticks 3000 --max-sessions 3 ) > ss.txt 2>&1; rcs=$?
 ss_new=$(sym_after "$w/nt/ss" 9000); ss_ctl=$(sym_after "$w/nt/ss_c" 9000)
 env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/ss" > ss_v.txt 2>&1; rcsv=$?
 env -u DIARY_VERBOSE "$nb" --wordstat --home "$w/nt/ss" > ss_w.txt 2>&1
