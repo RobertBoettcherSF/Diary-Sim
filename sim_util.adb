@@ -1,4 +1,4 @@
---  Version: 0.011
+--  Version: 0.012
 pragma Ada_2022;
 
 with Ada.Calendar.Formatting, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Maps, Ada.Directories,
@@ -155,11 +155,36 @@ package body Sim_Util is
 
    function Has (Key : String) return Boolean is (Texts.Contains (Key));
 
+   Keys_Read_On : Boolean := False;
+   Keys_Read : Str_Maps.Map;
+
+   function Key_Text (Key : String) return String is
+      T : constant String := (if Texts.Contains (Key) then Fx.Trim (Texts (Key), Ada.Strings.Both) else "");
+   begin
+      return (if T = "" then "-" else T);
+   end Key_Text;
+
+   procedure Record_Keys (On : Boolean) is
+   begin
+      Keys_Read_On := On;
+   end Record_Keys;
+
+   procedure Recorded_Keys (Into : in out Str_Vectors.Vector) is
+      package Sorting is new Str_Vectors.Generic_Sorting;
+   begin
+      Into.Clear;
+      for C in Keys_Read.Iterate loop
+         Into.Append (Str_Maps.Key (C) & " " & Str_Maps.Element (C));
+      end loop;
+      Sorting.Sort (Into);
+   end Recorded_Keys;
+
    function Limit (Key : String; Default : Int) return Int is
       T : constant String := (if Texts.Contains (Key) then Fx.Trim (Texts (Key), Ada.Strings.Both) else "");
       Neg : constant Boolean := T'Length > 1 and then T (T'First) = '-';
       D : constant String := (if Neg then T (T'First + 1 .. T'Last) else T);
    begin
+      if Keys_Read_On and then not Keys_Read.Contains (Key) then Keys_Read.Insert (Key, Key_Text (Key)); end if;
       if D'Length not in 1 .. 9 or else (for some C of D => C not in '0' .. '9') then
          return Default;
       end if;

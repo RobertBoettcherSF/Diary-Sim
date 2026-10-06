@@ -110,9 +110,10 @@ diaries, entities and summary files are byte for byte the same.
 **Build 0.059 (details and reasoning: [docs/CHECKPOINT.md](docs/CHECKPOINT.md)).** The checkpoint belongs to a STATE FORMAT
 (`diary-sim-ckpt 2`), not to the build: a new zip loads it in seconds instead of the full replay. Each module's state is a tagged
 section (name, byte length, hash); a section whose tag or length does not fit this build is refused with `layout (state layout
-changed: <module>)` and a full replay. A format 1 checkpoint of build 0.058 has the same layout and loads too. `data/` is no reason
-any more: display text (`messages.txt`, `help.txt`, ...) is not even hashed, and a changed rule file (`limits.txt`, ...) only prints
-`data changed since the checkpoint (make verify replays everything): limits.txt`. `make check` fails with `bump Ckpt_Format` when
+changed: <module>)` and a full replay. A format 1 checkpoint of build 0.058 has the same layout and loads too. In `data/`, display
+text (`messages.txt`, `help.txt`, ...) is not even hashed; a number the start reads into the state (module `Init`, recorded as
+`startkey` lines) refuses the checkpoint when it changed (`data (a start value changed: <key> <old> -> <new>)`); any other changed
+rule file only prints `data changed since the checkpoint (make verify replays everything): limits.txt`. `make check` fails with `bump Ckpt_Format` when
 the `State_IO` code changed without a new format (`scripts/ckpt_layout.sh`, `make ckpt-layout`). A passed `make verify` writes a
 fresh checkpoint and a `VERIFY` entry in `run_log.txt`; `checkin.txt` shows `last full verify: <date> (N ticks)`: run `make verify`
 about once a week (the drift check). The text below is the 0.058 description; where it says build or data, read the above.
@@ -126,8 +127,8 @@ a crash leaves the old one; the times go to `ckpt_log.txt` (`checkpoint: tick N,
 
 A start loads it only if everything fits, and replays only the ticks after it; the first console line says which:
 `start: checkpoint of tick 300300 loaded in 2.00 s (+0 ticks replayed)` or `replay: checkpoint missing - 300300 ticks replayed`
-(also `stale (...)`, `version`, `layout`, `corrupt`, `forced`, `off`). Refused, and replayed from scratch, are (0.059: not another build or
-data; another state format or layout), a record file
+(also `stale (...)`, `version`, `layout`, `data`, `corrupt`, `forced`, `off`). Refused, and replayed from scratch, are (0.059: not another build
+or rule data, but another state format or layout, or a changed start value), a record file
 that is shorter or changed in its recorded part, inputs or records added behind the checkpoint's tick (the counts), a store whose lines
 do not fit its tick, a broken payload (hash) and a section marker or end state that does not fit. A refused checkpoint never touches the
 files; the run replays and writes a new one. `--replay` replays anyway; `make verify` always replays the whole history and then compares

@@ -1,6 +1,6 @@
 # The state checkpoint (`state.ckpt`)
 
-Version: 0.001 (build 0.059; the checkpoint itself came with build 0.058, README "The state checkpoint")
+Version: 0.002 (build 0.059; the checkpoint itself came with build 0.058, README "The state checkpoint")
 
 A start used to replay the whole history to rebuild the state in memory: 13 minutes for 300000 ticks, about 35 minutes on Robert's
 774600-tick save, growing every night. `state.ckpt` in the save folder holds the end state of the last run, so a start loads it in
@@ -22,6 +22,8 @@ A text header, one `key value` per line, up to the line `end`, then the binary p
 * `diary-sim-ckpt 2` - the format = the state layout number (`Ckpt_Format` in `diary_sim.adb`).
 * `build 0.059` - information only (which build wrote it).
 * `data <hash>` and one `datafile <name> <hash>` per rule file of `data/` - information only (see "data/" below).
+* one `startkey <key> <text>` per number of `data/` that the start read before the restore point (`-`: not in `data/`, the
+  default) - compared (see "data/" below).
 * `seed`, `tick`, `written`, `diary1..4` (bytes of each diary up to the tick), `counts` (sessions, votes and Robert's inputs up to
   the tick), `store1..15` (lines of each record store), `world`, `eff`, `section<K>` (information), `payload <bytes> <hash>`, and one
   `file <size> <fingerprint> <path>` per record file.
@@ -48,29 +50,43 @@ The start loads the checkpoint only if all of this holds; otherwise it replays e
 | `layout (state layout changed: format N, ...)` | a format older than `Ckpt_Layout_Since` (the layout changed since) |
 | `layout (state layout changed: <section>)` | a section whose tag is not the one this build expects there, sections after `end`, or a section that does not read back with exactly its byte length (the module streams more or fewer bytes than were written) |
 | `corrupt (payload)`, `corrupt (section <name>)` | a payload or section hash that does not fit (a damaged file) |
+| `data (a start value changed: <key> <old> -> <new>)` | a number of `data/` that the writer's start read (module `Init`, `Load_*`) has another text now |
 | `stale (<file>)` | a record file changed or shorter in its recorded part (fingerprint), inputs or records added behind the checkpoint's tick, a store that does not fit its tick |
 
-**No longer a reason** (build 0.059): another build, and any change in `data/`.
+**No longer a reason** (build 0.059): another build, display text in `data/`, comments, and every rule-data change except a
+start value (below).
 
 A refusal never touches the record files; the run replays and writes a new checkpoint at its end.
 
-## data/: information, not a refusal
+## data/: start values refuse, everything else is information
 
 * **Display text never counts**: `messages.txt`, `help.txt`, `menu.txt`, `fonts.txt`, `names.txt` (display names; the ids stay),
   `voices.txt`, `wordstat.txt`, `evolve.txt`, `frustration.txt`, `ledger.txt` (`Sim_Ckpt.Is_Text_Only`). The simulation never reads
   them, so they are not even hashed.
-* **Every other file is a rule file** (numbers or templates that may feed the state or a record: `limits.txt`, `karma.txt`,
-  `kalpas.txt`, `topics.txt`, `words.txt`, `things.txt`, `chat.txt`, `visit.txt`, ...; also any new file). Each gets a hash of its
-  lines without comments and blank lines (a changed comment is no changed rule), recorded in the header.
-* A start whose rule files differ from the checkpoint's **still loads it** and prints one line of information:
-  `data changed since the checkpoint (make verify replays everything): limits.txt`.
+* **Start values refuse the checkpoint.** While a start runs up to the restore point (module `Init`, the `Load_*` of the record
+  files), `Sim_Util.Limit` records every key it reads with its text; the checkpoint header keeps them as `startkey <key> <text>`
+  (about 150 keys: the world's `R30`/`Lean`/`Base_W`, things, dharma, games, robot, screen, trial, preport, the `active.*`
+  parameters, ...). These numbers are copied into the module state, so the checkpoint holds them. If one of them has another text
+  in `data/` now, the start refuses: `replay: checkpoint data (a start value changed: active.slow_coin_pct 50 -> 100)`, and the full
+  replay rebuilds the state with the new number, exactly as a run without the checkpoint would.
+* **Every other change of a rule file** (`limits.txt` keys read later, `karma.txt`, `kalpas.txt`, `topics.txt`, `words.txt`,
+  `things.txt`, `chat.txt`, `visit.txt`, ...; also any new file) is information: each rule file has a hash of its lines without
+  comments and blank lines (a changed comment is no changed rule) in the header, and a start whose rule files differ **still loads
+  the checkpoint** and prints one line: `data changed since the checkpoint (make verify replays everything): limits.txt`.
 
-The reasoning: a number that a new rule needs comes with that rule's session marker, so it acts only in new sessions, the same
-way whether the state was replayed or loaded. A number changed under OLD sessions changes what a replay of them would give: then
-the diaries no longer fit the data, and that is a drift, which only a full replay can see (not the checkpoint, and not a refusal
-of it). So refusing the checkpoint would cost 35 minutes and prove nothing; `make verify` is the check for it, and the information
-line says when one is worth running. A format 1 checkpoint has no rule-file hashes; it is loaded without the comparison
-(noted in `ckpt_log.txt`).
+The reasoning. The suggestion was "record the data hash, say so, still load". That holds for everything the simulation reads
+**while it runs**: such a number is read fresh from `data/` at every use, the same way whether the state was replayed or loaded,
+and a new rule's number comes with that rule's session marker, so it acts only in new sessions. A number changed under OLD sessions
+changes what a replay of them would give: the diaries no longer fit the data, and that is a drift that only a full replay can see
+(not the checkpoint, and not a refusal of it), so refusing would cost 35 minutes and prove nothing: `make verify` is that check,
+and the information line says when one is worth running.
+
+It does not hold for numbers read **at the start**: the modules copy them into their state (and `State_IO` streams them), so a
+loaded checkpoint would bring back the OLD number and keep using it in every new session, forever, silently, while a full replay
+uses the new one. `make check` caught exactly that (scenario 56: a raised `active.slow_coin_pct` was ignored after the load). So
+those keys, and only those, are compared one by one; the check proves that a refused start gives byte for byte the files of a run
+without the checkpoint. A format 1 checkpoint (0.058) has neither rule-file hashes nor start values; it is loaded without the
+comparison (0.059 changes no number in `data/`, and the check proves the 0.058 checkpoint gives the files of a full replay).
 
 ## The layout guard (make check)
 

@@ -1,4 +1,4 @@
---  Version: 0.011
+--  Version: 0.012
 --  Pure helpers of diary_sim: deterministic hash rolls and the diary line
 --  format (read side).  Standard library only.
 pragma Ada_2022;
@@ -28,6 +28,11 @@ package Sim_Util is
    function Has (Key : String) return Boolean;   --  is the key loaded?
    function Limit (Key : String; Default : Int) return Int;   --  loaded whole number, signed
    procedure Set_Limit (Key : String; Value : Int);   --  this run only (the Settings menu); no file is written
+   --  0.059 (the state checkpoint): while on, Limit remembers every key it reads with its text: the numbers a start reads before the
+   --  checkpoint is restored, which a module may keep in its state.  Recorded_Keys: "key text" sorted (text "-": not in data/).
+   procedure Record_Keys (On : Boolean);
+   procedure Recorded_Keys (Into : in out Str_Vectors.Vector);
+   function Key_Text (Key : String) return String;   --  the loaded text, trimmed, or "-"
    function Ends_With_Lf (File : String) return Boolean;
 
    function Img (N : Int) return String;         --  no leading blank

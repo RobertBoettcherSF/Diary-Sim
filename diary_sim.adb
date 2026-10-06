@@ -172,6 +172,7 @@ procedure Diary_Sim is
    Ckpt_Bytes : Long_Long_Integer := 0;
    Data_Hash : Unbounded_String;                     --  the rule files of data/ as the program started (0.059: information, never a refusal)
    Data_Lines : Str_Vectors.Vector;                  --  "name hash" per rule file (Sim_Ckpt.Data_Prints)
+   Start_Keys : Str_Vectors.Vector;                  --  0.059: "key text" of every number this start read before the restore point
    Data_Note : Unbounded_String;                     --  0.059: "data changed since the checkpoint ..." (a start that loaded one)
    Ckpt_Fmt_Used : Integer := 0;                     --  the format of the checkpoint this start loaded
    Ckpt_Verify_Diff : Boolean := False;              --  --verify: the checkpoint differed from the replay
@@ -7767,6 +7768,21 @@ procedure Diary_Sim is
          for E in Entity_Id loop
             Ckpt_Off (E) := Int'Value (Head_Get (Ckpt_Head, "diary" & Img (Integer (E))));
          end loop;
+         --  0.059: a number the writer's start read from data/ (Init, Load_*) may sit in the state: if data/ gives another one now,
+         --  the checkpoint holds the old one where a full replay would use the new one: replay
+         for H of Ckpt_Head loop
+            if H'Length > 9 and then H (H'First .. H'First + 8) = "startkey " then
+               declare
+                  KV : constant String := H (H'First + 9 .. H'Last);
+                  Sp : constant Natural := Fx.Index (KV, " ");
+               begin
+                  if Sp > 0 and then Sim_Util.Key_Text (KV (KV'First .. Sp - 1)) /= KV (Sp + 1 .. KV'Last) then
+                     No (Msg ("ckpt.why.data", KV (KV'First .. Sp - 1) & " " & KV (Sp + 1 .. KV'Last) & " -> " & Sim_Util.Key_Text (KV (KV'First .. Sp - 1))));
+                     return;
+                  end if;
+               end;
+            end if;
+         end loop;
          Ckpt_Seed := Int'Value (Head_Get (Ckpt_Head, "seed"));
          Ckpt_Tick := C;
          Ckpt_Used := True;
@@ -7920,6 +7936,7 @@ procedure Diary_Sim is
       Line ("build", Build);   --  information (0.059: not a reason to refuse)
       Line ("data", To_String (Data_Hash));   --  information: the rule files of data/ (Sim_Ckpt.Data_Prints), one line each below
       for D of Data_Lines loop Line ("datafile", D); end loop;
+      for K of Start_Keys loop Line ("startkey", K); end loop;   --  the numbers of data/ the start read (a change: replay)
       Line ("seed", Img (Seed));
       Line ("tick", Img (C));
       Line ("written", Local_Stamp);
@@ -8078,6 +8095,7 @@ procedure Diary_Sim is
    end Night_Next_Session;
 
 begin
+   Sim_Util.Record_Keys (True);   --  0.059: the numbers read up to the restore point (Start_Keys)
    Sim_Ckpt.Data_Prints (Ada.Directories.Containing_Directory (Data_Path ("limits.txt")), Data_Lines);   --  the rule files Load_Data reads
    Data_Hash := To_Unbounded_String (Sim_Ckpt.Lines_Hash (Data_Lines));
    Ckpt_Test_Extra := To_Unbounded_String (GNAT.OS_Lib.Getenv ("DIARY_TEST_CKPT_EXTRA").all);
@@ -8465,6 +8483,8 @@ begin
       Ckpt_Full_Diaries;
    end if;
    Ckpt_Restore;   --  0.058: the state of ticks 1 .. Ckpt_Tick from state.ckpt (or nothing, and Ckpt_Used is False)
+   Sim_Util.Record_Keys (False);   --  0.059: what Init and the Load_* read from data/ (a module may keep it in its state)
+   Sim_Util.Recorded_Keys (Start_Keys);
    if not Ledger_Mode then Write_Debug ("RUN", ""); end if;   --  stub: a kill -9 still leaves a file
 
    Sessions_Loop : loop   --  once for a normal run; a night run goes round once per session (the replay below only in the first)

@@ -2630,16 +2630,21 @@ k6 "$c6/l1" > kl1.txt; k6 "$c6/lr" > klr.txt
 [ $rl1 = 0 ] && grep -q '^replay: checkpoint layout (state layout changed: dharma) - 300 ticks replayed$' l1.txt && cmp -s kl1.txt klr.txt \
   && grep -q '^replay: checkpoint layout (state layout changed: main) - 300 ticks replayed$' l2.txt && grep -q '^replay: checkpoint layout (state layout changed: main) - 380 ticks replayed$' l2b.txt \
   && ok "a section that reads more bytes than it holds (a field added: dharma, main) or fewer (a field removed) is refused: 'replay: checkpoint layout (state layout changed: <module>)', a full replay with the same files as a run without the checkpoint" || bad "layout change ($rl1)"
-# (c) data/: display text never counts, a comment neither; a changed rule file is information, the checkpoint loads anyway
-for v in d1 d2 d3; do cp -r "$c6/l" "$c6/$v"; rm -rf "$c6/n$v"; cp -r "$c6/n" "$c6/n$v"; done
+# (c) data/: display text never counts, a comment neither; a changed number the start reads (into the state) refuses the checkpoint;
+#     any other change of a rule file is information, the checkpoint loads anyway
+for v in d1 d2 d3 d4 d4r; do cp -r "$c6/l" "$c6/$v"; rm -rf "$c6/n$v"; cp -r "$c6/n" "$c6/n$v"; done
 echo "x.test = only text" >> "$c6/nd1/data/messages.txt"; sed -i 's/^\(--replay .*\)$/\1 /' "$c6/nd1/data/help.txt"; echo "# a comment only" >> "$c6/nd2/data/limits.txt"
 sed -i 's/^night.recent = .*/night.recent = 3/' "$c6/nd3/data/limits.txt"
-for v in d1 d2 d3; do r6 n$v "$c6/$v" --more 30 --every 5000 > $v.txt 2>&1; done
+sed -i 's/^active.slow_coin_pct = .*/active.slow_coin_pct = 100/' "$c6/nd4/data/limits.txt" "$c6/nd4r/data/limits.txt"; rm -f "$c6/d4r/state.ckpt"
+for v in d1 d2 d3 d4 d4r; do r6 n$v "$c6/$v" --more 30 --every 5000 > $v.txt 2>&1; done
+k6 "$c6/d4" > kd4.txt; k6 "$c6/d4r" > kd4r.txt
 grep -q '^start: checkpoint of tick 300 loaded' d1.txt && ! grep -q '^data changed' d1.txt && grep -q '^start: checkpoint of tick 300 loaded' d2.txt && ! grep -q '^data changed' d2.txt \
   && grep -q '^start: checkpoint of tick 300 loaded' d3.txt && grep -q '^data changed since the checkpoint (make verify replays everything): limits.txt$' d3.txt \
   && grep -aq '^datafile limits.txt [0-9a-f]*$' "$c6/l/state.ckpt" && ! grep -aq '^datafile messages.txt' "$c6/l/state.ckpt" \
   && grep -q 'data changed since the checkpoint' "$c6/d3/ckpt_log.txt" \
-  && ok "data/: a changed messages.txt / help.txt (not hashed) or a comment in limits.txt: loaded, no word; a changed number in limits.txt: loaded with 'data changed since the checkpoint (make verify replays everything): limits.txt'" || bad "data changes"
+  && grep -aq '^startkey active.slow_coin_pct 50$' "$c6/l/state.ckpt" && ! grep -aq '^startkey night.recent ' "$c6/l/state.ckpt" \
+  && grep -q '^replay: checkpoint data (a start value changed: active.slow_coin_pct 50 -> 100) - 300 ticks replayed$' d4.txt && [ -s kd4.txt ] && cmp -s kd4.txt kd4r.txt \
+  && ok "data/: a changed messages.txt / help.txt (not hashed) or a comment in limits.txt: loaded, no word; a changed number read later (night.recent): loaded with 'data changed since the checkpoint (make verify replays everything): limits.txt'; a changed number the start read (active.slow_coin_pct): 'replay: checkpoint data (a start value changed: ...)', the files of a full replay" || bad "data changes"
 # (d) make verify refreshes the checkpoint and writes its VERIFY entry; the next start loads that checkpoint, the same files as a full replay
 cp -r "$c6/l" "$c6/v"; rm -f "$c6/v/state.ckpt"; r6 n "$c6/v" --verify > v1.txt 2>&1; rcv1=$?
 cp -r "$c6/v" "$c6/vb"; rm -f "$c6/vb/state.ckpt"
