@@ -114,7 +114,7 @@ zip goes out, `scripts/ckpt_layout.sh` hashes what decides the payload bytes: th
 name (the streamed variables, their types, the element types of the vectors, the constants of array bounds; comments and spacing
 do not count). The recorded value, next to the format number, is:
 
-ckpt_layout: 3 d4e1efa75855a2c3
+ckpt_layout: 3 dadbc2ea5e244597
 
 `make check` (scenario 63) and `make ckpt-layout` compare it with the code: when the code changed and this line did not, the check
 FAILS with `bump Ckpt_Format`. Then:

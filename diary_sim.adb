@@ -642,7 +642,7 @@ procedure Diary_Sim is
    --  Relief: below the relief energy a wesen rests instead of talking (teaching).  Pull: a wesen with spare energy and a low mood
    --  teaches the target (the wesen missing the most words all the others know) one of those words: Carry_To (E) and Carry_W (E)
    --  name the lesson for Teach in the same step.  Its own dice (salts 23101, 23102); older sessions return Base untouched.
-   package Word_Lists is new Ada.Containers.Vectors (Positive, Positive);   --  0.062: the words of an exchange
+   package Exchange_Words is new Ada.Containers.Vectors (Positive, Positive);   --  0.062: the words of an exchange
    Carry_To : array (Entity_Id) of Natural := [others => 0];
    Carry_R : array (Entity_Id) of Positive := [others => 1];   --  0.062: the index of the planned word among the carriable ones
 
@@ -912,7 +912,7 @@ procedure Diary_Sim is
                      Backs : Unbounded_String;
                      Got : Natural := 1;
                      Back_N : Natural := 0;
-                     Ws : Word_Lists.Vector;
+                     Ws : Exchange_Words.Vector;
                   begin
                      for J in 0 .. N1 - 1 loop   --  the next carriable words after W in table order (wrapping)
                         exit when Got >= K1;
