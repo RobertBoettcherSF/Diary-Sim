@@ -1,4 +1,4 @@
---  Version: 0.056
+--  Version: 0.057
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.056";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.057";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -167,6 +167,8 @@ procedure Diary_Sim is
    Night_Mode : Boolean := False;                          --  --continuous / make night: back-to-back sessions until q, a limit, or DRIFT
    Night_Ticks, Night_Sessions : Int := -1;                --  --session-ticks / --max-sessions (-1: data/limits.txt night.*)
    Night_Hours : Unbounded_String;                         --  --max-hours (text, may have decimals)
+   End_Check_Max : Int := -1;                               --  --end-check-ticks N (0.057): the night's end check (a full replay) only up to
+                                                            --  N ticks in the save (0 = never; -1 = no cap: night.verify_end decides)
    Runlog_Mode : Boolean := False;                         --  --runlog / make runlog: the last lines of run_log.txt
    Report_Mode : Boolean := False;                         --  --report / make report: print the last run_report.txt of the save folder
    Menu_Opt : Boolean := False;                            --  --menu: show the main menu (make menu)
@@ -278,6 +280,8 @@ procedure Diary_Sim is
    Evolve_Mode : Boolean := False;               --  --evolve / make evolve: the evolution preview (read-only; Sim_Evolve, docs/EVOLVE.md)
    Active_Mode : Boolean := False;               --  --active / make active: the active-vocabulary preview with a cap (read-only)
    Wordstat_Mode : Boolean := False;             --  --wordstat / make wordstat: the vocabulary report (read-only)
+   Since_Session : Natural := 0;                 --  --since-session N (0.057, report-only): make frustration counts sessions N and later
+                                                 --  (the diaries are entered by a binary search on the tick, not read from the start)
    Chatlog_Mode : Boolean := False;              --  --chatlog / make chatlog: the last chat lines
    Chat_Active : Boolean := False;               --  the session being replayed is a chat=1 session
    Symbols_Active : Boolean := False;            --  the session being replayed is a symbols=1 session: chess strings are symbols, not words (docs/EVOLVE.md 9)
@@ -763,19 +767,24 @@ procedure Diary_Sim is
                end loop;
             end;
          end if;
-         if Int (Roll (Seed, Eid, Tick, 2, 100)) <= Teach_Pct and then Pending_Word (P) = 0 and then Teachable_Count (E, P) > 0 then
+         if Int (Roll (Seed, Eid, Tick, 2, 100)) <= Teach_Pct and then Pending_Word (P) = 0 then
             declare
-               N : constant Natural := Teachable_Count (E, P);
-               W0 : constant Positive := Nth_Teachable (E, P, Roll (Seed, Eid, Tick, 4, N));
-               W : constant Positive := (if World_Mode then Sim_Things.Mutate (W0, E, Tick) else W0);
+               N : constant Natural := Teachable_Count (E, P);   --  0.057: counted once (it walks the whole word table; was twice)
             begin
-               --  active=2 mint-slow: a pupil at the cap gets a NEW word only when the die lets it through (a word it has asleep is no new word)
-               if not Asleep (P, W) and then not Slow_Pass (Seed, P, Tick, Slow_Lesson) then return; end if;
-               Pending_Word (P) := W;
-               Pending_From (P) := E;
-               Did_Teach := True;
-               Use_Word (E, W0);   --  the teacher mentions it too
-               Add (Msg ("detail.taught", Name (P), Word (W)));
+               if N > 0 then
+                  declare
+                     W0 : constant Positive := Nth_Teachable (E, P, Roll (Seed, Eid, Tick, 4, N));
+                     W : constant Positive := (if World_Mode then Sim_Things.Mutate (W0, E, Tick) else W0);
+                  begin
+                     --  active=2 mint-slow: a pupil at the cap gets a NEW word only when the die lets it through (a word it has asleep is no new word)
+                     if not Asleep (P, W) and then not Slow_Pass (Seed, P, Tick, Slow_Lesson) then return; end if;
+                     Pending_Word (P) := W;
+                     Pending_From (P) := E;
+                     Did_Teach := True;
+                     Use_Word (E, W0);   --  the teacher mentions it too
+                     Add (Msg ("detail.taught", Name (P), Word (W)));
+                  end;
+               end if;
             end;
          end if;
       end Teach;
@@ -1049,6 +1058,49 @@ procedure Diary_Sim is
          end;
       end loop;
    end Load_Diary;
+
+   --  0.057: the last line of a diary without reading the whole file (a night run checks its own diaries after every session; reading
+   --  them whole cost more than the session itself on a big save).  True: the file ends with a line break and its last line is complete
+   --  with "tick":Want.  Anything else (or an error) is False: the caller reads the whole file as before.
+   function Diary_Tail_Ok (P : String; Want : Natural) return Boolean is
+      package SIO renames Ada.Streams.Stream_IO;
+      use type SIO.Count, Ada.Streams.Stream_Element_Offset;
+      F : SIO.File_Type;
+      Size : SIO.Count;
+      B : Ada.Streams.Stream_Element_Array (1 .. 16_384);
+      N : Ada.Streams.Stream_Element_Offset;
+   begin
+      if not Ada.Directories.Exists (P) then return False; end if;
+      SIO.Open (F, SIO.In_File, P);
+      Size := SIO.Size (F);
+      if Size < 2 then SIO.Close (F); return Want = 0; end if;
+      SIO.Set_Index (F, (if Size > B'Length then Size - B'Length + 1 else 1));
+      SIO.Read (F, B, N);
+      SIO.Close (F);
+      declare
+         T : String (1 .. Integer (N));
+         From : Natural := 0;
+      begin
+         for I in T'Range loop T (I) := Character'Val (B (Ada.Streams.Stream_Element_Offset (I))); end loop;
+         if T (T'Last) /= ASCII.LF then return False; end if;
+         for I in reverse T'First .. T'Last - 1 loop
+            if T (I) = ASCII.LF then From := I + 1; exit; end if;
+         end loop;
+         if From = 0 then
+            if Size > B'Length then return False; end if;   --  a last line longer than the window: read it all
+            From := 1;
+         end if;
+         declare
+            L : constant String := T (From .. T'Last - 1);
+         begin
+            return Complete (L) and then Field (L, "tick") = Int (Want);
+         end;
+      end;
+   exception
+      when others =>
+         if SIO.Is_Open (F) then SIO.Close (F); end if;
+         return False;
+   end Diary_Tail_Ok;
 
    --  last_error.txt gets everything; the console the first 11 lines (+ a note) and two hints.
    procedure Report (E : Ada.Exceptions.Exception_Occurrence) is
@@ -1794,9 +1846,11 @@ procedure Diary_Sim is
       type Nat_Array is array (Positive range <>) of Natural;
       Lines : Str_Vectors.Vector;
       Found : Boolean;
-      Max_S : constant := 5_000;   --  sessions counted (the rest of a longer save is left out)
+      Max_S : constant := 5_000;   --  sessions counted: the newest ones (0.057: was the first ones), or the window of --since-session
       W_Ref : constant Natural := Natural (Int'Max (0, Limit ("frustration.refuse_weight", 10)));
-      N_S : Natural := 0;   --  sessions found
+      N_S : Natural := 0;   --  sessions in the window
+      N_All : Natural := 0;   --  sessions found
+      Base : Natural := 0;   --  session Base + k is index k
       Name_W : constant := 12;
       Cell_W : constant := 9;
 
@@ -1833,8 +1887,11 @@ procedure Diary_Sim is
    begin
       Read_Lines ("diaries/sessions.txt", Lines, Found);
       for L of Lines loop
-         if L'Length > 1 and then L (L'First) = 'S' and then L (L'First + 1) in '0' .. '9' then N_S := Natural'Min (Max_S, N_S + 1); end if;
+         if L'Length > 1 and then L (L'First) = 'S' and then L (L'First + 1) in '0' .. '9' then N_All := N_All + 1; end if;
       end loop;
+      if Since_Session > 1 then Base := Natural'Min (Since_Session - 1, Natural'Max (1, N_All) - 1); end if;
+      if N_All - Base > Max_S then Base := N_All - Max_S; end if;
+      N_S := N_All - Base;
       if N_S = 0 then
          TIO.Put_Line (TIO.Standard_Error, Msg ("frust.none", Ada.Directories.Full_Name ("diaries/sessions.txt")));
          Ada.Command_Line.Set_Exit_Status (2);
@@ -1884,6 +1941,7 @@ procedure Diary_Sim is
                begin
                   while Sp <= L'Last and then L (Sp) /= ' ' loop Sp := Sp + 1; end loop;
                   K := Num (L (L'First + 1 .. Sp - 1));
+                  K := (if K > Base then K - Base else 0);
                   if K in 1 .. N_S then
                      if L (L'First) = 'S' then
                         First (K) := Num (Field (L, "start")) + 1;
@@ -1903,9 +1961,12 @@ procedure Diary_Sim is
                   Out_V : constant String := Field (L, "out");
                   S : Natural := Num (Field (L, "s"));
                   E : Natural := 0;
-                  P : constant Natural := Player_Index (Field (L, "player"));
+                  P : Natural := 0;
                begin
+                  S := (if S > Base then S - Base else 0);
                   if S not in 1 .. N_S then S := Session_Of (Num (Field (L, "t"))); end if;
+                  if Base > 0 and then S = 0 then goto Next_Petition; end if;   --  before the window
+                  P := Player_Index (Field (L, "player"));
                   for X in Entity_Id loop
                      if Name (X) = Field (L, "wesen") then E := Natural (X); end if;
                   end loop;
@@ -1927,6 +1988,7 @@ procedure Diary_Sim is
                         if S > 0 then P_Load (P, S) := P_Load (P, S) + 1; end if;
                      end if;
                   end if;
+                  <<Next_Petition>> null;
                end;
             end if;
          end loop;
@@ -1934,13 +1996,72 @@ procedure Diary_Sim is
          for E in Entity_Id loop   --  the lowest mood of each session, streamed: {"tick":N, ... "mood":M, ...}
             if Ada.Directories.Exists (Path (E)) then
                declare
-                  F : TIO.File_Type;
+                  package SIO renames Ada.Streams.Stream_IO;
+                  F : SIO.File_Type;
                   S : Natural := 1;
-               begin
-                  TIO.Open (F, TIO.In_File, Path (E));
-                  while not TIO.End_Of_File (F) loop
+                  Size : SIO.Count;
+                  Buf : Ada.Streams.Stream_Element_Array (1 .. 65_536);
+                  Got : Ada.Streams.Stream_Element_Offset;
+                  Part : Unbounded_String;   --  a line cut by the end of a buffer
+                  Key_T : constant String := '"' & "tick" & '"' & ":";
+
+                  function Tick_Of (L : String) return Natural is   --  the tick of a diary line, 0 if none
+                     At_T : constant Natural := Fx.Index (L, Key_T);
+                     T : Natural := 0;
+                     J : Natural;
+                  begin
+                     if At_T = 0 then return 0; end if;
+                     J := At_T + Key_T'Length;
+                     while J <= L'Last and then L (J) in '0' .. '9' loop
+                        if T < 100_000_000 then T := T * 10 + Character'Pos (L (J)) - Character'Pos ('0'); end if;
+                        J := J + 1;
+                     end loop;
+                     return T;
+                  end Tick_Of;
+
+                  --  The tick of the first whole line that starts after byte Pos (0: none in the next 4 KB).
+                  function Tick_After (Pos : SIO.Positive_Count) return Natural is
+                     B : Ada.Streams.Stream_Element_Array (1 .. 4_096);
+                     N : Ada.Streams.Stream_Element_Offset;
+                     Txt : String (1 .. 4_096);
+                     From : Natural := 0;
+                  begin
+                     SIO.Set_Index (F, Pos);
+                     SIO.Read (F, B, N);
+                     for I in 1 .. Integer (N) loop Txt (I) := Character'Val (B (Ada.Streams.Stream_Element_Offset (I))); end loop;
+                     for I in 1 .. Integer (N) loop
+                        if Txt (I) = ASCII.LF then From := I + 1; exit; end if;
+                     end loop;
+                     if From = 0 or else From > Integer (N) then return 0; end if;
+                     for I in From .. Integer (N) loop
+                        if Txt (I) = ASCII.LF then return Tick_Of (Txt (From .. I - 1)); end if;
+                     end loop;
+                     return 0;
+                  end Tick_After;
+
+                  procedure One_Line (L : String);
+
+                  procedure Feed (Chunk : String) is   --  split into lines; the rest waits in Part
+                     From : Positive := Chunk'First;
+                  begin
+                     for I in Chunk'Range loop
+                        if Chunk (I) = ASCII.LF then
+                           if Length (Part) > 0 then
+                              Append (Part, Chunk (From .. I - 1));
+                              One_Line (To_String (Part));
+                              Part := Null_Unbounded_String;
+                           else
+                              One_Line (Chunk (From .. I - 1));
+                           end if;
+                           From := I + 1;
+                        end if;
+                     end loop;
+                     if From <= Chunk'Last then Append (Part, Chunk (From .. Chunk'Last)); end if;
+                  end Feed;
+
+                  procedure One_Line (L : String) is
+                  begin
                      declare
-                        L : constant String := TIO.Get_Line (F);
                         T_At : constant Natural := Fx.Index (L, """tick"":");
                         M_At : constant Natural := Fx.Index (L, """mood"":");
                         T : Natural := 0;
@@ -1968,10 +2089,50 @@ procedure Diary_Sim is
                            end if;
                         end if;
                      end;
+                  end One_Line;
+
+                  Lo, Hi, Mid : SIO.Positive_Count;
+                  Skip_Part : Boolean;
+                  use type SIO.Count, Ada.Streams.Stream_Element_Offset;
+               begin
+                  SIO.Open (F, SIO.In_File, Path (E));
+                  Size := SIO.Size (F);
+                  Lo := 1;   --  a byte whose next whole line is still before the window (or the start of the file)
+                  if Base > 0 and then First (1) > 1 and then Size > 8_192 then   --  a binary search on the tick: the window, not the whole diary
+                     Hi := Size;
+                     while Hi - Lo > 4_096 loop
+                        Mid := Lo + (Hi - Lo) / 2;
+                        declare
+                           T : constant Natural := Tick_After (Mid);
+                        begin
+                           if T /= 0 and then T < First (1) then Lo := Mid; else Hi := Mid; end if;
+                        end;
+                     end loop;
+                  end if;
+                  SIO.Set_Index (F, Lo);
+                  Skip_Part := Lo > 1;   --  the cut line before the first whole one is left out
+                  loop
+                     SIO.Read (F, Buf, Got);
+                     exit when Got = 0;
+                     declare
+                        C : String (1 .. Integer (Got));
+                        Start : Positive := 1;
+                     begin
+                        for I in C'Range loop C (I) := Character'Val (Buf (Ada.Streams.Stream_Element_Offset (I))); end loop;
+                        if Skip_Part then
+                           Start := C'Last + 1;
+                           for I in C'Range loop
+                              if C (I) = ASCII.LF then Start := I + 1; Skip_Part := False; exit; end if;
+                           end loop;
+                        end if;
+                        if Start <= C'Last then Feed (C (Start .. C'Last)); end if;
+                     end;
+                     exit when Got < Buf'Last;
                   end loop;
-                  TIO.Close (F);
+                  if Length (Part) > 0 then One_Line (To_String (Part)); end if;
+                  SIO.Close (F);
                exception
-                  when others => if TIO.Is_Open (F) then TIO.Close (F); end if;
+                  when others => if SIO.Is_Open (F) then SIO.Close (F); end if;
                end;
             end if;
          end loop;
@@ -1983,13 +2144,14 @@ procedure Diary_Sim is
          end loop;
          begin
             Put (Msg ("frust.title", Img (N_S), Img (All_Pet)));
+            if Base > 0 then Put (Msg ("frust.window", Img (Base + 1), Img (Base + N_S), Img (N_All))); end if;
             Put ("");
             Para (Msg ("frust.wesen.head", Img (W_Ref)));
             Put (Pad_R ("", Name_W) & Cell (Msg ("frust.col.pet")) & Cell (Msg ("frust.col.grant")) & Cell (Msg ("frust.col.part"))
                  & Cell (Msg ("frust.col.ref")) & Cell (Msg ("frust.col.low")) & Cell (Msg ("frust.col.worst")) & Cell (Msg ("frust.col.in")));
             for E in Entity_Id loop
                Put (Pad_R (Display (E), Name_W) & Cell (Img (Tot_Pet (E))) & Cell (Img (Tot_Grant (E))) & Cell (Img (Tot_Part (E)))
-                    & Cell (Img (Tot_Ref (E))) & Cell (Img (Low_All (E))) & Cell (Img (Worst (E))) & Cell ("s" & Img (Worst_S (E))));
+                    & Cell (Img (Tot_Ref (E))) & Cell (Img (Low_All (E))) & Cell (Img (Worst (E))) & Cell ("s" & Img (Worst_S (E) + Base)));
             end loop;
             declare
                Hi, Lo : Entity_Id := Entity_Id'First;
@@ -1999,9 +2161,9 @@ procedure Diary_Sim is
                   if Worst (E) < Worst (Lo) then Lo := E; end if;
                end loop;
                Put ("");
-               Para (Msg ("frust.worst", Display (Hi), Img (Worst (Hi)), Img (Worst_S (Hi)), Img (Refused (Hi, Worst_S (Hi))),
+               Para (Msg ("frust.worst", Display (Hi), Img (Worst (Hi)), Img (Worst_S (Hi) + Base), Img (Refused (Hi, Worst_S (Hi))),
                           Img (Low (Hi, Worst_S (Hi)))));
-               Para (Msg ("frust.minimax", Display (Lo), Img (Worst (Lo)), Img (Worst_S (Lo)), Img (Worst (Hi) - Worst (Lo))));
+               Para (Msg ("frust.minimax", Display (Lo), Img (Worst (Lo)), Img (Worst_S (Lo) + Base), Img (Worst (Hi) - Worst (Lo))));
             end;
             Put ("");
             Para (Msg ("frust.player.head"));
@@ -2020,7 +2182,7 @@ procedure Diary_Sim is
                         if P_Load (P, S) > 0 then Busy := Busy + 1; end if;
                      end loop;
                      Put (Pad_R (Sim_World.Show (Players (P)), Name_W) & Cell (Img (P_Tot (P))) & Cell (Img (P_Ref (P)))
-                          & Cell (Img (Pct (P_Ref (P), P_Tot (P))) & "%") & Cell (Img (Mx)) & Cell ("s" & Img (Ms))
+                          & Cell (Img (Pct (P_Ref (P), P_Tot (P))) & "%") & Cell (Img (Mx)) & Cell ("s" & Img (Ms + (if Ms > 0 then Base else 0)))
                           & Cell (Img (P_Tot (P) / Natural'Max (1, N_S)) & "." & Img ((P_Tot (P) * 10 / Natural'Max (1, N_S)) mod 10)));
                      if Hi = 0 or else Mx > Hi_Max or else (Mx = Hi_Max and then P_Tot (P) > P_Tot (Hi)) then
                         Hi := P; Hi_Max := Mx; Hi_S := Ms;
@@ -2029,7 +2191,7 @@ procedure Diary_Sim is
                end loop;
                Put ("");
                if Hi > 0 then
-                  Para (Msg ("frust.load", Sim_World.Show (Players (Hi)), Img (Hi_Max), Img (Hi_S), Img (P_Tot (Hi)), Img (Pct (P_Ref (Hi), P_Tot (Hi)))));
+                  Para (Msg ("frust.load", Sim_World.Show (Players (Hi)), Img (Hi_Max), Img (Hi_S + (if Hi_S > 0 then Base else 0)), Img (P_Tot (Hi)), Img (Pct (P_Ref (Hi), P_Tot (Hi)))));
                else
                   Para (Msg ("frust.load.none"));
                end if;
@@ -3210,7 +3372,9 @@ procedure Diary_Sim is
       Out_Text : Unbounded_String;
       F : TIO.File_Type;
    begin
-      if Preview then return; end if;   --  preview writes nothing
+      if Preview or else Ledger_Mode then return; end if;   --  preview writes nothing; the read-only replays (make verify, the night's end check
+      --  child, elo, ledger ...) leave debug.txt of the run alone (0.057: the end check child and the night wrote debug.tmp at the same
+      --  time after a SIGHUP, the rename of one failed: "debug.txt could not be written")
       Part (Head) := To_Unbounded_String (Status & " v" & Build & " seed " & (if Seed < 0 then "?" else Img (Seed)) & ASCII.LF);
       Part (Ticks_P) := To_Unbounded_String
         ((if Last_Done > Int (Common)
@@ -3274,12 +3438,19 @@ procedure Diary_Sim is
          Ada.Directories.Rename ("debug.tmp", "debug.txt");
       exception
          when others =>   --  a rename that will not replace: delete first
-            Ada.Directories.Delete_File ("debug.txt");
+            if Ada.Directories.Exists ("debug.txt") then Ada.Directories.Delete_File ("debug.txt"); end if;
             Ada.Directories.Rename ("debug.tmp", "debug.txt");
       end;
       Write_Digest (Status, Err);   --  only with --debug, and only for a final status
    exception
-      when others => Con.Put_Line (Msg ("debug.failed"));
+      when E : others =>   --  say why (the folder, the exception): the console may be gone (a closed terminal), so this never raises
+         begin
+            if TIO.Is_Open (F) then TIO.Close (F); end if;
+            Con.Put_Line (Msg ("debug.failed") & " (" & Ada.Exceptions.Exception_Name (E) & ": " & Ada.Exceptions.Exception_Message (E)
+                          & " in " & Ada.Directories.Current_Directory & ")");
+         exception
+            when others => null;
+         end;
    end Write_Debug;
 
    --  One tick for all entities in id order: compare with the disk or append.
@@ -4415,6 +4586,7 @@ procedure Diary_Sim is
                else
                   TIO.Put_Line (Out_File (E), Line);
                   TIO.Flush (Out_File (E));
+                  if Night_Mode then Disk (E).Append (Line); end if;   --  0.057: the next session of a night needs no reread of the diary
                end if;
                Written := Written + 1;
             end if;
@@ -4787,6 +4959,10 @@ procedure Diary_Sim is
       Lines := 0;
       if not Ada.Directories.Exists (P) or else Ada.Directories.Size (P) = 0 then
          Append (Fails, " " & P & " missing or empty;");
+         return;
+      end if;
+      if Kind = 'd' and then Night_Mode and then Expect > 0 and then Diary_Tail_Ok (P, Natural (Expect)) then   --  0.057: a night checks the end
+         Lines := Expect;   --  of its own diary (it wrote every line of this run; the older ones were read and compared at its start)
          return;
       end if;
       Read_Lines (P, V, Found);
@@ -6383,11 +6559,13 @@ procedure Diary_Sim is
    Night_Phase : Natural := 0;                  --  0 replaying the history, 1 a session, 2 verifying, 3 between sessions
    Night_Verified : Natural := 0;               --  full replays by the child process
    Q_Said : Boolean := False;
+   Night_Check_Skipped : Boolean := False;      --  0.057: the end check was left out (--end-check-ticks, a big save)
    Night_Verify_Cut : Boolean := False;         --  the check at the end was cut short by q (the reason stays the limit)
    Q_Dropped : Boolean := False;                --  a q came when the limit was already reached: dropped, the reason is the limit
    Size0, Size_Now : Int := 0;
    Sess_Total, Last_Dur : Duration := 0.0;      --  wall time of the finished sessions / of the last one
    S_Start, Last_Paint, Last_Poll, Last_Size : Ada.Calendar.Time := Night_T0;
+   Loop_End : Ada.Calendar.Time := Night_T0;   --  0.057: when the tick loop of the session ended (trend.txt secs= loop= tps=; the rest is the end report)
    Last_Line : Unbounded_String;
    Recent : Str_Vectors.Vector;                 --  the status lines of the sessions (shown below the header on a terminal)
 
@@ -6969,6 +7147,7 @@ procedure Diary_Sim is
       Box.Append (Msg ("night.box.speed", Avg_Text, Ticks_Per_Sec, Size_Text (Size_Now), Growth_Text));
       if Night_Verified > 0 then Box.Append (Msg ("night.box.verified", Img (Night_Verified))); end if;
       if Night_Verify_Cut and then Why in "max_sessions" | "max_hours" then Box.Append (Msg ("night.box.verify_cut")); end if;
+      if Night_Check_Skipped then Box.Append (Msg ("night.box.check_skipped", Img (Last_Done), Img (End_Check_Max))); end if;
       if Q_Dropped and then Why in "max_sessions" | "max_hours" then Box.Append (Msg ("night.box.q_dropped")); end if;
       if Length (Last_Line) > 0 then Box.Append (Msg ("night.box.last", To_String (Last_Line))); end if;
       Box.Append (Msg ("night.box.files"));
@@ -7054,7 +7233,12 @@ procedure Diary_Sim is
          S_Start := Ada.Calendar.Clock;
          return False;
       end if;
-      if Ok and then End_Check and then not Verified_Now and then To_String (Night_Why) in "max_sessions" | "max_hours" then   --  not after q / Ctrl-C: those end at once; make verify does it by hand
+      if Ok and then End_Check and then not Verified_Now and then To_String (Night_Why) in "max_sessions" | "max_hours"
+        and then End_Check_Max >= 0 and then Last_Done > End_Check_Max
+      then   --  make night-ship: a full replay of a big save takes many minutes after the night; make verify does it by hand
+         Append_Log ("NIGHT", "verify: skipped ticks=" & Img (Last_Done) & " cap=" & Img (End_Check_Max) & ASCII.LF);
+         Night_Check_Skipped := True;
+      elsif Ok and then End_Check and then not Verified_Now and then To_String (Night_Why) in "max_sessions" | "max_hours" then   --  not after q / Ctrl-C: those end at once; make verify does it by hand
          if not Night_Verify then Night_Why := To_Unbounded_String ("drift");
          elsif Sim_Quit.Requested then Night_Why := To_Unbounded_String ("signal");
          end if;   --  cut short by q: the reason stays the limit, the box says the check was cut short (Night_Verify_Cut)
@@ -7077,9 +7261,11 @@ procedure Diary_Sim is
       T_Run := Ada.Calendar.Clock;
       Ticks := Int (Common) + Night_Per;
       for E in Entity_Id loop
-         Disk (E).Clear;
          Cur_Name := To_Unbounded_String (Name (E));
-         Load_Diary (E, Seed_D);
+         if Natural (Disk (E).Length) /= Common or else not Diary_Tail_Ok (Path (E), Common) then   --  0.057: else the lines in memory are the file
+            Disk (E).Clear;
+            Load_Diary (E, Seed_D);
+         end if;
          if Natural (Disk (E).Length) /= Common then
             raise Diary_Error with Msg ("night.err.length", Name (E), Img (Integer (Disk (E).Length)), Img (Common), Img (Old));
          end if;
@@ -7101,7 +7287,7 @@ begin
          A   : constant String := Ada.Command_Line.Argument (I);
          Eq  : constant Natural := Fx.Index (A, "=");
          Opt : constant String := (if Eq > 0 then A (A'First .. Eq - 1) else A);
-         Num : constant Boolean := Opt in "--ticks" | "--seed" | "--every" | "--crash-at" | "--more" | "--session-ticks" | "--max-sessions";
+         Num : constant Boolean := Opt in "--ticks" | "--seed" | "--every" | "--crash-at" | "--more" | "--session-ticks" | "--max-sessions" | "--end-check-ticks" | "--since-session";
          Sep : constant Boolean := (Num or else Opt in "--max-hours" | "--home" | "--say" | "--text" | "--as" | "--grant" | "--veto" | "--approve" | "--challenge" | "--debug-section" | "--chat-script" | "--visit" | "--visit-script") and then Eq = 0 and then I < Ada.Command_Line.Argument_Count;   --  --ticks 200
          Val : constant String := (if Eq > 0 then A (Eq + 1 .. A'Last) elsif Sep then Ada.Command_Line.Argument (I + 1) else "");
          Help  : Str_Vectors.Vector;
@@ -7130,6 +7316,8 @@ begin
          elsif Opt = "--active" then Active_Mode := True;
          elsif Opt = "--session-ticks" then Night_Ticks := Number (Opt, Val);
          elsif Opt = "--max-sessions" then Night_Sessions := Number (Opt, Val);
+         elsif Opt = "--end-check-ticks" then End_Check_Max := Number (Opt, Val);
+         elsif Opt = "--since-session" then Since_Session := Natural (Number (Opt, Val));
          elsif Opt = "--max-hours" then
             if Val'Length not in 1 .. 8 or else (for some C of Val => C not in '0' .. '9' | '.') or else Val (Val'First) = '.' or else Val (Val'Last) = '.'
               or else (for some I in Val'Range => Val (I) = '.' and then (for some J in Val'Range => J > I and then Val (J) = '.'))
@@ -7534,6 +7722,7 @@ begin
          Quit_Seen := Sim_Quit.Requested or else (Chat_Mode and then Sim_Quit.Key_Q);   --  --chat: q stops at the next tick (a rerun resumes the session)
          exit when Quit_Seen;
       end loop;
+      Loop_End := Ada.Calendar.Clock;
    end if;
    if not Quit_Seen and then Ticks > Int (Common)
      and then not (for some R of Word_Votes => R.Tick = Ticks)
@@ -7570,7 +7759,7 @@ begin
          end if;
          Write_Petitions;
          Write_Debug ("QUIT", Msg ("debug.quit", (if By_Key then "q" else Sim_Quit.Which), Img (Last_Done)));
-         if not By_Key then Con.Put_Line (Msg ("debug.attach")); end if;
+         if not By_Key and then not Ledger_Mode then Con.Put_Line (Msg ("debug.attach")); end if;
          Put_Saved;
          if By_Key then
             Night_End ("q");
@@ -7674,6 +7863,18 @@ begin
          if Ticks > Int (Common) then   --  a session that added ticks: its line in trend.txt
             declare
                Mo, En, Wo, Pe : Unbounded_String;
+               --  0.057: the speed of this session (wall clock, new lines only): secs = from its first new tick to here (end report included),
+               --  loop = the tick loop alone, tps = new ticks per second of the loop
+               function Speed_Text return String is
+                  Whole : constant Duration := Ada.Calendar."-" (Ada.Calendar.Clock, S_Start);
+                  Lp : constant Duration := Ada.Calendar."-" (Loop_End, S_Start);
+                  N : constant Int := Ticks - Int (Common);
+               begin
+                  if Lp <= 0.0 or else Whole <= 0.0 then return ""; end if;
+                  return " secs=" & Tenths_Text (Whole) & " loop=" & Tenths_Text (Lp) & " tps=" & Img (Int (Float (N) / Float (Lp)));
+               exception
+                  when others => return "";
+               end Speed_Text;
             begin
                for E in Entity_Id loop
                   Append (Mo, (if E = Entity_Id'First then "" else ",") & Img (St (E).Mood));
@@ -7683,7 +7884,7 @@ begin
                end loop;
                Append_Trend ("T session=" & Img (Session_N) & " tick=" & Img (Ticks) & " time=" & Local_Stamp & " elapsed=" & Tenths_Text (Ada.Calendar."-" (Ada.Calendar.Clock, T_Run)) & " size=" & Img (Folder_Bytes (".")) & " mood=" & To_String (Mo)
                              & " energy=" & To_String (En) & " words=" & To_String (Wo) & " pets=" & To_String (Pe) & Sim_Records.Trend
-                             & " trials=" & Img (Sim_Trial.Count) & " anomalies=" & Img (Natural (Items.Length)));
+                             & " trials=" & Img (Sim_Trial.Count) & " anomalies=" & Img (Natural (Items.Length)) & Speed_Text);
             end;
          end if;
       end Report_Out;

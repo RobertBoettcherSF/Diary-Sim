@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  See the spec.  Counting only: integer arithmetic, no dice, no clock, no files.
 pragma Ada_2022;
 
@@ -81,29 +81,52 @@ package body Sim_Evolve is
    function Weaker (A, B : Cand) return Boolean is (A.Fit < B.Fit or else (A.Fit = B.Fit and then A.Idx < B.Idx));
    package Cand_Sort is new Cand_Vectors.Generic_Sorting ("<" => Weaker);
 
+   --  0.057: the sessions loop visits only the LIVE words (not a symbol, born, not dormant) instead of every word of the list: the
+   --  same result (every live word is updated on its own; the candidates are sorted by fitness and index), but a long save no
+   --  longer costs words x sessions (make evolve / make active scaled with both).
+   package Idx_Vectors is new Ada.Containers.Vectors (Positive, Positive);
    procedure Run_One (E : Positive) is
       Ws : Word_Vectors.Vector renames Words (E);
       Cursor : array (1 .. Natural'Max (1, Natural (Ws.Length))) of Natural := [others => 1];
       Active : Natural := 0;
       Was_Above : Boolean := False;
+      Born_In : array (1 .. Sessions) of Idx_Vectors.Vector;   --  the non-symbol words born in each session, in index order
+      Live, Kept : Idx_Vectors.Vector;                         --  the live words, in index order
    begin
       for W of Ws loop
          W.R.Born := Session_Of (W.Tick);
          for Ev of W.Ev loop Ev.Sess := Session_Of (Ev.Tick); end loop;
          Event_Sort.Sort (W.Ev);
       end loop;
+      for I in 1 .. Natural (Ws.Length) loop
+         if not Ws (I).Symbol and then Ws (I).R.Born in Born_In'Range then Born_In (Ws (I).R.Born).Append (I); end if;
+      end loop;
       for K in 1 .. Sessions loop
          declare
             Retire_Left : Natural := Pr.Retire_Max;
             Idle_C, Cap_C : Cand_Vectors.Vector;
-            Births : Natural := 0;
+            Births : constant Natural := Natural (Born_In (K).Length);
          begin
-            for I in 1 .. Natural (Ws.Length) loop
+            if Births > 0 then   --  the newborn join the live words (index order kept: a merge)
+               Kept.Clear;
+               declare
+                  A, B : Positive := 1;
+               begin
+                  while A <= Natural (Live.Length) or else B <= Births loop
+                     if B > Births or else (A <= Natural (Live.Length) and then Live (A) < Born_In (K) (B)) then
+                        Kept.Append (Live (A)); A := A + 1;
+                     else
+                        Kept.Append (Born_In (K) (B)); B := B + 1;
+                     end if;
+                  end loop;
+               end;
+               Live.Move (Kept);
+            end if;
+            for I of Live loop
                declare
                   W : Word_Rec renames Ws (I);
                   U, G, A : Natural := 0;
                begin
-                  if not W.Symbol and then W.R.Born = K then Births := Births + 1; end if;
                   if not W.Symbol and then W.R.Born <= K and then W.R.Dormant_In = 0 then
                      while Cursor (I) <= Natural (W.Ev.Length) and then W.Ev (Cursor (I)).Sess <= K loop
                         case W.Ev (Cursor (I)).Kind is
@@ -132,7 +155,7 @@ package body Sim_Evolve is
             end loop;
             Active := Active + Births;
             if Pr.Cap > 0 and then Active > Pr.Cap then Was_Above := True; end if;
-            for I in 1 .. Natural (Ws.Length) loop
+            for I of Live loop
                declare
                   W : Word_Rec renames Ws (I);
                begin
@@ -163,6 +186,11 @@ package body Sim_Evolve is
                end loop;
                if Was_Above and then Active <= Pr.Cap and then Tot (E).Cap_Reached = 0 then Tot (E).Cap_Reached := K; end if;
             end if;
+            Kept.Clear;   --  the words that went dormant leave the live list
+            for I of Live loop
+               if Ws (I).R.Dormant_In = 0 then Kept.Append (I); end if;
+            end loop;
+            Live.Move (Kept);
          end;
       end loop;
       for W of Ws loop
@@ -263,11 +291,22 @@ package body Sim_Evolve is
    Curve : array (1 .. Max_Comp) of Int_Vectors.Vector;
    Last_Rating : array (1 .. Max_Comp) of Positive := [others => 1];
 
-   function C_Session_Of (Tick : Natural) return Positive is
+   function C_Session_Of (Tick : Natural) return Positive is   --  the last start below Tick (the starts ascend: a binary search, 0.057)
+      Lo : Natural := 1;
+      Hi : Natural := Natural (C_Starts.Length);
       Best : Positive := 1;
    begin
-      for I in 1 .. Natural (C_Starts.Length) loop
-         if C_Starts.Element (I) < Integer (Tick) then Best := I; end if;
+      while Lo <= Hi loop
+         declare
+            Mid : constant Positive := (Lo + Hi) / 2;
+         begin
+            if C_Starts.Element (Mid) < Integer (Tick) then
+               Best := Mid;
+               Lo := Mid + 1;
+            else
+               Hi := Mid - 1;
+            end if;
+         end;
       end loop;
       return Best;
    end C_Session_Of;

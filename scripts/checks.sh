@@ -1640,10 +1640,10 @@ env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/vt" > vt.txt 2>&1; rct=$?
 rnorm() { sed -E 's/[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9:]{8}//g; s#'"$2"'#HOME#g; s/(elapsed|Elapsed)[= ][0-9.]+//g' "$1/run_report.txt"; }
 rnorm "$w/nt/night" "$w/nt/night" > rn1.txt; rnorm "$w/nt/hand" "$w/nt/hand" > rn2.txt
 diff rn1.txt rn2.txt > rn.diff 2>&1; [ -s rn1.txt ] && [ ! -s rn.diff ] && ok "run_report.txt of the last night session equals the one of the last hand-made session (times and paths aside)" || { bad "night run_report differs from the hand-made one"; head -5 rn.diff; }
-nt="$w/nt/night/trend.txt"; tp='^T session=[0-9]+ tick=[0-9]+ time=[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} elapsed=[0-9]+\.[0-9] size=[0-9]+ mood=(-?[0-9]+,){3}-?[0-9]+ energy=([0-9]+,){3}[0-9]+ words=([0-9]+,){3}[0-9]+ pets=([0-9]+,){3}[0-9]+ grant=([0-9]+,){3}[0-9]+ refuse=([0-9]+,){3}[0-9]+ agreed=[0-9]+ rejected=[0-9]+ trials=[0-9]+ anomalies=[0-9]+$'
+nt="$w/nt/night/trend.txt"; tp='^T session=[0-9]+ tick=[0-9]+ time=[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} elapsed=[0-9]+\.[0-9] size=[0-9]+ mood=(-?[0-9]+,){3}-?[0-9]+ energy=([0-9]+,){3}[0-9]+ words=([0-9]+,){3}[0-9]+ pets=([0-9]+,){3}[0-9]+ grant=([0-9]+,){3}[0-9]+ refuse=([0-9]+,){3}[0-9]+ agreed=[0-9]+ rejected=[0-9]+ trials=[0-9]+ anomalies=[0-9]+( secs=[0-9]+\.[0-9] loop=[0-9]+\.[0-9] tps=[0-9]+)?$'
 nt_ok=1; [ "$(grep -c '^T ' "$nt")" = 3 ] && [ "$(grep -cE "$tp" "$nt")" = 3 ] || nt_ok=0; head -1 "$nt" | grep -q '^# trend v1, one line per session: time (local), elapsed .* wesen in the order Adam,Eve,Abel,Ruth: mood' || nt_ok=0
 [ "$(grep '^T ' "$nt" | sed -E 's/^T session=([0-9]+) tick=([0-9]+) .*/\1:\2/' | tr '\n' ' ')" = "1:60 2:120 3:180 " ] || nt_ok=0
-diff <(sed 's/ time=[^ ]* [^ ]* elapsed=[^ ]* size=[^ ]*//' "$nt") <(sed 's/ time=[^ ]* [^ ]* elapsed=[^ ]* size=[^ ]*//' "$w/nt/hand/trend.txt") > /dev/null || nt_ok=0
+diff <(sed 's/ time=[^ ]* [^ ]* elapsed=[^ ]* size=[^ ]*//; s/ secs=.*//' "$nt") <(sed 's/ time=[^ ]* [^ ]* elapsed=[^ ]* size=[^ ]*//; s/ secs=.*//' "$w/nt/hand/trend.txt") > /dev/null || nt_ok=0
 sz=($(grep '^T ' "$nt" | sed -E 's/.* size=([0-9]+) .*/\1/')); [ "${sz[0]}" -gt 0 ] && [ "${sz[0]}" -lt "${sz[1]}" ] && [ "${sz[1]}" -lt "${sz[2]}" ] || nt_ok=0
 [ "$nt_ok" = 1 ] && ok "trend.txt: a legend line, then one fixed key=value line per session (session tick time elapsed size mood energy words pets grant refuse agreed rejected trials anomalies); a normal run writes the same lines" || bad "trend.txt ($nt_ok)"
 rl="$w/nt/night/run_log.txt"
@@ -2461,10 +2461,10 @@ cp -r "$w/nt/a2" "$w/nt/spw"; sed -i 's/ symstrict=1//' "$w/nt/spw/diaries/sessi
   && ok "make ship on a cold start (no save folder): PASS, session 1; on a save that DRIFTs: exit $rcd, VERDICT: FAIL with the reasons; make wordstat without a symstrict=1 session says so; README and the Makefile header describe make ship" || bad "make ship cold / fail ($rcc $rcd)"
 # make night-ship: the overnight form; the same checkin.txt, the same verdict layout; here a tiny time limit, so the reason is max_hours
 rm -rf "$w/nt/spn"; cp -r "$w/nt/a2" "$w/nt/spn"
-DIARY_HOME="$w/nt/spn" make --no-print-directory -C "$root" night-ship NIGHT_SHIP_HOURS=0.002 NIGHT_SHIP_TICKS=30 > spn.txt 2>&1 < /dev/null; rcn=$?
-ckn="$w/nt/spn/checkin.txt"; keys() { sed -n '3,18p' "$1" | awk '{ print $1 }'; }
+DIARY_HOME="$w/nt/spn" make --no-print-directory -C "$root" night-ship NIGHT_SHIP_HOURS=0.002 NIGHT_SHIP_TICKS=30 NIGHT_SHIP_RESERVE=0 > spn.txt 2>&1 < /dev/null; rcn=$?
+ckn="$w/nt/spn/checkin.txt"; keys() { sed -n '3,/^wall time: /p' "$1" | grep -v '^budget: ' | awk '{ print $1 }'; }
 [ "$rcn" = 0 ] && sed -n 1p "$ckn" | grep -q '^diary-sim checkin (make night-ship): attach this ONE file' && sed -n 3p "$ckn" | grep -q '^VERDICT: PASS$' \
-  && grep -q '^stop reason: max_hours (the time limit was reached)$' "$ckn" && grep -q '^night: sessions of 30 ticks; max sessions: no limit; max hours: 0.002$' "$ckn" \
+  && grep -q '^stop reason: max_hours (the time limit was reached)$' "$ckn" && grep -q '^night: sessions of 30 ticks; max sessions: no limit; one budget of 0.002h$' "$ckn" && grep -q '^budget: 0.002h; stop [0-9:]*, reserve 0m00s; due [0-9:]*, written ' "$ckn" && grep -q '^shared (3 of 4): [0-9]* / 40000 ' "$ckn" && grep -q '^post_secs=[0-9]*$' "$w/nt/spn/ship_stamp.txt" \
   && grep -q '^night: sessions of 60 ticks; max sessions: 1; max hours: 12$' "$ck" && [ "$(keys "$ckn")" = "$(keys "$ck")" ] && grep -qF '== night box == reason=max_hours' "$ckn" && grep -q '^roles (s[0-9]*-s[0-9]*): ' "$ckn" && grep -qF '== early signals: ' "$ckn" \
   && grep -q '^make night-ship wall time: ' spn.txt && grep -q '^# make night-ship ' "$root/Makefile" && grep -q '^night-ship: all' "$root/Makefile" && grep -q 'make night-ship' "$root/README.md" \
   && ok "make night-ship (no session limit, a tiny time limit): VERDICT: PASS, stop reason max_hours, the same checkin.txt and the same verdict lines as make ship; Makefile and README describe it" || bad "make night-ship ($rcn)"
@@ -2481,7 +2481,7 @@ ckr="$w/nt/spr/checkin.txt"; sumr=$(sed -n '/^-\{79\}$/,$p' spr.txt)
 [ "$rcr" = 0 ] && sed -n 1p "$ckr" | grep -q '^diary-sim checkin (make ship): attach this ONE file' && sed -n 3p "$ckr" | grep -q '^VERDICT: PASS$' \
   && grep -q "^night: none (reports only); the save: $nsr sessions, [0-9]* ticks$" "$ckr" && grep -q '^stop reason: none (no night); the last night: [a-z_]*$' "$ckr" \
   && grep -q '^new sessions: 0; newest: [0-9]* (s[0-9]* to s'"$nsr"'), active=2: ' "$ckr" && grep -q '^verify: OK ([0-9]* ticks replayed from the files)$' "$ckr" \
-  && grep -q '^wall time: total [0-9]*m[0-9][0-9]s (no night)$' "$ckr" && [ "$(keys "$ckr")" = "$(keys "$ck")" ] \
+  && grep -q '^wall time: total [0-9]*m[0-9][0-9]s (no night, reports [0-9]*m[0-9][0-9]s)$' "$ckr" && [ "$(keys "$ckr")" = "$(keys "$ck")" ] \
   && grep -qF '== no night: run_log.txt entries of the last night ==' "$ckr" && grep -qF '== make evolve (exit 0' "$ckr" && grep -qF '== make verify (exit 0' "$ckr" \
   && [ "$(dsum "$w/nt/spr")" = "$d0" ] && [ "$(cat "$w/nt/spr/run_log.txt" 2>/dev/null | cksum)" = "$rl0" ] && [ "$(cat "$w/nt/spr/night_console.txt" 2>/dev/null | cksum)" = "$nc0" ] \
   && ! grep -q 'night run:' spr.txt && [ "$(echo "$sumr" | wc -l)" -le 20 ] && [ "$(echo "$sumr" | grep -v '^attach this' | awk 'length > 79' | wc -l)" = 0 ] \
@@ -2489,7 +2489,7 @@ ckr="$w/nt/spr/checkin.txt"; sumr=$(sed -n '/^-\{79\}$/,$p' spr.txt)
   && grep -q '^roles (s[0-9]*-s[0-9]*): rest [A-Za-z]* [0-9]*%, work [A-Za-z]* [0-9]*%, teach ' "$ckr" && grep -q '^shared words: [0-9]* of [0-9]* known by all four ([0-9]*%); pairs 0\.[0-9]* to [01]\.[0-9]*$' "$ckr" \
   && grep -q '^petition topics (s[0-9]*-s[0-9]*): ' "$ckr" && grep -q '^mood: spread [0-9]* ([A-Za-z]* -*[0-9]* to [A-Za-z]* -*[0-9]*), mean -*[0-9]*$' "$ckr" \
   && grep -q '^since the last ship: no stamp yet' "$ckr" && grep -q "^sessions=$nsr\$" "$w/nt/spr/ship_stamp.txt" && grep -qF '== early signals: the lines above in full, from the files (no replay) ==' "$ckr" \
-  && [ "$(sed -n '1p;3,18p' "$ckr" | awk 'length > 79' | wc -l)" = 0 ] && sed -n 18p "$ckr" | grep -q '^wall time: ' \
+  && [ "$(sed -n '1p;3,/^wall time: /p' "$ckr" | awk 'length > 79' | wc -l)" = 0 ] && grep -q '^wall time: ' "$ckr" \
   && ok "make ship (default): no night run, stdin closed (no q), ${dtr}s; VERDICT: PASS with the same verdict lines as a night (the save size, the last night's stop reason and sessions, verify OK); diaries, run_log.txt and night_console.txt unchanged; early signals (roles, shared words, petition topics, mood spread; no stamp yet, ship_stamp.txt written)" || bad "make ship reports only ($rcr)"
 DIARY_HOME="$w/nt/spr" make --no-print-directory -C "$root" ship SHIP_VERIFY_TICKS=10 > sps.txt 2>&1 < /dev/null; rcs=$?
 cp "$ckr" sps_ck.txt

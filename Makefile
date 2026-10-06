@@ -1,4 +1,4 @@
-# Version: 0.045
+# Version: 0.046
 # make ship       ROBERT'S DAY COMMAND (after unzipping over the source folder; the save in ../diary-data stays): REPORTS ONLY, no
 #                 night, no q, seconds: build if needed, then active, wordstat, frustration, evolve on the save as it is, and verify if the
 #                 save has at most SHIP_VERIFY_TICKS (150000) ticks (verify replays the whole history, minutes on a big save; the
@@ -11,10 +11,15 @@
 #                 Exit 0 = PASS.  SHIP_SESSIONS=N (0) adds N new sessions of CHECKIN_TICKS (300) ticks first, without q; NOTE: that run
 #                 replays the whole history once before the first new session (minutes on a big save).  An empty save (cold start) gets
 #                 SHIP_COLD_SESSIONS (10) sessions first.  (scripts/ship.sh)
-# make night-ship THE OVERNIGHT COMMAND: the full path: the history replay, sessions of NIGHT_SHIP_TICKS (300) ticks until
-#                 NIGHT_SHIP_HOURS (10) hours have passed (NIGHT_SHIP_SESSIONS = 0: no session limit; set it to stop earlier), then the
-#                 same reports with verify always, into the same checkin.txt with the same verdict header.  Stop reason max_hours (or
-#                 max_sessions) = PASS; q still works (FAIL: stopped by hand, the reports still run).  e.g. make night-ship NIGHT_SHIP_HOURS=8
+# make night-ship THE OVERNIGHT COMMAND: ONE wall-clock budget of NIGHT_SHIP_HOURS (9, decimals allowed) from the start of make for the
+#                 WHOLE job: the history replay, sessions of NIGHT_SHIP_TICKS (300) ticks, then the reports and checkin.txt.  New sessions
+#                 stop at the budget minus a reserve (the time the last night needed after its stop x NIGHT_SHIP_RESERVE_FACTOR 1.5 +
+#                 NIGHT_SHIP_RESERVE_MARGIN 120 s, kept in ship_stamp.txt; NIGHT_SHIP_RESERVE=<s> by hand); the planned stop and the reserve
+#                 are printed first and stand in checkin.txt.  The end check and verify follow SHIP_VERIFY / SHIP_VERIFY_TICKS like make ship
+#                 (no full replay of a big save: make verify by hand).  A closed terminal (SIGHUP) ends the night; the reports still run and
+#                 checkin.txt is still written (the console also goes to ship_log.txt).  NIGHT_SHIP_DETACH=1: run detached, no live screen.
+#                 Stop reason max_hours (or max_sessions) = PASS; q still works (FAIL: stopped by hand, the reports still run).
+#                 Reports (both ships) cover the sessions since the last ship stamp; SHIP_FULL=1: the whole save.
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -155,7 +160,8 @@ SHIP_COLD_SESSIONS ?= 10
 # make night-ship: the overnight form of make ship (0 sessions = no session limit; the hours end it)
 NIGHT_SHIP_SESSIONS ?= 0
 NIGHT_SHIP_TICKS ?= 300
-NIGHT_SHIP_HOURS ?= 10
+NIGHT_SHIP_HOURS ?= 9
+export SHIP_FULL NIGHT_SHIP_RESERVE NIGHT_SHIP_RESERVE_FACTOR NIGHT_SHIP_RESERVE_MARGIN NIGHT_SHIP_DETACH SHIP_VOCAB_GOAL
 
 EVERY ?= 100
 
@@ -299,7 +305,7 @@ ship: all
 	$(TIMED) scripts/ship.sh ship $(SHIP_SESSIONS) $(CHECKIN_TICKS) "" $(T0) "$(SEED)" $(SHIP_VERIFY) $(SHIP_VERIFY_TICKS) $(SHIP_COLD_SESSIONS)
 
 night-ship: all
-	$(TIMED) scripts/ship.sh night-ship $(NIGHT_SHIP_SESSIONS) $(NIGHT_SHIP_TICKS) $(NIGHT_SHIP_HOURS) $(T0) "$(SEED)" 1 0 0
+	$(TIMED) scripts/ship.sh night-ship $(NIGHT_SHIP_SESSIONS) $(NIGHT_SHIP_TICKS) $(NIGHT_SHIP_HOURS) $(T0) "$(SEED)" $(SHIP_VERIFY) $(SHIP_VERIFY_TICKS) 0
 
 checkin: all
 	@echo "=== make night (checkin: $(CHECKIN_SESSIONS) sessions of $(CHECKIN_TICKS) ticks) ==="
@@ -330,4 +336,4 @@ footprint:
 	$(TIMED) scripts/footprint.sh
 
 clean:
-	rm -rf obj obj_small bin diaries diaries_old_* entities summary.txt summary.jsonl run_report.txt run_report_prev.txt run_log.txt trend.txt night_console.txt night_verify.txt voice_log.txt debug.txt debug.tmp debug_digest.txt debug_digest.prev debug_full.txt last_error.txt
+	rm -rf obj obj_small bin diaries diaries_old_* entities summary.txt summary.jsonl run_report.txt run_report_prev.txt run_log.txt trend.txt night_console.txt ship_log.txt ship_console.txt night_verify.txt voice_log.txt debug.txt debug.tmp debug_digest.txt debug_digest.prev debug_full.txt last_error.txt

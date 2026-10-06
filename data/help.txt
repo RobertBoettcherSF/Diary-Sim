@@ -44,6 +44,10 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
                the history replay is done a "replay done: ... NEW from sN,
                tick T (active=2)" line (plain output at once, run_log.txt,
                and in the final box; make checkin)
+--end-check-ticks=N  with --continuous: the end check (a full replay) only
+               if the save has at most N ticks (0 = never; make night-ship)
+--since-session=N  with --frustration: count sessions N and later only
+               (the diaries are entered by a binary search on the tick)
 --chat         one paced session with an input line (make chat): @name
                text talks to a wesen, a player or the observer; /help lists
                the orders; q (empty line) stops; every line is recorded in

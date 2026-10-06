@@ -107,11 +107,11 @@ diaries, entities and summary files are byte for byte the same.
 
 ## Overnight: `make night`, `trend.txt`, `make trend`, `make share`
 
-**Robert's loop (three steps, build 0.056):**
+**Robert's loop (three steps, build 0.057):**
 
 1. Unzip `diary-sim.zip` over `~/Downloads/diary-sim` (the save in `~/Downloads/diary-data` stays):
    `cd ~/Downloads && rm -rf diary-sim && unzip -o diary-sim.zip && cd diary-sim`
-2. ONE command: `make ship` by day (reports only, seconds, no q) or `make night-ship` overnight (about 10 hours)
+2. ONE command: `make ship` by day (reports only, seconds, no q) or `make night-ship` overnight (ONE budget of 9 hours for everything)
 3. Paste the short summary from the terminal and attach ONE file: `~/Downloads/diary-data/checkin.txt`
 
 * **`make ship`** (by day) runs NO night and needs no q: it builds if needed, then `make active`, `make wordstat`,
@@ -137,11 +137,34 @@ diaries, entities and summary files are byte for byte the same.
   the whole history once before the first new session (minutes on a big save), so the default stays at reports only. A cold start
   (an empty or missing save folder) gets `SHIP_COLD_SESSIONS` (10) sessions first, so there is something to report.
   `make checkin` stays (a night of 40 sessions, everything on the terminal), the single targets too.
-* **`make night-ship`** (overnight) is the full path: the history replay, sessions of `NIGHT_SHIP_TICKS` (300) ticks for
-  `NIGHT_SHIP_HOURS` (10) hours (`NIGHT_SHIP_SESSIONS` = 0: no session limit; set it to stop earlier), then the same reports with
-  `make verify` always, into the same `checkin.txt` with the same VERDICT header. The stop reason is then `max_hours` (or
-  `max_sessions`), both PASS. For a long night the run_log, session and trend sections keep their first 40 and last 240 lines (the
-  rest stays in the save), so the file stays small. e.g. `make night-ship NIGHT_SHIP_HOURS=8`. A cold start works the same way.
+* **`make night-ship`** (overnight) is the full path: the history replay, sessions of `NIGHT_SHIP_TICKS` (300) ticks, then the same
+  reports into the same `checkin.txt` with the same VERDICT header. **Build 0.057: ONE wall-clock budget**, `NIGHT_SHIP_HOURS` (9,
+  decimals allowed), counted from the start of make, covers the WHOLE job: the replay, the night, the reports and `checkin.txt`. New
+  sessions stop at the budget minus a reserve: the time the last night needed after its planned stop (end check + reports,
+  `post_secs` in `ship_stamp.txt`) x `NIGHT_SHIP_RESERVE_FACTOR` (1.5) + `NIGHT_SHIP_RESERVE_MARGIN` (120 s); without history an
+  estimate from the save size (`NIGHT_SHIP_RESERVE=<seconds>` sets it by hand). The first lines say when new sessions stop, the
+  reserve and when `checkin.txt` is due; the verdict has a `budget:` line (on time / late). The night's end check and the verify step
+  follow `SHIP_VERIFY` / `SHIP_VERIFY_TICKS` like `make ship` (`bin/diary_sim --end-check-ticks N`): a big save gets no full replay after
+  the night (`make verify` by hand); if the end check ran, it is the verify of the run (no second replay). **A closed terminal**
+  (SIGHUP) ends the night cleanly; the reports still run and `checkin.txt` is still written (the script ignores HUP and PIPE from then
+  on; every line it prints also goes to `ship_log.txt` in the save folder). `NIGHT_SHIP_DETACH=1` runs the whole job detached
+  (`setsid nohup`, console in `ship_console.txt`, no live screen). The stop reason `max_hours` (or `max_sessions`) is PASS; a closed
+  terminal after real sessions is PASS with a WARN. For a long night the run_log, session and trend sections keep their first 40 and
+  last 240 lines (the rest stays in the save), so the file stays small. A cold start works the same way.
+* **Reports window (0.057).** Both ships give the reports the sessions since the last ship stamp (or, with nothing new, the last
+  night): `make frustration` takes `--since-session N` (it finds the first tick of the window in each diary by a binary search
+  instead of reading the diary from the start); `SHIP_FULL=1` gives the whole save. `make wordstat`, `make active` and `make evolve`
+  stay whole-save (they read the word lists, the record files and the chess games, which grow linearly; the evolve word loop no longer
+  costs words x sessions); the early signals were already windowed. Each report step prints a progress line with its time.
+* **Vocabulary goal (0.057).** Right under the VERDICT: `shared (3 of 4): N / 40000` = plain words (no chess move, no number) known by
+  at least ceiling(3/4 of the wesen), the change since the last ship, the stricter all-four count, the overlap (all four / mean known
+  per wesen), the known words per wesen and who is missing most often among the words known by all but one. One read of
+  `entities/*/words.txt`. `used: not tracked yet`: the files keep no per-word record of who said or wrote a word (a first-use line per
+  wesen and word in new sessions' records would be needed). `SHIP_VOCAB_GOAL` changes the 40000.
+* **Speed (0.057).** `trend.txt` lines of new sessions end with `secs=` (wall seconds of the session, end report included), `loop=`
+  (its tick loop) and `tps=` (new ticks per second of the loop). A night no longer rereads every diary between sessions and at each
+  session's export check (it checks the last line of each diary and keeps the lines it wrote in memory): that was the part of a
+  session that grew with the save (about 1.4 s of 2.0 s at 100k ticks; the same files, byte for byte).
 
 For a run you leave alone and read in the morning, and for the loop *Robert runs it, sends the files, the code changes, Robert downloads*:
 
@@ -151,7 +174,7 @@ For a run you leave alone and read in the morning, and for the loop *Robert runs
     make share                                  # ONE zip to send back
     make ship                                   # by day: reports only (no night, no q) into ../diary-data/checkin.txt
     make ship SHIP_SESSIONS=5                   # the same after 5 new sessions (replays the history first)
-    make night-ship                             # overnight: 300-tick sessions for 10 hours, then the same checkin.txt
+    make night-ship                             # overnight: ONE budget of 9 hours: sessions, then the reports and checkin.txt
     make checkin                                # the older paste: a night of 40 sessions (no q needed), then active, wordstat, frustration, evolve, verify
     make checkin CHECKIN_SESSIONS=10 CHECKIN_TICKS=300 SEED=42
 

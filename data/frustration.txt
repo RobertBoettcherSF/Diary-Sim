@@ -1,8 +1,9 @@
-# Version: 0.001
+# Version: 0.002
 # The MiniMax frustration report (make frustration, --frustration): read-only, counts over diaries/petitions.txt,
 # diaries/sessions.txt and diaries/<id>.jsonl.  Nothing is simulated or written; the grant rate is not changed.
 # Numbers: frustration.refuse_weight in data/limits.txt.  {1} {2} ... are filled in by the program.
 frust.none = no sessions in {1}: run make run or make night first
+frust.window = window: sessions s{1} to s{2} of {3} (--since-session; without it the newest 5000)
 frust.title = Frustration (MiniMax, read-only): {1} sessions, {2} decided petitions.
 frust.wesen.head = Per wesen: petitions decided, granted, partly granted, refused, the lowest mood of all sessions (0 if it never went below 0), and the worst session. Session score = {1} x refused petitions + the depth of the lowest mood below 0.
 frust.col.pet = asked
