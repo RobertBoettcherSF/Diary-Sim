@@ -1,5 +1,5 @@
 #!/bin/sh
-# Version: 0.007
+# Version: 0.008
 # make ship (by day) and make night-ship (overnight): Robert's ONE command; both write ONE file, checkin.txt in the save folder
 # (../diary-data next to the source folder, or --home / $DIARY_HOME: bin/diary_sim --folder says where), with the same VERDICT header
 # on top, and print a short summary and the path of that file.  Exit status 0 = PASS, 1 = FAIL.
@@ -9,10 +9,14 @@
 #   replays the whole history once before the first new one, so that costs replay time too).  An empty save (cold start) gets
 #   <cold sessions> sessions first, so there is something to report.
 # make night-ship: ONE wall-clock budget of <hours> hours (decimals allowed) from the start of make for the WHOLE job: the night, the
-#   reports and checkin.txt.  The night stops starting sessions at budget minus a reserve; the reserve is the measured time after the
-#   last night's planned stop (post_secs in ship_stamp.txt) x NIGHT_SHIP_RESERVE_FACTOR (1.5) + NIGHT_SHIP_RESERVE_MARGIN (120 s); with no
-#   history an estimate from the save size (NIGHT_SHIP_RESERVE=<seconds> sets it by hand).  The night runs on the terminal (the live
-#   screen of make night; no q needed).  Its end check (a full replay) and the verify step follow the same cap as make ship (auto:
+#   reports and checkin.txt.  The night stops starting sessions at budget minus a reserve.  0.060: the reserve is the measured REPORTS
+#   phase of the last run of the same kind (night_reports_secs / slice_reports_secs in ship_stamp.txt, else reports_secs) x
+#   NIGHT_SHIP_RESERVE_FACTOR (1.5) + NIGHT_SHIP_RESERVE_MARGIN (60 s) + the night's end check when it will run, at least 60 s and at most
+#   a quarter of the budget (not the replay, not a late finish: 0.059 took the whole time after the planned stop and left a 20-minute
+#   slice 60 s); with no history an estimate from the save size (NIGHT_SHIP_RESERVE=<seconds> sets it by hand).  The program gets the
+#   deadline and the reserve (--deadline, --reserve): without a valid checkpoint it prints a replay estimate first and, when that cannot
+#   hold, 'the budget cannot hold: replay first (~N min), then sessions; checkin.txt late by ~M min' (also in checkin.txt), then goes on.
+#   The night runs on the terminal (the live screen of make night, labelled slice / ship / night run; no q needed).  Its end check (a full replay) and the verify step follow the same cap as make ship (auto:
 #   at most <verify ticks> ticks); the full check of a big save is make verify by hand.
 # Terminal closed (SIGHUP): the night ends cleanly (the program does that), the reports still run and checkin.txt is still written:
 #   this script ignores HUP and PIPE from then on, and every line it prints also goes to ship_log.txt in the save folder.
@@ -22,14 +26,23 @@
 #   script says beforehand whether there is one, and the verdict line "checkpoint:" says how the start went (loaded, or a full replay and
 #   why) and how long it took, and what the end wrote.  Its reserve is kept apart (slice_post_secs in ship_stamp.txt).
 # The reports cover the sessions since the last ship stamp (or the newest window); SHIP_FULL=1: the whole save.
+# 0.060 verify: auto = make verify-full if the save has at most <verify ticks> ticks, else the incremental make verify if the verified
+#   checkpoint (state.verified.ckpt) is at most <verify ticks> ticks behind, else skipped.  checkin.txt: "last full verify: <date> (N
+#   ticks)", due after 30 days or when the simulation fingerprint (scripts/sim_print.sh) or the state format differs from the one of that
+#   verify (verify_stamp.txt), and "last verify: <date> (ticks A-B)", due weekly.  "growth:" the three file groups of the save that grew
+#   most since the last ship (state.ckpt left out: it is rewritten, not grown).
+# Every pipe into "first line only" uses sed -n 1p (reads all its input): with PIPE ignored, head -n 1 left the writer a "Broken pipe".
 # Usage (from the source folder):
 #   scripts/ship.sh <ship|night-ship|slice> <sessions> <ticks> <hours (slice: minutes) or ""> <make start, seconds since 1970> <seed or ""> \
 #                   <verify: 1, 0 or auto> <verify ticks> <cold sessions>
 exe=bin/diary_sim
 mode=${1:-ship}; sessions=${2:-0}; ticks=${3:-300}; hours=$4; t0=${5:-$(date +%s)}; seed=$6
 vmode=${7:-auto}; vmax=${8:-150000}; cold=${9:-10}
-minutes=""; pkey=post_secs
-if [ "$mode" = slice ]; then minutes=${hours:-20}; hours=$(awk -v m="$minutes" 'BEGIN { printf "%.4f", m / 60 }'); pkey=slice_post_secs; fi
+minutes=""; pkey=post_secs; rkey=night_reports_secs; label=night
+if [ "$mode" = slice ]; then minutes=${hours:-20}; hours=$(awk -v m="$minutes" 'BEGIN { printf "%.4f", m / 60 }'); pkey=slice_post_secs; rkey=slice_reports_secs; label=slice; fi
+[ "$mode" = ship ] && { rkey=ship_reports_secs; label=ship; }
+simprint=$(scripts/sim_print.sh 2>/dev/null); simprint=${simprint:--}
+ckfmt=$(sed -n 's/^ *Ckpt_Format : constant := \([0-9]*\);.*/\1/p' diary_sim.adb)
 build=$(sed -n 's/^ *Build : constant String := "\([0-9.]*\)".*/\1/p' diary_sim.adb)
 folder=$("$exe" --folder) || { echo "ship: cannot find the save folder" >&2; exit 1; }
 mkdir -p "$folder" || exit 1
@@ -52,13 +65,16 @@ stopped=0; hup=0
 say() { printf '%s\n' "$*" >> "$log" 2>/dev/null; printf '%s\n' "$*" 2>/dev/null; }   # the terminal (if it is still there) and ship_log.txt
 hm() { date -d "@$1" '+%H:%M' 2>/dev/null || date -r "$1" '+%H:%M' 2>/dev/null || echo "?"; }
 cnt() { if [ -f "$1" ]; then grep -c "$2" "$1"; else echo 0; fi; }   # a count, 0 without the file
+# the tick of a checkpoint: its header line "tick N" (0.060: the header is longer than 4 KB on a real save; sed stops at that line)
+ckt() { LC_ALL=C sed -n '/^tick [0-9]/{s/^tick \([0-9]*\).*/\1/p;q;}' "$1" 2>/dev/null; }
 secs() { s=$1; printf '%dm%02ds' $((s / 60)) $((s % 60)); }
 ses="$folder/diaries/sessions.txt"; rl="$folder/run_log.txt"; con="$folder/night_console.txt"; tr="$folder/trend.txt"
 stampf="$folder/ship_stamp.txt"
-sv() { sed -n "s/^$1=//p" "$stampf" 2>/dev/null | head -n 1; }
+sv() { sed -n "s/^$1=//p" "$stampf" 2>/dev/null | sed -n 1p; }
 dlt() { if [ -n "$1" ] && [ -n "$2" ] && [ "$1" != - ] && [ "$2" != - ]; then d=$(( $1 - $2 )); [ "$d" -ge 0 ] && d="+$d"; echo "$d"; else echo "?"; fi; }
 p_post_keep=$(sv post_secs)   # carried over by a day ship (and by a slice)
 p_spost_keep=$(sv slice_post_secs)   # the same for make slice (carried over by a day ship and by a night)
+p_rkeep=""; for k in ship_reports_secs night_reports_secs slice_reports_secs; do v=$(sv $k); [ -n "$v" ] && p_rkeep="$p_rkeep $k=$v"; done   # 0.060
 ckl="$folder/ckpt_log.txt"
 s0=$(cnt "$ses" '^S[0-9]'); r0=$(if [ -f "$rl" ]; then wc -l < "$rl"; else echo 0; fi); t_0=$(if [ -f "$tr" ]; then wc -l < "$tr"; else echo 0; fi)
 touch "$tmp/stamp"; t0_date=$(date '+%Y-%m-%d %H:%M:%S' -d "@$t0" 2>/dev/null || echo 0)
@@ -80,14 +96,21 @@ night_hours=$hours
 if [ "$mode" != ship ]; then   # ONE budget for the whole job: the night stops starting sessions at deadline - reserve
   budget=$(awk -v h="${hours:-9}" 'BEGIN { printf "%d", h * 3600 }')
   deadline=$((t0 + budget))
-  fac=${NIGHT_SHIP_RESERVE_FACTOR:-1.5}; mar=${NIGHT_SHIP_RESERVE_MARGIN:-120}
-  p_post=$(sv $pkey)
-  # the end check of the night replays the whole history when the save is under the verify cap: about 300 ticks/s
-  chk=0; case $vmode in 1) chk=$((ticks0 / 300)) ;; 0) chk=0 ;; *) [ "$ticks0" -le "$vmax" ] && chk=$((ticks0 / 300)) ;; esac
+  fac=${NIGHT_SHIP_RESERVE_FACTOR:-1.5}; mar=${NIGHT_SHIP_RESERVE_MARGIN:-60}
+  # 0.060: the REPORTS phase only (its measured seconds, kept per kind of run), not the replay and not how late the last one was
+  p_rep=$(sv $rkey); [ -n "$p_rep" ] || p_rep=$(sv reports_secs)
+  # the end check of the night replays the whole history when the save is under the verify cap: about 1500 ticks/s (0.060)
+  chk=0; case $vmode in 1) chk=$((ticks0 / 1500)) ;; 0) chk=0 ;; *) [ "$ticks0" -le "$vmax" ] && chk=$((ticks0 / 1500)) ;; esac
+  cap=$((budget / 4)); rmin=60
   if [ -n "$NIGHT_SHIP_RESERVE" ]; then reserve=$NIGHT_SHIP_RESERVE; rtxt="set by hand (NIGHT_SHIP_RESERVE)"
-  elif [ -n "$p_post" ]; then
-    reserve=$(awk -v p="$p_post" -v f="$fac" -v m="$mar" 'BEGIN { printf "%d", p * f + m + 0.5 }'); rtxt="the last night needed ${p_post}s after its stop, x$fac + ${mar}s"
-  else reserve=$((90 + mb0 / 10 + chk + mar)); rtxt="no history yet: estimate 90s + ${mb0} MB/10 + end check ${chk}s + ${mar}s"; fi
+  else
+    if [ -n "$p_rep" ]; then
+      reserve=$(awk -v p="$p_rep" -v f="$fac" -v m="$mar" -v c="$chk" 'BEGIN { printf "%d", p * f + m + c + 0.5 }'); rtxt="reports took ${p_rep}s last time, x$fac + ${mar}s"
+    else reserve=$((60 + mb0 / 20 + mar + chk)); rtxt="no reports measured yet: 60s + ${mb0} MB/20 + ${mar}s"; fi
+    [ "$chk" -gt 0 ] && rtxt="$rtxt + end check ${chk}s"
+    [ "$reserve" -lt "$rmin" ] && { reserve=$rmin; rtxt="$rtxt; at least ${rmin}s"; }
+    [ "$reserve" -gt "$cap" ] && { reserve=$cap; rtxt="$rtxt; capped at a quarter of the budget"; }
+  fi
   now=$(date +%s); night_secs=$((deadline - reserve - now))
   floor=$((budget / 2)); [ "$floor" -gt 60 ] && floor=60; [ "$floor" -ge 1 ] || floor=1
   if [ "$night_secs" -lt "$floor" ]; then night_secs=$floor; rtxt="$rtxt; budget too small: the night gets ${floor}s"; fi
@@ -106,13 +129,19 @@ else say "=== make $mode (build $build): reports only, no night (SHIP_SESSIONS=N
 say "save folder: $folder"
 if [ "$night" = 1 ]; then   # 0.058: the start loads the state checkpoint when it fits the files, else it replays the whole history once
   if [ -f "$folder/state.ckpt" ]; then
-    say "checkpoint: state.ckpt of tick $(head -c 4096 "$folder/state.ckpt" | grep -a '^tick ' | cut -d' ' -f2), $(( $(wc -c < "$folder/state.ckpt") / 1048576 )) MB: the start loads it if it fits the files"
+    say "checkpoint: state.ckpt of tick $(ckt "$folder/state.ckpt"), $(( $(wc -c < "$folder/state.ckpt") / 1048576 )) MB: the start loads it if it fits the files"
   else say "checkpoint: none yet: the start replays the whole history once (minutes on a big save); the end writes one"; fi
 fi
 tn=$(date +%s); rcn=0
 if [ "$night" = 1 ]; then
   set -- --continuous --session-ticks "$ticks" --max-sessions "$sessions"
+  if [ "$mode" != ship ]; then   # 0.060: max hours from NOW (the time spent since the plan above counts), the deadline for the estimate
+    left=$((plan_stop - $(date +%s))); [ "$left" -ge 1 ] || left=1
+    night_hours=$(awk -v s="$left" 'BEGIN { printf "%.4f", s / 3600 }')
+    set -- "$@" --deadline "$deadline" --reserve "$reserve"
+  fi
   [ -n "$night_hours" ] && set -- "$@" --max-hours "$night_hours"
+  set -- "$@" --sim-print "$simprint" --run-label "$label"
   if [ "$mode" != ship ]; then   # never a full replay of a big save after the night
     case $vmode in 1) ;; 0) set -- "$@" --end-check-ticks 0 ;; *) set -- "$@" --end-check-ticks "$vmax" ;; esac
   fi
@@ -128,9 +157,14 @@ night_end=$(date +%s); dn=$((night_end - tn))
 lastS=$(grep '^S[0-9]' "$ses" 2>/dev/null | tail -n 1)
 st=$(echo "$lastS" | sed -n 's/.* start=\([0-9]*\) .*/\1/p'); ln=$(echo "$lastS" | sed -n 's/.* len=\([0-9]*\) .*/\1/p')
 n_ticks=$(( ${st:-0} + ${ln:-0} ))
+# 0.060: the tick of the verified checkpoint (state.verified.ckpt): an incremental verify replays only the ticks after it
+vck=$(ckt "$folder/state.verified.ckpt")
+vkind=verify-full
 case $vmode in
   1) dov=1 ;; 0) dov=0 ;;
-  *) if [ "$n_ticks" -le "$vmax" ]; then dov=1; else dov=0; fi ;;
+  *) if [ "$n_ticks" -le "$vmax" ]; then dov=1
+     elif [ -n "$vck" ] && [ $((n_ticks - vck)) -le "$vmax" ]; then dov=1; vkind=verify
+     else dov=0; fi ;;
 esac
 [ "$stopped" = 1 ] && dov=0
 [ "$hup" = 1 ] && dov=0   # after a SIGHUP: checkin.txt first; make verify by hand
@@ -143,7 +177,10 @@ if [ "$night" = 1 ]; then
   [ -n "$sl" ] && rs=$sl
 fi
 nightchk=""
-if [ "$mode" != ship ]; then nightchk=$(tail -n +$rs "$rl" 2>/dev/null | sed -n 's/^verify: \(ok ticks=[0-9]*\)$/\1/p' | tail -n 1); fi
+# 0.060: by the time stamp when it is read (a report run in between may trim run_log.txt at its top, which moves the line numbers)
+rl_run() { if [ "$night" = 1 ] && [ "$t0_date" != 0 ]; then awk -v t="$t0_date" -v rs="$rs" 'f || (/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9] [A-Z]/ && substr($0, 1, 19) >= t) { f = 1; print }' "$rl" 2>/dev/null
+  else tail -n +$rs "$rl" 2>/dev/null; fi; }
+if [ "$mode" != ship ]; then nightchk=$(rl_run 2>/dev/null | sed -n 's/^verify: \(ok ticks=[0-9]*\)$/\1/p' | tail -n 1); fi
 [ -n "$nightchk" ] && dov=0
 
 # ---- the window of the reports: the sessions since the last ship stamp, or the newest window; SHIP_FULL=1: the whole save
@@ -174,11 +211,12 @@ for x in active wordstat frustration evolve verify; do
   elif [ "$x" = verify ] && [ -n "$nightchk" ]; then echo "done by the night's end check: $nightchk (the whole history replayed from the files)" > "$tmp/$x.txt"; echo night > "$tmp/$x.rc"
   elif [ "$x" = verify ] && [ "$hup" = 1 ]; then echo "skipped: the terminal was closed (SIGHUP); make verify replays the whole history by hand" > "$tmp/$x.txt"; echo skip > "$tmp/$x.rc"
   elif [ "$x" = verify ] && [ "$dov" = 0 ]; then
-    echo "skipped: the save has $n_ticks ticks (more than SHIP_VERIFY_TICKS=$vmax); make verify replays them all (SHIP_VERIFY=1 here)" > "$tmp/$x.txt"; echo skip > "$tmp/$x.rc"
+    echo "skipped: the save has $n_ticks ticks (more than SHIP_VERIFY_TICKS=$vmax) and no verified checkpoint at most that far behind; make verify (incremental) or make verify-full by hand (SHIP_VERIFY=1 here)" > "$tmp/$x.txt"; echo skip > "$tmp/$x.rc"
   else
     printf '  %s %-12s ...' "$(date '+%H:%M:%S')" "$x" 2>/dev/null
     # shellcheck disable=SC2086
-    "$exe" --"$x" $wopt > "$tmp/$x.txt" 2>&1; echo $? > "$tmp/$x.rc"
+    if [ "$x" = verify ]; then "$exe" --"$vkind" --sim-print "$simprint" > "$tmp/$x.txt" 2>&1; echo $? > "$tmp/$x.rc"
+    else "$exe" --"$x" $wopt > "$tmp/$x.txt" 2>&1; echo $? > "$tmp/$x.rc"; fi
     printf ' %s\n' "$(secs $(( $(date +%s) - ts )))" 2>/dev/null
     echo "  $x: exit $(cat "$tmp/$x.rc"), $(secs $(( $(date +%s) - ts )))" >> "$log" 2>/dev/null
   fi
@@ -188,7 +226,7 @@ drep=$(( $(date +%s) - tr0 ))
 
 # ---- what this run is about: the new sessions, or (reports only) the sessions of the last night ------------------------------------
 if [ "$night" = 1 ]; then
-  tail -n +$rs "$rl" 2>/dev/null > "$tmp/runlog.txt"
+  rl_run > "$tmp/runlog.txt"
   grep '^S[0-9]' "$ses" 2>/dev/null | tail -n +$((s0 + 1)) > "$tmp/new.txt"
   [ -f "$tr" ] && tail -n +$((t_0 + 1)) "$tr" | grep '^T ' > "$tmp/trend.txt"
 else
@@ -218,35 +256,84 @@ row5='( +[0-9]+){5} *$'
 ws_sym=$(grep -E "^  of those, chess or number strings$row5" "$tmp/wordstat.txt" | tail -n 1 | awk '{ print $NF }')
 ws_str=$(grep -E "^  chess or number strings$row5" "$tmp/wordstat.txt" | tail -n 1 | awk '{ print $NF }')
 if [ -n "$ws_str" ]; then strict_txt="since symstrict=1: $ws_str"; elif grep -q 'no symstrict=1 session yet' "$tmp/wordstat.txt"; then strict_txt="no symstrict=1 session yet"; else strict_txt="since symstrict=1: -"; fi
-vrc=$(cat "$tmp/verify.rc"); vt=$(sed -n 's/^verify: OK, \([0-9]*\) ticks.*/\1/p' "$tmp/verify.txt" | head -n 1)
+vrc=$(cat "$tmp/verify.rc"); vt=$(sed -n 's/^verify: OK, \([0-9]*\) ticks.*/\1/p' "$tmp/verify.txt" | sed -n 1p)
+vti=$(sed -n 's/^verify: OK (incremental), ticks \([0-9]* to [0-9]*\) .*/\1/p' "$tmp/verify.txt" | sed -n 1p)
 lastchk=$(sed -n 's/^verify: \(ok ticks=[0-9]*\)$/\1/p' "$rl" 2>/dev/null | tail -n 1)
-if [ "$vrc" = 0 ]; then ver="OK (${vt:-?} ticks replayed from the files)"
+if [ "$vrc" = 0 ] && [ -n "$vti" ]; then ver="OK, incremental (ticks $vti replayed from the files)"
+elif [ "$vrc" = 0 ]; then ver="OK (${vt:-?} ticks replayed from the files)"
 elif [ "$vrc" = night ]; then ver="OK by the night's end check ($nightchk)"
 elif [ "$vrc" = skip ] && [ "$hup" = 1 ]; then ver="skipped (terminal closed); last end check: ${lastchk:-none}"
 elif [ "$vrc" = skip ]; then ver="skipped ($n_ticks ticks > $vmax); night end check: ${lastchk:-none} (make verify by hand)"
 else ver="FAILED (exit $vrc) $(grep -m 1 -i 'drift\|differs\|failed\|skipped' "$tmp/verify.txt" | cut -c1-60)"; fi
 # 0.059: the last PASSED full replay (make verify, a ship's verify, the night's end check): the newest "full verify: OK, N ticks" entry
 # (VERIFY) or "verify: ok ticks=N" entry (NIGHT) of run_log.txt with the time stamp of its entry, else the one kept in ship_stamp.txt
-# (run_log.txt keeps only its last report.log_keep entries; a night writes one per session).  Due after 7 days (weekly drift check).
+# (run_log.txt keeps only its last report.log_keep entries; a night writes one per session).
+# 0.060: verify_stamp.txt first (every passed verify writes it: "full=<date> <ticks> <simulation fingerprint> <state format>",
+# "incr=<date> <from> <to>"); the run_log.txt / ship_stamp.txt one counts only when it covers more ticks (a 0.059 verify: no
+# fingerprint on record).  make verify-full is DUE after 30 days, or when the fingerprint or the state format differs (an incremental
+# verify cannot see a change of how old sessions replay); make verify (incremental, or full) is due after 7 days.
+vstf="$folder/verify_stamp.txt"
+vf=$(sed -n 's/^full=//p' "$vstf" 2>/dev/null | tail -n 1); vi=$(sed -n 's/^incr=//p' "$vstf" 2>/dev/null | tail -n 1)
 lv=$(awk '/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9] [A-Z]/ { st = substr($0, 1, 16); next }
   /^full verify: OK, [0-9]+ ticks/ { t = $4; sub(/,$/, "", t); if (st != "") v = st " " t }
   /^verify: ok ticks=[0-9]+$/ { t = $2; sub(/^ticks=/, "", t); if (st != "") v = st " " t }
   END { print v }' "$rl" 2>/dev/null)
 p_lv=$(sv last_verify)
 if [ -n "$p_lv" ] && { [ -z "$lv" ] || [ "$(printf '%s\n%s\n' "$p_lv" "$lv" | sort | tail -n 1)" = "$p_lv" ]; }; then lv=$p_lv; fi
+lv_p="?"; lv_f="?"; lv_why=""
+if [ -n "$vf" ]; then
+  set -- $vf   # date time ticks print format
+  if [ -z "$lv" ] || [ "${lv##* }" -le "$3" ] 2>/dev/null; then lv="$1 $2 $3"; lv_p=$4; lv_f=$5; fi
+fi
+age() { s_=$(date -d "$1" +%s 2>/dev/null || date -j -f '%Y-%m-%d %H:%M' "$1" +%s 2>/dev/null); [ -n "$s_" ] && echo $(( ($(date +%s) - s_) / 86400 )); }
+ago() { case $1 in "") echo "age unknown" ;; 0) echo "today" ;; 1) echo "1 day ago" ;; *) echo "$1 days ago" ;; esac; }
 if [ -n "$lv" ]; then
-  lv_d=${lv% *}; lv_t=${lv##* }
-  lv_s=$(date -d "$lv_d" +%s 2>/dev/null || date -j -f '%Y-%m-%d %H:%M' "$lv_d" +%s 2>/dev/null)
-  if [ -n "$lv_s" ]; then
-    lv_n=$(( ($(date +%s) - lv_s) / 86400 ))
-    case $lv_n in 0) lv_ago="today" ;; 1) lv_ago="1 day ago" ;; *) lv_ago="$lv_n days ago" ;; esac
-    [ "$lv_n" -ge 7 ] && lv_ago="$lv_ago - due: make verify (weekly)"
-  else lv_ago="age unknown"; fi
-  lv_line="last full verify: $lv_d ($lv_t ticks), $lv_ago"
-else lv_line="last full verify: none on record - due: make verify (weekly)"; fi
+  lv_d=${lv% *}; lv_t=${lv##* }; lv_n=$(age "$lv_d"); due=""
+  [ -n "$lv_n" ] && [ "$lv_n" -ge 30 ] && due="monthly (30 days)"
+  if [ "$lv_p" = "?" ] || [ "$lv_p" = - ]; then due="${due:+$due; }no simulation fingerprint on record (an older build)"
+  elif [ "$lv_p" != "$simprint" ]; then due="${due:+$due; }the simulation changed since (fingerprint $lv_p, now $simprint)"; fi
+  [ "$lv_f" != "?" ] && [ -n "$ckfmt" ] && [ "$lv_f" != "$ckfmt" ] && due="${due:+$due; }state format $lv_f, now $ckfmt"
+  # due: the date without the time, so that the line keeps 79 columns; the reasons on the next line (checkin.txt)
+  if [ -n "$due" ]; then lv_line="last full verify: ${lv_d%% *} ($lv_t ticks), $(ago "$lv_n"); verify-full due"; lv_why="  verify-full due: $due"
+  else lv_line="last full verify: $lv_d ($lv_t ticks), $(ago "$lv_n")"; lv_why=""; fi
+else lv_line="last full verify: none on record; make verify-full due"; lv_why=""; fi
+# the newest verify of any kind: the incremental one, or the full one when it is newer
+li=""; [ -n "$lv" ] && li="$lv_d 1 ${lv##* }"
+if [ -n "$vi" ]; then set -- $vi; if [ -z "$li" ] || [ "$(printf '%s\n%s\n' "$1 $2" "${li% * *}" | sort | tail -n 1)" = "$1 $2" ]; then li="$1 $2 $3 $4"; fi; fi
+if [ -n "$li" ]; then
+  set -- $li; li_n=$(age "$1 $2"); li_a=$(ago "$li_n"); [ -n "$li_n" ] && [ "$li_n" -ge 7 ] && li_a="$li_a; make verify due (weekly)"
+  if [ "$3" = 1 ]; then li_r="ticks 1-$4, full"; elif [ "$3" = 0 ]; then li_r="ticks 1-$4, full"; else li_r="ticks $(( $3 + 1 ))-$4"; fi
+  li_line="last verify: $1 $2 ($li_r), $li_a"
+else li_line="last verify: none on record; make verify due (weekly)"; fi
+# 0.060: the replay estimate and 'the budget cannot hold' line of the program (run_log.txt NIGHT entry of this run, or the console)
+bud_l=$( { cat "$tmp/runlog.txt"; [ -f "$con" ] && [ "$con" -nt "$tmp/stamp" ] && cat "$con"; } 2>/dev/null | sed -n 's/^.*\(the budget cannot hold: .*\)$/\1/p' | sed -n 1p)
+est_l=$( { cat "$tmp/runlog.txt"; [ -f "$con" ] && [ "$con" -nt "$tmp/stamp" ] && cat "$con"; } 2>/dev/null | sed -n 's/^.*\(replay estimate: .*\)$/\1/p' | sed -n 1p)
+# 0.060: growth since the last ship: the size of the file groups of the save (state.ckpt and the verified checkpoint left out: they
+# are rewritten, not grown); the stamp keeps them (sizes=group:bytes,...)
+sizes=$(cd "$folder" 2>/dev/null && find . -type f -exec wc -c {} + 2>/dev/null | awk '
+  $2 == "total" { next }
+  { f = $2; sub(/^\.\//, "", f); b = $1
+    if (f ~ /^state\.(verified\.)?ckpt/ || f ~ /\.ckpt(\.tmp)?$/) next
+    if (f ~ /^diaries\/[^\/]*\.jsonl$/) g = "diaries"; else if (f == "diaries/chat.txt") g = "chat"
+    else if (f ~ /^diaries\//) g = "records"; else if (f ~ /^entities\//) g = "entities"
+    else if (f == "run_log.txt") g = "run_log"; else if (f == "trend.txt") g = "trend"
+    else if (f ~ /(console|_log)\.txt$/) g = "logs"; else g = "other"
+    s[g] += b }
+  END { n = 0; for (g in s) printf "%s%s:%d", (n++ ? "," : ""), g, s[g]; print "" }')
+p_sizes=$(sv sizes)
+grow_line=$(printf '%s\n%s\n' "$sizes" "$p_sizes" | awk -v since="$(sv made | cut -c6-16)" '
+  NR == 1 { n = split($0, a, ","); for (i = 1; i <= n; i++) { split(a[i], kv, ":"); now[kv[1]] = kv[2] } }
+  NR == 2 { has = ($0 != ""); n = split($0, a, ","); for (i = 1; i <= n; i++) { split(a[i], kv, ":"); was[kv[1]] = kv[2] } }
+  END { k = 0
+    for (g in now) { d = (has ? now[g] - was[g] : now[g]); k++; gg[k] = g; dd[k] = d }
+    for (i = 1; i <= k; i++) for (j = i + 1; j <= k; j++) if (dd[j] > dd[i]) { t = dd[i]; dd[i] = dd[j]; dd[j] = t; t = gg[i]; gg[i] = gg[j]; gg[j] = t }
+    out = ""; for (i = 1; i <= k && i <= 3; i++) out = out (i > 1 ? ", " : "") gg[i] " " sprintf(has ? "%+.1f" : "%.1f", dd[i] / 1048576) " MB"
+    if (k == 0) out = "no files yet"
+    if (has) printf "growth since %s: %s\n", since, out
+    else printf "growth: first sizes now; largest: %s\n", out }')
 # ---- early signals (cheap, from the files of the save; no replay) ---------------------------------------------------------------
 # the window: the sessions of this night, or (reports only) of the last night; the diaries of at most its last 30000 ticks
-nm() { v=$(sed -n "s/^$1 = \([A-Za-z]*\).*/\1/p" data/names.txt 2>/dev/null | head -n 1); echo "${v:-$1}"; }
+nm() { v=$(sed -n "s/^$1 = \([A-Za-z]*\).*/\1/p" data/names.txt 2>/dev/null | sed -n 1p); echo "${v:-$1}"; }
 ids="ada gemini replika robert"
 names=$(for e in $ids; do printf '%s ' "$(nm $e)"; done); names=${names% }   # the wesen names for the lines (data/names.txt)
 win=""; [ "$nn" -gt 0 ] && win="s$first-s$last"
@@ -267,7 +354,7 @@ for e in $ids; do   # words taught by e (as the teacher) in the window, and peti
   echo "$e $(nm $e) ${tw:-0} ${pw:-0}" >> "$tmp/teach.txt"
 done
 touch "$tmp/teach.txt"
-best() { sort -k"$2" -n -r "$1" | head -n 1 | awk -v k="$2" -v u="$3" '{ if ($k > 0) printf "%s %s%s", $2, $k, u; else printf "-" }'; }
+best() { sort -k"$2" -n -r "$1" | sed -n 1p | awk -v k="$2" -v u="$3" '{ if ($k > 0) printf "%s %s%s", $2, $k, u; else printf "-" }'; }
 roles_txt="rest $(best "$tmp/roles.txt" 4 %), work $(best "$tmp/roles.txt" 5 %), teach $(best "$tmp/teach.txt" 3 ""), petition $(best "$tmp/teach.txt" 4 "")"
 [ -s "$tmp/roles.txt" ] || roles_txt="no diaries yet"
 # shared words: known by all four of the union, and the pairwise Jaccard (shared / union of two)
@@ -358,8 +445,8 @@ else delta_full="since the last ship: no stamp yet (ship_stamp.txt is written no
 # (both logs are capped, so the lines are picked by their time stamp; the start line and the replay time come from the night's box)
 awk -v t="$t0_date" 'substr($0, 1, 19) >= t' "$ckl" 2>/dev/null > "$tmp/ckpt.txt"; touch "$tmp/ckpt.txt"
 if [ -f "$con" ] && [ "$con" -nt "$tmp/stamp" ]; then sed -n '/^== night box ==/,$p' "$con" > "$tmp/box.txt"; else : > "$tmp/box.txt"; fi
-rdy=$(cat "$tmp/box.txt" "$tmp/runlog.txt" | sed -n 's/^replay done: [0-9]* ticks in \([0-9.]*\) s;.*/\1/p' | head -n 1)
-st_l=$( { grep -E '^(start|replay): ' "$tmp/box.txt"; grep -E '^[0-9-]+ [0-9:]+ (start|replay): ' "$tmp/ckpt.txt" | cut -d' ' -f3-; } | head -n 1)
+rdy=$(cat "$tmp/box.txt" "$tmp/runlog.txt" | sed -n 's/^replay done: [0-9]* ticks in \([0-9.]*\) s;.*/\1/p' | sed -n 1p)
+st_l=$( { grep -E '^(start|replay): ' "$tmp/box.txt"; grep -E '^[0-9-]+ [0-9:]+ (start|replay): ' "$tmp/ckpt.txt" | cut -d' ' -f3-; } | sed -n 1p)
 wr_l=$(grep -E '^[0-9-]+ [0-9:]+ checkpoint: tick ' "$tmp/ckpt.txt" | tail -n 1 | sed -E 's/.* checkpoint: tick ([0-9]+), ([0-9]+) KB, written in ([0-9.]+) s$/t\1 \2 \3/' | awk '{ printf "%s %.1f MB %s s", $1, $2 / 1024, $3 }')
 case $st_l in
   start:*) st_t="loaded t$(echo "$st_l" | sed -n 's/.*checkpoint of tick \([0-9]*\) loaded in \([0-9.]*\) s.*/\1 in \2 s/p')" ;;
@@ -367,7 +454,7 @@ case $st_l in
   *) st_t="" ;;
 esac
 if [ "$night" = 1 ]; then ck_line="checkpoint: start ${st_t:-?}; end ${wr_l:-not written}"
-elif [ -f "$folder/state.ckpt" ]; then ck_line="checkpoint: no night; state.ckpt of tick $(head -c 4096 "$folder/state.ckpt" | grep -a '^tick ' | cut -d' ' -f2) ($(( $(wc -c < "$folder/state.ckpt") / 1024 )) KB)"
+elif [ -f "$folder/state.ckpt" ]; then ck_line="checkpoint: no night; state.ckpt of tick $(ckt "$folder/state.ckpt") ($(( $(wc -c < "$folder/state.ckpt") / 1024 )) KB)"
 else ck_line="checkpoint: no night; none yet (the next run writes one)"; fi
 why=""
 for x in active wordstat frustration evolve; do [ "$(cat "$tmp/$x.rc")" = 0 ] || why="$why make $x exit $(cat "$tmp/$x.rc");"; done
@@ -400,6 +487,8 @@ total=$(( $(date +%s) - t0 ))
   if [ "$night" = 1 ]; then
     echo "night: $night_txt"
     [ "$mode" != ship ] && echo "budget: $( [ "$mode" = slice ] && echo "$minutes min" || echo "${hours}h"); stop $(hm $plan_stop), reserve $(secs $reserve); due $(hm $deadline), written $(date '+%H:%M') ($( [ "$(date +%s)" -le "$deadline" ] && echo on time || echo "late $(secs $(( $(date +%s) - deadline )))"))"
+    [ -n "$est_l" ] && echo "budget: $est_l"
+    [ -n "$bud_l" ] && echo "budget: $bud_l"
     echo "stop reason: ${reason:-none}${box_why:+ ($box_why)}"
     if [ "$nn" -gt 0 ]; then echo "new sessions: $nn (s$first to s$last), active=2: $n_a2/$nn"; else echo "new sessions: 0"; fi
   else
@@ -412,6 +501,8 @@ total=$(( $(date +%s) - t0 ))
   echo "chess/number strings learned: since symbols=1: ${ws_sym:--}; $strict_txt"
   echo "verify: $ver"
   echo "$lv_line" | cut -c1-79
+  [ -n "$lv_why" ] && echo "$lv_why"
+  echo "$li_line" | cut -c1-79
   echo "$ck_line" | cut -c1-79
   echo "reports window: $wtxt" | cut -c1-79
   echo "roles${win:+ ($win)}: $roles_txt" | cut -c1-79
@@ -419,6 +510,7 @@ total=$(( $(date +%s) - t0 ))
   if [ "$np" -gt 0 ]; then echo "petition topics${win:+ ($win)}: $topics (of $np)" | cut -c1-79; else echo "petition topics${win:+ ($win)}: none"; fi
   echo "$mood_line" | cut -c1-79
   echo "$delta_line" | cut -c1-79
+  echo "$grow_line" | cut -c1-79
   if [ "$night" = 1 ]; then echo "wall time: total $(secs $total) (night $(secs $dn), reports $(secs $drep))"; else echo "wall time: total $(secs $total) (no night, reports $(secs $drep))"; fi
 } > "$tmp/verdict.txt"
 
@@ -470,6 +562,9 @@ else w1="no night: run_log.txt entries of the last night"; w2="no night: the ses
   echo "moods=${moods:--}"; echo "spread=$spread"; echo "shared_all=$sh_all"; echo "shared_pct=$sh_pct"; echo "jaccard=$sh_pairs"
   echo "top=${top:--}"; echo "topics=${topics_all:--}"
   echo "reports_secs=$drep"
+  # 0.060: the reports phase per kind of run (the next reserve of that kind); the other kinds carried over
+  echo "$rkey=$drep"; for kv in $p_rkeep; do [ "${kv%%=*}" = "$rkey" ] || echo "$kv"; done
+  echo "sizes=$sizes"
   [ -n "$lv" ] && echo "last_verify=$lv"
   echo "vocab_shared=$voc_sh"; echo "vocab_all=$voc_s4"; echo "vocab_overlap=$voc_ov"; echo "vocab_known=$voc_per"; echo "vocab_missing=$voc_miss"
   # make night-ship: the time after the planned stop of the night (the last session, the end check, the reports): the next reserve
@@ -487,6 +582,6 @@ else w1="no night: run_log.txt entries of the last night"; w2="no night: the ses
 say "-------------------------------------------------------------------------------"
 # the terminal: the verdict without its detail lines (they are in checkin.txt): the vocabulary details and the reports window,
 # and 'last full verify' unless it is due (0.059: the summary stays at 20 lines)
-while IFS= read -r l; do case $l in "  "*|"reports window:"*|"last full verify: "*today|"last full verify: "*ago) printf '%s\n' "$l" >> "$log" 2>/dev/null ;; *) say "$l" ;; esac; done < "$tmp/verdict.txt"
+while IFS= read -r l; do case $l in "  "*|"reports window:"*|"last full verify: "*today|"last full verify: "*ago|"last verify: "*today|"last verify: "*ago|"growth"*) printf '%s\n' "$l" >> "$log" 2>/dev/null ;; *) say "$l" ;; esac; done < "$tmp/verdict.txt"
 say "attach this ONE file: $out"
 case $verdict in PASS*) exit 0 ;; *) exit 1 ;; esac

@@ -358,6 +358,7 @@ procedure Diary_Sim is
    Verify_From : Natural := 0;                   --  0.060: the tick an incremental verify started after (0: tick 1, a full verify)
    Sim_Print_Opt : Unbounded_String;             --  0.060: --sim-print <hash> (make verify-full): the fingerprint of the simulation sources, kept in verify_stamp.txt
    Deadline_Opt : Int := 0;                      --  0.060: --deadline <unix seconds>: when the whole job (make slice / night-ship) is due
+   Run_Label : Unbounded_String := To_Unbounded_String ("night");   --  0.060: --run-label slice|ship|night: the name of the run on the screen and in the box (display only)
    Reserve_Opt : Int := 0;                       --  0.060: --reserve <seconds>: what the job needs after the night (the reports)
    Voices_View : Boolean := False;                 --  --voices / make voices: the four wesen messages at the last tick
    Elo_View, Perft_Mode : Boolean := False;      --  --elo (replay, then the ranking) / --perft (the move generator checks)
@@ -7047,7 +7048,7 @@ procedure Diary_Sim is
             when others => Msg ("night.t.idle"));
    begin
       Append (R, ASCII.ESC & "[H");
-      L (Msg ("night.t.1", Local_Stamp, Hms (Since (Night_T0))));
+      L (Msg ("night.t.1", Local_Stamp, Hms (Since (Night_T0)), To_String (Run_Label)));
       L (Msg ("night.t.2", Limits_Text, Left_Text));
       L (Msg ("night.t.3", Size_Text (Size_Now), Growth_Text));
       L (Msg ("night.t.path", Fx.Tail (Folder, Natural'Min (Folder'Length, 76))));
@@ -7187,7 +7188,8 @@ procedure Diary_Sim is
       else
          Con.Put_Line_Now (Msg ("night.start", Img (Night_Per), (if Night_Max_S = 0 then Msg ("night.none") else Img (Night_Max_S)),
                                 (if Night_Max_Secs = 0.0 then Msg ("night.none")
-                                 else To_String (if Length (Night_Hours) > 0 then Night_Hours else To_Unbounded_String (Img (Limit ("night.max_hours", 12)))))));
+                                 else To_String (if Length (Night_Hours) > 0 then Night_Hours else To_Unbounded_String (Img (Limit ("night.max_hours", 12))))),
+                                To_String (Run_Label)));
          Con.Put_Line_Now (Msg (if Sim_Quit.Watching then "night.keys" else "night.nokeys"));
       end if;
       Flush_Out;
@@ -7331,7 +7333,8 @@ procedure Diary_Sim is
       if Length (Last_Line) > 0 then Box.Append (Msg ("night.box.last", To_String (Last_Line))); end if;
       Box.Append (Msg ("night.box.files"));
       for L of Box loop Wide := Natural'Max (Wide, L'Length); end loop;
-      Con.Put_Line ("+-- " & Msg ("night.box.title") & " " & Fx."*" (Natural'Max (0, Wide - Msg ("night.box.title")'Length - 2), '-') & "+");
+      Con.Put_Line ("+-- " & Msg ("night.box.title", To_String (Run_Label)) & " "
+                    & Fx."*" (Natural'Max (0, Wide - Msg ("night.box.title", To_String (Run_Label))'Length - 2), '-') & "+");
       for L of Box loop Con.Put_Line ("| " & Fx.Head (L, Wide) & " |"); end loop;
       Con.Put_Line ("+" & Fx."*" (Wide + 2, '-') & "+");
       declare   --  the same box at the end of night_console.txt (make ship copies it into checkin.txt: the night ran on the terminal)
@@ -8268,7 +8271,7 @@ begin
          Eq  : constant Natural := Fx.Index (A, "=");
          Opt : constant String := (if Eq > 0 then A (A'First .. Eq - 1) else A);
          Num : constant Boolean := Opt in "--ticks" | "--seed" | "--every" | "--crash-at" | "--more" | "--session-ticks" | "--max-sessions" | "--end-check-ticks" | "--since-session" | "--deadline" | "--reserve";
-         Sep : constant Boolean := (Num or else Opt in "--max-hours" | "--home" | "--sim-print" | "--say" | "--text" | "--as" | "--grant" | "--veto" | "--approve" | "--challenge" | "--debug-section" | "--chat-script" | "--visit" | "--visit-script") and then Eq = 0 and then I < Ada.Command_Line.Argument_Count;   --  --ticks 200
+         Sep : constant Boolean := (Num or else Opt in "--max-hours" | "--home" | "--sim-print" | "--run-label" | "--say" | "--text" | "--as" | "--grant" | "--veto" | "--approve" | "--challenge" | "--debug-section" | "--chat-script" | "--visit" | "--visit-script") and then Eq = 0 and then I < Ada.Command_Line.Argument_Count;   --  --ticks 200
          Val : constant String := (if Eq > 0 then A (Eq + 1 .. A'Last) elsif Sep then Ada.Command_Line.Argument (I + 1) else "");
          Help  : Str_Vectors.Vector;
          Found : Boolean;
@@ -8319,6 +8322,7 @@ begin
          elsif Opt = "--sim-print" then Sim_Print_Opt := To_Unbounded_String (Val);
          elsif Opt = "--deadline" then Deadline_Opt := Number (Opt, Val);
          elsif Opt = "--reserve" then Reserve_Opt := Number (Opt, Val);
+         elsif Opt = "--run-label" then Run_Label := To_Unbounded_String (if Val = "" then "night" else Val);
          elsif Opt = "--elo" then Ledger_Mode := True; Elo_View := True;
          elsif Opt = "--voices" then Ledger_Mode := True; Voices_View := True;
          elsif Opt = "--govern" then Ledger_Mode := True; Govern_View := True;

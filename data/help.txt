@@ -77,9 +77,22 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
                one session; the grant rate is not changed (frustration.txt)
 --voices       the four wesen messages the night header shows (make voices;
                data/voices.txt; read-only)
---verify       replay the whole history from the files and compare it with
-               everything stored; one OK line (make verify); when it passes,
-               a VERIFY entry in run_log.txt and a fresh state.ckpt (weekly)
+--verify       incremental (0.060, make verify): load the last verified
+               checkpoint (state.verified.ckpt), replay only the newer ticks
+               from the files and compare them with everything stored; one OK
+               line; without that checkpoint the whole history (as before).
+               When it passes: a VERIFY entry in run_log.txt, verify_stamp.txt,
+               a fresh state.ckpt and state.verified.ckpt (weekly)
+--verify-full  the same from tick 1 (make verify-full; monthly, and due when
+               the simulation sources changed: docs/CHECKPOINT.md)
+--sim-print=H  with --verify(-full): the simulation fingerprint to keep in
+               verify_stamp.txt (scripts/sim_print.sh; make does it)
+--deadline=S   with --continuous: the job must end by unix time S; without a
+               checkpoint the start prints a replay estimate and, if it cannot
+               hold, 'the budget cannot hold: replay first ...' (make slice)
+--reserve=S    with --deadline: seconds the job needs after the run (reports)
+--run-label=L  with --continuous: the name of the run on the screen and in the
+               box (slice, ship, night; display only)
 --replay       replay the whole history at the start even if the state
                checkpoint (state.ckpt in the save folder) fits; without it a
                start loads the checkpoint (seconds) and replays only newer

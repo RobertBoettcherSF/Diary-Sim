@@ -1,4 +1,4 @@
-# Version: 0.049
+# Version: 0.050
 # make ship       ROBERT'S DAY COMMAND (after unzipping over the source folder; the save in ../diary-data stays): REPORTS ONLY, no
 #                 night, no q, seconds: build if needed, then active, wordstat, frustration, evolve on the save as it is, and verify if the
 #                 save has at most SHIP_VERIFY_TICKS (150000) ticks (verify replays the whole history, minutes on a big save; the
@@ -29,7 +29,8 @@
 #                 (0.059) it belongs to a STATE FORMAT (diary-sim-ckpt 2; a 0.058 format 1 checkpoint loads too), not to the build: a new
 #                 zip loads it; a start replays only if the state layout changed (tagged sections), the file is broken or a record file
 #                 does not fit, and says why.  data/ changes are information only ("data changed since the checkpoint ...").
-#                 --replay and make verify always replay from scratch; a passed make verify writes a fresh checkpoint.
+#                 --replay and make verify-full always replay from scratch; make verify from state.verified.ckpt (0.060); a passed
+#                 verify writes a fresh checkpoint.
 #                 ckpt.enabled = 0 in data/limits.txt switches it off.  docs/CHECKPOINT.md.
 # make ckpt-layout  the layout guard: the State_IO code against "ckpt_layout: <format> <hash>" in docs/CHECKPOINT.md (part of make check;
 #                 FAIL = bump Ckpt_Format)
@@ -73,9 +74,15 @@
 #                 trend.txt and run_log.txt get a line per session.  At the end (limits) a child process replays the WHOLE history from the
 #                 files (make verify); night.verify_every in data/limits.txt = also every N sessions.  Do not use say/grant/veto during a
 #                 night run: quit first.
-# make verify     replay the whole history from the files and compare it with everything stored; prints one OK line (exit 1: DRIFT);
-#                 (0.059) when it passes: a VERIFY entry in run_log.txt (checkin.txt: "last full verify: <date> (N ticks)") and a fresh
-#                 state.ckpt.  The drift check: run it about once a week (a full replay, ~35 min on a 775k-tick save)
+# make verify     (0.060) INCREMENTAL: loads the last verified checkpoint (state.verified.ckpt, written by every passed verify), replays
+#                 only the newer ticks from the files and compares them with everything stored; one OK line (exit 1: DRIFT); without a
+#                 verified checkpoint the whole history.  When it passes: a VERIFY entry in run_log.txt, verify_stamp.txt (checkin.txt:
+#                 "last verify: <date> (ticks A-B)"), a fresh state.ckpt and state.verified.ckpt.  Weekly.
+# make verify-full  the same from tick 1 (minutes on a big save; checkin.txt: "last full verify: <date> (N ticks)").  DUE (checkin.txt)
+#                 after 30 days, and when the simulation fingerprint (scripts/sim_print.sh: the simulation sources and data rules, not
+#                 the reports or scripts) or the state format differs from the one of the last full verify: an incremental verify
+#                 cannot see a code change that alters how OLD sessions replay.  docs/CHECKPOINT.md.
+# make sim-print  prints that fingerprint
 # make bench      seconds per session: 20 sessions of 300 ticks after a 6000-tick save, the old way (one program start per session)
 #                 against the night run (BENCH_SESSIONS, BENCH_TICKS, BENCH_BASE); diaries of both must be identical
 # make trend      the last 40 lines of trend.txt (one line per session: mood, energy, words, petitions, votes, trials, anomalies)
@@ -151,7 +158,7 @@ OPT ?= -O2
 JOBS ?= -j0
 FLAGS = -g $(OPT) -gnatwa -gnat2022 -gnata $(JOBS)
 
-.PHONY: ckpt-layout ship night-ship slice checkin chat chatlog voices wordstat evolve active frustration all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog trend night verify bench share small footprint
+.PHONY: ckpt-layout ship night-ship slice checkin chat chatlog voices wordstat evolve active frustration all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog trend night verify verify-full sim-print bench share small footprint
 export WESEN PLAYER TEXT AS
 
 # Every user-facing target prints its wall time as the LAST line (scripts/timed.sh), e.g. "make wordstat wall time: 0m12s (12s)":
@@ -257,7 +264,13 @@ night: all
 	$(TIMED) bin/diary_sim --continuous $(if $(SESSION_TICKS),--session-ticks $(SESSION_TICKS),) $(if $(MAX_SESSIONS),--max-sessions $(MAX_SESSIONS),) $(if $(MAX_HOURS),--max-hours $(MAX_HOURS),) $(if $(SEED),--seed $(SEED),)
 
 verify: all
-	$(TIMED) bin/diary_sim --verify
+	$(TIMED) bin/diary_sim --verify --sim-print $$(scripts/sim_print.sh)
+
+verify-full: all
+	$(TIMED) bin/diary_sim --verify-full --sim-print $$(scripts/sim_print.sh)
+
+sim-print:
+	@scripts/sim_print.sh $(if $(LIST),--list,)
 
 bench: all
 	$(TIMED) scripts/bench.sh bin/diary_sim
@@ -340,7 +353,7 @@ checkin: all
 	@echo "=== make evolve ==="
 	$(STEP) "evolve" $$(date +%s) $(QUIET) bin/diary_sim --evolve
 	@echo "=== make verify ==="
-	$(STEP) "verify" $$(date +%s) $(QUIET) bin/diary_sim --verify
+	$(STEP) "verify" $$(date +%s) $(QUIET) bin/diary_sim --verify --sim-print $$(scripts/sim_print.sh)
 	@echo "=== checkin done ==="
 	@scripts/timed.sh "checkin" $(T0) 1 true
 
