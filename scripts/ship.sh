@@ -258,8 +258,10 @@ ws_str=$(grep -E "^  chess or number strings$row5" "$tmp/wordstat.txt" | tail -n
 if [ -n "$ws_str" ]; then strict_txt="since symstrict=1: $ws_str"; elif grep -q 'no symstrict=1 session yet' "$tmp/wordstat.txt"; then strict_txt="no symstrict=1 session yet"; else strict_txt="since symstrict=1: -"; fi
 vrc=$(cat "$tmp/verify.rc"); vt=$(sed -n 's/^verify: OK, \([0-9]*\) ticks.*/\1/p' "$tmp/verify.txt" | sed -n 1p)
 vti=$(sed -n 's/^verify: OK (incremental), ticks \([0-9]* to [0-9]*\) .*/\1/p' "$tmp/verify.txt" | sed -n 1p)
+set -- $vti; [ -n "$3" ] && [ "$1" -gt "$3" ] && vti="none:$3"   # nothing new since the verified checkpoint
 lastchk=$(sed -n 's/^verify: \(ok ticks=[0-9]*\)$/\1/p' "$rl" 2>/dev/null | tail -n 1)
-if [ "$vrc" = 0 ] && [ -n "$vti" ]; then ver="OK, incremental (ticks $vti replayed from the files)"
+if [ "$vrc" = 0 ] && [ "${vti%%:*}" = none ]; then ver="OK, incremental (no new tick after the verified checkpoint of tick ${vti#none:})"
+elif [ "$vrc" = 0 ] && [ -n "$vti" ]; then ver="OK, incremental (ticks $vti replayed from the files)"
 elif [ "$vrc" = 0 ]; then ver="OK (${vt:-?} ticks replayed from the files)"
 elif [ "$vrc" = night ]; then ver="OK by the night's end check ($nightchk)"
 elif [ "$vrc" = skip ] && [ "$hup" = 1 ]; then ver="skipped (terminal closed); last end check: ${lastchk:-none}"
@@ -330,8 +332,8 @@ grow_line=$(printf '%s\n%s\n' "$sizes" "$p_sizes" | awk -v since="$(sv made | cu
     for (i = 1; i <= k; i++) for (j = i + 1; j <= k; j++) if (dd[j] > dd[i]) { t = dd[i]; dd[i] = dd[j]; dd[j] = t; t = gg[i]; gg[i] = gg[j]; gg[j] = t }
     out = ""; for (i = 1; i <= k && i <= 3; i++) out = out (i > 1 ? ", " : "") gg[i] " " sprintf(has ? "%+.1f" : "%.1f", dd[i] / 1048576) " MB"
     if (k == 0) out = "no files yet"
-    if (has) printf "growth since %s: %s\n", since, out
-    else printf "growth: first sizes now; largest: %s\n", out }')
+    if (has) printf "growth: %s since %s\n", out, since
+    else printf "growth: no earlier sizes; largest: %s\n", out }')
 # ---- early signals (cheap, from the files of the save; no replay) ---------------------------------------------------------------
 # the window: the sessions of this night, or (reports only) of the last night; the diaries of at most its last 30000 ticks
 nm() { v=$(sed -n "s/^$1 = \([A-Za-z]*\).*/\1/p" data/names.txt 2>/dev/null | sed -n 1p); echo "${v:-$1}"; }

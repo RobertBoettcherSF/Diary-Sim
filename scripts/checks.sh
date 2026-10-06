@@ -1439,7 +1439,7 @@ for d in a b; do
   cp -r "$idata" "$w/sm/$d/data"; sed -i 's/^chess.enabled = .*/chess.enabled = 1/; s/^govern.enabled = .*/govern.enabled = 1/; s/^trial.enabled = .*/trial.enabled = 1/; s/^screen.enabled = .*/screen.enabled = 1/; s/^robot.enabled = .*/robot.enabled = 1/' "$w/sm/$d/data/limits.txt"
   x="$w/sm/$d/bin/diary_sim"; [ $d = b ] && x="$w/sm/$d/bin/diary_sim_small"
   mkdir -p "$w/sm/$d/h"; ( cd "$w/sm/$d" && export DIARY_HOME="$w/sm/$d/h" && { "$x" --seed 42 --ticks 400 --yes --every 5000; "$x" --more 200 --every 5000; "$x" --trials; "$x" --elo; "$x" --govern; "$x" --more 0 --every 5000 --debug-section run; } 2>&1 | sed "s#$w/sm/$d/h#H#g" > "$w/sm/$d/out.txt" )
-  ( cd "$w/sm/$d/h" && find . -type f | sort | while read -r f; do case $f in ./debug*|./last*|./run_report*|./run_log*|./trend*|./night_console*|./state.ckpt*|./ckpt_log*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done > "$w/sm/$d/files.txt" )
+  ( cd "$w/sm/$d/h" && find . -type f | sort | while read -r f; do case $f in ./debug*|./last*|./run_report*|./run_log*|./trend*|./night_console*|./state.ckpt*|./state.verified.ckpt*|./verify_stamp.txt|./ckpt_log*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done > "$w/sm/$d/files.txt" )
 done
 [ -s "$w/sm/a/out.txt" ] && cmp -s "$w/sm/a/out.txt" "$w/sm/b/out.txt" && cmp -s "$w/sm/a/files.txt" "$w/sm/b/files.txt" && grep -q '^T[0-9]' "$w/sm/a/out.txt" && ok "the small binary gives the same console output and byte-identical diaries / entities / reports as the dev build ($(wc -l < "$w/sm/a/files.txt") files compared; trials, Elo, governance included)" || bad "small vs dev output"
 ( cd "$w/sm/src" && make footprint > "$w/sm/fp.txt" 2>&1 ); grep -q '^source  : ' "$w/sm/fp.txt" && grep -q '^data    : ' "$w/sm/fp.txt" && grep -q '^binary  : bin/diary_sim_small ' "$w/sm/fp.txt" && grep -q '^units   : ' "$w/sm/fp.txt" && grep -q '^runtime : ' "$w/sm/fp.txt" && ok "make footprint prints source, data, binary (stripped / debug share), per-unit and runtime sizes" || bad "footprint"
@@ -1539,7 +1539,7 @@ nwin=0; for b in $(grep '^B[0-9]' diaries/ballots.txt | sed -E 's/^B[0-9]+ t=[0-
 [ "$nb" -ge 3 ] && [ "$bad_b" = 0 ] && [ "$nwin" = "$nb" ] && head -1 diaries/ballots.txt | grep -q '^# seed 42$' && ok "secret ballots: $nb B lines (2 or 3 forms for a meaning, every player's pick, tally sums to the players, a die only on a tie); the winner is the form that went to the yes/no vote and into the dictionary" || bad "ballots ($nb $bad_b $nwin)"
 leak=0
 for b in $(grep '^B[0-9]' diaries/ballots.txt | sed -E 's/.* alts=([a-z,]*) .* win=([a-z]*) .*/\1:\2/'); do alts=${b%%:*}; win=${b##*:}; for a in ${alts//,/ }; do [ "$a" = "$win" ] && continue; if grep -rlw --exclude='state.ckpt*' -- "$a" . "$w/rq/"*.out 2>/dev/null | grep -qv 'ballots.txt'; then leak=$((leak + 1)); fi; done; done
-grep -rl --exclude='state.ckpt*' ' picks=' . 2>/dev/null | grep -qv 'ballots.txt' && leak=$((leak + 1))   # state.ckpt (0.058): the program's own state, like ballots.txt never shown
+grep -rl --exclude='state.ckpt*' --exclude='state.verified.ckpt*' ' picks=' . 2>/dev/null | grep -qv 'ballots.txt' && leak=$((leak + 1))   # state.ckpt (0.058): the program's own state, like ballots.txt never shown
 for o in --divergence --dictionary --inbox --govern --audit --robot; do "$w/rq/bin/diary_sim" $o > "$w/rq/view.out" 2>&1; grep -q ' picks=\|^B[0-9]' "$w/rq/view.out" && leak=$((leak + 1)); done
 grep -q 'kind=ballot' diaries/votes.txt && leak=$((leak + 1))
 [ "$nb" -ge 3 ] && [ "$leak" = 0 ] && ok "the ballot is secret: no losing form and no pick appears in any other file or player-visible view (diaries, votes, announcements, inbox, divergence, dictionary, govern, audit)" || bad "ballot leaks ($leak)"
@@ -1595,7 +1595,7 @@ vl=$(wc -l < "$w/sh/vtail.txt")
 [ "$miss" = 0 ] && [ "$miss2" = 0 ] && [ "$vl" -gt 100 ] && grep -q '^== chess ==' save/run_report.txt && grep -q '^== ledger ==' save/run_report.txt && ok "run_report.txt is complete: every line of the verbose console ($vl lines) and of the short form is in it" || bad "run_report.txt incomplete ($miss $miss2 $vl)"
 # --verbose and DIARY_VERBOSE=1 print the old whole report; the simulation is untouched by any of it
 nrm() { sed 's#/sh/[a-z]*/#/sh/X/#g' "$1"; }
-sums() { ( cd "$1/save" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./run_log*|./trend*|./night_console*|./debug*|./last*|./voice_log*|./state.ckpt*|./ckpt_log*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
+sums() { ( cd "$1/save" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./run_log*|./trend*|./night_console*|./debug*|./last*|./voice_log*|./state.ckpt*|./state.verified.ckpt*|./verify_stamp.txt|./ckpt_log*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
 diff <(nrm ../flag/c1.txt) <(nrm ../envv/c1.txt) > /dev/null && diff <(nrm ../flag/c2.txt) <(nrm ../envv/c2.txt) > /dev/null && grep -q '^chess games' ../flag/c1.txt && grep -q '^treadmill' ../flag/c1.txt && grep -q '^please attach debug.txt' ../flag/c1.txt && ! grep -q '^@@TRACE\|^Full report:' ../flag/c1.txt \
   && ok "--verbose = DIARY_VERBOSE=1: the whole report as before (no marker, no pointer), $vl lines after 'report:'" || bad "verbose output"
 sums "$w/sh/short" > "$w/sh/s1.txt"; sums "$w/sh/flag" > "$w/sh/s2.txt"; sums "$w/sh/envv" > "$w/sh/s3.txt"
@@ -1629,14 +1629,15 @@ ns=$(grep -c '^s[0-9]* t[0-9]* [0-9][0-9]:[0-9][0-9]:[0-9][0-9] | ' night.txt); 
 [ "$rcn" = 0 ] && [ "$ns" = 3 ] && grep -q '^night run: sessions of 60 ticks; max sessions: 3; max hours: 12' night.txt && grep -q '^+-- night run finished' night.txt && grep -q '^| stopped: the number of sessions was reached' night.txt \
   && ! grep -q '^@@\|Full report\|^report:\|^treadmill' night.txt && [ "$nlines" -le 24 ] && [ "$(grep -c "^  [0-9]h[0-9][0-9]m[0-9][0-9]s | .* KB (+.* KB) | .*/session | .* tick/s | left " night.txt)" = 3 ] && grep -v '^Save folder\|^Saved to' night.txt | awk 'length > 79 { n++ } END { exit n > 0 }' \
   && ok "make night, no terminal, MAX_SESSIONS=3: one status line per session (3) with its timer line (elapsed, save folder size and growth, seconds per session, ticks per second, time left), a final box, no report spam ($nlines lines, <= 79 columns), exit 0" || bad "night console ($rcn $ns $nlines)"
-nsums() { ( cd "$1" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./run_log*|./trend*|./night_console*|./debug*|./last*|./voice_log*|./state.ckpt*|./ckpt_log*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
+nsums() { ( cd "$1" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./run_log*|./trend*|./night_console*|./debug*|./last*|./voice_log*|./state.ckpt*|./state.verified.ckpt*|./verify_stamp.txt|./ckpt_log*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
 nsums "$w/nt/night" > ns1.txt; nsums "$w/nt/hand" > ns2.txt
 [ -s ns1.txt ] && cmp -s ns1.txt ns2.txt && ok "three night sessions are byte for byte three hand-made --more 60 runs (diaries, entities, summary, records: $(wc -l < ns1.txt) files)" || bad "night differs from hand runs"
 # make verify: OK on a night save; a changed diary line is DRIFT (exit 1); the night run against the same sessions by hand, run_report.txt included
-env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/night" > vf.txt 2>&1; rcv=$?
+env -u DIARY_VERBOSE "$nb" --verify-full --home "$w/nt/night" > vf.txt 2>&1; rcv=$?
+env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/night" > vfi.txt 2>&1 || rcv=9   # 0.060: incremental from the verified checkpoint
 rm -rf "$w/nt/vt"; cp -r "$w/nt/night" "$w/nt/vt"; sed -i '0,/"t":"work"/s//"t":"rest"/' "$w/nt/vt/diaries/ada.jsonl"
 env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/vt" > vt.txt 2>&1; rct=$?
-[ "$rcv" = 0 ] && grep -q '^verify: OK, 180 ticks replayed from the files' vf.txt && [ "$rct" = 1 ] && grep -q 'DRIFT\|differs\|import FAILED' vt.txt && ok "make verify (--verify): OK on the night save (180 ticks), exit 1 with the DRIFT text after one diary line was changed" || bad "make verify ($rcv $rct)"
+[ "$rcv" = 0 ] && grep -q '^verify: OK, 180 ticks replayed from the files' vf.txt && grep -q '^verify: OK (incremental), ticks 181 to 180 replayed from the verified checkpoint of tick 180 ' vfi.txt && [ "$rct" = 1 ] && grep -q 'DRIFT\|differs\|import FAILED' vt.txt && ok "make verify-full: OK on the night save (180 ticks); make verify (incremental) OK from the verified checkpoint; make verify exit 1 with the DRIFT text after one OLD diary line was changed (the verified checkpoint no longer fits the files: full replay)" || bad "make verify ($rcv $rct)"
 rnorm() { sed -E 's/[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9:]{8}//g; s#'"$2"'#HOME#g; s/(elapsed|Elapsed)[= ][0-9.]+//g' "$1/run_report.txt"; }
 rnorm "$w/nt/night" "$w/nt/night" > rn1.txt; rnorm "$w/nt/hand" "$w/nt/hand" > rn2.txt
 diff rn1.txt rn2.txt > rn.diff 2>&1; [ -s rn1.txt ] && [ ! -s rn.diff ] && ok "run_report.txt of the last night session equals the one of the last hand-made session (times and paths aside)" || { bad "night run_report differs from the hand-made one"; head -5 rn.diff; }
@@ -1737,7 +1738,7 @@ PY
   rm -rf "$w/nt/qf"; cp -r "$big" "$w/nt/qf"
   python3 "$w/nt/ptyq.py" q_first "$nb" "$w/nt/qf" --session-ticks 3000 --max-sessions 5 > qf.txt 2>&1
   el=$(sed -n 's/^ELAPSED=//p' qf.txt); ex=$(sed -n 's/^EXIT=//p' qf.txt)
-  env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/qf" > qf2.txt 2>&1; rcv=$?
+  env -u DIARY_VERBOSE "$nb" --verify-full --home "$w/nt/qf" > qf2.txt 2>&1; rcv=$?
   [ "$ex" = 0 ] && awk -v e="$el" 'BEGIN { exit !(e < 15) }' && grep -q 'q pressed: stopping\.\.\.' qf.txt && grep -q '^| stopped: you pressed q' qf.txt && grep -q 'reason=q sessions=1 ' "$w/nt/qf/run_log.txt" \
     && [ "$rcv" = 0 ] && grep -q '^verify: OK, 9000 ticks' qf2.txt && [ "$(grep -c '^T ' "$w/nt/qf/trend.txt")" = 2 ] \
     && ok "q during the first new ticks: the session finishes (3000 ticks, $el s), diaries/trend/run_log written (reason=q), exit 0, make verify: OK on 9000 ticks" || bad "q in the first session (exit $ex, $el s, verify $rcv)"
@@ -1798,7 +1799,7 @@ sed -i 's/^voice.enabled = .*/voice.enabled = 0/; s/^voice.log = .*/voice.log = 
 env -u DIARY_VERBOSE "$nb" --continuous --home "$w/nt/von" --session-ticks 200 --max-sessions 2 --seed 42 < /dev/null > von.txt 2>&1
 ( cd "$w/nt/vd" && env -u DIARY_VERBOSE bin/diary_sim --continuous --home "$w/nt/voff" --session-ticks 200 --max-sessions 2 --seed 42 < /dev/null > "$w/nt/voff.txt" 2>&1 )
 env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/von" > vov.txt 2>&1; rcvv=$?
-vn() { ( cd "$1" || exit 1; find . -type f ! -name 'voice_log.txt' ! -name 'run_*' ! -name 'trend.txt' ! -name 'night_*' ! -name 'debug.txt' ! -name 'last*' ! -name 'state.ckpt*' ! -name 'ckpt_log.txt' | sort | while read -r f; do case $f in *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^#' "$f" | cksum | sed "s#\$# $f#";; *) cksum < "$f" | sed "s#\$# $f#";; esac; done ); }
+vn() { ( cd "$1" || exit 1; find . -type f ! -name 'voice_log.txt' ! -name 'run_*' ! -name 'trend.txt' ! -name 'night_*' ! -name 'debug.txt' ! -name 'last*' ! -name 'state.ckpt*' ! -name 'state.verified.ckpt*' ! -name 'verify_stamp.txt' ! -name 'ckpt_log.txt' | sort | while read -r f; do case $f in *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^#' "$f" | cksum | sed "s#\$# $f#";; *) cksum < "$f" | sed "s#\$# $f#";; esac; done ); }
 vn "$w/nt/von" > vn1.txt; vn "$w/nt/voff" > vn2.txt
 if [ -s "$w/nt/von/voice_log.txt" ]; then vlong=$(sed 's/^t=[0-9]* //' "$w/nt/von/voice_log.txt" | awk 'length($0) > 150 || length($0) < 8' | wc -l); else vlong=-1; fi
 [ -s vn1.txt ] && cmp -s vn1.txt vn2.txt && [ "$vlong" = 0 ] && [ ! -e "$w/nt/voff/voice_log.txt" ] && [ "$rcvv" = 0 ] && grep -q '^verify: OK' vov.txt \
@@ -1855,7 +1856,7 @@ env -u DIARY_VERBOSE "$nb" --chatlog --home "$w/nt/ch" > chl.txt 2>&1
   && tail -1 "$w/nt/ch/diaries/sessions.txt" > /dev/null && grep -c ' chat=1' "$w/nt/ch/diaries/sessions.txt" | grep -q '^1$' \
   && ok "--chat with a script: @adam / @Eve / @ru / @jeh / @ob get answers from their templates, an unknown name, a name that fits two (@o) and an unknown order get error lines, /status /pause /resume /mood /trend /words /help answer; $cn C lines in diaries/chat.txt (format C<n> t= who= to= h= text=, numbered 1..$cn, none over 150 characters), the session carries chat=1, make verify passes, make chatlog and the plain console show them" || bad "chat script ($rcc, $cn lines, fmt $badfmt, len $badlen, seq $seqok, verify $rcv2)"
 cmp -s "$cf" "$w/nt/ch2/diaries/chat.txt" && ok "the answers are deterministic: the same script on a copy of the same save gives the same chat.txt byte for byte" || bad "chat answers differ between two runs"
-cs() { ( cd "$1" || exit 1; find . -type f ! -name 'chat.txt' ! -name 'voice_log.txt' ! -name 'run_*' ! -name 'trend.txt' ! -name 'night_*' ! -name 'debug.txt' ! -name 'last*' ! -name 'state.ckpt*' ! -name 'ckpt_log.txt' | sort | while read -r f; do case $f in *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | sed 's/ chat=1//' | cksum | sed "s#\$# $f#";; *) cksum < "$f" | sed "s#\$# $f#";; esac; done ); }
+cs() { ( cd "$1" || exit 1; find . -type f ! -name 'chat.txt' ! -name 'voice_log.txt' ! -name 'run_*' ! -name 'trend.txt' ! -name 'night_*' ! -name 'debug.txt' ! -name 'last*' ! -name 'state.ckpt*' ! -name 'state.verified.ckpt*' ! -name 'verify_stamp.txt' ! -name 'ckpt_log.txt' | sort | while read -r f; do case $f in *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | sed 's/ chat=1//' | cksum | sed "s#\$# $f#";; *) cksum < "$f" | sed "s#\$# $f#";; esac; done ); }
 cs "$w/nt/ch" > cs1.txt; cs "$w/nt/cp" > cs2.txt
 [ -s cs1.txt ] && cmp -s cs1.txt cs2.txt && [ ! -e "$w/nt/cp/diaries/chat.txt" ] && ! grep -q 'chat=1' "$w/nt/cp/diaries/sessions.txt" \
   && ok "the chat does not change the simulation: a session with $cn chat lines and the same session without leave every other diary, entity file and record byte for byte the same ($(wc -l < cs1.txt) files; only the chat=1 marker of sessions.txt and chat.txt differ); a plain run has no marker and no chat.txt" || bad "chat changes the simulation ($(diff cs1.txt cs2.txt | head -3 | tr '\n' ' '))"
@@ -2465,7 +2466,7 @@ cp -r "$w/nt/a2" "$w/nt/spw"; sed -i 's/ symstrict=1//' "$w/nt/spw/diaries/sessi
 # make night-ship: the overnight form; the same checkin.txt, the same verdict layout; here a tiny time limit, so the reason is max_hours
 rm -rf "$w/nt/spn"; cp -r "$w/nt/a2" "$w/nt/spn"
 DIARY_HOME="$w/nt/spn" make --no-print-directory -C "$root" night-ship NIGHT_SHIP_HOURS=0.002 NIGHT_SHIP_TICKS=30 NIGHT_SHIP_RESERVE=0 > spn.txt 2>&1 < /dev/null; rcn=$?
-ckn="$w/nt/spn/checkin.txt"; keys() { sed -n '3,/^wall time: /p' "$1" | grep -v '^budget: ' | awk '{ print $1 }'; }
+ckn="$w/nt/spn/checkin.txt"; keys() { sed -n '3,/^wall time: /p' "$1" | grep -v '^budget: ' | grep -v '^  verify-full due: ' | awk '{ print $1 }'; }   # 0.060: the due detail only when due
 [ "$rcn" = 0 ] && sed -n 1p "$ckn" | grep -q '^diary-sim checkin (make night-ship): attach this ONE file' && sed -n 3p "$ckn" | grep -q '^VERDICT: PASS$' \
   && grep -q '^stop reason: max_hours (the time limit was reached)$' "$ckn" && grep -q '^night: sessions of 30 ticks; max sessions: no limit; one budget of 0.002h$' "$ckn" && grep -q '^budget: 0.002h; stop [0-9:]*, reserve 0m00s; due [0-9:]*, written ' "$ckn" && grep -q '^shared (3 of 4): [0-9]* / 40000 ' "$ckn" && grep -q '^post_secs=[0-9]*$' "$w/nt/spn/ship_stamp.txt" \
   && grep -q '^night: sessions of 60 ticks; max sessions: 1; max hours: 12$' "$ck" && [ "$(keys "$ckn")" = "$(keys "$ck")" ] && grep -qF '== night box == reason=max_hours' "$ckn" && grep -q '^roles (s[0-9]*-s[0-9]*): ' "$ckn" && grep -qF '== early signals: ' "$ckn" \
@@ -2506,14 +2507,17 @@ ckr="$w/nt/spr/checkin.txt"; sumr=$(sed -n '/^-\{79\}$/,$p' spr.txt)
   && grep -q '^since the last ship: no stamp yet' "$ckr" && grep -q "^sessions=$nsr\$" "$w/nt/spr/ship_stamp.txt" && grep -qF '== early signals: the lines above in full, from the files (no replay) ==' "$ckr" \
   && [ "$(sed -n '1p;3,/^wall time: /p' "$ckr" | awk 'length > 79' | wc -l)" = 0 ] && grep -q '^wall time: ' "$ckr" \
   && ok "make ship (default): no night run, stdin closed (no q), ${dtr}s; VERDICT: PASS with the same verdict lines as a night (the save size, the last night's stop reason and sessions, verify OK); diaries, run_log.txt (but the VERIFY entry of the passed verify, 0.059) and night_console.txt unchanged; 'last full verify: <date> (N ticks), today' (also in ship_stamp.txt); early signals (roles, shared words, petition topics, mood spread; no stamp yet, ship_stamp.txt written)" || bad "make ship reports only ($rcr)"
+DIARY_HOME="$w/nt/spr" make --no-print-directory -C "$root" ship SHIP_VERIFY_TICKS=10 > spi.txt 2>&1 < /dev/null; rci=$?; cp "$ckr" spi_ck.txt   # 0.060: the verified checkpoint is 0 ticks behind: incremental
+rm -f "$w/nt/spr/state.verified.ckpt"
 DIARY_HOME="$w/nt/spr" make --no-print-directory -C "$root" ship SHIP_VERIFY_TICKS=10 > sps.txt 2>&1 < /dev/null; rcs=$?
 cp "$ckr" sps_ck.txt
 DIARY_HOME="$w/nt/spd" make --no-print-directory -C "$root" ship SHIP_VERIFY=1 > spv.txt 2>&1 < /dev/null; rcv=$?
-[ "$rcs" = 0 ] && sed -n 3p sps_ck.txt | grep -q '^VERDICT: PASS$' && grep -q '^verify: skipped ([0-9]* ticks > 10); night end check: ' sps_ck.txt && grep -q '^last full verify: [0-9-]* [0-9:]* ([0-9]* ticks), today$' sps_ck.txt && grep -qF '== make verify (skipped, ' sps_ck.txt \
+[ "$rci" = 0 ] && grep -q '^verify: OK, incremental (no new tick after the verified checkpoint of tick [0-9]*)$' spi_ck.txt \
+  && [ "$rcs" = 0 ] && sed -n 3p sps_ck.txt | grep -q '^VERDICT: PASS$' && grep -q '^verify: skipped ([0-9]* ticks > 10); night end check: ' sps_ck.txt && grep -q '^last full verify: [0-9-]* [0-9:]* ([0-9]* ticks), today$' sps_ck.txt && grep -qF '== make verify (skipped, ' sps_ck.txt \
   && grep -q '^since [0-9-]* [0-9:]*: +0 sessions, spread +0, all 4 +0, overlap +0 pts, top same$' sps_ck.txt && grep -q '^the stamp of the last ship:$' sps_ck.txt \
   && [ "$rcv" != 0 ] && grep -q '^VERDICT: FAIL:.* verify failed;' "$w/nt/spd/checkin.txt" && grep -q '^night: none (reports only)' "$w/nt/spd/checkin.txt" \
   && grep -q '^SHIP_SESSIONS ?= 0$' "$root/Makefile" && grep -q 'REPORTS ONLY' "$root/Makefile" && grep -q 'make ship.*(by day) runs NO night' "$root/README.md" \
-  && ok "make ship SHIP_VERIFY_TICKS=10: verify skipped (the end check of the last night quoted), still PASS, and the deltas since the last ship (+0 sessions, the same top topic); make ship SHIP_VERIFY=1 on a save that DRIFTs: exit $rcv, VERDICT: FAIL verify failed; Makefile and README say reports only" || bad "make ship verify skip / fail ($rcs $rcv)"
+  && ok "make ship SHIP_VERIFY_TICKS=10: with the verified checkpoint 0 ticks behind the incremental verify runs (0.060); without it verify skipped (the end check of the last night quoted), still PASS, and the deltas since the last ship (+0 sessions, the same top topic); make ship SHIP_VERIFY=1 on a save that DRIFTs: exit $rcv, VERDICT: FAIL verify failed; Makefile and README say reports only" || bad "make ship verify skip / fail ($rcs $rcv)"
 cd "$w" || exit 1
 
 echo "== 62. build 0.058: the state checkpoint (state.ckpt): a start loads it instead of replaying, with byte for byte the files of a full replay; a changed file or checkpoint is refused (full replay); a signal inside a session, then the resume =="
@@ -2727,12 +2731,12 @@ printf '# test\nfull=%s 1200 0123456789abcdef 1\nincr=%s 1200 1500\n' "$old" "$o
 DIARY_HOME="$s7" make --no-print-directory -C "$root" ship SHIP_VERIFY=0 > sh2.txt 2>&1 < /dev/null; rc2=$?; cp "$s7/checkin.txt" sh2_ck.txt
 sed -n '/^-\{79\}$/,$p' sh2.txt > sh2_sum.txt
 [ $rc1 = 0 ] && grep -q '^last full verify: [0-9-]* [0-9:]* (1200 ticks), today$' sh1_ck.txt && grep -q '^last verify: [0-9-]* [0-9:]* (up to tick 1500), today$' sh1_ck.txt \
-  && grep -q '^growth: first sizes now; largest: diaries [0-9.]* MB, ' sh1_ck.txt && ! grep -q '^last full verify' sh1.txt \
+  && grep -q '^growth: no earlier sizes; largest: diaries [0-9.]* MB, ' sh1_ck.txt && ! grep -q '^last full verify' sh1.txt \
   && [ $rc2 = 0 ] && grep -q '^last full verify: [0-9-]* (1200 ticks), 35 days ago; verify-full due$' sh2_ck.txt \
   && grep -q "^  verify-full due: monthly (30 days); the simulation changed since (fingerprint 0123456789abcdef, now $sp); state format 1, now $fmt7\$" sh2_ck.txt \
-  && grep -q '^last verify: [0-9-]* (ticks 1201-1500), 8 days ago; verify due (weekly)$' sh2_ck.txt && grep -q '^growth since [0-9-]* [0-9:]*: ' sh2_ck.txt \
+  && grep -q '^last verify: [0-9-]* (ticks 1201-1500), 8 days ago; verify due (weekly)$' sh2_ck.txt && grep -q '^growth: [a-z_]* [-+][0-9.]* MB, .* since [0-9-]* [0-9:]*$' sh2_ck.txt \
   && grep -q 'verify-full due$' sh2_sum.txt && grep -q 'verify due (weekly)$' sh2_sum.txt && ! grep -q '^growth' sh2_sum.txt && [ "$(wc -l < sh2_sum.txt)" -le 22 ] \
-  && ok "checkin.txt: 'last full verify: <date> (1200 ticks), today' and 'last verify: ...' from verify_stamp.txt; with a stamp 35 days old, of another fingerprint and state format: 'verify-full due' with the three reasons, an 8-day-old incremental: 'verify due (weekly)' (both on the terminal); 'growth:' the largest groups, then 'growth since <last ship>:'" \
+  && ok "checkin.txt: 'last full verify: <date> (1200 ticks), today' and 'last verify: ...' from verify_stamp.txt; with a stamp 35 days old, of another fingerprint and state format: 'verify-full due' with the three reasons, an 8-day-old incremental: 'verify due (weekly)' (both on the terminal); 'growth:' the largest groups, then 'growth: <group> +N MB, ... since <last ship>'" \
   || bad "verify due lines / growth ($rc1 $rc2)"
 # (e) make slice without a checkpoint on a too small budget: the replay estimate and 'the budget cannot hold' line (screen, run_log.txt,
 # checkin.txt), then the sessions; the reserve from the REPORTS phase only (9117 s last time: capped at a quarter of the budget); the
