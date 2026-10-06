@@ -1,5 +1,5 @@
 # Evolutionary pressure on words and on chess (previews built, the rest design)
-Version: 0.008
+Version: 0.009
 
 Build state: **step 1 (`symbols=1`) is built** (build 0.047), **step 1 (`symbols=1`)**, **step 2 (`make evolve` preview)** and **step 3 (`make active` preview)** are built (build 0.048); **the real `active=1` (section 13) is built** (build 0.049); everything else is design only.
 
@@ -233,4 +233,18 @@ unrealistic: reaching a good mood is the goal, staying above it is unnatural.
   (`pull_high_pct` % above the band). The mood ledger books it in "rest model".
 * Both flags come from the session records (no checkpoint state); the tunables are read live, so changing them changes the
   replay of the sessions that used them (as every other tunable).
+
+## 17. `moodrest=2`: the drift as a one-point step by a die (BUILT, build 0.063, new sessions only)
+Room review of 0.062: the 5 %/tick pull of `moodrest=1` halves a swing in ~14 ticks, so a 300-tick session erases everything
+(Adam read 61-61; thousands of refusals left no trace) and the teacher trigger "mood <= resting mood" needs real dips. 2-3 % hit
+the integer rounding dead zone (a move only when |gap| >= 17..25).
+* **Rule.** After the soft bounds (their remainder rounded by a die of the bound's divisor, salt 23105): with
+  P = min(10000, `pull_bp` x |gap|) (`pull_high_bp` above `band_hi`), a die of 10000 (salt 23106) <= P moves the mood one point
+  towards the resting mood. Expected drift = rate x gap; half-life ln 2 / rate = ~460 ticks at 15 bp.
+* **Units.** Moods are whole points (-100..100) everywhere; there is no finer internal unit, so the probabilistic step was
+  chosen over x1000 fixed point (no new state, no checkpoint format change).
+* **Demo** (copy of the 392100-tick save, carry=2 + moodrest=2, 12 sessions of 300 ticks; steady state, sessions 7-12):
+  15 bp: Adam p10..p90 -21..-6 (median -12), Eve 77..84, Abel 77..83, Ruth 64..77; >= +95 0 %; 30 bp: Adam -10..12, Eve
+  74..82, Abel 72..80, Ruth 65..75. Eve and Abel sit at the top of the band: the base model pushes them up (before moodrest
+  they were pinned at 97-100), and the 3x pull above 80 plus the soft bound (a gain at 80 keeps 20 %) hold them there.
 

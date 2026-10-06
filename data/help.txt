@@ -264,6 +264,10 @@ teaches the teacher words it lacks back in the same meeting; words back
 settle the favour at once. Resting moods (moodrest=1, moodrest.enabled=0:
 off): each wesen rests at a mood in 60..80 from its birth row; the mood drifts
 there, faster above 80. checkin: mood stats and the mood goal line.
+moodrest=2 (build 0.063, the default; moodrest.enabled=1: the 0.062 rule):
+the drift to the resting mood is one point a tick with the probability
+moodrest.pull_bp x gap / 10000 (15: a swing fades halfway in ~460 ticks),
+pull_high_bp above the band; moods keep dips and peaks for a session or two.
 Size (make footprint, make small): bin/diary_sim (-g -O0) is ~9 MB, of which
 ~4 MB is debug info and symbols. make small builds bin/diary_sim_small (-Os,
 no -g, gc-sections, stripped): ~2.9 MB, same output. See README, Footprint.

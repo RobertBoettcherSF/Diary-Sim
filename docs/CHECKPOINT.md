@@ -1,6 +1,6 @@
 # The state checkpoint (`state.ckpt`)
 
-Version: 0.005 (build 0.062; the checkpoint itself came with build 0.058, README "The state checkpoint")
+Version: 0.006 (build 0.063; the checkpoint itself came with build 0.058, README "The state checkpoint")
 
 A start used to replay the whole history to rebuild the state in memory: 13 minutes for 300000 ticks, about 35 minutes on Robert's
 774600-tick save, growing every night. `state.ckpt` in the save folder holds the end state of the last run, so a start loads it in
@@ -88,6 +88,13 @@ those keys, and only those, are compared one by one; the check proves that a ref
 without the checkpoint. A format 1 checkpoint (0.058) has neither rule-file hashes nor start values; it is loaded without the
 comparison (0.059 changes no number in `data/`, and the check proves the 0.058 checkpoint gives the files of a full replay).
 
+## Build 0.063: no format change
+`moodrest=2` is a session marker like `moodrest=1` (derived from the session records after a load); its die is the usual hash,
+so there is no new state. Scenario 67: the 0.061 fixture loads with +0 ticks; with carry=2 moodrest=1 two more sessions give byte
+for byte what 0.062 gave (`tests/ckpt061_mr1.expect`); moodrest=2 is deterministic and verify-full replays it byte for byte.
+The layout hash moved only because Session_Rec (not streamed, reached by its name) got the field Moodrest2; both fixture
+payloads are byte for byte the same, so it is recorded without a bump.
+
 ## Build 0.062: no format change
 `carry=2` and `moodrest=1` add no streamed state: the carry level and the moodrest flag are derived from the session records
 (the last session that starts before the checkpoint tick), the resting moods from `data/limits.txt` and the birth rows. Format 3
@@ -122,7 +129,7 @@ zip goes out, `scripts/ckpt_layout.sh` hashes what decides the payload bytes: th
 name (the streamed variables, their types, the element types of the vectors, the constants of array bounds; comments and spacing
 do not count). The recorded value, next to the format number, is:
 
-ckpt_layout: 3 dadbc2ea5e244597
+ckpt_layout: 3 006ad69b266ebca0
 
 `make check` (scenario 63) and `make ckpt-layout` compare it with the code: when the code changed and this line did not, the check
 FAILS with `bump Ckpt_Format`. Then:

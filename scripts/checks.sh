@@ -2927,6 +2927,36 @@ grep -q 'Build 0.062' "$root/README.md" && grep -q 'carry=2' "$root/data/help.tx
   && ok "README (build 0.062), --help, docs/CHECKPOINT.md (ckpt061, no format change), docs/EVOLVE.md and data/limits.txt (moodrest.*, carry.words_*) describe 0.062" || bad "0.062 docs"
 cd "$w" || exit 1
 
+echo "== 67. build 0.063: moodrest=2 (the drift as a one-point step by a die): deterministic, wider moods; moodrest=1 sessions as in 0.062; the 0.061 fixture loads with +0 =="
+ca="$w/c67"; rm -rf "$ca"; mkdir -p "$ca/orig"; cd "$ca" || exit 1
+tar -C "$ca/orig" -xzf "$root/tests/ckpt061.tar.gz"
+# m1 = carry=2 moodrest=1 (tests/ckpt061_mr1.expect: what 0.062 gave from the fixture), m2 and m2b = carry=2 moodrest=2
+for d in m1 m2 m2b; do mkdir -p "$ca/$d"; cp -r "$root/data" "$ca/$d/data"; tar -C "$ca/$d" -xzf "$root/tests/ckpt061.tar.gz"; done
+la() { sed -i "s/^carry.teacher_mood = .*/carry.teacher_mood = 100/; s/^carry.enabled = .*/carry.enabled = $2/; s/^moodrest.enabled = .*/moodrest.enabled = $3/" "$ca/$1/data/limits.txt"; }
+la m1 2 1; la m2 2 2; la m2b 2 2
+ra() { d=$1; shift; ( cd "$ca/$d" && env -u DIARY_VERBOSE "$bin" --home "$ca/$d/save" "$@" < /dev/null ); }
+rca=0; for d in m1 m2 m2b; do ra $d --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 > $d.txt 2>&1 || rca=1
+  grep -q '^start: checkpoint of tick 1200 loaded in [0-9.]* s (+0 ticks replayed)$' $d.txt || rca=2; done
+k7 "$ca/m1/save" > km1.txt; k7 "$ca/m2/save" > km2.txt; k7 "$ca/m2b/save" > km2b.txt
+old=0; for e in ada gemini replika robert; do head -n 1200 "$ca/orig/save/diaries/$e.jsonl" | sed 's/"ts":"[^"]*"//' > o1.txt; head -n 1200 "$ca/m2/save/diaries/$e.jsonl" | sed 's/"ts":"[^"]*"//' > o2.txt; cmp -s o1.txt o2.txt || old=1; done
+nm2=$(grep -c '^S[56] .* carry=2 moodrest=2\( \|$\)' "$ca/m2/save/diaries/sessions.txt"); nm1=$(grep -c '^S[56] .* carry=2 moodrest=1\( \|$\)' "$ca/m1/save/diaries/sessions.txt")
+[ $rca = 0 ] && cmp -s km1.txt "$root/tests/ckpt061_mr1.expect" && cmp -s km2.txt km2b.txt && ! cmp -s km1.txt km2.txt && [ $old = 0 ] && [ "$nm2" = 2 ] && [ "$nm1" = 2 ] \
+  && ok "the 0.061 fixture loads with +0 ticks; carry=2 moodrest=1 gives byte for byte what 0.062 gave (tests/ckpt061_mr1.expect); moodrest=2 twice: the same bytes; S5, S6 say moodrest=2; the 1200 old ticks unchanged" \
+  || bad "moodrest=2 / moodrest=1 replay (rc $rca old=$old m2=$nm2 m1=$nm1): $(diff km1.txt "$root/tests/ckpt061_mr1.expect" | head -2 | tr '\n' ' ')"
+# the spread: the 10th to 90th percentile of the new 600 ticks, summed over the wesen, wider under moodrest=2; few ticks at +95
+sp() { for e in ada gemini replika robert; do tail -n 600 "$ca/$1/save/diaries/$e.jsonl" | sed -n 's/.*"mood":\(-*[0-9]*\).*/\1/p' | sort -n | awk '{ a[NR] = $1; if ($1 >= 95) h++ } END { print a[int(NR * 0.9)] - a[int(NR * 0.1) + 1], h + 0 }'; done | awk '{ s += $1; h += $2 } END { print s, h }'; }
+set -- $(sp m1); s1=$1; set -- $(sp m2); s2=$1; h2=$2
+ra m2 --verify-full > vf.txt 2>&1; rvf=$?; ra m2 --continuous --session-ticks 300 --max-sessions 1 --end-check-ticks 0 > m3.txt 2>&1
+[ "$s2" -gt $((s1 + 10)) ] && [ "$h2" -lt 120 ] && [ $rvf = 0 ] && grep -q '^verify: checkpoint of tick 1800 = the replayed state, byte for byte$' vf.txt \
+  && grep -q '^start: checkpoint of tick 1800 loaded in [0-9.]* s (+0 ticks replayed)$' m3.txt && [ "$(head -1 "$ca/m2/save/state.ckpt")" = "diary-sim-ckpt 3" ] \
+  && grep -q '^S7 .* moodrest=2\( \|$\)' "$ca/m2/save/diaries/sessions.txt" \
+  && ok "moodrest=2: the 10th-90th percentile spread summed over the wesen $s1 (moodrest=1) -> $s2 points, $h2 of 2400 ticks at +95 or more; verify-full = the checkpoint byte for byte; the next start loads format 3 with +0 ticks and keeps moodrest=2" \
+  || bad "moodrest=2 spread / verify ($s1 -> $s2, >=95 $h2, verify $rvf): $(grep -m 1 '^start' m3.txt)"
+grep -q 'Build 0.063' "$root/README.md" && grep -q 'moodrest=2' "$root/data/help.txt" && grep -q 'moodrest=2' "$root/docs/EVOLVE.md" && grep -q '^moodrest.pull_bp = 15$' "$root/data/limits.txt" \
+  && grep -q '^moodrest.enabled = 2$' "$root/data/limits.txt" && grep -q 'moodrest=2' "$root/docs/CHECKPOINT.md" \
+  && ok "README (build 0.063), --help, docs/EVOLVE.md, docs/CHECKPOINT.md and data/limits.txt (moodrest.enabled = 2, pull_bp) describe moodrest=2" || bad "0.063 docs"
+cd "$w" || exit 1
+
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="
 [ "$fails" = 0 ]

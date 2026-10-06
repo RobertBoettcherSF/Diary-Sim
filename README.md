@@ -105,6 +105,16 @@ diaries, entities and summary files are byte for byte the same.
   of the run, `warnings:n`, `export-failed`. It is information only; nothing in the simulation reads it (`data/limits.txt`).
   `@@SECTIONS` gives the line of each header in `run_report.txt`.
 
+## Build 0.063: resting moods with room to move (`moodrest=2`)
+
+`moodrest=1` pulled 5 % of the gap every tick: a swing halved in ~14 ticks and a wesen read 61-61 all session; a weaker
+percentage hit a rounding dead zone (moods are whole points from -100 to +100; there is no finer unit inside). `moodrest=2`
+(`moodrest.enabled = 2`, the default; 1 = the 0.062 rule byte for byte, 0 = off): each tick the mood takes ONE point towards
+its resting mood with the probability `moodrest.pull_bp` x gap / 10000 (15: 0.15 % per point of gap, so the expected drift is
+0.0015 x gap and a swing fades halfway in ~460 ticks, 1-2 sessions); above the band `pull_high_bp` (45, 3x). The die is the
+usual hash of (seed, wesen, tick, salt): no new state, checkpoint format 3 unchanged. The shrinking of gains near +100 and of
+losses near -100 stays, its remainder also rounded by a die. Teachers in a moodrest session: at or below their resting mood.
+
 ## Build 0.062: lessons as exchanges (`carry=2`) and resting moods (`moodrest=1`)
 
 Two new session markers; each is on by default and off in `data/limits.txt`; old sessions replay byte for byte; no checkpoint
