@@ -521,7 +521,7 @@ package body Sim_Games is
    begin
       for I in 1 .. Natural (Games.Length) loop
          declare
-            G : constant Game_Rec := Games (I);
+            G : Game_Rec renames Games (I);   --  0.060: no copy of the whole game (moves, keys) per line
             Mv : Unbounded_String;
             Shown : constant Natural := (if Full then Natural (G.Moves.Length) else Natural'Min (6, Natural (G.Moves.Length)));
          begin

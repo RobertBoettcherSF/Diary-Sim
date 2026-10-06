@@ -5,7 +5,9 @@ pragma Ada_2022;
 with Sim_Ckpt;
 
 with Ada.Containers.Vectors;
+with Ada.Containers.Indefinite_Hashed_Sets;
 with Ada.Strings.Fixed;
+with Ada.Strings.Hash;
 with Ada.Strings.Unbounded;
 with Sim_Records;
 
@@ -390,9 +392,10 @@ package body Sim_Govern is
 
    --  ---- reports (from the D lines only) ---------------------------------------------------------------------------
    subtype Count5 is Counts_T;
+   package Seen_Sets is new Ada.Containers.Indefinite_Hashed_Sets (String, Ada.Strings.Hash, "=");
    function Count_For (Pl : String) return Count5 is
       C : Count5 := [others => 0];
-      Seen : Str_Vectors.Vector;
+      Seen : Seen_Sets.Set;   --  0.060: a hash set (was a list searched line by line: O(decisions^2) per report)
    begin
       for Ln of Dec_Lines loop
          if Pl = "" or else Tok (Ln, "player") = Pl then
@@ -401,7 +404,7 @@ package body Sim_Govern is
                Pet : constant String := Tok (Ln, "pet");
             begin
                if K in "grant" | "partial" | "defer" | "refuse" and then not Seen.Contains (Pet & "/" & Tok (Ln, "player")) then
-                  Seen.Append (Pet & "/" & Tok (Ln, "player"));
+                  Seen.Insert (Pet & "/" & Tok (Ln, "player"));
                   C (1) := C (1) + 1;
                end if;
                if K = "grant" then C (2) := C (2) + 1;

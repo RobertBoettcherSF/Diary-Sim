@@ -100,8 +100,33 @@ package body Sim_World is
          while B > Text'First and then Text (B - 1) /= ' ' loop B := B - 1; end loop;
          return B + 3 <= Text'Last and then Text (B .. B + 3) = "src=";
       end In_Src_Tag;
+      --  0.060: the ids and display names as plain strings once per call (they were converted for every pair at every letter of
+      --  the text: the end report of a big save is megabytes); the same matching, pair by pair in order
+      NP : constant Natural := Natural (Pairs.Length);
+      function Total (Shown : Boolean) return Natural is
+         N : Natural := 0;
+      begin
+         for P of Pairs loop N := N + Length (if Shown then P.Shown else P.Id); end loop;
+         return N;
+      end Total;
+      Id_Buf : String (1 .. Total (False));
+      Sh_Buf : String (1 .. Total (True));
+      Id_F, Id_L, Sh_F, Sh_L : array (1 .. NP) of Natural := [others => 0];
    begin
       if Pairs.Is_Empty then return Text; end if;
+      declare
+         A, B : Natural := 0;
+      begin
+         for K in 1 .. NP loop
+            declare
+               Id : constant String := To_String (Pairs (K).Id);
+               Sh : constant String := To_String (Pairs (K).Shown);
+            begin
+               Id_F (K) := A + 1; Id_L (K) := A + Id'Length; Id_Buf (A + 1 .. A + Id'Length) := Id; A := A + Id'Length;
+               Sh_F (K) := B + 1; Sh_L (K) := B + Sh'Length; Sh_Buf (B + 1 .. B + Sh'Length) := Sh; B := B + Sh'Length;
+            end;
+         end loop;
+      end;
       while I <= Text'Last loop
          declare
             Done : Boolean := False;
@@ -110,10 +135,10 @@ package body Sim_World is
               and then (I = Text'First or else not (Word_Char (Text (I - 1)) or else Text (I - 1) in '/' | '-' | ':' | '.')
                         or else In_Src_Tag (I))
             then
-               for P of Pairs loop
+               for K in 1 .. NP loop
                   declare
-                     Id : constant String := To_String (P.Id);
-                     Sh : constant String := To_String (P.Shown);
+                     Id : String renames Id_Buf (Id_F (K) .. Id_L (K));
+                     Sh : String renames Sh_Buf (Sh_F (K) .. Sh_L (K));
                      Last : constant Natural := I + Id'Length - 1;
                   begin
                      if not Done and then Last <= Text'Last and then Text (I .. Last) = Id
