@@ -1,10 +1,12 @@
---  Version: 0.002
+--  Version: 0.003
 --  The state checkpoint of a save (state.ckpt, build 0.058): helpers only, the content is written by diary_sim and the
 --  modules (their State_IO).  A memory stream (the whole payload is built in memory and written in one block), a fast
 --  64-bit hash (FNV-1a), and the fingerprint of a record file: its size and two hashes over its first Size bytes, the
 --  last 64 KB and 32 sample blocks of 4 KB spread over the file.  The record files only grow (append-only), so a later
 --  file is still "the same" as long as its first Size bytes are; the next start then replays only the ticks after
 --  the checkpoint.  Reading 64 KB + 128 KB per file is cheap on a 1 GB save (a full hash would read every byte).
+--  0.003 (build 0.059): the tagged sections of format 2 (a section head: tag, byte length and hash of the body, docs/CHECKPOINT.md),
+--  and the data prints: one hash per rule file of data/ (the text-only files are left out, they never touch the state).
 pragma Ada_2022;
 
 with Ada.Streams;
@@ -43,8 +45,23 @@ package Sim_Ckpt is
    --  The record files of the save folder (the current folder): every file in diaries/ and entities/*/, sorted (not diaries/inbox.txt,
    --  a view the program rewrites, and no *.tmp).
    procedure Record_Files (Into : in out Sim_Util.Str_Vectors.Vector);
-   --  One hash over the names and contents of the *.txt files of a folder (the data/ files: a changed number is another world).
-   function Dir_Hash (Dir : String) return String;
+
+   --  The data files of the checkpoint (build 0.059): "name hash" per *.txt file of Dir that may feed the state (sorted); the display
+   --  text files (Is_Text_Only) are left out, and so are comment and blank lines (a changed comment is no changed rule).
+   function Is_Text_Only (Name : String) return Boolean;
+   procedure Data_Prints (Dir : String; Into : in out Sim_Util.Str_Vectors.Vector);
+   function Lines_Hash (L : Sim_Util.Str_Vectors.Vector) return String;   --  one hash over lines
+
+   --  Format 2: every section of the payload is a head of Sect_Head_Len bytes (the tag, 8 characters padded with blanks, then the
+   --  byte length and the FNV-1a hash of the body, each 8 bytes little-endian) and the body.  Section_Begin writes the head with
+   --  room for the length and hash, Section_End fills them in from the body written since.  Section_Head reads a head at byte At + 1.
+   Tag_Len : constant := 8;
+   Sect_Head_Len : constant := 24;
+   procedure Section_Begin (S : in out Mem_Stream; Tag : String; At_B : out Stream_Element_Offset);
+   procedure Section_End (S : in out Mem_Stream; At_B : Stream_Element_Offset);
+   procedure Section_Head (S : Mem_Stream; At_B : Stream_Element_Offset; Tag : out String; Len : out Long_Long_Integer; H : out Hash_T;
+                           OK : out Boolean);   --  OK = False: the head runs past the end
+   function Pad_Tag (Tag : String) return String;   --  8 characters
 
    --  One variable of a State_IO: written (Save) or read back.
    generic

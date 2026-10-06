@@ -1,4 +1,4 @@
---  Version: 0.058
+--  Version: 0.059
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.058";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.059";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -150,7 +150,14 @@ procedure Diary_Sim is
    --  0.058, the state checkpoint (state.ckpt in the save folder, see Ckpt_Write): written at the end of every run that wrote ticks
    --  and at a clean stop; a start whose files still fit it loads it instead of replaying ticks 1 .. Ckpt_Tick.
    Ckpt_Path : constant String := "state.ckpt";
-   Ckpt_Format : constant String := "diary-sim-ckpt 1";
+   --  0.059: the checkpoint belongs to a STATE FORMAT, not to a build: Ckpt_Format is the number of the layout of the payload (the
+   --  State_IO of the modules, in tagged sections since format 2).  A start accepts the formats Ckpt_Layout_Since .. Ckpt_Format: format 1
+   --  (build 0.058, untagged, its section offsets in the header) has the same state layout as format 2.  A change of any State_IO or of
+   --  a streamed type needs Ckpt_Format + 1 AND Ckpt_Layout_Since := that number (older checkpoints are refused: full replay), then the
+   --  new line "ckpt_layout: <format> <hash>" in docs/CHECKPOINT.md (scripts/ckpt_layout.sh prints it; make check fails without it).
+   Ckpt_Magic : constant String := "diary-sim-ckpt ";
+   Ckpt_Format : constant := 2;
+   Ckpt_Layout_Since : constant := 1;
    Replay_Opt : Boolean := False;                    --  --replay: never load the checkpoint (make verify replays anyway)
    Ckpt_Used : Boolean := False;                     --  this run started from the checkpoint
    Ckpt_Tick : Natural := 0;                         --  its tick (when used)
@@ -163,7 +170,12 @@ procedure Diary_Sim is
    Ckpt_Written : Natural := 0;                      --  checkpoints written by this run
    Ckpt_Write_Secs : Duration := 0.0;                --  the last one: seconds and bytes
    Ckpt_Bytes : Long_Long_Integer := 0;
-   Data_Hash : Unbounded_String;                     --  the data/*.txt files as the program started (another number is another world)
+   Data_Hash : Unbounded_String;                     --  the rule files of data/ as the program started (0.059: information, never a refusal)
+   Data_Lines : Str_Vectors.Vector;                  --  "name hash" per rule file (Sim_Ckpt.Data_Prints)
+   Data_Note : Unbounded_String;                     --  0.059: "data changed since the checkpoint ..." (a start that loaded one)
+   Ckpt_Fmt_Used : Integer := 0;                     --  the format of the checkpoint this start loaded
+   Ckpt_Verify_Diff : Boolean := False;              --  --verify: the checkpoint differed from the replay
+   Ckpt_Test_Extra : Unbounded_String;               --  DIARY_TEST_CKPT_EXTRA=<section> (tests only): that section streams one Integer more
    Replay_Wait_Ms : Natural := 0;                    --  DIARY_TEST_REPLAY_MS (tests only): a pause per replayed tick
    Tick_Wait_Ms : Natural := 0;                      --  DIARY_TEST_TICK_MS (tests only): a pause per new tick (a signal inside a session)
    St       : array (Entity_Id) of State := [others => (80, 0, 3)];
@@ -7243,6 +7255,7 @@ procedure Diary_Sim is
       end if;
       Box.Append (if Length (Night_Replay_Line) > 0 then To_String (Night_Replay_Line) else Msg ("night.box.replay_no"));
       if Length (Ckpt_Start_Line) > 0 then Box.Append (To_String (Ckpt_Start_Line)); end if;   --  0.058: checkpoint or replay, the start time
+      if Length (Data_Note) > 0 then Box.Append (To_String (Data_Note)); end if;   --  0.059: the rule files differ from the checkpoint's
       Box.Append (Msg ("night.box.time", Elapsed_Text (Since (Night_T0))));
       Box.Append (Msg ("night.box.speed", Avg_Text, Ticks_Per_Sec, Size_Text (Size_Now), Growth_Text));
       if Night_Verified > 0 then Box.Append (Msg ("night.box.verified", Img (Night_Verified))); end if;
@@ -7356,9 +7369,16 @@ procedure Diary_Sim is
    --  The payload is the State_IO of every module and of this program, in sections with a marker.  What the files give (the
    --  diaries, sessions.txt, the record files, Robert's inputs) is not in it: every start reads them as before (Load_*), and the
    --  restore only sets what the replay of ticks 1 .. tick would have built from them.
-   Ckpt_Error : exception;
-   Sect_Count : constant := 16;
+   Layout_Error : exception;   --  0.059: a section that does not read back the way this build streams it (message: the section)
+   Sect_Count : constant := 16;   --  the 15 sections of the modules and "end"
+   Mod_Count : constant := 15;
    Sect_At : array (1 .. Sect_Count + 1) of Ada.Streams.Stream_Element_Offset := [others => 0];   --  where each section starts
+   --  the bodies of the sections of a payload in memory (bytes From .. To of its stream), from the header (format 1) or the section heads
+   type Sect_Bounds is array (1 .. Mod_Count) of Ada.Streams.Stream_Element_Offset;
+   type Layout is record
+      From, To : Sect_Bounds := [others => 0];
+   end record;
+   Ckpt_L : Layout;   --  the bodies in Ckpt_Data (Ckpt_Probe)
    Ckpt_Data : aliased Sim_Ckpt.Mem_Stream;   --  the file read by Ckpt_Probe (header and payload)
    Ckpt_Pay_At : Ada.Streams.Stream_Element_Offset := 0;   --  the payload starts after this byte
    Ckpt_Head : Str_Vectors.Vector;
@@ -7371,7 +7391,7 @@ procedure Diary_Sim is
       Found : Boolean;
       F : TIO.File_Type;
    begin
-      if Ledger_Mode or else Preview then return; end if;
+      if (Ledger_Mode and then not Verify_View) or else Preview then return; end if;   --  0.059: make verify writes the checkpoint
       Read_Lines ("ckpt_log.txt", Old, Found);
       TIO.Create (F, TIO.Out_File, "ckpt_log.txt.tmp");
       for I in Integer'Max (1, Natural (Old.Length) - 198) .. Natural (Old.Length) loop TIO.Put_Line (F, Old (I)); end loop;
@@ -7459,38 +7479,84 @@ procedure Diary_Sim is
       IO (S, Save, Grant_Report);
    end Main_State_IO;
 
-   --  Everything, in sections; a section marker that does not come back is a broken or foreign payload.
-   procedure All_State_IO (S : not null access Sim_Ckpt.Mem_Stream; Save : Boolean) is
-      procedure Mark (K : Positive) is
-         X : Integer := 77_000 + K;
-      begin
-         Sect_At (K) := (if Save then S.Last else S.Pos);
-         if Save then
-            Integer'Write (S, X);
-         else
-            Integer'Read (S, X);
-            if X /= 77_000 + K then raise Ckpt_Error with "section " & Sect_Name (K); end if;
-         end if;
-      end Mark;
+   --  One section of the payload: the State_IO of a module (K = 1 .. 14) or of this program (15).
+   procedure Sect_IO (K : Positive; S : not null access Sim_Ckpt.Mem_Stream; Save : Boolean) is
    begin
-      Mark (1); Sim_World.State_IO (S, Save);
-      Mark (2); Sim_Dharma.State_IO (S, Save);
-      Mark (3); Sim_Things.State_IO (S, Save);
-      Mark (4); Sim_Screen.State_IO (S, Save);
-      Mark (5); Sim_Games.State_IO (S, Save);
-      Mark (6); Sim_Robot.State_IO (S, Save);
-      Mark (7); Sim_Govern.State_IO (S, Save);
-      Mark (8); Sim_Preport.State_IO (S, Save);
-      Mark (9); Sim_Next.State_IO (S, Save);
-      Mark (10); Sim_Trial.State_IO (S, Save);
-      Mark (11); Sim_Records.State_IO (S, Save);
-      Mark (12); Sim_Visit.State_IO (S, Save);
-      Mark (13); Sim_Active.State_IO (S, Save);
-      Mark (14); Sim_Ledger.State_IO (S, Save);
-      Mark (15); Main_State_IO (S, Save);
-      Mark (16);
-      Sect_At (Sect_Count + 1) := (if Save then S.Last else S.Pos);
-   end All_State_IO;
+      case K is
+         when 1 => Sim_World.State_IO (S, Save);
+         when 2 => Sim_Dharma.State_IO (S, Save);
+         when 3 => Sim_Things.State_IO (S, Save);
+         when 4 => Sim_Screen.State_IO (S, Save);
+         when 5 => Sim_Games.State_IO (S, Save);
+         when 6 => Sim_Robot.State_IO (S, Save);
+         when 7 => Sim_Govern.State_IO (S, Save);
+         when 8 => Sim_Preport.State_IO (S, Save);
+         when 9 => Sim_Next.State_IO (S, Save);
+         when 10 => Sim_Trial.State_IO (S, Save);
+         when 11 => Sim_Records.State_IO (S, Save);
+         when 12 => Sim_Visit.State_IO (S, Save);
+         when 13 => Sim_Active.State_IO (S, Save);
+         when 14 => Sim_Ledger.State_IO (S, Save);
+         when others => Main_State_IO (S, Save);
+      end case;
+      if Length (Ckpt_Test_Extra) > 0 and then To_String (Ckpt_Test_Extra) = Sect_Name (K) then   --  tests only: a build with a field more
+         declare
+            X : Integer := 4242;
+         begin
+            if Save then Integer'Write (S, X); else Integer'Read (S, X); end if;
+         end;
+      end if;
+   end Sect_IO;
+
+   --  0.059, format 2: everything, each section with its head (tag = the section name, byte length and hash of the body; Sim_Ckpt),
+   --  the last one "end" with an empty body.
+   procedure All_State_Write (S : not null access Sim_Ckpt.Mem_Stream) is
+      At_B : Ada.Streams.Stream_Element_Offset;
+   begin
+      for K in 1 .. Sect_Count loop
+         Sim_Ckpt.Section_Begin (S.all, Sect_Name (K), At_B);
+         Sect_At (K) := At_B;
+         if K <= Mod_Count then Sect_IO (K, S, True); end if;
+         Sim_Ckpt.Section_End (S.all, At_B);
+      end loop;
+      Sect_At (Sect_Count + 1) := S.Last;
+   end All_State_Write;
+
+   --  Reads every section from its body only (the stream ends at the body's last byte while it is read): a section that wants more
+   --  bytes, or leaves some, was written with another layout of that module: Layout_Error with its name.
+   procedure All_State_Read (S : not null access Sim_Ckpt.Mem_Stream; L : Layout) is
+      use type Ada.Streams.Stream_Element_Offset;
+      Full : constant Ada.Streams.Stream_Element_Offset := S.Last;
+   begin
+      for K in 1 .. Mod_Count loop
+         S.Pos := L.From (K) - 1;
+         S.Last := L.To (K);
+         begin
+            Sect_IO (K, S, False);
+         exception
+            when others =>
+               S.Last := Full;
+               raise Layout_Error with Sect_Name (K);
+         end;
+         S.Last := Full;
+         if S.Pos /= L.To (K) then raise Layout_Error with Sect_Name (K); end if;
+      end loop;
+      S.Pos := Full;
+   end All_State_Read;
+
+   --  The section marker of format 1 (build 0.058): Integer 77000 + K before section K.
+   function Marker_Bytes (K : Positive) return Ada.Streams.Stream_Element_Array is
+      M : aliased Sim_Ckpt.Mem_Stream;
+      X : constant Integer := 77_000 + K;
+   begin
+      Integer'Write (M'Access, X);
+      declare
+         R : constant Ada.Streams.Stream_Element_Array := M.Buf (1 .. M.Last);
+      begin
+         Sim_Ckpt.Clear (M);
+         return R;
+      end;
+   end Marker_Bytes;
 
    --  What the files give at tick C: the sessions begun before C, the word votes up to C and Robert's inputs that have taken effect
    --  by then.  Equal at the write and at the load, or the files were changed behind the checkpoint (an old input added or removed).
@@ -7515,25 +7581,128 @@ procedure Diary_Sim is
       return "";
    end Head_Get;
 
-   --  The header checks shared by the start and by --verify: "" when the checkpoint fits the build, the data, the seed and the files.
-   function Ckpt_Fits (Head : Str_Vectors.Vector; Data : Sim_Ckpt.Mem_Stream; Pay_At : Ada.Streams.Stream_Element_Offset) return String is
-      use type Ada.Streams.Stream_Element_Offset;
+   --  The format number of the first header line "diary-sim-ckpt N" (-1: no checkpoint header).
+   function Head_Format (Head : Str_Vectors.Vector) return Integer is
    begin
-      if Head.Is_Empty or else Head.First_Element /= Ckpt_Format then return Msg ("ckpt.why.version", "format"); end if;
-      if Head_Get (Head, "build") /= Build then return Msg ("ckpt.why.version", "build " & Head_Get (Head, "build")); end if;
-      if Head_Get (Head, "data") /= To_String (Data_Hash) then return Msg ("ckpt.why.version", "data/*.txt"); end if;
+      if Head.Is_Empty then return -1; end if;
+      declare
+         F : constant String := Head.First_Element;
+      begin
+         if F'Length <= Ckpt_Magic'Length or else F (F'First .. F'First + Ckpt_Magic'Length - 1) /= Ckpt_Magic then return -1; end if;
+         return Integer'Value (F (F'First + Ckpt_Magic'Length .. F'Last));
+      end;
+   exception
+      when others => return -1;
+   end Head_Format;
+
+   --  The bodies of the sections of the payload Data (after byte Pay_At), and "" or why they do not fit what this build streams.
+   --  Format 1: the header lines "section<K> <name> <offset>" and the markers.  Format 2: the section heads, read in a row; a tag
+   --  other than the name this build expects there, or sections after "end", is another state layout ('state layout changed: <name>').
+   procedure Parse_Sections (Head : Str_Vectors.Vector; Data : Sim_Ckpt.Mem_Stream; Fmt : Integer; Pay_At : Ada.Streams.Stream_Element_Offset;
+                             L : out Layout; Why : out Unbounded_String) is
+      use type Ada.Streams.Stream_Element_Offset, Ada.Streams.Stream_Element_Array, Sim_Ckpt.Hash_T;
+   begin
+      L := (others => <>);
+      Why := Null_Unbounded_String;
+      if Fmt = 1 then
+         declare
+            Off : array (1 .. Sect_Count) of Ada.Streams.Stream_Element_Offset := [others => 0];
+         begin
+            for K in 1 .. Sect_Count loop
+               declare
+                  V : constant String := Head_Get (Head, "section" & Img (K));
+                  Sp : constant Natural := Fx.Index (V, " ");
+               begin
+                  if Sp = 0 then Why := To_Unbounded_String (Msg ("ckpt.why.corrupt", "section line")); return; end if;
+                  if V (V'First .. Sp - 1) /= Sect_Name (K) then Why := To_Unbounded_String (Msg ("ckpt.why.layout", Sect_Name (K))); return; end if;
+                  Off (K) := Ada.Streams.Stream_Element_Offset'Value (V (Sp + 1 .. V'Last));
+               end;
+            end loop;
+            if Head_Get (Head, "section" & Img (Integer (Sect_Count + 1))) /= "" then
+               Why := To_Unbounded_String (Msg ("ckpt.why.layout", "end"));
+               return;
+            end if;
+            for K in 1 .. Sect_Count loop
+               if Off (K) < 0 or else Pay_At + Off (K) + 4 > Data.Last or else (K > 1 and then Off (K) < Off (K - 1) + 4)
+                 or else Data.Buf (Pay_At + Off (K) + 1 .. Pay_At + Off (K) + 4) /= Marker_Bytes (K)
+               then
+                  Why := To_Unbounded_String (Msg ("ckpt.why.corrupt", "section " & Sect_Name (K)));
+                  return;
+               end if;
+            end loop;
+            if Pay_At + Off (Sect_Count) + 4 /= Data.Last then Why := To_Unbounded_String (Msg ("ckpt.why.layout", "end")); return; end if;
+            for K in 1 .. Mod_Count loop
+               L.From (K) := Pay_At + Off (K) + 5;
+               L.To (K) := Pay_At + Off (K + 1);
+            end loop;
+         end;
+      else
+         declare
+            P : Ada.Streams.Stream_Element_Offset := Pay_At;
+            Tag : String (1 .. Sim_Ckpt.Tag_Len);
+            Len : Long_Long_Integer;
+            H : Sim_Ckpt.Hash_T;
+            Ok : Boolean;
+         begin
+            for K in 1 .. Sect_Count loop
+               Sim_Ckpt.Section_Head (Data, P, Tag, Len, H, Ok);
+               if not Ok or else P + Sim_Ckpt.Sect_Head_Len + Ada.Streams.Stream_Element_Offset (Len) > Data.Last then
+                  Why := To_Unbounded_String (Msg ("ckpt.why.corrupt", "section " & Sect_Name (K)));
+                  return;
+               end if;
+               if Tag /= Sim_Ckpt.Pad_Tag (Sect_Name (K)) then
+                  Why := To_Unbounded_String (Msg ("ckpt.why.layout", Sect_Name (K) & ", found " & Fx.Trim (Tag, Ada.Strings.Both)));
+                  return;
+               end if;
+               declare
+                  First : constant Ada.Streams.Stream_Element_Offset := P + Sim_Ckpt.Sect_Head_Len + 1;
+                  Last : constant Ada.Streams.Stream_Element_Offset := P + Sim_Ckpt.Sect_Head_Len + Ada.Streams.Stream_Element_Offset (Len);
+               begin
+                  if Sim_Ckpt.Hash_Of (Data, First, Last) /= H then
+                     Why := To_Unbounded_String (Msg ("ckpt.why.corrupt", "section " & Sect_Name (K)));
+                     return;
+                  end if;
+                  if K <= Mod_Count then
+                     L.From (K) := First;
+                     L.To (K) := Last;
+                  end if;
+                  P := Last;
+               end;
+            end loop;
+            if P /= Data.Last then Why := To_Unbounded_String (Msg ("ckpt.why.layout", "end")); end if;   --  more sections: a newer layout
+         end;
+      end if;
+   exception
+      when others => Why := To_Unbounded_String (Msg ("ckpt.why.corrupt", "sections"));
+   end Parse_Sections;
+
+   --  The header and section checks shared by the start and by --verify: "" when the checkpoint has a format of this build's state
+   --  layout, its payload is whole and every section fits, and the record files fit.  0.059: the build and data/ are no reason.
+   function Ckpt_Fits (Head : Str_Vectors.Vector; Data : Sim_Ckpt.Mem_Stream; Pay_At : Ada.Streams.Stream_Element_Offset; L : out Layout) return String is
+      use type Ada.Streams.Stream_Element_Offset;
+      Fmt : constant Integer := Head_Format (Head);
+      Why : Unbounded_String;
+   begin
+      L := (others => <>);
+      if Fmt < 0 then return Msg ("ckpt.why.version", "format"); end if;
+      if Fmt > Ckpt_Format then return Msg ("ckpt.why.version", "format " & Img (Fmt) & ", newer than this build's " & Img (Integer (Ckpt_Format))); end if;
+      if Fmt < Ckpt_Layout_Since then
+         return Msg ("ckpt.why.layout", "format " & Img (Fmt) & ", this build reads " & Img (Integer (Ckpt_Layout_Since)) & " .. " & Img (Integer (Ckpt_Format)));
+      end if;
       if Head_Get (Head, "payload") /= Img (Int (Data.Last - Pay_At)) & " " & Sim_Ckpt.Hex (Sim_Ckpt.Hash_Of (Data, Pay_At + 1, Data.Last)) then
          return Msg ("ckpt.why.corrupt", "payload");
       end if;
-      for L of Head loop
-         if L'Length > 5 and then L (L'First .. L'First + 4) = "file " then
+      Parse_Sections (Head, Data, Fmt, Pay_At, L, Why);
+      if Length (Why) > 0 then return To_String (Why); end if;
+      for HL of Head loop
+         if HL'Length > 5 and then HL (HL'First .. HL'First + 4) = "file " then
             declare
-               A : constant Natural := Fx.Index (L, " ", L'First + 5);
-               B : constant Natural := (if A = 0 then 0 else Fx.Index (L, " ", A + 1));
+               A : constant Natural := Fx.Index (HL, " ", HL'First + 5);
+               B : constant Natural := (if A = 0 then 0 else Fx.Index (HL, " ", A + 1));
             begin
                if B = 0 then return Msg ("ckpt.why.corrupt", "file line"); end if;
-               if Sim_Ckpt.File_Print (L (B + 1 .. L'Last), Long_Long_Integer'Value (L (L'First + 5 .. A - 1))) /= L (A + 1 .. B - 1) then
-                  return Msg ("ckpt.why.stale", L (B + 1 .. L'Last));
+               if Sim_Ckpt.File_Print (HL (B + 1 .. HL'Last), Long_Long_Integer'Value (HL (HL'First + 5 .. A - 1))) /= HL (A + 1 .. B - 1) then
+                  return Msg ("ckpt.why.stale", HL (B + 1 .. HL'Last));
                end if;
             end;
          end if;
@@ -7542,6 +7711,31 @@ procedure Diary_Sim is
    exception
       when others => return Msg ("ckpt.why.corrupt", "header");
    end Ckpt_Fits;
+
+   --  0.059: the rule files of data/ that differ from the checkpoint's "datafile" lines (changed, new or gone), "a, b".
+   function Data_Changed (Head : Str_Vectors.Vector) return String is
+      R : Unbounded_String;
+      procedure Add (N : String) is
+      begin
+         Append (R, (if Length (R) > 0 then ", " else "") & N);
+      end Add;
+      function Name_Of (L : String) return String is
+        (if Fx.Index (L, " ") = 0 then L else L (L'First .. Fx.Index (L, " ") - 1));
+   begin
+      for L of Data_Lines loop
+         if Head_Get (Head, "datafile " & Name_Of (L)) /= L (L'First + Name_Of (L)'Length + 1 .. L'Last) then Add (Name_Of (L)); end if;
+      end loop;
+      for H of Head loop
+         if H'Length > 9 and then H (H'First .. H'First + 8) = "datafile " then
+            declare
+               N : constant String := Name_Of (H (H'First + 9 .. H'Last));
+            begin
+               if not (for some L of Data_Lines => Name_Of (L) = N) then Add (N); end if;
+            end;
+         end if;
+      end loop;
+      return To_String (R);
+   end Data_Changed;
 
    --  Before the diaries are read: may this start use the checkpoint?  Sets Ckpt_Used (and Ckpt_Tick, Ckpt_Seed, Ckpt_Off) or Ckpt_Why.
    procedure Ckpt_Probe is
@@ -7561,7 +7755,7 @@ procedure Diary_Sim is
       if not Ok then No (Msg ("ckpt.why.corrupt", "unreadable")); return; end if;
       Ckpt_Pay_At := Ckpt_Data.Pos;
       declare
-         Why : constant String := Ckpt_Fits (Ckpt_Head, Ckpt_Data, Ckpt_Pay_At);
+         Why : constant String := Ckpt_Fits (Ckpt_Head, Ckpt_Data, Ckpt_Pay_At, Ckpt_L);
          C : constant Natural := Natural'Value (Head_Get (Ckpt_Head, "tick"));
       begin
          if Why /= "" then No (Why); return; end if;
@@ -7576,6 +7770,11 @@ procedure Diary_Sim is
          Ckpt_Seed := Int'Value (Head_Get (Ckpt_Head, "seed"));
          Ckpt_Tick := C;
          Ckpt_Used := True;
+         Ckpt_Fmt_Used := Head_Format (Ckpt_Head);
+         --  0.059: data/ is information only (the rules of new behaviour come with session markers; make verify replays everything)
+         if Ckpt_Fmt_Used >= 2 and then Head_Get (Ckpt_Head, "data") /= To_String (Data_Hash) then
+            Data_Note := To_Unbounded_String (Msg ("ckpt.data.changed", Data_Changed (Ckpt_Head)));
+         end if;
       end;
    exception
       when others => No (Msg ("ckpt.why.corrupt", "header"));
@@ -7601,10 +7800,11 @@ procedure Diary_Sim is
    --  After every Load_* of the start: the files must still give the counts of the checkpoint, then its payload replaces the state of
    --  ticks 1 .. C.  Anything that does not fit puts the state back as it was (Pristine) and the start replays everything.
    procedure Ckpt_Restore is
-      use type Ada.Streams.Stream_Element_Offset;
       Pristine : aliased Sim_Ckpt.Mem_Stream;
+      Pristine_L : Layout;
       C : constant Int := Int (Ckpt_Tick);
       Fail : Unbounded_String;
+      Layout_Fail : Boolean := False;
    begin
       if not Ckpt_Used then return; end if;
       if Head_Get (Ckpt_Head, "counts") /= Ckpt_Counts (C) then
@@ -7628,27 +7828,33 @@ procedure Diary_Sim is
          end loop;
       end if;
       if Length (Fail) = 0 then
-         All_State_IO (Pristine'Access, True);
-         Ckpt_Data.Pos := Ckpt_Pay_At;
+         declare
+            W : Unbounded_String;
          begin
-            All_State_IO (Ckpt_Data'Access, False);
-            if Ckpt_Data.Pos /= Ckpt_Data.Last then Fail := To_Unbounded_String ("payload length");
-            elsif Last_Done /= C then Fail := To_Unbounded_String ("tick");
+            All_State_Write (Pristine'Access);
+            Parse_Sections (Str_Vectors.Empty_Vector, Pristine, Ckpt_Format, 0, Pristine_L, W);
+         end;
+         begin
+            All_State_Read (Ckpt_Data'Access, Ckpt_L);
+            if Last_Done /= C then Fail := To_Unbounded_String ("tick");
             elsif World_Flushed > Natural (World_Stored.Length) then Fail := To_Unbounded_String ("world.txt");
             end if;
          exception
+            when E : Layout_Error =>
+               Fail := To_Unbounded_String (Ada.Exceptions.Exception_Message (E));
+               Layout_Fail := True;
             when E : others => Fail := To_Unbounded_String ("payload: " & Ada.Exceptions.Exception_Message (E));
          end;
          if Length (Fail) > 0 then
-            Pristine.Pos := 0;
-            All_State_IO (Pristine'Access, False);
+            All_State_Read (Pristine'Access, Pristine_L);
          end if;
          Sim_Ckpt.Clear (Pristine);
       end if;
       Sim_Ckpt.Clear (Ckpt_Data);
       if Length (Fail) > 0 then
          Ckpt_Used := False;
-         Ckpt_Why := To_Unbounded_String (Msg ("ckpt.why.stale", To_String (Fail)));
+         Data_Note := Null_Unbounded_String;
+         Ckpt_Why := To_Unbounded_String (Msg ((if Layout_Fail then "ckpt.why.layout" else "ckpt.why.stale"), To_String (Fail)));
          Ckpt_Full_Diaries;
          return;
       end if;
@@ -7670,11 +7876,16 @@ procedure Diary_Sim is
       for X of Visit_Inputs loop X.Done := X.Tick <= C; end loop;   --  handled at their tick
       for X of Chat_Inputs loop X.Done := X.Tick <= C; end loop;
       Ckpt_Load_Secs := Since (T_Run);
+      if Ckpt_Fmt_Used < Ckpt_Format then   --  an older format of the same layout (0.058): loaded; the next write is format 2
+         Ckpt_Log (Msg ("ckpt.oldformat", Img (Ckpt_Fmt_Used), Head_Get (Ckpt_Head, "build"), Img (Integer (Ckpt_Format))));
+      end if;
    end Ckpt_Restore;
 
-   --  At the end of a run that wrote ticks (and at a clean stop): the state of tick Last_Done, with the files as they are now.
-   --  Never fatal: a checkpoint that cannot be written is left out (the next start replays, or loads an older one and replays the rest).
+   --  At the end of a run that wrote ticks (and at a clean stop, and after a passed make verify): the state of tick Last_Done, with
+   --  the files as they are now.  Never fatal: a checkpoint that cannot be written is left out (the next start replays, or loads an
+   --  older one and replays the rest).
    procedure Ckpt_Write is
+      use type Ada.Streams.Stream_Element_Offset;
       T0 : constant Ada.Calendar.Time := Ada.Calendar.Clock;
       C : constant Int := Last_Done;
       Data : aliased Sim_Ckpt.Mem_Stream;
@@ -7686,7 +7897,7 @@ procedure Diary_Sim is
          Append (H, K & " " & V & ASCII.LF);
       end Line;
    begin
-      if Preview or else Ledger_Mode or else C <= 0 or else Limit ("ckpt.enabled", 1) = 0 then return; end if;
+      if Preview or else (Ledger_Mode and then not Verify_View) or else C <= 0 or else Limit ("ckpt.enabled", 1) = 0 then return; end if;
       for E in Entity_Id loop
          if not Diary_Tail_Ok (Path (E), Natural (C)) then Ok := False; end if;
       end loop;
@@ -7704,10 +7915,11 @@ procedure Diary_Sim is
          Ckpt_Log (Msg ("ckpt.notwritten", Img (C)));
          return;
       end if;
-      All_State_IO (Data'Access, True);
-      Append (H, Ckpt_Format & ASCII.LF);
-      Line ("build", Build);
-      Line ("data", To_String (Data_Hash));
+      All_State_Write (Data'Access);
+      Append (H, Ckpt_Magic & Img (Integer (Ckpt_Format)) & ASCII.LF);
+      Line ("build", Build);   --  information (0.059: not a reason to refuse)
+      Line ("data", To_String (Data_Hash));   --  information: the rule files of data/ (Sim_Ckpt.Data_Prints), one line each below
+      for D of Data_Lines loop Line ("datafile", D); end loop;
       Line ("seed", Img (Seed));
       Line ("tick", Img (C));
       Line ("written", Local_Stamp);
@@ -7725,7 +7937,9 @@ procedure Diary_Sim is
       end loop;
       Line ("world", Img (Integer (World_Stored.Length)));
       Line ("eff", Img (Integer (Eff_Stored.Length)));
-      for K in 1 .. Sect_Count loop Line ("section" & Img (K), Sect_Name (K) & " " & Img (Int (Sect_At (K)))); end loop;
+      for K in 1 .. Sect_Count loop   --  information (format 2 reads the section heads of the payload)
+         Line ("section" & Img (K), Sect_Name (K) & " " & Img (Int (Sect_At (K))) & " " & Img (Int (Sect_At (K + 1) - Sect_At (K) - Sim_Ckpt.Sect_Head_Len)));
+      end loop;
       Line ("payload", Img (Int (Data.Last)) & " " & Sim_Ckpt.Hex (Sim_Ckpt.Hash_Of (Data, 1, Data.Last)));
       Sim_Ckpt.Record_Files (Files);
       for P of Files loop
@@ -7754,43 +7968,58 @@ procedure Diary_Sim is
          Ckpt_Log (Msg ("ckpt.failed", Ada.Exceptions.Exception_Message (E)));
    end Ckpt_Write;
 
-   --  --verify: the replay has rebuilt the state of its last tick; a checkpoint of that tick must hold exactly the same bytes.
+   --  --verify: the replay has rebuilt the state of its last tick; a checkpoint of that tick must hold exactly the same bytes, section
+   --  by section (a format 1 checkpoint of build 0.058 too: the bodies are the same, only the framing differs).
    function Ckpt_Verify return String is
       use type Ada.Streams.Stream_Element_Offset, Ada.Streams.Stream_Element;
       Head : Str_Vectors.Vector;
       Ok : Boolean;
       Now : aliased Sim_Ckpt.Mem_Stream;
+      L, NL : Layout;
+      W : Unbounded_String;
       At_Diff : Ada.Streams.Stream_Element_Offset := 0;
+      Diff_K : Positive := 1;
    begin
+      Ckpt_Verify_Diff := False;
       if not Ada.Directories.Exists (Ckpt_Path) then return Msg ("ckpt.verify.skip", Msg ("ckpt.why.missing")); end if;
       Sim_Ckpt.Read_File (Ckpt_Path, Head, Ckpt_Data, Ok);
       if not Ok then return Msg ("ckpt.verify.skip", Msg ("ckpt.why.corrupt", "unreadable")); end if;
       declare
          Pay : constant Ada.Streams.Stream_Element_Offset := Ckpt_Data.Pos;
-         Why : constant String := Ckpt_Fits (Head, Ckpt_Data, Pay);
+         Why : constant String := Ckpt_Fits (Head, Ckpt_Data, Pay, L);
          C : constant Int := Int'Value (Head_Get (Head, "tick"));
       begin
          if Why /= "" then Sim_Ckpt.Clear (Ckpt_Data); return Msg ("ckpt.verify.skip", Why); end if;
          if C /= Last_Done then Sim_Ckpt.Clear (Ckpt_Data); return Msg ("ckpt.verify.skip", Msg ("ckpt.why.tick", Img (C), Img (Last_Done))); end if;
-         All_State_IO (Now'Access, True);
-         if Now.Last /= Ckpt_Data.Last - Pay then At_Diff := Ada.Streams.Stream_Element_Offset'Min (Now.Last, Ckpt_Data.Last - Pay) + 1; end if;
-         for I in 1 .. Ada.Streams.Stream_Element_Offset'Min (Now.Last, Ckpt_Data.Last - Pay) loop
-            if Now.Buf (I) /= Ckpt_Data.Buf (Pay + I) then At_Diff := I; exit; end if;
-         end loop;
+         All_State_Write (Now'Access);
+         Parse_Sections (Str_Vectors.Empty_Vector, Now, Ckpt_Format, 0, NL, W);
+         Sections : for K in 1 .. Mod_Count loop
+            declare
+               A_Len : constant Ada.Streams.Stream_Element_Offset := L.To (K) - L.From (K) + 1;
+               B_Len : constant Ada.Streams.Stream_Element_Offset := NL.To (K) - NL.From (K) + 1;
+            begin
+               for I in 0 .. Ada.Streams.Stream_Element_Offset'Min (A_Len, B_Len) - 1 loop
+                  if Ckpt_Data.Buf (L.From (K) + I) /= Now.Buf (NL.From (K) + I) then
+                     At_Diff := I + 1;
+                     Diff_K := K;
+                     exit Sections;
+                  end if;
+               end loop;
+               if A_Len /= B_Len then
+                  At_Diff := Ada.Streams.Stream_Element_Offset'Min (A_Len, B_Len) + 1;
+                  Diff_K := K;
+                  exit Sections;
+               end if;
+            end;
+         end loop Sections;
          Sim_Ckpt.Clear (Now);
          Sim_Ckpt.Clear (Ckpt_Data);
          if At_Diff = 0 then return Msg ("ckpt.verify.same", Img (C)); end if;
-         declare
-            K : Positive := 1;
-         begin
-            for J in 1 .. Sect_Count loop
-               if Sect_At (J) < At_Diff then K := J; end if;
-            end loop;
-            if Ada.Directories.Exists (Ckpt_Path & ".bad") then Ada.Directories.Delete_File (Ckpt_Path & ".bad"); end if;
-            Ada.Directories.Rename (Ckpt_Path, Ckpt_Path & ".bad");
-            Ada.Command_Line.Set_Exit_Status (1);
-            return Msg ("ckpt.verify.diff", Img (C), Sect_Name (K), Img (Int (At_Diff - Sect_At (K))));
-         end;
+         if Ada.Directories.Exists (Ckpt_Path & ".bad") then Ada.Directories.Delete_File (Ckpt_Path & ".bad"); end if;
+         Ada.Directories.Rename (Ckpt_Path, Ckpt_Path & ".bad");
+         Ada.Command_Line.Set_Exit_Status (1);
+         Ckpt_Verify_Diff := True;
+         return Msg ("ckpt.verify.diff", Img (C), Sect_Name (Diff_K), Img (Int (At_Diff)));
       end;
    exception
       when E : others =>
@@ -7849,7 +8078,9 @@ procedure Diary_Sim is
    end Night_Next_Session;
 
 begin
-   Data_Hash := To_Unbounded_String (Sim_Ckpt.Dir_Hash (Ada.Directories.Containing_Directory (Data_Path ("limits.txt"))));   --  the data Load_Data reads
+   Sim_Ckpt.Data_Prints (Ada.Directories.Containing_Directory (Data_Path ("limits.txt")), Data_Lines);   --  the rule files Load_Data reads
+   Data_Hash := To_Unbounded_String (Sim_Ckpt.Lines_Hash (Data_Lines));
+   Ckpt_Test_Extra := To_Unbounded_String (GNAT.OS_Lib.Getenv ("DIARY_TEST_CKPT_EXTRA").all);
    Replay_Wait_Ms := Natural'Value ("0" & GNAT.OS_Lib.Getenv ("DIARY_TEST_REPLAY_MS").all);
    Tick_Wait_Ms := Natural'Value ("0" & GNAT.OS_Lib.Getenv ("DIARY_TEST_TICK_MS").all);
    Load_Data;
@@ -8251,6 +8482,15 @@ begin
          Con.Put_Line (To_String (Ckpt_Start_Line));
       end if;
       if not Ledger_Mode then Ckpt_Log (Ckpt_Start_Text (Timed => True)); end if;
+      if Ckpt_Used and then Length (Data_Note) > 0 and then not Ledger_Mode then   --  0.059: information, the checkpoint is loaded anyway
+         if Night_On then
+            Recent.Append (To_String (Data_Note));
+            if not Tty_Out then Con.Put_Line_Now (To_String (Data_Note)); Flush_Out; end if;
+         else
+            Con.Put_Line (To_String (Data_Note));
+         end if;
+         Ckpt_Log (To_String (Data_Note));
+      end if;
       if Ckpt_Used then
          Start_Sessions_At (Int (Ckpt_Tick));   --  a session the replay would begin at the checkpoint's tick
       else
@@ -8294,6 +8534,13 @@ begin
             Verify_Active (Last_Done);
             Con.Put_Line (Msg ("verify.ok", Img (Verify_To), Img (Integer (Sessions.Length)), Tenths_Text (Ada.Calendar."-" (Ada.Calendar.Clock, T_Run))));
             Con.Put_Line (Ckpt_Verify);   --  0.058: the checkpoint against the state the replay has just rebuilt
+            if not Ckpt_Verify_Diff then   --  0.059: passed: run_log.txt says so (checkin.txt: last full verify), a fresh checkpoint
+               Append_Log ("VERIFY", Msg ("verify.log", Img (Verify_To), Img (Integer (Sessions.Length)), Tenths_Text (Ada.Calendar."-" (Ada.Calendar.Clock, T_Run))));
+               Ckpt_Write;
+               if Ckpt_Written > 0 then
+                  Con.Put_Line (Msg ("ckpt.verify.written", Img (Last_Done), Img (Ckpt_Bytes / 1024), Secs_Text (Ckpt_Write_Secs)));
+               end if;
+            end if;
          elsif Voices_View then Con.Put (Voices_Text); elsif Elo_View then Con.Put (Elo_Text); elsif Govern_View then Con.Put (Govern_Text); elsif Audit_View then Con.Put (Audit_Text); elsif Next_View then Con.Put (Next_Text); elsif Trial_View then Con.Put (Trials_Text); elsif Rec_View then Con.Put (Lines_Text (Sim_Records.Divergence)); elsif Dict_View then Con.Put (Lines_Text (Sim_Records.Dictionary)); elsif Bal_View then Con.Put (Lines_Text (Sim_Records.Ballots)); elsif Robot_View then Con.Put (Robot_Text); elsif Screens_View then Con.Put (Screens_Text); else Con.Put_Line (Sim_Ledger.Report (Seed, Ledger_From, Ledger_Full)); end if;
          return;
       end if;

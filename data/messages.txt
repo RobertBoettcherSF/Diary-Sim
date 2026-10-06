@@ -117,6 +117,7 @@ ckpt.why.off = off (ckpt.enabled = 0)
 ckpt.why.verify = not used (make verify replays everything)
 ckpt.why.version = version ({1})
 ckpt.why.stale = stale ({1})
+ckpt.why.layout = layout (state layout changed: {1})
 ckpt.why.corrupt = corrupt ({1})
 ckpt.why.ticks = not used (--ticks {1} is before its tick {2})
 ckpt.why.tick = of tick {1}, the replay ended at {2}
@@ -126,6 +127,10 @@ ckpt.failed = checkpoint: not written ({1})
 ckpt.verify.same = verify: checkpoint of tick {1} = the replayed state, byte for byte
 ckpt.verify.diff = verify: DRIFT - the checkpoint of tick {1} differs from the replay (section {2}, byte {3}); moved to state.ckpt.bad
 ckpt.verify.skip = verify: checkpoint not compared ({1})
+ckpt.verify.written = verify: fresh checkpoint of tick {1} written ({2} KB, {3} s)
+ckpt.data.changed = data changed since the checkpoint (make verify replays everything): {1}
+ckpt.oldformat = checkpoint: format {1} (build {2}) loaded, the same state layout; the next write is format {3}
+verify.log = full verify: OK, {1} ticks, {2} sessions, {3} s
 night.status = s{1} t{2} {3} | {4}
 night.nostatus = session {1} done (no new ticks)
 night.err.opts = --continuous runs sessions of --session-ticks ticks on an existing save: it cannot be combined with --ticks, --more, --fresh, --preview, --visit or a menu
