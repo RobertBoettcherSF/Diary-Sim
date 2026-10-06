@@ -1,5 +1,5 @@
 #!/bin/sh
-# Version: 0.006
+# Version: 0.007
 # make ship (by day) and make night-ship (overnight): Robert's ONE command; both write ONE file, checkin.txt in the save folder
 # (../diary-data next to the source folder, or --home / $DIARY_HOME: bin/diary_sim --folder says where), with the same VERDICT header
 # on top, and print a short summary and the path of that file.  Exit status 0 = PASS, 1 = FAIL.
@@ -485,7 +485,8 @@ else w1="no night: run_log.txt entries of the last night"; w2="no night: the ses
 } > "$stampf.tmp" && mv "$stampf.tmp" "$stampf"
 
 say "-------------------------------------------------------------------------------"
-# the terminal: the verdict without its detail lines (they are in checkin.txt): the vocabulary details and the reports window
-while IFS= read -r l; do case $l in "  "*|"reports window:"*) printf '%s\n' "$l" >> "$log" 2>/dev/null ;; *) say "$l" ;; esac; done < "$tmp/verdict.txt"
+# the terminal: the verdict without its detail lines (they are in checkin.txt): the vocabulary details and the reports window,
+# and 'last full verify' unless it is due (0.059: the summary stays at 20 lines)
+while IFS= read -r l; do case $l in "  "*|"reports window:"*|"last full verify: "*today|"last full verify: "*ago) printf '%s\n' "$l" >> "$log" 2>/dev/null ;; *) say "$l" ;; esac; done < "$tmp/verdict.txt"
 say "attach this ONE file: $out"
 case $verdict in PASS*) exit 0 ;; *) exit 1 ;; esac
