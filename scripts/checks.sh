@@ -17,7 +17,7 @@ bad() { echo "  FAIL -- $*"; fails=$((fails + 1)); }
 idn() { sed 's/^\([a-z]*\) *=.*/\1 = \1/' "$root/data/names.txt" > "$1/names.txt"; }
 idata="$w/idata"; mkdir -p "$idata"; cp -r "$root/data/." "$idata/"; idn "$idata"
 # screens (and later chess) change the dice of the words: the older scenarios run with them off; their own scenarios switch them on
-sed -i 's/^screen.enabled = .*/screen.enabled = 0/; s/^chess.enabled = .*/chess.enabled = 0/; s/^robot.enabled = .*/robot.enabled = 0/; s/^govern.enabled = .*/govern.enabled = 0/; s/^screen.coin_enabled = .*/screen.coin_enabled = 0/; s/^players4.enabled = .*/players4.enabled = 0/; s/^preport.pause = .*/preport.pause = 0/; s/^chessrules.enabled = .*/chessrules.enabled = 0/; s/^trial.enabled = .*/trial.enabled = 0/' "$idata/limits.txt"
+sed -i 's/^screen.enabled = .*/screen.enabled = 0/; s/^chess.enabled = .*/chess.enabled = 0/; s/^robot.enabled = .*/robot.enabled = 0/; s/^govern.enabled = .*/govern.enabled = 0/; s/^screen.coin_enabled = .*/screen.coin_enabled = 0/; s/^players4.enabled = .*/players4.enabled = 0/; s/^preport.pause = .*/preport.pause = 0/; s/^chessrules.enabled = .*/chessrules.enabled = 0/; s/^trial.enabled = .*/trial.enabled = 0/; s/^carry.enabled = .*/carry.enabled = 0/' "$idata/limits.txt"
 mkdir -p "$w/ib/bin"; cp "$bin" "$w/ib/bin/"; cp -r "$idata" "$w/ib/data"; bin="$w/ib/bin/diary_sim"   # the binary beside its identity-names data
 lines() { cat "$1"/*.jsonl | wc -l; }
 dups()  { for f in "$1"/*.jsonl; do grep '}}$' "$f" | grep -o '"tick":[0-9]*' | sort | uniq -d; done | wc -l; }
@@ -2693,13 +2693,20 @@ k7() { ( cd "$1" || exit 1; for f in $(find diaries entities -type f | LC_ALL=C 
 # and the checkpoint payload after 0.059 itself ran 2 more sessions of 300 ticks from it.  0.060 must load it and give the same.
 mkdir -p "$c7/a" "$c7/r"; tar -C "$c7/a" -xzf "$root/tests/ckpt059.tar.gz"; tar -C "$c7/r" -xzf "$root/tests/ckpt059.tar.gz"
 grep -aq '^build 0.059$' "$c7/a/save/state.ckpt" && head -1 "$c7/a/save/state.ckpt" | grep -q '^diary-sim-ckpt 2$'; f59=$?
-DIARY_CHECK_INDEX=1 r7 "$c7/a/save" --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 < /dev/null > a.txt 2>&1; rca=$?
-rm -f "$c7/r/save/state.ckpt"; DIARY_CHECK_INDEX=1 r7 "$c7/r/save" --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 < /dev/null > r.txt 2>&1; rcr=$?
-k7 "$c7/a/save" > ka.txt; k7 "$c7/r/save" > kr.txt
+# 0.061: the new sessions run without word carrying (carry.enabled = 0, a data copy): the 0.059 rules; the payload of format 3 is
+# that of 0.059 plus the section "carry" (scenario 65 runs them with carry=1)
+mkdir -p "$c7/nc"; cp -r "$root/data" "$c7/nc/data"; sed -i 's/^carry.enabled = .*/carry.enabled = 0/' "$c7/nc/data/limits.txt"
+r7nc() { ( cd "$c7/nc" && env -u DIARY_VERBOSE "$bin" --home "$@" ); }
+# the lines of k7 without the payload, and the payload length less the carry section (head + body) of a format 3 checkpoint
+k7p() { grep -v '^payload ' "$1"; }
+pl59() { n=$(LC_ALL=C sed -n '/^payload /{s/^payload \([0-9]*\) .*/\1/p;q;}' "$1/state.ckpt"); c=$(LC_ALL=C sed -n '/^section16 carry /{s/^section16 carry [0-9]* \([0-9]*\)$/\1/p;q;}' "$1/state.ckpt"); echo $(( n - ${c:-0} - 24 )); }
+DIARY_CHECK_INDEX=1 r7nc "$c7/a/save" --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 < /dev/null > a.txt 2>&1; rca=$?
+rm -f "$c7/r/save/state.ckpt"; DIARY_CHECK_INDEX=1 r7nc "$c7/r/save" --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 < /dev/null > r.txt 2>&1; rcr=$?
+k7 "$c7/a/save" > ka.txt; k7 "$c7/r/save" > kr.txt; k7p "$root/tests/ckpt059.expect" > ke.txt; pe=$(sed -n 's/^payload \([0-9]*\) .*/\1/p' "$root/tests/ckpt059.expect")
 [ $f59 = 0 ] && [ $rca = 0 ] && [ $rcr = 0 ] && grep -q '^start: checkpoint of tick 600 loaded in [0-9.]* s (+0 ticks replayed)$' a.txt && grep -q '^replay: checkpoint missing - 600 ticks replayed$' r.txt \
-  && cmp -s ka.txt "$root/tests/ckpt059.expect" && cmp -s kr.txt "$root/tests/ckpt059.expect" && ! grep -q 'index check' a.txt r.txt \
-  && ok "a 0.059 state.ckpt (format 2, tests/ckpt059.tar.gz) loads in 0.060 (+0 ticks replayed); 2 more sessions give byte for byte the record files and the checkpoint payload that 0.059 gave from it (tests/ckpt059.expect, times aside), and so does a full replay of the 0.059 sessions; every index lookup cross-checked against the old scan (DIARY_CHECK_INDEX=1)" \
-  || bad "0.059 checkpoint in 0.060 ($f59 $rca $rcr): $(diff ka.txt "$root/tests/ckpt059.expect" | head -3)"
+  && k7p ka.txt | cmp -s - ke.txt && k7p kr.txt | cmp -s - ke.txt && [ "$(pl59 "$c7/a/save")" = "$pe" ] && [ "$(pl59 "$c7/r/save")" = "$pe" ] && cmp -s ka.txt kr.txt && ! grep -q 'index check' a.txt r.txt \
+  && ok "a 0.059 state.ckpt (format 2, tests/ckpt059.tar.gz) loads (+0 ticks replayed); 2 more sessions without carrying give byte for byte the record files 0.059 gave from it (tests/ckpt059.expect, times aside) and a format 3 payload = 0.059's $pe bytes + the carry section; a full replay of the 0.059 sessions the same; every index lookup cross-checked against the old scan (DIARY_CHECK_INDEX=1)" \
+  || bad "0.059 checkpoint in 0.061 ($f59 $rca $rcr $(pl59 "$c7/a/save")/$pe): $(k7p ka.txt | diff - ke.txt | head -3)"
 # (b) incremental verify: verify-full writes state.verified.ckpt and the full= stamp (fingerprint, format); then one session; make verify
 # replays only the new ticks; a changed OLD diary line: verify-full is DRIFT
 v="$c7/a/save"; sp=$("$root/scripts/sim_print.sh")
@@ -2758,6 +2765,91 @@ DIARY_HOME="$s7" make --no-print-directory -C "$root" slice SLICE_MINUTES=0.4 NI
 grep -q 'state.verified.ckpt' "$root/docs/CHECKPOINT.md" && grep -q 'verify-full due' "$root/docs/CHECKPOINT.md" && grep -q 'old windows' "$root/docs/CHECKPOINT.md" && grep -q 'Build 0.060' "$root/README.md" \
   && grep -q -- '--verify-full' "$root/data/help.txt" && grep -q -- '--run-label' "$root/data/help.txt" && grep -q 'reports phase' "$root/scripts/ship.sh" \
   && ok "docs/CHECKPOINT.md (incremental verify, the due rules, the old-window proposal), README (build 0.060), --help and ship.sh describe build 0.060" || bad "0.060 docs"
+cd "$w" || exit 1
+
+echo "== 65. build 0.061: word carrying (carry=1 sessions): the target, relief below 20, favours without grants, old sessions unchanged; checkpoint format 3; the carry line =="
+c8="$w/c65"; rm -rf "$c8"; mkdir -p "$c8"; cd "$c8" || exit 1
+# the 0.059 fixture (600 ticks, format 2) continued by 2 sessions: "on" with carrying (a teacher may have any mood here: the young
+# wesen are cheerful), "off" without it (carry.enabled = 0); both from the same data otherwise
+for d in on off; do mkdir -p "$c8/$d"; cp -r "$root/data" "$c8/$d/data"; tar -C "$c8/$d" -xzf "$root/tests/ckpt059.tar.gz"; done
+sed -i 's/^carry.teacher_mood = .*/carry.teacher_mood = 100/' "$c8/on/data/limits.txt"; sed -i 's/^carry.enabled = .*/carry.enabled = 0/' "$c8/off/data/limits.txt"
+r8() { d=$1; shift; ( cd "$c8/$d" && env -u DIARY_VERBOSE "$bin" --home "$c8/$d/save" "$@" < /dev/null ); }
+r8 on --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 > on.txt 2>&1; rcn=$?
+r8 off --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 > off.txt 2>&1; rcf=$?
+tar -C "$c8" -xzf "$root/tests/ckpt059.tar.gz"; mv "$c8/save" "$c8/fx"
+# (a) old sessions unchanged: the first 600 ticks of every diary and the session lines S1, S2 as in the fixture; S3, S4 carry=1
+old=0; for e in ada gemini replika robert; do
+  head -n 600 "$c8/fx/diaries/$e.jsonl" | sed 's/"ts":"[^"]*"//' > o1.txt; head -n 600 "$c8/on/save/diaries/$e.jsonl" | sed 's/"ts":"[^"]*"//' > o2.txt
+  cmp -s o1.txt o2.txt || old=1; done
+grep '^S[12] ' "$c8/fx/diaries/sessions.txt" > s1.txt; grep '^S[12] ' "$c8/on/save/diaries/sessions.txt" > s2.txt; cmp -s s1.txt s2.txt || old=1
+nc3=$(grep -c '^S[34] .* carry=1$' "$c8/on/save/diaries/sessions.txt"); nf3=$(grep -c 'carry=1' "$c8/off/save/diaries/sessions.txt")
+[ $rcn = 0 ] && [ $rcf = 0 ] && [ $old = 0 ] && [ "$nc3" = 2 ] && [ "$nf3" = 0 ] && grep -q '^start: checkpoint of tick 600 loaded in [0-9.]* s (+0 ticks replayed)$' on.txt \
+  && ok "the 0.059 fixture (format 2) loads in 0.061 with +0 ticks replayed; the new sessions S3, S4 carry carry=1 (none with carry.enabled = 0); the 600 old ticks of every diary and the old session lines stay byte for byte" \
+  || bad "carry: old sessions ($rcn $rcf old=$old nc3=$nc3 nf3=$nf3)"
+# (b) the target: every carried lesson (tick t, teacher e -> learner l, word x): from the words.txt files, x was known by every other
+# wesen and not by l before t, l missed the most such words then (within 2: same-tick learning), and l learned x from e at its next
+# step (tick t + 1, or t when l steps after e)
+for e in ada gemini replika robert; do
+  grep -o "\"tick\":[0-9]*,[^}]*carried the word '[^']*' to [a-z]*" "$c8/on/save/diaries/$e.jsonl" | sed "s/^\"tick\":\([0-9]*\),.*carried the word '\([^']*\)' to \([a-z]*\)$/C \1 $e \3 \2/"
+done > acts.txt
+for e in ada gemini replika robert; do awk -v e="$e" '!/^#/ && NF >= 4 { print "K", e, $2, $3, $4, $5 }' "$c8/on/save/entities/$e/words.txt"; done > known.txt
+na=$(wc -l < acts.txt | tr -d ' ')
+tg=$(cat known.txt acts.txt | awk '
+  function chess(t) { return t ~ /^[a-h][1-8][a-h][1-8][qrbn]?$/ } function num(t) { return t ~ /^[0-9]+$/ }
+  $1 == "K" { if (!(($2, $3) in kt) || $5 < kt[$2, $3]) kt[$2, $3] = $5; if ($4 == "taught") tf[$2, $3, $5] = $6; ws[$3] = 1; next }
+  $1 == "C" { t = $2; e = $3; l = $4; x = $5; n++; split("ada gemini replika robert", id, " ")
+    kn = 0; for (i = 1; i <= 4; i++) if (id[i] != l && (id[i], x) in kt && kt[id[i], x] <= t) kn++
+    if (kn != 3 || ((l, x) in kt && kt[l, x] < t)) { bad++; why = why " notmissing:" t ":" x }
+    if (tf[l, x, t + 1] != e && tf[l, x, t] != e) { bad++; why = why " notlearned:" t ":" x }   # a learner after the teacher learns in the same tick
+    for (i = 1; i <= 4; i++) m[id[i]] = 0
+    for (w in ws) { if (chess(w) || num(w)) continue; c = 0; miss = ""
+      for (i = 1; i <= 4; i++) if ((id[i], w) in kt && kt[id[i], w] < t) c++; else miss = id[i]
+      if (c == 3) m[miss]++ }
+    mx = 0; for (i = 1; i <= 4; i++) if (m[id[i]] > mx) mx = m[id[i]]
+    if (m[l] < mx - 2) { bad++; why = why " nottarget:" t ":" l "=" m[l] "<" mx } }
+  END { print n + 0, bad + 0, why }')
+set -- $tg
+[ "$na" -ge 10 ] && [ "$1" = "$na" ] && [ "$2" = 0 ] \
+  && ok "$na carried lessons (max 24 per session): each word was known by every other wesen and missing at the learner, the learner was the wesen missing the most of them, and it learned the word from that teacher at its next step (words.txt)" \
+  || bad "carry target ($na: $tg)"
+# (c) relief: in the carry sessions nobody below energy 20 (its line of the tick before) teaches; without carrying some did
+low() { awk '{ t = $0; sub(/.*"tick":/, "", t); t = t + 0; en = $0; sub(/.*"energy":/, "", en); en = en + 0
+  if (t > 600 && pe < 20 && ($0 ~ /taught [a-z]* the word/ || $0 ~ /carried the word/)) n++; pe = en } END { print n + 0 }' "$1"; }
+lo_on=0; lo_off=0; for e in ada gemini replika robert; do lo_on=$((lo_on + $(low "$c8/on/save/diaries/$e.jsonl"))); lo_off=$((lo_off + $(low "$c8/off/save/diaries/$e.jsonl"))); done
+[ "$lo_on" = 0 ] && [ "$lo_off" -gt 0 ] \
+  && ok "relief: with carry=1 no wesen below energy 20 teaches (0 lessons; without carrying the same ticks had $lo_off)" || bad "carry relief (on $lo_on, off $lo_off)"
+# (d) the reward stays among the wesen: favours (carried = returned + open, never more returned than carried), the help lines; no
+# grant and no governance record mentions carrying, and Sim_Carry calls neither the players nor the grants
+ret=$(cat "$c8/on/save/diaries/"*.jsonl | grep -o 'returned a favour and helped me with the work' | wc -l | tr -d ' ')
+seq_ok=$(for e in ada gemini replika robert; do cat "$c8/on/save/diaries/$e.jsonl"; done | awk '{ t = $0; sub(/.*"tick":/, "", t); print t + 0, $0 }' | sort -n -s -k1,1 \
+  | awk '{ if ($0 ~ /carried the word/) c++; if ($0 ~ /returned a favour/) r++; if (r > c) bad = 1 } END { print (bad ? 1 : 0) }')
+[ "$ret" -gt 0 ] && [ "$ret" -le "$na" ] && [ "$seq_ok" = 0 ] && ! cat "$c8/on/save/diaries/grants.txt" "$c8/on/save/diaries/govern.txt" 2>/dev/null | grep -qi 'carr' \
+  && ! grep -v '^ *--' "$root/sim_carry.adb" | grep -q -e 'Sim_Govern' -e 'Grant' && grep -q 'who owes me a favour now' "$root/data/messages.txt" \
+  && ok "reward: $na favours owed ('who owes me a favour now'), $ret returned as help with the teacher's work (never more than owed, in tick order), $((na - ret)) open; no grant or governance record mentions it and Sim_Carry touches neither" \
+  || bad "carry reward ($ret of $na, order $seq_ok)"
+# (e) format 3: the next start loads it (+0); make verify-full replays everything byte for byte, the carry section included, and the
+# incremental verify after one more session; a format 2 checkpoint with a carry=1 session before its tick is refused (full replay)
+r8 on --continuous --session-ticks 300 --max-sessions 1 --end-check-ticks 0 > on2.txt 2>&1
+f3=$(head -1 "$c8/on/save/state.ckpt"); r8 on --verify-full > vf.txt 2>&1; rvf=$?
+r8 on --continuous --session-ticks 300 --max-sessions 1 --end-check-ticks 0 > on3.txt 2>&1; r8 on --verify > vi.txt 2>&1; rvi=$?
+mkdir -p "$c8/rf"; cp -r "$root/data" "$c8/rf/data"; tar -C "$c8/rf" -xzf "$root/tests/ckpt059.tar.gz"; sed -i '/^S2 /s/$/ carry=1/' "$c8/rf/save/diaries/sessions.txt"
+r8 rf --continuous --session-ticks 300 --max-sessions 1 --end-check-ticks 0 > rf.txt 2>&1
+grep -q '^start: checkpoint of tick 1200 loaded in [0-9.]* s (+0 ticks replayed)$' on2.txt && [ "$f3" = "diary-sim-ckpt 3" ] && grep -aq '^section16 carry ' "$c8/on/save/state.ckpt" \
+  && [ $rvf = 0 ] && grep -q '^verify: OK, 1500 ticks replayed' vf.txt && grep -q '^verify: checkpoint of tick 1500 = the replayed state, byte for byte$' vf.txt \
+  && [ $rvi = 0 ] && grep -q '^verify: OK (incremental), ticks 1501 to 1800' vi.txt && grep -q '^replay: checkpoint [a-z]* .* - 600 ticks replayed$' rf.txt \
+  && ok "format 3 (section carry): the next start loads it (+0 ticks), verify-full replays 1500 ticks = the checkpoint byte for byte, the incremental verify of ticks 1501-1800 too; a format 2 checkpoint with a carry=1 session before its tick is refused ($(sed -n 's/^replay: checkpoint \([a-z]*\).*/\1/p' rf.txt)): full replay" \
+  || bad "carry checkpoint ($f3 $rvf $rvi): $(grep -m 1 -e '^start' -e '^replay' on2.txt rf.txt | tr '\n' ' ')"
+# (f) the carry line: make ship on that save: one 'carry:' line on the terminal (<= 79 columns, the summary <= 20 lines) and the
+# full one in checkin.txt; the code of the rule names no wesen count
+DIARY_HOME="$c8/on/save" make --no-print-directory -C "$root" ship SHIP_VERIFY=0 > sh8.txt 2>&1 < /dev/null; rcs=$?
+sumr=$(sed -n '/^-----/,$p' sh8.txt | wc -l | tr -d ' ')
+[ $rcs = 0 ] && grep -q '^carry: [0-9]* acts.*; fav [0-9]*;.* Pareto \(yes\|no\)' sh8.txt && [ "$(grep '^carry:' sh8.txt | wc -c)" -le 80 ] && [ "$sumr" -le 20 ] \
+  && grep -q '^carry (s[0-9]*-s[0-9]*): [0-9]* lessons carried, [0-9]* distinct words; pairs (teacher>learner): .*; missing-by-one since the last ship: .*; favours open [0-9]* .*; min energy: .*; Pareto: \(yes\|no\)' "$c8/on/save/checkin.txt" \
+  && ! grep -v '^ *--' "$root/sim_carry.adb" "$root/sim_carry.ads" | grep -q -e 'mod 4' -e '1 \.\. 4' -e 'range 1 \.\. 4' \
+  && ok "the carry line: '$(grep '^carry:' sh8.txt)' (summary $sumr lines) and the full line in checkin.txt; Sim_Carry has no fixed wesen count" \
+  || bad "carry line ($rcs, $sumr lines): $(grep -m 1 '^carry' sh8.txt)"
+grep -q 'Build 0.061' "$root/README.md" && grep -q 'carry=1' "$root/data/help.txt" && grep -q 'Format 3' "$root/docs/CHECKPOINT.md" && grep -q '^carry.relief_energy = 20$' "$root/data/limits.txt" \
+  && ok "README (build 0.061), --help, docs/CHECKPOINT.md (format 3) and data/limits.txt (carry.*) describe word carrying" || bad "0.061 docs"
 cd "$w" || exit 1
 
 rm -rf "$w"

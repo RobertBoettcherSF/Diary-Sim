@@ -105,6 +105,20 @@ diaries, entities and summary files are byte for byte the same.
   of the run, `warnings:n`, `export-failed`. It is information only; nothing in the simulation reads it (`data/limits.txt`).
   `@@SECTIONS` gives the line of each header in `run_report.txt`.
 
+## Build 0.061: word carrying (`carry=1` sessions)
+
+* **The wesen carry words to the one who misses most.** In new sessions (`carry=1`) a wesen with spare energy and a low mood may
+  teach the target, the wesen missing the most words that all the others know, one of those words (at most 24 such lessons a
+  session). The learner owes the teacher a favour and repays it later by helping with the teacher's work; the teacher gains
+  standing and a little mood. Below energy 20 a wesen rests instead of teaching. No player and no grant takes part. Tunables:
+  `carry.*` in `data/limits.txt` (`carry.enabled = 0` turns it off for new sessions); docs/EVOLVE.md 15.
+* **`checkin.txt` and the summary have a `carry:` line**: lessons carried, the top teacher>learner pairs, how the missing count of
+  the wesen that missed most changed, open favours, the top teacher's mood change and `Pareto yes/no`; the full line in
+  `checkin.txt` adds the missing-by-one counts before/after for every wesen, the moods and the lowest energy per wesen. To keep the
+  summary at 20 lines, `newest sessions symstrict=1`, `chess/number strings learned` and `shared words` are in `checkin.txt` only.
+* **Checkpoint format 3** (`ckpt_layout: 3 d4e1efa75855a2c3`): one new section `carry`. A 0.059 / 0.060 checkpoint (format 2)
+  still loads with +0 ticks replayed; the old sessions replay byte for byte (docs/CHECKPOINT.md "Format 3").
+
 ## Build 0.060: speed, incremental verify, the budget
 
 * **Faster on a big save, results unchanged.** The per-tick work that grew with the history or the vocabulary is gone: session,
