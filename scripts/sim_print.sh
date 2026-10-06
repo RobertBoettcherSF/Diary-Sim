@@ -2,7 +2,7 @@
 # Version: 0.001
 # The fingerprint of what decides the replay of OLD sessions (build 0.060, docs/CHECKPOINT.md "Incremental verify"): the simulation
 # sources (diary_sim.adb and the sim_* units the tick loop runs; NOT the reports, the menu, the voices, the checkpoint code, the
-# scripts) without comments and spacing, and the rule files of data/ without comments and blank lines (not the display text).  A
+# scripts) without comments, spacing and the Build constant, and the rule files of data/ without comments and blank lines (not the display text).  A
 # different fingerprint than at the last passed make verify-full makes it due (checkin.txt), because an incremental make verify only
 # checks the ticks after its checkpoint and cannot see a change that alters how old sessions replay.
 #   scripts/sim_print.sh [ROOT]          prints the 16-hex-digit fingerprint
@@ -27,7 +27,8 @@ perl -e '
     open my $h, "<", $f or die "$f: $!"; my @l = <$h>; close $h;
     $all .= "== $f\n";
     for my $x (@l) {
-      if ($f =~ /\.ad[bs]$/) { $x =~ s/^((?:[^"\n-]|"[^"\n]*"|-(?!-))*)--.*$/$1/; }
+      if ($f =~ /\.ad[bs]$/) { next if $x =~ /^\s*Build : constant String :=/;   # the build number is no simulation
+        $x =~ s/^((?:[^"\n-]|"[^"\n]*"|-(?!-))*)--.*$/$1/; }
       else { next if $x =~ /^\s*#/; }
       $x =~ s/\s+/ /g; $x =~ s/^ | $//g; next if $x eq "";
       $all .= "$x\n";

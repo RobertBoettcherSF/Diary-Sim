@@ -13,9 +13,11 @@
 #                 SHIP_COLD_SESSIONS (10) sessions first.  (scripts/ship.sh)
 # make night-ship THE OVERNIGHT COMMAND: ONE wall-clock budget of NIGHT_SHIP_HOURS (9, decimals allowed) from the start of make for the
 #                 WHOLE job: the history replay, sessions of NIGHT_SHIP_TICKS (300) ticks, then the reports and checkin.txt.  New sessions
-#                 stop at the budget minus a reserve (the time the last night needed after its stop x NIGHT_SHIP_RESERVE_FACTOR 1.5 +
-#                 NIGHT_SHIP_RESERVE_MARGIN 120 s, kept in ship_stamp.txt; NIGHT_SHIP_RESERVE=<s> by hand); the planned stop and the reserve
-#                 are printed first and stand in checkin.txt.  The end check and verify follow SHIP_VERIFY / SHIP_VERIFY_TICKS like make ship
+#                 stop at the budget minus a reserve (0.060: the measured REPORTS phase of the last run of that kind x
+#                 NIGHT_SHIP_RESERVE_FACTOR 1.5 + NIGHT_SHIP_RESERVE_MARGIN 60 s + the end check, at least 60 s, at most a quarter of the
+#                 budget, kept in ship_stamp.txt; NIGHT_SHIP_RESERVE=<s> by hand); the planned stop and the reserve are printed first and
+#                 stand in checkin.txt.  Without a valid checkpoint the run prints a replay estimate and, if it cannot hold, "the budget
+#                 cannot hold: replay first (~N min), then sessions; checkin.txt late by ~M min", then goes on.  The end check and verify follow SHIP_VERIFY / SHIP_VERIFY_TICKS like make ship
 #                 (no full replay of a big save: make verify by hand).  A closed terminal (SIGHUP) ends the night; the reports still run and
 #                 checkin.txt is still written (the console also goes to ship_log.txt).  NIGHT_SHIP_DETACH=1: run detached, no live screen.
 #                 Stop reason max_hours (or max_sessions) = PASS; q still works (FAIL: stopped by hand, the reports still run).

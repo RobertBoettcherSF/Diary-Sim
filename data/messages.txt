@@ -114,7 +114,7 @@ ckpt.replay = replay: checkpoint {1} - {2} ticks replayed
 ckpt.why.missing = missing
 ckpt.why.forced = off (--replay)
 ckpt.why.off = off (ckpt.enabled = 0)
-ckpt.why.verify = not used (make verify replays everything)
+ckpt.why.verify = not used (make verify-full replays everything)
 ckpt.why.version = version ({1})
 ckpt.why.stale = stale ({1})
 ckpt.why.layout = layout (state layout changed: {1})
@@ -129,7 +129,7 @@ ckpt.verify.same = verify: checkpoint of tick {1} = the replayed state, byte for
 ckpt.verify.diff = verify: DRIFT - the checkpoint of tick {1} differs from the replay (section {2}, byte {3}); moved to state.ckpt.bad
 ckpt.verify.skip = verify: checkpoint not compared ({1})
 ckpt.verify.written = verify: fresh checkpoint of tick {1} written ({2} KB, {3} s)
-ckpt.data.changed = data changed since the checkpoint (make verify replays everything): {1}
+ckpt.data.changed = data changed since the checkpoint (make verify-full replays everything): {1}
 ckpt.oldformat = checkpoint: format {1} (build {2}) loaded, the same state layout; the next write is format {3}
 verify.log = full verify: OK, {1} ticks, {2} sessions, {3} s
 verify.log.incr = incremental verify: OK, ticks {1} to {2}, {3} sessions, {4} s

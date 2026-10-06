@@ -105,6 +105,25 @@ diaries, entities and summary files are byte for byte the same.
   of the run, `warnings:n`, `export-failed`. It is information only; nothing in the simulation reads it (`data/limits.txt`).
   `@@SECTIONS` gives the line of each header in `run_report.txt`.
 
+## Build 0.060: speed, incremental verify, the budget
+
+* **Faster on a big save, results unchanged.** The per-tick work that grew with the history or the vocabulary is gone: session,
+  vote and dharma records are found by tick through indices instead of a scan of every record line, chess games through the first
+  running one instead of every game ever played, words through a text index and bit masks instead of a walk over the word table;
+  the end-of-session report no longer converts strings per letter. On a 388500-tick save the full replay went from ~1250 s to
+  ~180 s (late ticks ~300 -> ~1500 ticks/s) and a live 300-tick session from ~2.3 s to ~0.75 s. Every file written is byte for
+  byte the same (make check; `DIARY_CHECK_INDEX=1` cross-checks each index against the old scan). The checkpoint layout is the same
+  (`ckpt_layout: 2 0b775a42d23f534b`): a 0.059 `state.ckpt` loads.
+* **`make verify` is incremental**: from the last verified checkpoint (`state.verified.ckpt`) only the newer ticks; **`make
+  verify-full`** replays from tick 1. `checkin.txt`: `last full verify` (due monthly, or when the simulation fingerprint
+  `scripts/sim_print.sh` / the state format changed) and `last verify` (due weekly). docs/CHECKPOINT.md.
+* **The budget of make slice / night-ship counts from the start of make**: without a valid checkpoint the run prints a replay
+  estimate first and, if it cannot hold, `the budget cannot hold: replay first (~N min), then sessions; checkin.txt late by ~M min`
+  (also in `checkin.txt`), then goes on. The reserve is the measured REPORTS phase of the last run of that kind x 1.5 + 60 s (plus
+  the end check), at least 60 s and at most a quarter of the budget. The live screen and the box say `slice run` / `night run` /
+  `ship run`. `checkin.txt` has a `growth:` line (the three file groups that grew most since the last ship; state.ckpt left out).
+  No more `cut: write error: Broken pipe` from `scripts/ship.sh`.
+
 ## The state checkpoint: `state.ckpt` (build 0.058; a state format since 0.059)
 
 **Build 0.059 (details and reasoning: [docs/CHECKPOINT.md](docs/CHECKPOINT.md)).** The checkpoint belongs to a STATE FORMAT
@@ -113,7 +132,7 @@ section (name, byte length, hash); a section whose tag or length does not fit th
 changed: <module>)` and a full replay. A format 1 checkpoint of build 0.058 has the same layout and loads too. In `data/`, display
 text (`messages.txt`, `help.txt`, ...) is not even hashed; a number the start reads into the state (module `Init`, recorded as
 `startkey` lines) refuses the checkpoint when it changed (`data (a start value changed: <key> <old> -> <new>)`); any other changed
-rule file only prints `data changed since the checkpoint (make verify replays everything): limits.txt`. `make check` fails with `bump Ckpt_Format` when
+rule file only prints `data changed since the checkpoint (make verify-full replays everything): limits.txt`. `make check` fails with `bump Ckpt_Format` when
 the `State_IO` code changed without a new format (`scripts/ckpt_layout.sh`, `make ckpt-layout`). A passed `make verify` writes a
 fresh checkpoint and a `VERIFY` entry in `run_log.txt`; `checkin.txt` shows `last full verify: <date> (N ticks)`: run `make verify`
 about once a week (the drift check). The text below is the 0.058 description; where it says build or data, read the above.
@@ -188,9 +207,9 @@ a 0.058 checkpoint too); only a changed state layout replays the history once.
 * **`make night-ship`** (overnight) is the full path: the history replay, sessions of `NIGHT_SHIP_TICKS` (300) ticks, then the same
   reports into the same `checkin.txt` with the same VERDICT header. **Build 0.057: ONE wall-clock budget**, `NIGHT_SHIP_HOURS` (9,
   decimals allowed), counted from the start of make, covers the WHOLE job: the replay, the night, the reports and `checkin.txt`. New
-  sessions stop at the budget minus a reserve: the time the last night needed after its planned stop (end check + reports,
-  `post_secs` in `ship_stamp.txt`) x `NIGHT_SHIP_RESERVE_FACTOR` (1.5) + `NIGHT_SHIP_RESERVE_MARGIN` (120 s); without history an
-  estimate from the save size (`NIGHT_SHIP_RESERVE=<seconds>` sets it by hand). The first lines say when new sessions stop, the
+  sessions stop at the budget minus a reserve: (0.060) the measured reports phase of the last run of the same kind
+  (`night_reports_secs` / `slice_reports_secs` in `ship_stamp.txt`) x `NIGHT_SHIP_RESERVE_FACTOR` (1.5) + `NIGHT_SHIP_RESERVE_MARGIN`
+  (60 s) + the end check when it runs, at least 60 s, at most a quarter of the budget; without history an estimate from the save size (`NIGHT_SHIP_RESERVE=<seconds>` sets it by hand). The first lines say when new sessions stop, the
   reserve and when `checkin.txt` is due; the verdict has a `budget:` line (on time / late). The night's end check and the verify step
   follow `SHIP_VERIFY` / `SHIP_VERIFY_TICKS` like `make ship` (`bin/diary_sim --end-check-ticks N`): a big save gets no full replay after
   the night (`make verify` by hand); if the end check ran, it is the verify of the run (no second replay). **A closed terminal**
@@ -265,8 +284,9 @@ For a run you leave alone and read in the morning, and for the loop *Robert runs
   diaries and record files up to that tick, then every state field in a fixed order), written at a session end; a run uses it only if
   build, seed and the hash match the files on disk, otherwise it says why and replays everything; `make verify` always replays. A
   check would compare a resumed run with a full-replay run. The night run already removes the replay from all but the first session.
-* **`make verify`** (`bin/diary_sim --verify`) replays the whole history from the files and compares it with everything stored (diaries,
-  sessions, inbox, records of every kind): one `verify: OK ...` line, or the DRIFT text and exit status 1; it writes nothing. A night run
+* **`make verify`** (`bin/diary_sim --verify`; 0.060: incremental from `state.verified.ckpt`, `make verify-full` from tick 1) replays the
+  history from the files and compares it with everything stored (diaries, sessions, inbox, records of every kind): one `verify: OK ...`
+  line, or the DRIFT text and exit status 1; it writes no record (only the checkpoints, `verify_stamp.txt` and a `VERIFY` entry). A night run
   that stops at `MAX_SESSIONS` or `MAX_HOURS` runs it in a child process at its end (`night.verify_end = 1`; the box says so), and every
   `night.verify_every` sessions if that is set (default 0 = never). After q or Ctrl-C it is not run (those end at once): run
   `make verify` by hand. q during the check stops the check (the box says `end check cut short by q`, the reason stays the limit).

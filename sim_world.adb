@@ -1,4 +1,4 @@
---  Version: 0.023
+--  Version: 0.024
 pragma Ada_2022;
 
 with Sim_Ckpt;

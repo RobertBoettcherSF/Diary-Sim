@@ -1,6 +1,6 @@
 # The state checkpoint (`state.ckpt`)
 
-Version: 0.002 (build 0.059; the checkpoint itself came with build 0.058, README "The state checkpoint")
+Version: 0.003 (build 0.060; the checkpoint itself came with build 0.058, README "The state checkpoint")
 
 A start used to replay the whole history to rebuild the state in memory: 13 minutes for 300000 ticks, about 35 minutes on Robert's
 774600-tick save, growing every night. `state.ckpt` in the save folder holds the end state of the last run, so a start loads it in
@@ -72,7 +72,7 @@ A refusal never touches the record files; the run replays and writes a new check
 * **Every other change of a rule file** (`limits.txt` keys read later, `karma.txt`, `kalpas.txt`, `topics.txt`, `words.txt`,
   `things.txt`, `chat.txt`, `visit.txt`, ...; also any new file) is information: each rule file has a hash of its lines without
   comments and blank lines (a changed comment is no changed rule) in the header, and a start whose rule files differ **still loads
-  the checkpoint** and prints one line: `data changed since the checkpoint (make verify replays everything): limits.txt`.
+  the checkpoint** and prints one line: `data changed since the checkpoint (make verify-full replays everything): limits.txt`.
 
 The reasoning. The suggestion was "record the data hash, say so, still load". That holds for everything the simulation reads
 **while it runs**: such a number is read fresh from `data/` at every use, the same way whether the state was replayed or loaded,
@@ -108,22 +108,71 @@ Only if the bytes are truly unchanged (a rename, a reordered declaration) record
 fire for a declaration that only shares a name with a streamed one; that is a false alarm to look at, never a reason to skip the
 look.
 
-## Full replay stays the drift check
+## Verify: incremental by default, full monthly (build 0.060)
 
-`make verify` (`--verify`) and `--replay` always replay the whole history from the files and compare it with everything stored;
-`--verify` then compares the checkpoint, section by section, with the state the replay rebuilt (format 1 too). When verify passes it
-writes one `VERIFY` entry to `run_log.txt` (`full verify: OK, N ticks, S sessions, T s`) and a fresh checkpoint of the replayed
-state (`verify: fresh checkpoint of tick N written ...`), so a verify also refreshes the cache. A difference is a DRIFT (exit 1,
-the checkpoint moves to `state.ckpt.bad`, nothing new is written).
+**`make verify`** (`--verify`) is incremental: it loads the last *verified* checkpoint, `state.verified.ckpt`, replays only the
+ticks after it from the files and compares them with everything stored, then compares `state.ckpt` with the replayed state, section
+by section (`verify: OK (incremental), ticks A to B replayed from the verified checkpoint of tick A-1 ...`). Without a verified
+checkpoint (or when it does not fit the files: the same checks as a start) it replays from tick 1 and says why. **`make
+verify-full`** (`--verify-full`) and `--replay` always replay the whole history. A passed verify of either kind writes:
 
-`checkin.txt` (make ship / slice / night-ship) carries `last full verify: <date> (N ticks)`, read from `run_log.txt` (and kept in
-`ship_stamp.txt`, because `run_log.txt` keeps only its last entries). **Run `make verify` about once a week** (on the big save it
-is the full replay, ~35 minutes); the line says `due` after 7 days.
+* one `VERIFY` entry in `run_log.txt` (`full verify: OK, N ticks, S sessions, T s` or `incremental verify: OK, ticks A to B, ...`);
+* a fresh `state.ckpt` of the replayed state, copied to `state.verified.ckpt` (the next `make verify` starts there; the copy is
+  made only from a state that a replay produced and compared, never from a run's own checkpoint);
+* `verify_stamp.txt`: `full=<date> <ticks> <simulation fingerprint> <state format>` and `incr=<date> <from tick> <to tick>`.
+
+A difference is a DRIFT (exit 1, the checkpoint moves to `state.ckpt.bad`, nothing new is written). A night's end check (when the
+save is under the cap) is a `--verify-full` child and writes the same files.
+
+**Why a full one is still needed.** The incremental verify proves that the new ticks follow from the verified state. It cannot see a
+code change that alters how OLD sessions replay: the verified checkpoint already holds the old result. So `checkin.txt` (make ship /
+slice / night-ship) has two lines:
+
+* `last full verify: <date> (N ticks), <age>`; it says `verify-full due` (and on the next line why) **after 30 days**, or when the
+  **simulation fingerprint** or the **state format** differs from the one of that verify. The fingerprint (`scripts/sim_print.sh`,
+  `make sim-print`) hashes `diary_sim.adb` and the `sim_*` units the tick loop runs, without comments, spacing and the `Build`
+  constant, and the rule files of `data/` without comments (not the display text). Reports, the menu, the voices, the checkpoint
+  and ledger code, the scripts and the docs do not count, so a build that only touches those does not make it due. (Limit:
+  `diary_sim.adb` also holds report code; a change there counts.) A full verify from before 0.060 has no fingerprint on record:
+  due once.
+* `last verify: <date> (ticks A-B)`; `make verify due (weekly)` after 7 days.
+
+Timing (build 0.060, this box): the full replay of a 388500-tick save takes ~180 s (0.059: ~1250 s); an incremental verify of 900
+new ticks on a small save 0.3 s, of 36000 new ticks 12 s; on Robert's save it is the checkpoint load (~7.6 s with 0.059's
+measurement) plus the new ticks at ~1500 ticks/s.
+
+`make ship` (auto) runs `--verify-full` when the save has at most `SHIP_VERIFY_TICKS` ticks, else the incremental verify when the
+verified checkpoint is at most that many ticks behind, else none (the line says so).
+
+**Proposal, not built: old windows.** Keep up to 3 older verified checkpoints spaced across the save (~70 MB each on Robert's save)
+and let the weekly `make verify` also replay one random old window (from one of them to the next, at most 20000 ticks) and compare
+it with the next one and the files. That would catch most code changes that alter old sessions within a week at a cost of a few
+seconds, without the monthly full replay. It needs a rotation rule for the old checkpoints and a window replay that stops at a
+tick and compares the state there; with the fingerprint rule above, a full verify after every simulation change already covers
+the case, so it was left out of 0.060.
+
+## Derived indices (build 0.060)
+
+Build 0.060 keeps lookup indices next to the state (sessions and votes by tick, the dharma lines by tick, the first running chess
+game, a text index and bit masks of the word table). They are derived data, never written to the checkpoint: after a load,
+`Sim_Games.Reindex` and `Sim_World.Reindex` rebuild them from the loaded state, so the layout (and the guard line below) did not
+change and a 0.059 checkpoint loads. `DIARY_CHECK_INDEX=1` cross-checks every indexed lookup against the old full scan (tests).
+
+## The replay estimate and the budget (build 0.060)
+
+When a run has no valid checkpoint and more than 1000 ticks to replay (a night, a slice, a verify), it prints first `replay
+estimate: N ticks, about M min (...)`, from the last measured full replay in `ckpt_log.txt` (`replay done: N ticks in S s`; scaled
+by (N/n)^1.5, the replay gets slower with the history) or 1500 ticks a second. With `--deadline` (make slice / night-ship pass the
+absolute end of the budget, counted from the start of make) it adds `the budget cannot hold: replay first (~N min), then sessions;
+checkin.txt late by ~M min` when the replay plus the reserve ends past it, and goes on: the replay comes first, then at least one
+session.
 
 ## Commands
 
     make slice                 # by day: loads the checkpoint (seconds), sessions, reports, checkin.txt
-    make verify                # the drift check: full replay, compare, then a fresh checkpoint (weekly)
+    make verify                # weekly: incremental from state.verified.ckpt, compare, then fresh checkpoints
+    make verify-full           # monthly or when due: the whole history from tick 1
+    make sim-print             # the simulation fingerprint (LIST=1: the files it covers)
     bin/diary_sim --replay     # one start without the checkpoint
     make ckpt-layout           # the layout guard alone (also part of make check)
     tail ../diary-data/ckpt_log.txt   # loads, writes, refusals with their time

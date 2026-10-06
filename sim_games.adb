@@ -1,4 +1,4 @@
---  Version: 0.005
+--  Version: 0.006
 --  See sim_games.ads.
 pragma Ada_2022;
 
