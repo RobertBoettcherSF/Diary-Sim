@@ -938,14 +938,16 @@ procedure Diary_Sim is
       if Govern_Active and then A = Work and then Eff_Mo < 0 then   --  a governed lever: work costs less mood (never turns it positive)
          Eff_Mo := Integer'Min (0, Eff_Mo + Sim_Govern.Off (E, Sim_Govern.Work));
       end if;
-      if Sim_Carry.Active and then A = Work and then Eff_Mo < 0 then   --  carry=1: a learner who owes E a favour helps with the work
+      --  carry=1: a learner who owes E a favour helps with the work: it costs E no mood and half the energy that tick
+      if Sim_Carry.Active and then A = Work and then (Eff_Mo < 0 or else Eff_En < 0) then
          declare
             D : constant Natural := Sim_Carry.Debtor (E);
          begin
             if D /= 0 and then St (Entity_Id (D)).Energy >= Sim_Carry.Relief_Energy + Sim_Carry.Help_Energy
               and then Roll (Seed, Eid, Tick, 23103, 100) <= Sim_Carry.Spend_Pct
             then
-               Eff_Mo := 0;
+               Eff_Mo := Integer'Max (0, Eff_Mo);
+               Eff_En := Eff_En / 2;
                St (Entity_Id (D)).Energy := Clamp (St (Entity_Id (D)).Energy - Sim_Carry.Help_Energy, E_Min, E_Max);
                Sim_Carry.Spend (Entity_Id (D), E);
                Add (Msg ("detail.favour", Name (Entity_Id (D))));

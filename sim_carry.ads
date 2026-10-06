@@ -5,7 +5,7 @@
 --    pull     a wesen with spare energy and a low mood teaches the target one of those words (bounded per session)
 --    relief   a wesen below the relief energy rests instead of talking (teaching)
 --    reward   the learner owes the teacher a favour (per pair) and the teacher gains standing; being useful lifts its mood a little
---    favour   later, when the teacher works and the work costs mood, a debtor helps: the work costs no mood that tick, the debtor
+--    favour   later, when the teacher works, a debtor helps: the work costs no mood and half the energy that tick, the debtor
 --             pays a little energy, and the favour is spent
 --  Tunables: data/limits.txt carry.* (read once).  State (checkpoint section "carry", format 3): Active, Lessons, Acts, Spent,
 --  the favours and the standing.
