@@ -26,7 +26,7 @@ pragma Interrupt_State (SIGINT, USER);
 pragma Interrupt_State (SIGTERM, USER);
 pragma Ada_2022;
 
-with Ada.Calendar, Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Maps, Ada.Containers.Ordered_Maps, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
+with Ada.Calendar, Ada.Calendar.Formatting, Ada.Characters.Handling, Ada.Numerics.Elementary_Functions, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Maps, Ada.Containers.Ordered_Maps, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Finalization, Ada.Strings.Fixed, Ada.Streams.Stream_IO, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
      GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Ckpt, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chat, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Records, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Trial, Sim_Util, Sim_Visit, Sim_Voice, Sim_Wordstat, Sim_Evolve, Sim_Active, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
@@ -353,6 +353,12 @@ procedure Diary_Sim is
    Audit_View, Challenge_Mode : Boolean := False;   --  --audit / --challenge <player>
    Challenge_Opt : Unbounded_String;
    Verify_View : Boolean := False;               --  --verify (make verify): replay everything from the files, compare, print one line
+   Verify_Incr : Boolean := False;               --  0.060: --verify replays from the last VERIFIED checkpoint (state.verified.ckpt); --verify-full from tick 1
+   Verified_Path : constant String := "state.verified.ckpt";   --  0.060: the checkpoint a passed verify wrote (incremental verify starts there)
+   Verify_From : Natural := 0;                   --  0.060: the tick an incremental verify started after (0: tick 1, a full verify)
+   Sim_Print_Opt : Unbounded_String;             --  0.060: --sim-print <hash> (make verify-full): the fingerprint of the simulation sources, kept in verify_stamp.txt
+   Deadline_Opt : Int := 0;                      --  0.060: --deadline <unix seconds>: when the whole job (make slice / night-ship) is due
+   Reserve_Opt : Int := 0;                       --  0.060: --reserve <seconds>: what the job needs after the night (the reports)
    Voices_View : Boolean := False;                 --  --voices / make voices: the four wesen messages at the last tick
    Elo_View, Perft_Mode : Boolean := False;      --  --elo (replay, then the ranking) / --perft (the move generator checks)
    Screens_View : Boolean := False;              --  --screens: replay, then show the screens (a view like --ledger)
@@ -7224,7 +7230,7 @@ procedure Diary_Sim is
 
    --  The whole history from the files in a child process: `diary_sim --verify`.  True: it passed (or was cut short by q / a signal).
    function Night_Verify return Boolean is
-      Args : GNAT.OS_Lib.Argument_List (1 .. 6);
+      Args : GNAT.OS_Lib.Argument_List (1 .. 8);
       Pid : GNAT.OS_Lib.Process_Id;
       OK : Boolean;
       RC : Integer := -1;
@@ -7235,9 +7241,11 @@ procedure Diary_Sim is
       Args (1) := new String'("-c");
       Args (2) := new String'("""$0"" ""$@"" > night_verify.txt 2>&1; echo $? > night_rc.tmp; mv night_rc.tmp night_rc.txt");
       Args (3) := new String'(Self_Exe);
-      Args (4) := new String'("--verify");
+      Args (4) := new String'("--verify-full");   --  0.060: the end check replays the whole history (make verify is incremental)
       Args (5) := new String'("--home");
       Args (6) := new String'(To_String (Home_Path));
+      Args (7) := new String'("--sim-print");
+      Args (8) := new String'(if Length (Sim_Print_Opt) > 0 then To_String (Sim_Print_Opt) else "-");
       if not Tty_Out then Con.Put_Line_Now (Msg ("night.t.verify")); end if;
       Pid := GNAT.OS_Lib.Non_Blocking_Spawn ("/bin/sh", Args);
       if GNAT.OS_Lib.Pid_To_Integer (Pid) <= 0 then return False; end if;
@@ -7796,7 +7804,7 @@ procedure Diary_Sim is
    end Data_Changed;
 
    --  Before the diaries are read: may this start use the checkpoint?  Sets Ckpt_Used (and Ckpt_Tick, Ckpt_Seed, Ckpt_Off) or Ckpt_Why.
-   procedure Ckpt_Probe is
+   procedure Ckpt_Probe (From : String := Ckpt_Path) is
       Ok : Boolean;
       procedure No (Why : String) is
       begin
@@ -7808,8 +7816,8 @@ procedure Diary_Sim is
       Ckpt_Used := False;
       if Replay_Opt then No (Msg ("ckpt.why.forced")); return; end if;
       if Limit ("ckpt.enabled", 1) = 0 then No (Msg ("ckpt.why.off")); return; end if;
-      if not Ada.Directories.Exists (Ckpt_Path) then No (Msg ("ckpt.why.missing")); return; end if;
-      Sim_Ckpt.Read_File (Ckpt_Path, Ckpt_Head, Ckpt_Data, Ok);
+      if not Ada.Directories.Exists (From) then No (Msg ("ckpt.why.missing")); return; end if;
+      Sim_Ckpt.Read_File (From, Ckpt_Head, Ckpt_Data, Ok);
       if not Ok then No (Msg ("ckpt.why.corrupt", "unreadable")); return; end if;
       Ckpt_Pay_At := Ckpt_Data.Pos;
       declare
@@ -8124,6 +8132,7 @@ procedure Diary_Sim is
    end Night_Ckpt_Due;
 
    Prog_Last_T : Ada.Calendar.Time := Prog_T0;
+   Replay_T0 : Ada.Calendar.Time := Prog_T0;   --  0.060: the start of the replay of this run
    Prog_Last_Tick : Int := 0;
    procedure Progress_Line (Tick : Int) is   --  DIARY_REPLAY_PROGRESS: tick, seconds since the start, ticks/s since the last line
       Now : constant Ada.Calendar.Time := Ada.Calendar.Clock;
@@ -8134,6 +8143,83 @@ procedure Diary_Sim is
       Prog_Last_T := Now;
       Prog_Last_Tick := Tick;
    end Progress_Line;
+
+   --  0.060: seconds since 1970 (UTC), for --deadline
+   function Unix_Now return Int is
+     (Int (Ada.Calendar."-" (Ada.Calendar.Clock, Ada.Calendar.Formatting.Time_Of (1970, 1, 1, 0.0))));
+
+   --  0.060: how long a replay of N ticks will take, from the last measured one in ckpt_log.txt ("replay done: <n> ticks in <s> s",
+   --  written after every replay of at least 1000 ticks): the cost of a tick grows with the history, measured about as n ** 1.5 in
+   --  total, so t = s * (N / n) ** 1.5; without a measurement N / 1500 ticks a second.  Src says which.
+   function Replay_Estimate (N : Natural; Src : out Unbounded_String) return Duration is
+      Lines : Str_Vectors.Vector;
+      Found : Boolean;
+      Mark : constant String := " replay done: ";
+      Got_N : Natural := 0;
+      Got_S : Float := 0.0;
+   begin
+      Read_Lines ("ckpt_log.txt", Lines, Found);
+      for L of Lines loop
+         declare
+            P : constant Natural := Fx.Index (L, Mark);
+         begin
+            if P > 0 then
+               declare
+                  R : constant String := L (P + Mark'Length .. L'Last);   --  "<n> ticks in <s> s ..."
+                  A : constant Natural := Fx.Index (R, " ticks in ");
+                  B : constant Natural := (if A > 0 then Fx.Index (R, " s", A + 10) else 0);
+               begin
+                  if A > R'First and then B > A + 10 then
+                     Got_N := Natural'Value (R (R'First .. A - 1));
+                     Got_S := Float'Value (R (A + 10 .. B - 1));
+                  end if;
+               exception
+                  when others => null;
+               end;
+            end if;
+         end;
+      end loop;
+      if Got_N >= 1000 and then Got_S > 0.0 then
+         Src := To_Unbounded_String (Msg ("replay.est.measured", Img (Got_N), Tenths_Text (Duration (Got_S))));
+         declare
+            R : constant Float := Float (N) / Float (Got_N);
+         begin
+            return Duration (Got_S * R * Ada.Numerics.Elementary_Functions.Sqrt (R));
+         end;
+      end if;
+      Src := To_Unbounded_String (Msg ("replay.est.default"));
+      return Duration (Float (N) / 1500.0);
+   end Replay_Estimate;
+
+   function Minutes_Up (D : Duration) return Int is (Int'Max (1, (Int (D) + 59) / 60));
+
+   --  0.060: verify_stamp.txt in the save folder: "full=<date> <ticks> <sim print> <format>" (the last passed verify from tick 1) and
+   --  "incr=<date> <from> <to>" (the last passed incremental one); ship.sh reads it for checkin.txt (what is due).
+   procedure Write_Verify_Stamp (Full : Boolean; From, To : Natural) is
+      Old : Str_Vectors.Vector;
+      Found : Boolean;
+      F : TIO.File_Type;
+      Key : constant String := (if Full then "full=" else "incr=");
+      Now : constant String := Local_Stamp;
+   begin
+      Read_Lines ("verify_stamp.txt", Old, Found);
+      TIO.Create (F, TIO.Out_File, "verify_stamp.txt.tmp");
+      TIO.Put_Line (F, "# diary-sim verify stamp (make verify / make verify-full write it; checkin.txt reads it)");
+      for L of Old loop
+         if L'Length > 5 and then L (L'First .. L'First + 4) in "full=" | "incr=" and then L (L'First .. L'First + 4) /= Key then TIO.Put_Line (F, L); end if;
+      end loop;
+      if Full then
+         TIO.Put_Line (F, Key & Now (Now'First .. Now'First + 15) & " " & Img (To) & " "
+                       & (if Length (Sim_Print_Opt) > 0 then To_String (Sim_Print_Opt) else "-") & " " & Img (Integer (Ckpt_Format)));
+      else
+         TIO.Put_Line (F, Key & Now (Now'First .. Now'First + 15) & " " & Img (From) & " " & Img (To));
+      end if;
+      TIO.Close (F);
+      if Ada.Directories.Exists ("verify_stamp.txt") then Ada.Directories.Delete_File ("verify_stamp.txt"); end if;
+      Ada.Directories.Rename ("verify_stamp.txt.tmp", "verify_stamp.txt");
+   exception
+      when others => null;
+   end Write_Verify_Stamp;
 
    procedure Night_Next_Session is
       Seed_D : Int := Disk_Seed;
@@ -8181,8 +8267,8 @@ begin
          A   : constant String := Ada.Command_Line.Argument (I);
          Eq  : constant Natural := Fx.Index (A, "=");
          Opt : constant String := (if Eq > 0 then A (A'First .. Eq - 1) else A);
-         Num : constant Boolean := Opt in "--ticks" | "--seed" | "--every" | "--crash-at" | "--more" | "--session-ticks" | "--max-sessions" | "--end-check-ticks" | "--since-session";
-         Sep : constant Boolean := (Num or else Opt in "--max-hours" | "--home" | "--say" | "--text" | "--as" | "--grant" | "--veto" | "--approve" | "--challenge" | "--debug-section" | "--chat-script" | "--visit" | "--visit-script") and then Eq = 0 and then I < Ada.Command_Line.Argument_Count;   --  --ticks 200
+         Num : constant Boolean := Opt in "--ticks" | "--seed" | "--every" | "--crash-at" | "--more" | "--session-ticks" | "--max-sessions" | "--end-check-ticks" | "--since-session" | "--deadline" | "--reserve";
+         Sep : constant Boolean := (Num or else Opt in "--max-hours" | "--home" | "--sim-print" | "--say" | "--text" | "--as" | "--grant" | "--veto" | "--approve" | "--challenge" | "--debug-section" | "--chat-script" | "--visit" | "--visit-script") and then Eq = 0 and then I < Ada.Command_Line.Argument_Count;   --  --ticks 200
          Val : constant String := (if Eq > 0 then A (Eq + 1 .. A'Last) elsif Sep then Ada.Command_Line.Argument (I + 1) else "");
          Help  : Str_Vectors.Vector;
          Found : Boolean;
@@ -8228,7 +8314,11 @@ begin
          elsif Opt = "--map" then Map_Mode := True;
          elsif Opt = "--grant" then Grant_Mode := True; Grant_Opt := To_Unbounded_String (Val);
          elsif Opt = "--perft" then Perft_Mode := True;
-         elsif Opt = "--verify" then Ledger_Mode := True; Verify_View := True;
+         elsif Opt = "--verify" then Ledger_Mode := True; Verify_View := True; Verify_Incr := True;
+         elsif Opt = "--verify-full" then Ledger_Mode := True; Verify_View := True; Verify_Incr := False;
+         elsif Opt = "--sim-print" then Sim_Print_Opt := To_Unbounded_String (Val);
+         elsif Opt = "--deadline" then Deadline_Opt := Number (Opt, Val);
+         elsif Opt = "--reserve" then Reserve_Opt := Number (Opt, Val);
          elsif Opt = "--elo" then Ledger_Mode := True; Elo_View := True;
          elsif Opt = "--voices" then Ledger_Mode := True; Voices_View := True;
          elsif Opt = "--govern" then Ledger_Mode := True; Govern_View := True;
@@ -8432,6 +8522,13 @@ begin
    Ada.Directories.Create_Path ("diaries");
    if Has_Diaries and then not Fresh and then not Verify_View then   --  0.058: the checkpoint, if it fits (else Ckpt_Why says why not)
       Ckpt_Probe;
+   elsif Has_Diaries and then Verify_View and then Verify_Incr then   --  0.060: make verify: from the last verified checkpoint, if it fits
+      Ckpt_Probe (Verified_Path);
+      if Ckpt_Used then
+         Verify_From := Ckpt_Tick;
+      else
+         Ckpt_Why := To_Unbounded_String (Msg ("verify.incr.none", To_String (Ckpt_Why)));
+      end if;
    else
       Ckpt_Why := To_Unbounded_String (Msg (if Verify_View then "ckpt.why.verify" else "ckpt.why.missing"));
    end if;
@@ -8585,6 +8682,33 @@ begin
          end if;
          Ckpt_Log (To_String (Data_Note));
       end if;
+      if not Ckpt_Used and then Verify_To >= 1000 and then (Night_On or else Verify_View) then   --  0.060: what the replay will cost, first
+         declare
+            Src : Unbounded_String;
+            Est : constant Duration := Replay_Estimate (Verify_To, Src);
+            Lines : Str_Vectors.Vector;
+         begin
+            Lines.Append (Msg ("replay.est", Img (Verify_To), Img (Minutes_Up (Est)), To_String (Src)));
+            if Deadline_Opt > 0 then
+               declare
+                  Late : constant Int := Unix_Now + Int (Est) + Reserve_Opt - Deadline_Opt;
+               begin
+                  if Late > 0 then Lines.Append (Msg ("replay.budget", Img (Minutes_Up (Est)), Img (Minutes_Up (Duration (Late))))); end if;
+               end;
+            end if;
+            for L of Lines loop
+               if Night_On then
+                  Recent.Append (L);
+                  if not Tty_Out then Con.Put_Line_Now (L); Flush_Out; end if;
+               else
+                  Con.Put_Line (L);
+               end if;
+               Ckpt_Log (L);
+               if Night_On then Append_Log ("NIGHT", L & ASCII.LF); end if;
+            end loop;
+         end;
+      end if;
+      Replay_T0 := Ada.Calendar.Clock;
       if Ckpt_Used then
          Start_Sessions_At (Int (Ckpt_Tick));   --  a session the replay would begin at the checkpoint's tick
       else
@@ -8599,6 +8723,13 @@ begin
          Quit_Seen := Sim_Quit.Requested or else (Night_On and then Sim_Quit.Key_Q);
          exit when Quit_Seen;
       end loop;
+      if not Quit_Seen and then not Ckpt_Used and then Verify_To >= 1000 then   --  0.060: the measurement for the next estimate
+         declare
+            D : constant Duration := Since (Replay_T0);
+         begin
+            Ckpt_Log (Msg ("replay.done", Img (Verify_To), Tenths_Text (D), Img (Int (Float (Verify_To) / Float (Duration'Max (0.1, D))))));
+         end;
+      end if;
    end if;
    if not Quit_Seen then
       declare
@@ -8627,13 +8758,31 @@ begin
             Verify_Visit (Last_Done);
             Verify_Chat (Last_Done);
             Verify_Active (Last_Done);
-            Con.Put_Line (Msg ("verify.ok", Img (Verify_To), Img (Integer (Sessions.Length)), Tenths_Text (Ada.Calendar."-" (Ada.Calendar.Clock, T_Run))));
+            if Verify_From > 0 then   --  0.060: incremental: the ticks after the last verified checkpoint
+               Con.Put_Line (Msg ("verify.ok.incr", Img (Verify_From + 1), Img (Verify_To), Img (Verify_From), Img (Integer (Sessions.Length)),
+                                  Tenths_Text (Ada.Calendar."-" (Ada.Calendar.Clock, T_Run))));
+            else
+               Con.Put_Line (Msg ("verify.ok", Img (Verify_To), Img (Integer (Sessions.Length)), Tenths_Text (Ada.Calendar."-" (Ada.Calendar.Clock, T_Run))));
+            end if;
             Con.Put_Line (Ckpt_Verify);   --  0.058: the checkpoint against the state the replay has just rebuilt
             if not Ckpt_Verify_Diff then   --  0.059: passed: run_log.txt says so (checkin.txt: last full verify), a fresh checkpoint
-               Append_Log ("VERIFY", Msg ("verify.log", Img (Verify_To), Img (Integer (Sessions.Length)), Tenths_Text (Ada.Calendar."-" (Ada.Calendar.Clock, T_Run))));
+               if Verify_From > 0 then
+                  Append_Log ("VERIFY", Msg ("verify.log.incr", Img (Verify_From + 1), Img (Verify_To), Img (Integer (Sessions.Length)), Tenths_Text (Ada.Calendar."-" (Ada.Calendar.Clock, T_Run))));
+               else
+                  Append_Log ("VERIFY", Msg ("verify.log", Img (Verify_To), Img (Integer (Sessions.Length)), Tenths_Text (Ada.Calendar."-" (Ada.Calendar.Clock, T_Run))));
+               end if;
+               Write_Verify_Stamp (Verify_From = 0, Verify_From, Verify_To);
                Ckpt_Write;
                if Ckpt_Written > 0 then
                   Con.Put_Line (Msg ("ckpt.verify.written", Img (Last_Done), Img (Ckpt_Bytes / 1024), Secs_Text (Ckpt_Write_Secs)));
+                  begin   --  0.060: the next make verify starts here
+                     Ada.Directories.Copy_File (Ckpt_Path, Verified_Path & ".tmp");
+                     if Ada.Directories.Exists (Verified_Path) then Ada.Directories.Delete_File (Verified_Path); end if;
+                     Ada.Directories.Rename (Verified_Path & ".tmp", Verified_Path);
+                     Ckpt_Log (Msg ("verify.verified.written", Img (Last_Done)));
+                  exception
+                     when others => null;
+                  end;
                end if;
             end if;
          elsif Voices_View then Con.Put (Voices_Text); elsif Elo_View then Con.Put (Elo_Text); elsif Govern_View then Con.Put (Govern_Text); elsif Audit_View then Con.Put (Audit_Text); elsif Next_View then Con.Put (Next_Text); elsif Trial_View then Con.Put (Trials_Text); elsif Rec_View then Con.Put (Lines_Text (Sim_Records.Divergence)); elsif Dict_View then Con.Put (Lines_Text (Sim_Records.Dictionary)); elsif Bal_View then Con.Put (Lines_Text (Sim_Records.Ballots)); elsif Robot_View then Con.Put (Robot_Text); elsif Screens_View then Con.Put (Screens_Text); else Con.Put_Line (Sim_Ledger.Report (Seed, Ledger_From, Ledger_Full)); end if;
