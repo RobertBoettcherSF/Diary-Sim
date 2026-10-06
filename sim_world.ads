@@ -98,6 +98,11 @@ package Sim_World is
    function Nth_Known (E : Entity_Id; N : Positive) return Positive;
    function Teachable_Count (From, To : Entity_Id) return Natural;
    function Nth_Teachable (From, To : Entity_Id; N : Positive) return Positive;
+   --  0.021 (word carrying): the words known by every wesen but E that E lacks (no chess move, no number: the count of ship.sh),
+   --  and the ones of them From can teach To (From knows them awake, no hidden symbol), in table order.
+   function Missing_By_One (E : Entity_Id) return Natural;
+   function Carry_Count (From, To : Entity_Id) return Natural;
+   function Nth_Carry (From, To : Entity_Id; N : Positive) return Positive;
 
    --  ---- personality: Rule 30 + state-driven action weights -------------------------
    --  Each entity has a ring of rule30.width bits (Rule 30: new = left xor (centre or

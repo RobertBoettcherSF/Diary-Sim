@@ -270,6 +270,7 @@ package body Sim_World is
    Mir_Ok : Boolean := False;
    Mir_Known, Mir_Dorm : array (Entity_Id) of U64_Vectors.Vector;
    Mir_Sym, Mir_Sym_T : U64_Vectors.Vector;
+   Mir_Plain : U64_Vectors.Vector;   --  0.025: the words that are no chess move and no number (as the vocabulary count of ship.sh)
    Text_Index : Text_Index_Maps.Map;
    Text_Index_N : Natural := 0;   --  words 1 .. Text_Index_N are in Text_Index
 
@@ -291,11 +292,22 @@ package body Sim_World is
       if On then V (I) := V (I) or B; else V (I) := V (I) and not B; end if;
    end Bit_Set;
 
+   --  0.025: a text that counts as a word in the vocabulary goal: not a chess move (e2e4, e7e8q) and not a number.
+   function Word_Text (T : String) return Boolean is
+      Chess : constant Boolean := T'Length in 4 .. 5
+        and then T (T'First) in 'a' .. 'h' and then T (T'First + 1) in '1' .. '8'
+        and then T (T'First + 2) in 'a' .. 'h' and then T (T'First + 3) in '1' .. '8'
+        and then (T'Length = 4 or else T (T'Last) in 'q' | 'r' | 'b' | 'n');
+   begin
+      return T'Length > 0 and then not Chess and then not (for all C of T => C in '0' .. '9');
+   end Word_Text;
+
    --  The bits of word W (W <= Count) from the vectors.
    procedure Mirror_Word (W : Positive) is
    begin
       Bit_Set (Mir_Sym, W, Table (W).Symbol);
       Bit_Set (Mir_Sym_T, W, Table (W).Sym_Text);
+      Bit_Set (Mir_Plain, W, Word_Text (To_String (Table (W).Text)));
       for E in Entity_Id loop
          Bit_Set (Mir_Known (E), W, W <= Natural (Known (E).Length) and then Known (E) (W));
          Bit_Set (Mir_Dorm (E), W, W <= Natural (Dormant (E).Length) and then Dormant (E) (W));
@@ -307,6 +319,7 @@ package body Sim_World is
       if Mir_Ok then return; end if;
       Mir_Sym.Clear;
       Mir_Sym_T.Clear;
+      Mir_Plain.Clear;
       for E in Entity_Id loop
          Mir_Known (E).Clear;
          Mir_Dorm (E).Clear;
@@ -335,7 +348,17 @@ package body Sim_World is
       return 64;
    end Nth_Bit;
 
-   type Pick_Kind is (P_Known, P_Usable, P_Teach);
+   type Pick_Kind is (P_Known, P_Usable, P_Teach, P_Miss, P_Carry);
+
+   --  0.025: the words every wesen but T knows (and T does not), counted only if they are words (Word_Text).
+   function Miss_Block (T : Entity_Id; I : Natural) return U64 is
+      X : U64 := Get (Mir_Plain, I) and not Get (Mir_Known (T), I);
+   begin
+      for O in Entity_Id loop
+         if O /= T then X := X and Get (Mir_Known (O), I); end if;
+      end loop;
+      return X;
+   end Miss_Block;
 
    --  The matches of word block I (bits of words 64 I + 1 .. 64 I + 64) for a kind: the same predicate as the scans below.
    function Block (K : Pick_Kind; From, To : Entity_Id; I : Natural) return U64 is
@@ -352,6 +375,14 @@ package body Sim_World is
                Bl : constant U64 := (if Symbols_Hidden then Get (Mir_Sym, I) or (if Symbols_Strict then Get (Mir_Sym_T, I) else 0) else 0);
             begin
                return Kf and ((not Kt) or Dt) and (not Bl) and (not Df);
+            end;
+         when P_Miss => return Miss_Block (To, I);
+         when P_Carry =>   --  what From can carry to To: missing by one at To, not asleep at From, no hidden symbol
+            declare
+               Df : constant U64 := (if Dormant_On then Get (Mir_Dorm (From), I) else 0);
+               Bl : constant U64 := (if Symbols_Hidden then Get (Mir_Sym, I) or (if Symbols_Strict then Get (Mir_Sym_T, I) else 0) else 0);
+            begin
+               return Kf and Miss_Block (To, I) and (not Bl) and (not Df);
             end;
       end case;
    end Block;
@@ -703,6 +734,10 @@ package body Sim_World is
       if Check_Index and then R /= Scan_Nth_Teachable (From, To, N) then raise Program_Error with "index: Nth_Teachable"; end if;
       return R;
    end Nth_Teachable;
+
+   function Missing_By_One (E : Entity_Id) return Natural is (Pick_Count (P_Miss, E, E));
+   function Carry_Count (From, To : Entity_Id) return Natural is (Pick_Count (P_Carry, From, To));
+   function Nth_Carry (From, To : Entity_Id; N : Positive) return Positive is (Pick_Nth (P_Carry, From, To, N));
 
    --  ---- personality -------------------------------------------------------------------
 

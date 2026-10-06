@@ -1,5 +1,5 @@
 #!/bin/sh
-# Version: 0.001
+# Version: 0.002
 # The fingerprint of what decides the replay of OLD sessions (build 0.060, docs/CHECKPOINT.md "Incremental verify"): the simulation
 # sources (diary_sim.adb and the sim_* units the tick loop runs; NOT the reports, the menu, the voices, the checkpoint code, the
 # scripts) without comments, spacing and the Build constant, and the rule files of data/ without comments and blank lines (not the display text).  A
@@ -11,7 +11,7 @@ list=0; [ "$1" = --list ] && { list=1; shift; }
 root=${1:-$(cd "$(dirname "$0")/.." && pwd)}
 cd "$root" || exit 1
 sim="diary_sim.adb"
-for u in util world dharma things screen chess games robot govern preport next visit chat trial records active store; do
+for u in util world dharma things screen chess games robot govern preport next visit chat trial records active store carry; do
   for x in ads adb; do [ -f "sim_$u.$x" ] && sim="$sim sim_$u.$x"; done
 done
 rules=""

@@ -1,6 +1,6 @@
 # The state checkpoint (`state.ckpt`)
 
-Version: 0.003 (build 0.060; the checkpoint itself came with build 0.058, README "The state checkpoint")
+Version: 0.004 (build 0.061; the checkpoint itself came with build 0.058, README "The state checkpoint")
 
 A start used to replay the whole history to rebuild the state in memory: 13 minutes for 300000 ticks, about 35 minutes on Robert's
 774600-tick save, growing every night. `state.ckpt` in the save folder holds the end state of the last run, so a start loads it in
@@ -88,6 +88,24 @@ those keys, and only those, are compared one by one; the check proves that a ref
 without the checkpoint. A format 1 checkpoint (0.058) has neither rule-file hashes nor start values; it is loaded without the
 comparison (0.059 changes no number in `data/`, and the check proves the 0.058 checkpoint gives the files of a full replay).
 
+## Format 3: the section "carry" (build 0.061)
+
+Build 0.061 adds the word carrying (`carry=1` sessions, `sim_carry.ads`) and its state: the open favours per pair, the standing
+per wesen, the carried lessons of the session and in all, and whether the session carries. Format 3 streams it in one new section
+`carry` after `main`; every other section is byte for byte what formats 1 and 2 hold. So `Ckpt_Layout_Since` stays 1: a format 1
+(0.058) or format 2 (0.059, 0.060) checkpoint still loads, and its missing section reads as zero (no favours, no standing, not
+carrying). That is the state a replay builds as long as no `carry=1` session began before the checkpoint's tick, and only then:
+if one did, the old checkpoint is refused (`state layout changed: format 2 has no carry state, carry=1 since session N`) and the
+start replays. On Robert's save the first `carry=1` session begins after his 0.060 checkpoint, so the first 0.061 start loads it
+(+0 ticks replayed) and writes format 3 at the end of the run.
+
+`make check` (scenario 65) proves it with the 0.059 fixture (`tests/ckpt059.tar.gz`): it loads with +0 ticks replayed; with
+`carry.enabled = 0` two more sessions give byte for byte the record files of 0.059 (`tests/ckpt059.expect`) and a payload that is
+longer by exactly the `carry` section; with carry on, the old 600 ticks stay unchanged, the new sessions carry `carry=1`, the
+format 3 checkpoint loads again and `make verify-full` replays everything byte for byte; a `carry=1` session before a format 2
+checkpoint's tick is refused. `make verify` compares the `carry` section like any other; against a format 1 / 2 checkpoint it
+requires the replayed carry state to be zero.
+
 ## The layout guard (make check)
 
 The runtime section heads catch a changed layout at the load, but only as a refusal. So that a forgotten bump is caught before a
@@ -96,7 +114,7 @@ zip goes out, `scripts/ckpt_layout.sh` hashes what decides the payload bytes: th
 name (the streamed variables, their types, the element types of the vectors, the constants of array bounds; comments and spacing
 do not count). The recorded value, next to the format number, is:
 
-ckpt_layout: 2 0b775a42d23f534b
+ckpt_layout: 3 d4e1efa75855a2c3
 
 `make check` (scenario 63) and `make ckpt-layout` compare it with the code: when the code changed and this line did not, the check
 FAILS with `bump Ckpt_Format`. Then:

@@ -268,3 +268,5 @@ grant.head = granted petitions (E<n> tick, topic, applied, per wesen: recovery r
 err.grant = grants.txt {1} names petition {2} by {3} on {4}, but the replay has no such petition at that point
 err.grant_fx = grants.txt {1}: the stored effect differs from the replay: {2}
 warn.grants_bad = grants.txt: a line is not a grant and is ignored: {1}
+detail.carried = carried the word '{2}' to {1}, who owes me a favour now
+detail.favour = {1} returned a favour and helped me with the work
