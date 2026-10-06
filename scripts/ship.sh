@@ -612,8 +612,6 @@ total=$(( $(date +%s) - t0 ))
   if [ "$np" -gt 0 ]; then echo "petition topics${win:+ ($win)}: $topics (of $np)" | cut -c1-79; else echo "petition topics${win:+ ($win)}: none"; fi
   echo "$mood_short" | cut -c1-79
   echo "  $mood_line"
-  echo "$mood_stats"
-  echo "$mood_goal"
   echo "$delta_line" | cut -c1-79
   echo "$grow_line" | cut -c1-79
   if [ "$night" = 1 ]; then echo "wall time: total $(secs $total) (night $(secs $dn), reports $(secs $drep))"; else echo "wall time: total $(secs $total) (no night, reports $(secs $drep))"; fi
@@ -639,6 +637,8 @@ else w1="no night: run_log.txt entries of the last night"; w2="no night: the ses
   echo "roles, per wesen: id name ticks rest% work%"; cat "$tmp/roles.txt"
   echo "roles, per wesen: id name words-taught petitions-filed"; cat "$tmp/teach.txt"
   echo "$carry_full"
+  echo "$mood_stats" | sed 's/^  //'
+  echo "$mood_goal" | sed 's/^  //'
   echo "$shared_line"
   echo "$voc_full"
   echo "petition topics: ${topics_all:-none} (of $np)"

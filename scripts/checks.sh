@@ -2917,8 +2917,8 @@ sumr=$(sed -n '/^-----/,$p' sh9.txt | wc -l | tr -d ' ')
   && [ "$(head -1 "$c9/both/save/state.ckpt")" = "diary-sim-ckpt 3" ] && [ $rcs = 0 ] && [ "$sumr" -le 20 ] \
   && grep -q '^carry: [0-9]* acts.*; w [0-9.]*/[0-9.]*;.* Pareto \(yes\|no\)' sh9.txt && [ "$(grep '^carry:' sh9.txt | wc -c)" -le 80 ] \
   && grep -q '^mood: median .*; in 60-80 [0-9]*%; goal \(met\|no\)$' sh9.txt && [ "$(grep '^mood:' sh9.txt | wc -c)" -le 80 ] \
-  && [ "$(grep -c '^  mood stats: [A-Za-z]* median -*[0-9]*, p10 -*[0-9]*, p90 -*[0-9]*; >=+95 [0-9]*%, <=-95 [0-9]*%, in 60..80 [0-9]*%, near [0-9]*%, <0 [0-9]*%$' "$c9/both/save/checkin.txt")" = 4 ] \
-  && grep -q '^  mood goal (more than 50% of the window within 10 of 60..80, none below 0 more than 50%): \(met\|not met (.*)\)$' "$c9/both/save/checkin.txt" \
+  && [ "$(grep -c '^mood stats: [A-Za-z]* median -*[0-9]*, p10 -*[0-9]*, p90 -*[0-9]*; >=+95 [0-9]*%, <=-95 [0-9]*%, in 60..80 [0-9]*%, near [0-9]*%, <0 [0-9]*%$' "$c9/both/save/checkin.txt")" = 4 ] \
+  && grep -q '^mood goal (more than 50% of the window within 10 of 60..80, none below 0 more than 50%): \(met\|not met (.*)\)$' "$c9/both/save/checkin.txt" \
   && grep -q '^carry (s[0-9]*-s[0-9]*): .*; words per lesson: out [0-9.]* ([0-9]* words), back [0-9.]* ([0-9]* words) in [0-9]* exchanges .*(per wesen: ' "$c9/both/save/checkin.txt" \
   && ok "carry=2 + moodrest=1: verify-full = the checkpoint byte for byte; the next start loads format 3 with +0 ticks; ship: '$(grep '^carry:' sh9.txt)', '$(grep '^mood:' sh9.txt)' (summary $sumr lines); mood stats and the mood goal in checkin.txt" \
   || bad "0.062 verify / reload / ship ($rvf $rcs $sumr): $(grep -m 1 -e '^start' b3.txt) $(grep -m 2 -e '^carry:' -e '^mood:' sh9.txt | tr '\n' ' ')"
