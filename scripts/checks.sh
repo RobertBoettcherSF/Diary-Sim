@@ -2477,7 +2477,7 @@ DIARY_HOME="$w/nt/spn" make --no-print-directory -C "$root" slice SLICE_MINUTES=
   && grep -q '^stop reason: max_hours (the time limit was reached)$' "$ckn" && grep -q '^night: sessions of 30 ticks; max sessions: no limit; one budget of 0.15 min$' "$ckn" \
   && grep -q '^budget: 0.15 min; stop [0-9:]*, reserve 0m00s; due [0-9:]*, written [0-9:]* ' "$ckn" && [ "$(keys "$ckn")" = "$(keys "$ck")" ] \
   && grep -q '^checkpoint: state.ckpt of tick [0-9]*, [0-9]* MB: the start loads it if it fits the files$' sps.txt \
-  && grep -q '^checkpoint: start loaded t[0-9]* [0-9.]* s, ready [0-9.]* s; end t[0-9]* [0-9]* KB [0-9.]* s$' "$ckn" && grep -q '^checkpoint: start ' sps.txt \
+  && grep -q '^checkpoint: start loaded t[0-9]* in [0-9.]* s; end t[0-9]* [0-9.]* MB [0-9.]* s$' "$ckn" && grep -q '^checkpoint: start ' sps.txt \
   && grep -q '^slice_post_secs=[0-9]*$' "$w/nt/spn/ship_stamp.txt" && grep -q '^post_secs=[0-9]*$' "$w/nt/spn/ship_stamp.txt" && grep -q '^make slice wall time: ' sps.txt \
   && grep -q '^slice: all' "$root/Makefile" && grep -q '^# make slice ' "$root/Makefile" && grep -q 'make slice SLICE_MINUTES=10' "$root/README.md" \
   && ok "make slice SLICE_MINUTES=0.15: the night-ship job with a budget in minutes, VERDICT: PASS, says first that state.ckpt is there, the verdict line 'checkpoint: start loaded ...' (time) and what the end wrote; its own reserve (slice_post_secs) beside post_secs" || bad "make slice ($rcs)"

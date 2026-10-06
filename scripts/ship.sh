@@ -59,7 +59,7 @@ sv() { sed -n "s/^$1=//p" "$stampf" 2>/dev/null | head -n 1; }
 dlt() { if [ -n "$1" ] && [ -n "$2" ] && [ "$1" != - ] && [ "$2" != - ]; then d=$(( $1 - $2 )); [ "$d" -ge 0 ] && d="+$d"; echo "$d"; else echo "?"; fi; }
 p_post_keep=$(sv post_secs)   # carried over by a day ship (and by a slice)
 p_spost_keep=$(sv slice_post_secs)   # the same for make slice (carried over by a day ship and by a night)
-ckl="$folder/ckpt_log.txt"; k0=$(if [ -f "$ckl" ]; then wc -l < "$ckl"; else echo 0; fi)
+ckl="$folder/ckpt_log.txt"
 s0=$(cnt "$ses" '^S[0-9]'); r0=$(if [ -f "$rl" ]; then wc -l < "$rl"; else echo 0; fi); t_0=$(if [ -f "$tr" ]; then wc -l < "$tr"; else echo 0; fi)
 touch "$tmp/stamp"; t0_date=$(date '+%Y-%m-%d %H:%M:%S' -d "@$t0" 2>/dev/null || echo 0)
 
@@ -336,16 +336,18 @@ else delta_full="since the last ship: no stamp yet (ship_stamp.txt is written no
 
 # 0.058: the checkpoint: how this run's night started (loaded, or a full replay and why; ready after the replay line's seconds) and
 # what its end wrote (ckpt_log.txt lines of this run); a day ship names the checkpoint the save has
-tail -n +$((k0 + 1)) "$ckl" 2>/dev/null > "$tmp/ckpt.txt"; touch "$tmp/ckpt.txt"
-rdy=$(sed -n 's/^replay done: [0-9]* ticks in \([0-9.]*\) s;.*/\1/p' "$tmp/runlog.txt" | head -n 1)
-st_l=$(grep -E '^[0-9-]+ [0-9:]+ (start|replay): ' "$tmp/ckpt.txt" | head -n 1 | cut -d' ' -f3-)
-wr_l=$(grep -E '^[0-9-]+ [0-9:]+ checkpoint: tick ' "$tmp/ckpt.txt" | tail -n 1 | sed -E 's/.* checkpoint: tick ([0-9]+), ([0-9]+) KB, written in ([0-9.]+) s$/t\1 \2 KB \3 s/')
+# (both logs are capped, so the lines are picked by their time stamp; the start line and the replay time come from the night's box)
+awk -v t="$t0_date" 'substr($0, 1, 19) >= t' "$ckl" 2>/dev/null > "$tmp/ckpt.txt"; touch "$tmp/ckpt.txt"
+if [ -f "$con" ] && [ "$con" -nt "$tmp/stamp" ]; then sed -n '/^== night box ==/,$p' "$con" > "$tmp/box.txt"; else : > "$tmp/box.txt"; fi
+rdy=$(cat "$tmp/box.txt" "$tmp/runlog.txt" | sed -n 's/^replay done: [0-9]* ticks in \([0-9.]*\) s;.*/\1/p' | head -n 1)
+st_l=$( { grep -E '^(start|replay): ' "$tmp/box.txt"; grep -E '^[0-9-]+ [0-9:]+ (start|replay): ' "$tmp/ckpt.txt" | cut -d' ' -f3-; } | head -n 1)
+wr_l=$(grep -E '^[0-9-]+ [0-9:]+ checkpoint: tick ' "$tmp/ckpt.txt" | tail -n 1 | sed -E 's/.* checkpoint: tick ([0-9]+), ([0-9]+) KB, written in ([0-9.]+) s$/t\1 \2 \3/' | awk '{ printf "%s %.1f MB %s s", $1, $2 / 1024, $3 }')
 case $st_l in
-  start:*) st_t="loaded t$(echo "$st_l" | sed -n 's/.*checkpoint of tick \([0-9]*\) loaded in \([0-9.]*\) s.*/\1 \2 s/p')" ;;
-  replay:*) st_t="full replay ($(echo "$st_l" | sed -n 's/^replay: checkpoint \(.*\) - [0-9]* ticks replayed$/\1/p' | cut -c1-24))" ;;
+  start:*) st_t="loaded t$(echo "$st_l" | sed -n 's/.*checkpoint of tick \([0-9]*\) loaded in \([0-9.]*\) s.*/\1 in \2 s/p')" ;;
+  replay:*) st_t="full replay ($(echo "$st_l" | sed -n 's/^replay: checkpoint \([a-z]*\).* - [0-9]* ticks replayed$/\1/p'))${rdy:+ in $rdy s}" ;;
   *) st_t="" ;;
 esac
-if [ "$night" = 1 ]; then ck_line="checkpoint: start ${st_t:-?}${rdy:+, ready $rdy s}; end ${wr_l:-not written}"
+if [ "$night" = 1 ]; then ck_line="checkpoint: start ${st_t:-?}; end ${wr_l:-not written}"
 elif [ -f "$folder/state.ckpt" ]; then ck_line="checkpoint: no night; state.ckpt of tick $(head -c 4096 "$folder/state.ckpt" | grep -a '^tick ' | cut -d' ' -f2) ($(( $(wc -c < "$folder/state.ckpt") / 1024 )) KB)"
 else ck_line="checkpoint: no night; none yet (the next run writes one)"; fi
 why=""

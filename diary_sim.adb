@@ -7812,7 +7812,8 @@ procedure Diary_Sim is
       return Every_S <= 0 or else Since (Ckpt_Last_Write) >= Duration (Every_S)
         or else Sim_Quit.Requested or else Sim_Quit.Key_Q
         or else (Night_Max_S > 0 and then Int (Night_Done) + 1 >= Night_Max_S)
-        or else (Night_Max_Secs > 0.0 and then Since (Night_T0) + Duration'Max (5.0, 2 * Last_Dur) >= Night_Max_Secs);
+        or else (Night_Max_Secs > 0.0 and then Since (Night_T0) + Duration'Max (2.0, 2 * Last_Dur) >= Night_Max_Secs
+                 and then (Last_Dur >= 0.5 or else Since (Ckpt_Last_Write) >= 0.5));   --  short sessions: at most 2 writes a second
    end Night_Ckpt_Due;
 
    procedure Night_Next_Session is

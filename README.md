@@ -146,8 +146,8 @@ Measured (box, build 0.058): a save of 300000 ticks / 1000 sessions / 365 MB sta
   for the whole job: the night, then the same reports and the same `checkin.txt` (VERDICT, vocabulary line, exit status 0 = PASS),
   finished inside the budget (the reserve for the end is learned per mode: `slice_post_secs` in `ship_stamp.txt`). It says first
   whether the save has a state checkpoint (`checkpoint: state.ckpt of tick N, M MB: the start loads it if it fits the files`), and the
-  verdict line `checkpoint:` says how the start went (`start loaded t300300 2.0 s, ready 2.1 s` or `start full replay (missing),
-  ready 760 s`) and what the end wrote (`end t300600 27180 KB 0.3 s`). The end check and `make verify` replay only saves of at most
+  verdict line `checkpoint:` says how the start went (`start loaded t300300 in 2.00 s` or `start full replay (missing) in
+  795 s`) and what the end wrote (`end t300600 27.2 MB 0.50 s`). The end check and `make verify` replay only saves of at most
   `SLICE_VERIFY_TICKS` (30000) ticks. The first run of a new build replays the history once (the checkpoint belongs to its build).
 * **`make ship`** (by day) runs NO night and needs no q: it builds if needed, then `make active`, `make wordstat`,
   `make frustration` and `make evolve` on the save as it is, and `make verify` only if the save has at most `SHIP_VERIFY_TICKS`
