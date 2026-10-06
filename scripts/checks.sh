@@ -2782,7 +2782,7 @@ old=0; for e in ada gemini replika robert; do
   head -n 600 "$c8/fx/diaries/$e.jsonl" | sed 's/"ts":"[^"]*"//' > o1.txt; head -n 600 "$c8/on/save/diaries/$e.jsonl" | sed 's/"ts":"[^"]*"//' > o2.txt
   cmp -s o1.txt o2.txt || old=1; done
 grep '^S[12] ' "$c8/fx/diaries/sessions.txt" > s1.txt; grep '^S[12] ' "$c8/on/save/diaries/sessions.txt" > s2.txt; cmp -s s1.txt s2.txt || old=1
-nc3=$(grep -c '^S[34] .* carry=1$' "$c8/on/save/diaries/sessions.txt"); nf3=$(grep -c 'carry=1' "$c8/off/save/diaries/sessions.txt")
+nc3=$(grep -c '^S[34] .* carry=1 ' "$c8/on/save/diaries/sessions.txt"); nf3=$(grep -c 'carry=1' "$c8/off/save/diaries/sessions.txt")
 [ $rcn = 0 ] && [ $rcf = 0 ] && [ $old = 0 ] && [ "$nc3" = 2 ] && [ "$nf3" = 0 ] && grep -q '^start: checkpoint of tick 600 loaded in [0-9.]* s (+0 ticks replayed)$' on.txt \
   && ok "the 0.059 fixture (format 2) loads in 0.061 with +0 ticks replayed; the new sessions S3, S4 carry carry=1 (none with carry.enabled = 0); the 600 old ticks of every diary and the old session lines stay byte for byte" \
   || bad "carry: old sessions ($rcn $rcf old=$old nc3=$nc3 nf3=$nf3)"
