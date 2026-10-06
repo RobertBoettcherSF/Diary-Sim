@@ -1,5 +1,7 @@
---  Version: 0.022
+--  Version: 0.023
 pragma Ada_2022;
+
+with Sim_Ckpt;
 
 with Ada.Characters.Handling, Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
 use Ada.Strings.Unbounded;
@@ -1108,5 +1110,64 @@ package body Sim_World is
               & Img (Sum_L (Fav)) & ",""disagreement"":{""location"":""" & Loc (Dis) & """,""spread"":" & Img (Dis_Spread)
               & ",""high"":""" & Name (Hi) & """,""low"":""" & Name (Lo) & """}}" & ASCII.LF);
    end Summarize;
+
+   --  0.058: everything Init and the replay change (the data tables of Load_Names / Load_Topics / Load_Kalpas are read again at the start).
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean) is
+      procedure IO is new Sim_Ckpt.IO (Integer);
+      procedure IO is new Sim_Ckpt.IO (Int);
+      procedure IO is new Sim_Ckpt.IO (Boolean);
+      procedure IO is new Sim_Ckpt.IO (Interfaces.Unsigned_64);
+      procedure IO is new Sim_Ckpt.IO (Word_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Bool_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Nat_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Petition_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Weight_Array);
+   begin
+      IO (S, Save, Table);
+      IO (S, Save, Symbols_Hidden);
+      IO (S, Save, Symbols_Strict);
+      for E in Entity_Id loop
+         IO (S, Save, Known (E));
+         IO (S, Save, Known_N (E));
+         IO (S, Save, Freq (E));
+         IO (S, Save, Taught (E));
+         IO (S, Save, Via_World (E));
+         IO (S, Save, Dormant (E));
+         IO (S, Save, Dormant_N (E));
+         IO (S, Save, Slow (E));
+         IO (S, Save, Pet_Last (E));
+         IO (S, Save, Pet_N (E));
+         IO (S, Save, Topic_Last (E));
+         IO (S, Save, Cache_Steps (E));
+         IO (S, Save, Cache_Row (E));
+         for T in 1 .. Max_Topics loop
+            IO (S, Save, Topic_By (E, T));
+            IO (S, Save, Done_Topic (E, T));
+            IO (S, Save, Urgency (E, T));
+         end loop;
+      end loop;
+      IO (S, Save, Base);
+      IO (S, Save, Dormant_On);
+      for K in Slow_Kind loop IO (S, Save, Slow_P (K)); end loop;
+      IO (S, Save, Wake_Teach);
+      IO (S, Save, Petitions);
+      for T in 1 .. Max_Topics loop IO (S, Save, Topic_Used (T)); end loop;
+      IO (S, Save, R30_On);
+      IO (S, Save, R30_Width);
+      IO (S, Save, R30_Period);
+      IO (S, Save, R30_Strength);
+      IO (S, Save, R30_Core);
+      IO (S, Save, Base_W);
+      IO (S, Save, Lean_Propose);
+      IO (S, Save, Pet_Cooldown);
+      IO (S, Save, Pet_Repeat_Pct);
+      IO (S, Save, Lean_Low_Energy);
+      IO (S, Save, Lean_High_Energy);
+      IO (S, Save, Lean_Low_Mood);
+      IO (S, Save, Lean_High_Mood);
+      IO (S, Save, Lean_Few_Words);
+      IO (S, Save, Few_Words_N);
+      IO (S, Save, Clean_On);
+   end State_IO;
 
 end Sim_World;

@@ -1,6 +1,8 @@
---  Version: 0.008
+--  Version: 0.009
 --  See sim_screen.ads.
 pragma Ada_2022;
+
+with Sim_Ckpt;
 
 with Ada.Containers.Indefinite_Ordered_Maps;
 with Ada.Characters.Handling;
@@ -544,5 +546,36 @@ package body Sim_Screen is
    function Summary (E : Entity_Id) return String is
      (Msg ("screen.sum", Name (E), Img (Count (E)), Img (Pins_Of (E)), Img (C_Shown (E)), Img (C_Left (E)), Img (C_Read (E)))
       & ASCII.LF & "  " & Msg ("screen.sum2", Img (C_Taught (E)), Img (C_Coined (E))));
+
+   --  0.058: the checkpoint.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean) is
+      procedure IO is new Sim_Ckpt.IO (Integer);
+      procedure IO is new Sim_Ckpt.IO (Int);
+      procedure IO is new Sim_Ckpt.IO (Boolean);
+      procedure IO is new Sim_Ckpt.IO (Screens);
+      procedure IO is new Sim_Ckpt.IO (Note_Maps.Map);
+      procedure IO is new Sim_Ckpt.IO (Bools);
+      procedure IO is new Sim_Ckpt.IO (Counts);
+      procedure IO is new Sim_Ckpt.IO (Str_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Read_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Frames);
+      procedure IO is new Sim_Ckpt.IO (Unbounded_String);
+   begin
+      IO (S, Save, Scr);
+      IO (S, Save, Notes);
+      IO (S, Save, Started);
+      IO (S, Save, C_Taught); IO (S, Save, C_Coined); IO (S, Save, C_Shown); IO (S, Save, C_Left); IO (S, Save, C_Read); IO (S, Save, C_Pins);
+      IO (S, Save, Pend);
+      IO (S, Save, Reads);
+      IO (S, Save, Cam_Frame);
+      for E in Entity_Id loop IO (S, Save, Frame_Err (E)); end loop;
+      IO (S, Save, Seed_V); IO (S, Save, Cap_V);
+      IO (S, Save, Scoin_On);
+      IO (S, Save, Ses_Coined);
+      IO (S, Save, Coin_Pct_S); IO (S, Save, Coin_Cap_S);
+      IO (S, Save, Cols); IO (S, Save, Rows); IO (S, Save, Max_Pins); IO (S, Save, Start_N); IO (S, Save, Pin_Pct); IO (S, Save, Drop_Pct);
+      IO (S, Save, Show_Pct); IO (S, Save, Read_N); IO (S, Save, Learn_Pct); IO (S, Save, Leave_Pct); IO (S, Save, Leave_N);
+      IO (S, Save, Note_Pct); IO (S, Save, Blend_Pct); IO (S, Save, Own_Blend_Pct);
+   end State_IO;
 
 end Sim_Screen;

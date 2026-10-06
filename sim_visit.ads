@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  The visit (visit=1 sessions; inspired by Exile, 1988), STEP 1 = watch and talk.  Robert, the human player, is placed next to ONE wesen
 --  for the ticks of a session: every tick shows what that wesen sees (the 5x5 treadmill view as the robot camera draws it, its screen,
 --  mood, energy, what it does this tick, who and what is near), the simulation runs as normal and the wesen acts on its own.  Between
@@ -19,6 +19,8 @@
 --  Off (no visit=1 session) nothing here runs and nothing is stored.
 --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (command parsing, template filling, bounded integer arithmetic, hash dice)
 pragma Ada_2022;
+
+with Ada.Streams;
 
 with Ada.Containers.Vectors;
 with Ada.Strings.Unbounded;
@@ -76,5 +78,8 @@ package Sim_Visit is
    function Frame (S : Scene) return String;
    function Leave_Text (E : Entity_Id) return String;
    function Help_Text return String;
+
+   --  0.058: the state the replay builds, for the checkpoint (state.ckpt): Save writes it, else it is read back.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean);
 
 end Sim_Visit;

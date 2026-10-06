@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 --  active=1 sessions (docs/EVOLVE.md 12 and 13, docs/LEARN.md 12 (a)): every wesen keeps an ACTIVE vocabulary.  The fitness of each
 --  word is counted from the record lines the replay emits (screens K, votes V, petitions P, dictionary L: the same inputs and points as
 --  make evolve), a running average per session.  At the end of an active=1 session a word whose fitness stayed at or under the line
@@ -8,6 +8,8 @@
 --  it again.  Every decision is a line of diaries/active.txt (record-first, replay-verified); no die is rolled.  Pure counting.
 --  PROOF-LATER: Importance 4/10, Urgency 3/10, SPARK2 (bounded counters, sorted candidate lists, token parsing)
 pragma Ada_2022;
+
+with Ada.Streams;
 
 with Sim_Util;
 with Sim_Evolve;
@@ -49,5 +51,8 @@ package Sim_Active is
 
    function Dormancies (E : Positive) return Natural;   --  dormant lines so far
    function Wakes (E : Positive) return Natural;        --  wake lines so far
+
+   --  0.058: the state the replay builds, for the checkpoint (state.ckpt): Save writes it, else it is read back.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean);
 
 end Sim_Active;

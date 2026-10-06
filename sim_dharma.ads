@@ -1,4 +1,4 @@
---  Version: 0.004
+--  Version: 0.005
 --  The Buddhism layer of diary_sim, RECORD-FIRST: karma, reincarnation values, attachment
 --  (unrest), the commitment ladder with an anchor, awareness ("feels watched"), and the three
 --  in-sim PLAYERS that sit between the wesen and Robert (the real player) and write him summary
@@ -10,6 +10,8 @@
 --  Numbers: data/karma.txt; players: data/players.txt; wording: data/dharma.txt.
 --  Standard library only.
 pragma Ada_2022;
+
+with Ada.Streams;
 
 with Sim_Util, Sim_World;
 
@@ -42,6 +44,7 @@ package Sim_Dharma is
    --  An address from Robert (diaries/says.txt): To = wesen id (Say) or player id (Relay), else 0.
    --  It takes effect from tick Tick + 1.  Text is kept (cut) for the inbox.
    procedure Add_Address (Tick : Int; Kind : Address_Kind; To : Natural; Text : String);
+   function Addresses_Before (Tick : Int) return Natural;   --  0.058: Robert's words of ticks before Tick (the checkpoint compares the count)
    procedure Tick_Begin (Tick : Int);   --  applies the addresses of Tick - 1
    procedure Tick_End (Tick : Int);     --  attachment windows, awareness decay
 
@@ -80,5 +83,8 @@ package Sim_Dharma is
    --  the first line of a player is its counter line (shown in the end report), all lines go to the inbox.
    procedure Set_Govern_Report (P : Player_Id; Lines : Str_Vectors.Vector);
    function Last_Petition return String;   --  "C3 more_rest 3/4", "" before the first
+
+   --  0.058: the state the replay builds, for the checkpoint (state.ckpt): Save writes it, else it is read back.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean);
 
 end Sim_Dharma;

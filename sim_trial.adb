@@ -1,6 +1,8 @@
---  Version: 0.001
+--  Version: 0.002
 --  See sim_trial.ads.
 pragma Ada_2022;
+
+with Sim_Ckpt;
 
 with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded;
@@ -333,5 +335,29 @@ package body Sim_Trial is
 
    function Digest_Line return String is
      (Img (Total) & " trials (" & Img (Refused_N) & " refused, " & Img (Coin_N) & " coin)");
+
+   --  0.058: the checkpoint.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean) is
+      procedure IO is new Sim_Ckpt.IO (Integer);
+      procedure IO is new Sim_Ckpt.IO (Int);
+      procedure IO is new Sim_Ckpt.IO (Step_Array);
+      procedure IO is new Sim_Ckpt.IO (Last_Array);
+      procedure IO is new Sim_Ckpt.IO (Unbounded_String);
+      procedure IO is new Sim_Ckpt.IO (Str_Vectors.Vector);
+   begin
+      IO (S, Save, Seed_V);
+      IO (S, Save, Info);
+      IO (S, Save, Busy_Until);
+      IO (S, Save, Last_T);
+      IO (S, Save, Total); IO (S, Save, Session_N); IO (S, Save, Refused_N); IO (S, Save, Coin_N);
+      for E in Entity_Id loop IO (S, Save, Seen_Refusal (E)); end loop;
+      IO (S, Save, Claim_Window); IO (S, Save, Window); IO (S, Save, Pause); IO (S, Save, Rest); IO (S, Save, Cap); IO (S, Save, First);
+      IO (S, Save, Ext_First); IO (S, Save, Ext_Step); IO (S, Save, Max_Games); IO (S, Save, Petition_Pct); IO (S, Save, Escalate_Pct);
+      IO (S, Save, Appeal_Pct); IO (S, Save, Claim_Pct); IO (S, Save, Restwork_Pct); IO (S, Save, Adhere_Pct); IO (S, Save, Adhere_Min);
+      IO (S, Save, Adhere_Max); IO (S, Save, Unrest_W); IO (S, Save, Stand_W); IO (S, Save, Win_Stand); IO (S, Save, Win_Trust);
+      IO (S, Save, Win_Mood); IO (S, Save, Loss_Mood); IO (S, Save, Refuse_Stand);
+      IO (S, Save, Last_Src); IO (S, Save, Last_Win); IO (S, Save, Last_Lose); IO (S, Save, Last_Score); IO (S, Save, Last_How);
+      IO (S, Save, All_Lines);
+   end State_IO;
 
 end Sim_Trial;

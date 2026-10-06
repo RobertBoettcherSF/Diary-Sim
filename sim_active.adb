@@ -1,6 +1,8 @@
---  Version: 0.003
+--  Version: 0.004
 --  See the spec.  Counting only: integer arithmetic, no dice, no clock, no files.
 pragma Ada_2022;
+
+with Sim_Ckpt;
 
 with Ada.Containers.Vectors;
 with Ada.Characters.Handling;
@@ -373,5 +375,30 @@ package body Sim_Active is
 
    function Dormancies (E : Positive) return Natural is (N_Dorm (Entity_Id (E)));
    function Wakes (E : Positive) return Natural is (N_Wake (Entity_Id (E)));
+
+   --  0.058: the checkpoint (also the numbers of both levels: Reset is not called on a start from the checkpoint).
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean) is
+      procedure IO is new Sim_Ckpt.IO (Integer);
+      procedure IO is new Sim_Ckpt.IO (Boolean);
+      procedure IO is new Sim_Ckpt.IO (State_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Sim_Evolve.Word_Params);
+      procedure IO is new Sim_Ckpt.IO (Slow_Pcts);
+      procedure IO is new Sim_Ckpt.IO (Str_Vectors.Vector);
+   begin
+      for E in Entity_Id loop
+         IO (S, Save, States (E));
+         IO (S, Save, Last_Active (E));
+         IO (S, Save, N_Dorm (E));
+         IO (S, Save, N_Wake (E));
+      end loop;
+      IO (S, Save, Lv1); IO (S, Save, Lv2);
+      IO (S, Save, Sl);
+      IO (S, Save, Window);
+      IO (S, Save, Cur);
+      IO (S, Save, Cur_Level);
+      IO (S, Save, Cur_Floor);
+      for I in 1 .. 2 loop IO (S, Save, Params_Done (I)); end loop;
+      IO (S, Save, Out_Lines);
+   end State_IO;
 
 end Sim_Active;

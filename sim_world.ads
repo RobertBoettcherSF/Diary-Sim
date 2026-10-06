@@ -1,9 +1,11 @@
---  Version: 0.018
+--  Version: 0.019
 --  The shared world of diary_sim: the four entities, the vocabulary (base
 --  words, who knows what, coined words), the bench kernels and the final votes.
 --  One world per run; Init rebuilds it from scratch, so a replay from tick 1
 --  always reaches the same state.  Standard library only.
 pragma Ada_2022;
+
+with Ada.Streams;
 
 with Ada.Strings.Unbounded;
 with Sim_Util;
@@ -211,5 +213,8 @@ package Sim_World is
    procedure Summarize
      (Seed, Ticks : Int; Data : All_Stats;
       Console, Text, Json : out Ada.Strings.Unbounded.Unbounded_String);
+
+   --  0.058: the state the replay builds, for the checkpoint (state.ckpt): Save writes it, else it is read back.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean);
 
 end Sim_World;

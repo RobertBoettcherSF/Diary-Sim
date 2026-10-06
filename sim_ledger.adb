@@ -1,6 +1,8 @@
---  Version: 0.003
+--  Version: 0.004
 --  See sim_ledger.ads.
 pragma Ada_2022;
+
+with Sim_Ckpt;
 
 with Ada.Characters.Handling;
 with Ada.Containers.Vectors;
@@ -21,8 +23,9 @@ package body Sim_Ledger is
       Feel : Integer := -1;
    end record;
    package Rec_Vectors is new Ada.Containers.Vectors (Positive, Rec);
-   Recs : Rec_Vectors.Vector;
+   Recs : Rec_Vectors.Vector;   --  0.058: only the ticks after the start of the newest session (Keep_From); the whole run is in Total
    Last_Tick : Int := 0;
+   N_Seen : Natural := 0;       --  all ticks added (all wesen)
 
    subtype Place is Natural range 0 .. 3;
    type Verb_Sums is array (List_Id range Rest .. Greet) of Integer;
@@ -59,26 +62,84 @@ package body Sim_Ledger is
       Chess_N : Natural := 0;
    end record;
 
+   procedure Add_To (G : in out Agg; R : Rec) is
+   begin
+      declare
+         L : constant Place := Place'Min (3, R.Loc);
+         D : constant Integer := R.Base + R.Rst + R.Psh + R.Chs + R.Gvn;
+      begin
+         G.N := G.N + 1;
+         G.Net := G.Net + D;
+         G.Absorbed := G.Absorbed + (R.Nom - D);
+         G.Cell (R.A, L) := G.Cell (R.A, L) + R.Base;
+         G.Cell_N (R.A, L) := G.Cell_N (R.A, L) + 1;
+         G.Act (R.A) := G.Act (R.A) + D;
+         G.Act_N (R.A) := G.Act_N (R.A) + 1;
+         G.Loc (L) := G.Loc (L) + D;
+         G.Loc_N (L) := G.Loc_N (L) + 1;
+         G.Verb (R.V) := G.Verb (R.V) + D;
+         G.Verb_N (R.V) := G.Verb_N (R.V) + 1;
+         if R.Feel in 0 .. 2 then
+            G.Push (R.Feel) := G.Push (R.Feel) + R.Psh;
+            G.Push_N (R.Feel) := G.Push_N (R.Feel) + 1;
+         end if;
+         G.Chess := G.Chess + R.Chs;
+         G.Gov := G.Gov + R.Gvn;
+         if R.Gvn /= 0 then G.Gov_N := G.Gov_N + 1; end if;
+         if R.Chs /= 0 then G.Chess_N := G.Chess_N + 1; end if;
+         if R.Phase < 0 then
+            G.Quick := G.Quick + R.Rst;
+            G.Quick_N := G.Quick_N + 1;
+         elsif R.Phase > 0 then
+            G.Calm := G.Calm + R.Rst;
+            G.Calm_N := G.Calm_N + 1;
+         end if;
+         if R.Cool then
+            G.Cool_Sum := G.Cool_Sum + D;
+            G.Cool_N := G.Cool_N + 1;
+         end if;
+      end;
+   end Add_To;
+
+   Total : array (Entity_Id) of Agg;   --  0.058: the sums of the whole run (Sum (E, 0)), kept as the ticks come
+
    procedure Reset is
    begin
       Recs.Clear;
       Last_Tick := 0;
+      N_Seen := 0;
+      Total := [others => <>];
    end Reset;
 
    procedure Add (E : Entity_Id; Tick : Int; A : Action; V : List_Id; Loc : Natural;
                   Base, Rest_Fx, Push_Fx, Nominal, Phase : Integer; Cool : Boolean; Feel : Integer; Chess_Fx : Integer := 0;
                   Gov_Fx : Integer := 0) is
+      R : constant Rec := (E => E, Tick => Tick, A => A, V => V, Loc => Loc, Base => Base, Rst => Rest_Fx, Psh => Push_Fx, Chs => Chess_Fx, Gvn => Gov_Fx,
+                           Nom => Nominal, Phase => Phase, Cool => Cool, Feel => Feel);
    begin
-      Recs.Append (Rec'(E => E, Tick => Tick, A => A, V => V, Loc => Loc, Base => Base, Rst => Rest_Fx, Psh => Push_Fx, Chs => Chess_Fx, Gvn => Gov_Fx,
-                        Nom => Nominal, Phase => Phase, Cool => Cool, Feel => Feel));
+      Recs.Append (R);
+      Add_To (Total (E), R);
+      N_Seen := N_Seen + 1;
       if Tick > Last_Tick then Last_Tick := Tick; end if;
    end Add;
 
-   function Ticks_Seen return Natural is (Natural (Recs.Length));
+   procedure Keep_From (Tick : Int) is
+      K : Natural := 0;
+   begin
+      for R of Recs loop
+         exit when R.Tick > Tick;
+         K := K + 1;
+      end loop;
+      if K > 0 then Recs.Delete_First (Ada.Containers.Count_Type (K)); end if;
+   end Keep_From;
+
+
+   function Ticks_Seen return Natural is (N_Seen);
 
    function Net (E : Entity_Id; From, To : Int) return Integer is
       T : Integer := 0;
    begin
+      if From <= 0 and then To = 0 then return Total (E).Net; end if;
       for R of Recs loop
          if R.E = E and then R.Tick > From and then (To = 0 or else R.Tick <= To) then T := T + R.Base + R.Rst + R.Psh + R.Chs + R.Gvn; end if;
       end loop;
@@ -88,44 +149,9 @@ package body Sim_Ledger is
    function Sum (E : Entity_Id; From : Int) return Agg is
       G : Agg;
    begin
+      if From <= 0 then return Total (E); end if;
       for R of Recs loop
-         if R.E = E and then R.Tick > From then
-            declare
-               L : constant Place := Place'Min (3, R.Loc);
-               D : constant Integer := R.Base + R.Rst + R.Psh + R.Chs + R.Gvn;
-            begin
-               G.N := G.N + 1;
-               G.Net := G.Net + D;
-               G.Absorbed := G.Absorbed + (R.Nom - D);
-               G.Cell (R.A, L) := G.Cell (R.A, L) + R.Base;
-               G.Cell_N (R.A, L) := G.Cell_N (R.A, L) + 1;
-               G.Act (R.A) := G.Act (R.A) + D;
-               G.Act_N (R.A) := G.Act_N (R.A) + 1;
-               G.Loc (L) := G.Loc (L) + D;
-               G.Loc_N (L) := G.Loc_N (L) + 1;
-               G.Verb (R.V) := G.Verb (R.V) + D;
-               G.Verb_N (R.V) := G.Verb_N (R.V) + 1;
-               if R.Feel in 0 .. 2 then
-                  G.Push (R.Feel) := G.Push (R.Feel) + R.Psh;
-                  G.Push_N (R.Feel) := G.Push_N (R.Feel) + 1;
-               end if;
-               G.Chess := G.Chess + R.Chs;
-               G.Gov := G.Gov + R.Gvn;
-               if R.Gvn /= 0 then G.Gov_N := G.Gov_N + 1; end if;
-               if R.Chs /= 0 then G.Chess_N := G.Chess_N + 1; end if;
-               if R.Phase < 0 then
-                  G.Quick := G.Quick + R.Rst;
-                  G.Quick_N := G.Quick_N + 1;
-               elsif R.Phase > 0 then
-                  G.Calm := G.Calm + R.Rst;
-                  G.Calm_N := G.Calm_N + 1;
-               end if;
-               if R.Cool then
-                  G.Cool_Sum := G.Cool_Sum + D;
-                  G.Cool_N := G.Cool_N + 1;
-               end if;
-            end;
-         end if;
+         if R.E = E and then R.Tick > From then Add_To (G, R); end if;
       end loop;
       return G;
    end Sum;
@@ -337,7 +363,7 @@ package body Sim_Ledger is
    begin
       for E in Entity_Id loop Wide := Positive'Max (Wide, Display (E)'Length); end loop;
       Append (Out_S, Msg ("ledger.head", Img (Seed), Img (Last_Tick), Img (Last_From + 1)) & ASCII.LF);
-      if Recs.Is_Empty then return To_String (Out_S) & Msg ("ledger.empty"); end if;
+      if N_Seen = 0 then return To_String (Out_S) & Msg ("ledger.empty"); end if;
       for E in Entity_Id loop
          declare
             G : constant Agg := Sum (E, 0);
@@ -361,5 +387,18 @@ package body Sim_Ledger is
       end loop;
       return To_String (Out_S) (1 .. Length (Out_S) - 1);   --  without the last line feed (the caller's Put_Line adds it)
    end Report;
+
+   --  0.058: the checkpoint.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean) is
+      procedure IO is new Sim_Ckpt.IO (Integer);
+      procedure IO is new Sim_Ckpt.IO (Int);
+      procedure IO is new Sim_Ckpt.IO (Rec_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Agg);
+   begin
+      IO (S, Save, Recs);
+      IO (S, Save, Last_Tick);
+      IO (S, Save, N_Seen);
+      for E in Entity_Id loop IO (S, Save, Total (E)); end loop;
+   end State_IO;
 
 end Sim_Ledger;

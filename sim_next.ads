@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  The advice for the next run (nextticks=1 sessions; needs govern=1): at the last tick of every such session each wesen PROPOSES a tick
 --  count from its own state (open and deferred petitions, unrest, low energy, a small Rule 30 'would like to see what happens' bump),
 --  each player then DECIDES with a bounded rule (the mean of the proposals of the wesen it watches, pulled toward its own preference by a
@@ -9,6 +9,8 @@
 --  is omitted and nextticks.use = 1.  Pure functions of (seed, wesen/player, tick, salts) and of the replayed state.
 --  PROOF-LATER: Importance 2/10, Urgency 2/10, SPARK2 (bounded integer arithmetic, hash dice, record parsing)
 pragma Ada_2022;
+
+with Ada.Streams;
 
 with Sim_Util;
 with Sim_World;
@@ -34,5 +36,8 @@ package Sim_Next is
    function Box_Lines (Tick : Int; Data : Inputs) return Str_Vectors.Vector;
    function View (Tick : Int; Data : Inputs) return Str_Vectors.Vector;   --  --next / make next (ids; the output layer maps names)
    function Digest_Line return String;            --  "3 rounds, last 400 (wesen 300/400/300/200)"
+
+   --  0.058: the state the replay builds, for the checkpoint (state.ckpt): Save writes it, else it is read back.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean);
 
 end Sim_Next;

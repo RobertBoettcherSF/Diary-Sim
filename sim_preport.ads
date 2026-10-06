@@ -1,4 +1,4 @@
---  Version: 0.004
+--  Version: 0.005
 --  The player reports of diary_sim (preport=1 sessions; needs govern=1): at the end of every run the players (Player 1 .. Player 4) write
 --  Robert ONE framed text box: a header and a short paragraph per player: how many petitions came to it, what it decided (counts from the D records
 --  of Sim_Govern - NEVER omitted or changed), how the wesen it watches are doing ('overall happiness' as the PLAYER REPORTS it), its top
@@ -13,6 +13,8 @@
 --  salts) and of the replayed state; nothing here runs without a preport=1 session.  Wording and numbers: data/preport.txt, data/limits.txt.
 --  PROOF-LATER: Importance 4/10, Urgency 3/10, SPARK2 (bounded claim arithmetic, hash dice, record parsing)
 pragma Ada_2022;
+
+with Ada.Streams;
 
 with Sim_Dharma;
 with Sim_Util;
@@ -41,5 +43,10 @@ package Sim_Preport is
    function Audit return Str_Vectors.Vector;       --  --audit / make audit (ids; the output layer maps names)
    function Digest_Line return String;             --  "3 rounds, 4/12 misreports, biggest +22"
    function Lie_Total return Natural;
+
+   --  0.058: the state the replay builds, for the checkpoint (state.ckpt): Save writes it, else it is read back.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean);
+   procedure Inputs_Done_Before (Tick : Int);   --  the challenges read at the start: those of ticks before Tick are done
+   function Inputs_Before (Tick : Int) return Natural;   --  how many of them (the checkpoint compares the count)
 
 end Sim_Preport;

@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 --  The treadmill world of diary_sim (world=1 sessions only): an endless grid that is generated
 --  around the wesen as they walk and is identical whenever they come back.
 --
@@ -13,6 +13,8 @@
 --    location numbers 0 .. 3: Region (x, y) is the nearest landmark.
 --  Plain hashing and small text tables, CPU only.  Salts 7000 .. 8999 are this package's own.
 pragma Ada_2022;
+
+with Ada.Streams;
 
 with Ada.Containers.Vectors;
 with Sim_Util;
@@ -97,5 +99,8 @@ package Sim_Things is
    --  The 5x5 window around (X, Y), five strings of five glyphs: the biome, the thing glyph where a thing lies, the digit of a
    --  wesen standing there; the centre shows Centre (the robot).  Like one column of the treadmill view.
    function Camera (X, Y : Integer; Centre : Character) return Str_Vectors.Vector;
+
+   --  0.058: the state the replay builds, for the checkpoint (state.ckpt): Save writes it, else it is read back.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean);
 
 end Sim_Things;

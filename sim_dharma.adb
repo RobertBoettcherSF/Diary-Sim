@@ -1,5 +1,7 @@
---  Version: 0.006
+--  Version: 0.007
 pragma Ada_2022;
+
+with Sim_Ckpt;
 
 with Ada.Characters.Handling, Ada.Containers.Vectors, Ada.Strings.Fixed, Ada.Strings.Unbounded, Interfaces;
 use Ada.Strings.Unbounded;
@@ -329,6 +331,15 @@ package body Sim_Dharma is
    begin
       Addrs.Append (Addr_Rec'(Tick, Kind, To, To_Unbounded_String (Text)));
    end Add_Address;
+
+   function Addresses_Before (Tick : Int) return Natural is
+      N : Natural := 0;
+   begin
+      for A of Addrs loop
+         if A.Tick < Tick then N := N + 1; end if;
+      end loop;
+      return N;
+   end Addresses_Before;
 
    procedure Raise_Aware (E : Entity_Id; Base : Integer; At_Tick : Int) is
       Sudden : constant Boolean := Last_Addr (E) < 0 or else At_Tick - Last_Addr (E) >= Int (Sudden_Gap);
@@ -785,5 +796,70 @@ package body Sim_Dharma is
    end Inbox_Tail;
 
    function Last_Petition return String is (To_String (Last_C));
+
+   --  0.058: the checkpoint.  Not in it: Addrs (Robert's words, read from diaries/says.txt at every start), the players' names, goals
+   --  and values (data/players.txt), and Start_* (Mark_Start sets them after the replay of every run).
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean) is
+      procedure IO is new Sim_Ckpt.IO (Integer);
+      procedure IO is new Sim_Ckpt.IO (Int);
+      procedure IO is new Sim_Ckpt.IO (Boolean);
+      procedure IO is new Sim_Ckpt.IO (Category);
+      procedure IO is new Sim_Ckpt.IO (Player_Id);
+      procedure IO is new Sim_Ckpt.IO (Player_Ints);
+      procedure IO is new Sim_Ckpt.IO (Wesen_Ints);
+      procedure IO is new Sim_Ckpt.IO (Watch_Array);
+      procedure IO is new Sim_Ckpt.IO (Trusts);
+      procedure IO is new Sim_Ckpt.IO (Dec_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Str_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Unbounded_String);
+   begin
+      IO (S, Save, Sd);
+      for A in Action loop IO (S, Save, Deed_W (A)); end loop;
+      IO (S, Save, Deed_Teach); IO (S, Save, Deed_Coin); IO (S, Save, Deed_Tired); IO (S, Save, Tired_Below);
+      for I in 1 .. 5 loop IO (S, Save, Realm_Limit (I)); end loop;
+      for I in 1 .. 4 loop
+         IO (S, Save, Ladder_Limit (I));
+         IO (S, Save, Bias_Sign (I));
+         IO (S, Save, Pull (I));
+      end loop;
+      IO (S, Save, Lib_Karma); IO (S, Save, Bias_Div); IO (S, Save, Bias_Cap);
+      IO (S, Save, Attach_Window); IO (S, Save, Attach_Dom); IO (S, Save, Attach_Rise); IO (S, Save, Attach_Fall);
+      IO (S, Save, Commit_Start); IO (S, Save, Commit_Rise); IO (S, Save, Commit_Fall); IO (S, Save, Commit_Mid); IO (S, Save, Value_High);
+      IO (S, Save, Aw_Say); IO (S, Save, Aw_All); IO (S, Save, Aw_Relay); IO (S, Save, Sudden_Gap); IO (S, Save, Sudden_Bonus);
+      IO (S, Save, Aw_Decay); IO (S, Save, Aw_Base_Max); IO (S, Save, Sens_Min); IO (S, Save, Sens_Max); IO (S, Save, Watch_Pct);
+      IO (S, Save, Aw_Note); IO (S, Save, Aw_Alert);
+      IO (S, Save, Unrest_Note); IO (S, Save, Unrest_Alert); IO (S, Save, Conflict_Alert);
+      IO (S, Save, Trust_Start); IO (S, Save, Trust_Rise); IO (S, Save, Trust_Fall); IO (S, Save, Relay_Pct); IO (S, Save, Soft_Pct);
+      IO (S, Save, Attn_Start); IO (S, Save, Attn_Base_Max); IO (S, Save, Attn_Alert); IO (S, Save, Attn_Note); IO (S, Save, Attn_Msg);
+      IO (S, Save, Attn_Decay); IO (S, Save, Tone_Step); IO (S, Save, Omit_Info); IO (S, Save, Inbox_Max);
+      IO (S, Save, P_Steps); IO (S, Save, Show_Per);
+      for E in Entity_Id loop
+         IO (S, Save, Good (E)); IO (S, Save, Bad (E)); IO (S, Save, Life_No (E));
+         for I in 1 .. 4 loop IO (S, Save, Vals (E, I)); end loop;
+         IO (S, Save, Unrest_V (E));
+         for C in Real_Cat loop IO (S, Save, Win_Count (E, C)); end loop;
+         IO (S, Save, Dom_Cat (E)); IO (S, Save, Dom_Pct (E));
+         IO (S, Save, Rank_V (E)); IO (S, Save, Rung_V (E)); IO (S, Save, Conflict_V (E)); IO (S, Save, Realm_V (E));
+         IO (S, Save, Aware_M (E)); IO (S, Save, Last_Addr (E));
+         IO (S, Save, Lib (E)); IO (S, Save, New_Lib (E)); IO (S, Save, Reb (E)); IO (S, Save, Prev_Net (E));
+         IO (S, Save, Base_Aware (E)); IO (S, Save, Sens (E)); IO (S, Save, Takes (E));
+      end loop;
+      IO (S, Save, Commit_V);
+      IO (S, Save, Life_Start);
+      IO (S, Save, Anchor_E); IO (S, Save, First_E);
+      IO (S, Save, Ended);
+      IO (S, Save, Watch); IO (S, Save, Watch0);
+      IO (S, Save, Last_P);
+      IO (S, Save, Attn); IO (S, Save, Tone); IO (S, Save, Tone0); IO (S, Save, Brev); IO (S, Save, Warm); IO (S, Save, Attn_Base); IO (S, Save, Msgs);
+      for P in Player_Id loop
+         IO (S, Save, Trust (P));
+         IO (S, Save, Gov_Lines (P));
+      end loop;
+      IO (S, Save, Decisions);
+      IO (S, Save, Inbox);
+      IO (S, Save, Last_Table); IO (S, Save, Last_Block); IO (S, Save, Last_Report);
+      IO (S, Save, Last_C);
+      IO (S, Save, Last_Win_N);
+   end State_IO;
 
 end Sim_Dharma;

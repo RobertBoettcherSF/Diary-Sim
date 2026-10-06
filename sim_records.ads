@@ -1,4 +1,4 @@
---  Version: 0.004
+--  Version: 0.005
 --  The raw records of diary_sim (records=1 sessions; needs govern=1): WHAT WAS VOTED, WHAT WAS ASKED, which words were agreed, what was
 --  announced.  Four record files in diaries/, all derived from the replay and compared with it by diary_sim through Sim_Store (a changed,
 --  invented or removed line is DRIFT; own hash salts 14000 .. 14399):
@@ -24,6 +24,8 @@
 --  contains its own part).  Pure functions of (seed, wesen/player, tick, salts) and of the replayed state; nothing runs without records=1.
 --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (bounded integer arithmetic, hash dice, record parsing)
 pragma Ada_2022;
+
+with Ada.Streams;
 
 with Sim_Util;
 with Sim_World;
@@ -69,5 +71,8 @@ package Sim_Records is
    function Dictionary return Str_Vectors.Vector;             --  make dictionary: the official word list
    function Trend return String;                              --  trend.txt: " grant=a,b,c,d refuse=a,b,c,d agreed=n rejected=n" (all sessions)
    function Counts return String;                              --  "3 agreed, 2 rejected, 1 waiting, 4 announced" (all sessions)
+
+   --  0.058: the state the replay builds, for the checkpoint (state.ckpt): Save writes it, else it is read back.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean);
 
 end Sim_Records;

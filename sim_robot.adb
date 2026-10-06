@@ -1,6 +1,8 @@
---  Version: 0.002
+--  Version: 0.003
 --  See sim_robot.ads.
 pragma Ada_2022;
+
+with Sim_Ckpt;
 
 with Sim_Screen;
 with Sim_Things;
@@ -436,5 +438,42 @@ package body Sim_Robot is
       end if;
       return R;
    end Report;
+
+   --  0.058: the checkpoint.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean) is
+      procedure IO is new Sim_Ckpt.IO (Integer);
+      procedure IO is new Sim_Ckpt.IO (Int);
+      procedure IO is new Sim_Ckpt.IO (Boolean);
+      procedure IO is new Sim_Ckpt.IO (Entity_Id);
+      procedure IO is new Sim_Ckpt.IO (Verb_Array);
+      procedure IO is new Sim_Ckpt.IO (Sim_Things.Thing);
+      procedure IO is new Sim_Ckpt.IO (Ints);
+      procedure IO is new Sim_Ckpt.IO (Counts);
+      procedure IO is new Sim_Ckpt.IO (Unbounded_String);
+      procedure IO is new Sim_Ckpt.IO (Str_Vectors.Vector);
+   begin
+      IO (S, Save, Seed_V);
+      IO (S, Save, Is_Started);
+      IO (S, Save, Verbs);
+      IO (S, Save, N_Verbs);
+      IO (S, Save, RX); IO (S, Save, RY); IO (S, Save, Heading); IO (S, Save, Battery);
+      IO (S, Save, Carry);
+      IO (S, Save, Carry_T);
+      IO (S, Save, Ctl_Until);
+      IO (S, Save, Issued); IO (S, Save, Errs);
+      for E in Entity_Id loop IO (S, Save, Replies (E)); end loop;
+      IO (S, Save, Last_Exec);
+      IO (S, Save, Cmd_N); IO (S, Save, Err_N); IO (S, Save, Share_N);
+      IO (S, Save, Log);
+      IO (S, Save, Pend_Valid);
+      IO (S, Save, Pend_Who);
+      IO (S, Save, Pend_Verb); IO (S, Save, Pend_Arg);
+      IO (S, Save, Pend_Text);
+      IO (S, Save, Pend_Ready);
+      IO (S, Save, Reach); IO (S, Save, Max_B); IO (S, Save, Start_B); IO (S, Save, Charge); IO (S, Save, Radius); IO (S, Save, Trickle);
+      IO (S, Save, Delay_B); IO (S, Save, Delay_X); IO (S, Save, Gap); IO (S, Save, Contact_Pct); IO (S, Save, Cmd_Pct);
+      IO (S, Save, Sloppy_Pct); IO (S, Save, Window); IO (S, Save, Start_LM);
+      IO (S, Save, Cost_Go); IO (S, Save, Cost_Turn); IO (S, Save, Cost_Look); IO (S, Save, Cost_Pick); IO (S, Save, Cost_Push);
+   end State_IO;
 
 end Sim_Robot;

@@ -1,6 +1,8 @@
---  Version: 0.001
+--  Version: 0.002
 --  See sim_next.ads.
 pragma Ada_2022;
+
+with Sim_Ckpt;
 
 with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded;
@@ -234,5 +236,16 @@ package body Sim_Next is
 
    function Digest_Line return String is
      (Msg ("next.digest", Img (Count), Img (Latest.Next), Slashed (Latest.Wesen)));
+
+   --  0.058: the checkpoint.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean) is
+      procedure IO is new Sim_Ckpt.IO (Integer);
+      procedure IO is new Sim_Ckpt.IO (Int);
+      procedure IO is new Sim_Ckpt.IO (Result);
+   begin
+      IO (S, Save, Seed_V);
+      IO (S, Save, Latest);
+      IO (S, Save, Count);
+   end State_IO;
 
 end Sim_Next;

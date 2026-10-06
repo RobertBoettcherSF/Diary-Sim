@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  Trial by chess (trial=1 sessions; needs chess=1 and govern=1): a DISPUTE between two wesen, a wesen and a player, or two players is
 --  settled over the board.  Disputes come from sources that already exist: two CLASHING petitions (one asks for rest, the other for
 --  quicker work: the pairs are data, trial.clash.N) filed within trial.window ticks (src=petition; their watching players may take the
@@ -19,6 +19,8 @@
 --  a changed, invented or removed line is DRIFT.  Pure functions of (seed, wesen/player, tick, salts) and of the replayed state.
 --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (bounded integer arithmetic, hash dice, a bit-row coin, record parsing)
 pragma Ada_2022;
+
+with Ada.Streams;
 
 with Sim_Games;
 with Sim_Util;
@@ -42,5 +44,8 @@ package Sim_Trial is
    function Box_Line (Players : Positive) return String;  --  one line in the voice of one of the Players about the latest trial of this session, "" if none
    function View return Str_Vectors.Vector;             --  --trials / make trials (ids; the output layer maps names)
    function Digest_Line return String;                  --  "2 trials (1 refused, 0 coin)"
+
+   --  0.058: the state the replay builds, for the checkpoint (state.ckpt): Save writes it, else it is read back.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean);
 
 end Sim_Trial;

@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 --  The mood ledger of diary_sim: REPORT ONLY.  Every tick the replay hands over how the mood of a wesen
 --  moved and from which source; nothing here is stored in a diary, hashed, or read back by the simulation,
 --  so action weights, dice and every stored byte are what they were without it.  The ledger exists
@@ -15,6 +15,8 @@
 --  and how much a bound (-100 / +100) swallowed.  Wording: data/ledger.txt.
 --  PROOF-LATER: Importance 2/10, Urgency 2/10, SPARK2 (integer sums and a stable top-3 selection)
 pragma Ada_2022;
+
+with Ada.Streams;
 
 with Sim_Util;
 with Sim_World;
@@ -34,9 +36,13 @@ package Sim_Ledger is
                   Base, Rest_Fx, Push_Fx, Nominal, Phase : Integer; Cool : Boolean; Feel : Integer; Chess_Fx : Integer := 0;
                   Gov_Fx : Integer := 0);
 
+   --  0.058: the records before Tick are summed up (the whole run) and dropped; Sum / Net / Report with a From after the start of
+   --  the newest session (Ledger_From) stay exact.  Called at every session start (Start_Life).
+   procedure Keep_From (Tick : Int);
+
    function Ticks_Seen return Natural;   --  records held (all wesen)
 
-   --  Sum of the mood changes of E in ticks From + 1 .. To (To = 0: to the last one).
+   --  Sum of the mood changes of E in ticks From + 1 .. To (To = 0: to the last one); From = 0 and To = 0, or From after Keep_From.
    function Net (E : Entity_Id; From, To : Int) return Integer;
 
    --  The text of the ledger for the whole run and for the ticks after Last_From (the last session).
@@ -47,5 +53,8 @@ package Sim_Ledger is
    --  One short line per wesen for the debug digest, and the sentence / breakdown for the full record.
    function Digest_Line (E : Entity_Id; Last_From : Int) return String;
    function Sentence (E : Entity_Id) return String;
+
+   --  0.058: the state the replay builds, for the checkpoint (state.ckpt): Save writes it, else it is read back.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean);
 
 end Sim_Ledger;

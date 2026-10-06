@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 --  The screens of diary_sim (screen=1 sessions).  Every wesen owns a small text screen (screen.cols x screen.rows
 --  characters, data/limits.txt) with the words it knows, the names of things it examined, and words it saw on other
 --  screens.  A wesen can pin and drop words, show its screen to a wesen in the same or a neighbouring cell, or leave
@@ -12,6 +12,8 @@
 --  order; a later step may fold the most seen words into one short form there.  Reserved: screen.condense = 0.
 --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (layout width arithmetic, bounded vectors)
 pragma Ada_2022;
+
+with Ada.Streams;
 
 with Ada.Containers.Vectors;
 with Ada.Strings.Unbounded;
@@ -73,5 +75,8 @@ package Sim_Screen is
    function Read_Notes (E : Entity_Id) return Natural;            --  notes E read
    function Notes_Now return Natural;                             --  notes lying on things
    function Summary (E : Entity_Id) return String;                --  one report line
+
+   --  0.058: the state the replay builds, for the checkpoint (state.ckpt): Save writes it, else it is read back.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean);
 
 end Sim_Screen;

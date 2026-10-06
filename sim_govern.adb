@@ -1,6 +1,8 @@
---  Version: 0.008
+--  Version: 0.009
 --  See sim_govern.ads.
 pragma Ada_2022;
+
+with Sim_Ckpt;
 
 with Ada.Containers.Vectors;
 with Ada.Strings.Fixed;
@@ -538,5 +540,42 @@ package body Sim_Govern is
       end loop;
       return R;
    end View;
+
+   --  0.058: the checkpoint.  Not in it: Inputs (Robert's vetoes and approvals, read from diaries/vetoes.txt at every start; then
+   --  Inputs_Done_Before marks those the replay before the checkpoint has passed).
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean) is
+      procedure IO is new Sim_Ckpt.IO (Int);
+      procedure IO is new Sim_Ckpt.IO (Boolean);
+      procedure IO is new Sim_Ckpt.IO (Offs);
+      procedure IO is new Sim_Ckpt.IO (Ints);
+      procedure IO is new Sim_Ckpt.IO (Cnt_Topic);
+      procedure IO is new Sim_Ckpt.IO (Pend_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Dec_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Str_Vectors.Vector);
+   begin
+      IO (S, Save, Seed_V);
+      IO (S, Save, Is_Started);
+      IO (S, Save, Off_V);
+      IO (S, Save, Trust); IO (S, Save, Stand); IO (S, Save, Mood_P);
+      for E in Entity_Id loop IO (S, Save, Refused_At (E)); end loop;
+      IO (S, Save, Reps);
+      IO (S, Save, Pend);
+      IO (S, Save, Decs);
+      IO (S, Save, Dec_Lines);
+   end State_IO;
+
+   procedure Inputs_Done_Before (Tick : Int) is
+   begin
+      for X of Inputs loop X.Done := X.Tick < Tick; end loop;   --  an input of tick T takes effect at T + 1
+   end Inputs_Done_Before;
+
+   function Inputs_Before (Tick : Int) return Natural is
+      N : Natural := 0;
+   begin
+      for X of Inputs loop
+         if X.Tick < Tick then N := N + 1; end if;
+      end loop;
+      return N;
+   end Inputs_Before;
 
 end Sim_Govern;

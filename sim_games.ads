@@ -1,4 +1,4 @@
---  Version: 0.007
+--  Version: 0.008
 --  The chess games of diary_sim (chess=1 sessions), a rest activity of the four wesen and the three players.
 --  A competitor is a wesen (1 .. 4) or a player (5 .. 7: Player 1, Player 2, Player 3 = iris, sol, noor; player 4 does not play chess).  A player is "in range" of a wesen
 --  that it watches or that stands in the same or a neighbouring cell as one it watches.  When a wesen rests, it may play a
@@ -14,6 +14,8 @@
 --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (game bookkeeping, bounded vectors)
 --  PROOF-LATER: Importance 4/10, Urgency 3/10, SPARK2 (Elo: integer table lookup, rounding, symmetric deltas)
 pragma Ada_2022;
+
+with Ada.Streams;
 
 with Ada.Strings.Unbounded;
 with Sim_Util;
@@ -71,5 +73,8 @@ package Sim_Games is
    function Summary (C : Comp_Id) return String;
    function Ranking return Str_Vectors.Vector;     --  the table of --elo / make elo
    function Digest_Line return String;             --  "elo Ruth 1230 Abel 1215 ..." best first
+
+   --  0.058: the state the replay builds, for the checkpoint (state.ckpt): Save writes it, else it is read back.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean);
 
 end Sim_Games;

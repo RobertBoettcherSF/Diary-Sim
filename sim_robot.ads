@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  The robot of diary_sim (robot=1 sessions; needs screen=1): one world thing with a position, a heading, a battery and a short
 --  command list (data/robot.txt: go <north|east|south|west>, turn <left|right>, look, pick, push).  A wesen steers it by PINNING the
 --  command words on its screen (Sim_Screen.Pin_Command): only words the wesen already knows can be pinned, so the robot ties to word
@@ -11,6 +11,8 @@
 --  Pure functions of (seed, wesen, tick, salts 9600 .. 9699) and the replayed state.
 --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (command parsing, bounded battery arithmetic)
 pragma Ada_2022;
+
+with Ada.Streams;
 
 with Ada.Strings.Unbounded;
 with Sim_Util;
@@ -42,5 +44,8 @@ package Sim_Robot is
    function Report return Str_Vectors.Vector;                --  the end report block
    function Count_Commands return Natural;
    function Count_Errors return Natural;
+
+   --  0.058: the state the replay builds, for the checkpoint (state.ckpt): Save writes it, else it is read back.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean);
 
 end Sim_Robot;

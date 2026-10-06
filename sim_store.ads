@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  A record file of lines that the replay computes (record-first, like diaries/world.txt): every line starts
 --  with a unique key token ("K12", "H3"), and a "t=<tick>" token tells when it happened.  Emit compares a
 --  computed line with the stored line of the same key: equal is fine, different is DRIFT (the caller raises
@@ -29,6 +29,14 @@ package Sim_Store is
    --  First stored line with t <= Upto that no Emit has matched ("" if none).
    function Orphan (S : Store; Upto : Int) return String;
    function Count (S : Store) return Natural;
+   --  0.058, a start from the checkpoint: the stored lines with t <= Upto (and those without t) count as matched, as the replay
+   --  up to Upto had matched them (the checkpoint is only written after a run whose checks passed).
+   --  0.058, a start from the checkpoint: the first N lines count as met by the replay (the checkpoint was taken with N lines, all met).
+   procedure Mark_First (S : in out Store; N : Natural);
+   --  The first N lines carry ticks up to Upto and the lines after them none before Upto (they belong to later ticks).
+   function Fits (S : Store; N : Natural; Upto : Int) return Boolean;
+   function Has_Key (S : Store; Key : String) return Boolean;
+   function Path_Of (S : Store) return String;
    function Key_Of (Line : String) return String;   --  the first token
 
 private

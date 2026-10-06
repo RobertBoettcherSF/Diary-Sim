@@ -1,6 +1,8 @@
---  Version: 0.004
+--  Version: 0.005
 --  See sim_games.ads.
 pragma Ada_2022;
+
+with Sim_Ckpt;
 
 with Ada.Containers.Vectors;
 with Interfaces;
@@ -559,5 +561,35 @@ package body Sim_Games is
       end loop;
       return Msg ("elo.digest", To_String (R));
    end Digest_Line;
+
+   --  0.058: the checkpoint.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean) is
+      procedure IO is new Sim_Ckpt.IO (Integer);
+      procedure IO is new Sim_Ckpt.IO (Int);
+      procedure IO is new Sim_Ckpt.IO (Boolean);
+      procedure IO is new Sim_Ckpt.IO (Game_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Ints);
+      procedure IO is new Sim_Ckpt.IO (Counts);
+      procedure IO is new Sim_Ckpt.IO (Pair_Ints);
+      procedure IO is new Sim_Ckpt.IO (Pair_Counts);
+      procedure IO is new Sim_Ckpt.IO (Table_Array);
+   begin
+      IO (S, Save, Games);
+      IO (S, Save, Seed_V);
+      IO (S, Save, Holiday_Until);
+      for C in Comp_Id loop IO (S, Save, Pending (C)); IO (S, Save, Rate (C)); end loop;
+      IO (S, Save, Last_End);
+      IO (S, Save, Pair_Games);
+      IO (S, Save, Won); IO (S, Save, Lost); IO (S, Save, Drawn); IO (S, Save, Made); IO (S, Save, Holidays); IO (S, Save, By_Time);
+      IO (S, Save, By_Resign); IO (S, Save, Played_N);
+      IO (S, Save, Table);
+      IO (S, Save, Gap); IO (S, Save, Start_Pct); IO (S, Save, Pause); IO (S, Save, Timeout); IO (S, Save, Max_Plies); IO (S, Save, Repeat);
+      IO (S, Save, Hol_Pct); IO (S, Save, Hol_Len); IO (S, Save, Smin); IO (S, Save, Smax); IO (S, Save, Win_Mood); IO (S, Save, Draw_Mood);
+      IO (S, Save, Loss_Mood); IO (S, Save, Res_Pct); IO (S, Save, Res_Gap); IO (S, Save, Res_Mood); IO (S, Save, Res_Mood_Pct);
+      IO (S, Save, Res_Min); IO (S, Save, PP_Pct); IO (S, Save, Elo_Start); IO (S, Save, Elo_K);
+      IO (S, Save, Forced);
+      IO (S, Save, Quiet);
+      IO (S, Save, Rules); IO (S, Save, Fives); IO (S, Save, Moves75); IO (S, Save, Claim_Pct); IO (S, Save, Claim_Behind);
+   end State_IO;
 
 end Sim_Games;

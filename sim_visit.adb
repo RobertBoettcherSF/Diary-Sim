@@ -1,6 +1,8 @@
---  Version: 0.001
+--  Version: 0.002
 --  See sim_visit.ads.
 pragma Ada_2022;
+
+with Sim_Ckpt;
 
 with Ada.Characters.Handling;
 with Ada.Strings.Fixed;
@@ -706,5 +708,25 @@ package body Sim_Visit is
 
    function Leave_Text (E : Entity_Id) return String is (Msg ("visit.leave", Name (E)));
    function Help_Text return String is (Msg ("visit.help"));
+
+   --  0.058: the checkpoint.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean) is
+      procedure IO is new Sim_Ckpt.IO (Integer);
+      procedure IO is new Sim_Ckpt.IO (Int);
+      procedure IO is new Sim_Ckpt.IO (Entity_Id);
+      procedure IO is new Sim_Ckpt.IO (Bonds);
+      procedure IO is new Sim_Ckpt.IO (Str_Vectors.Vector);
+   begin
+      IO (S, Save, Seed_V);
+      IO (S, Save, Bond);
+      IO (S, Save, Cur_N);
+      IO (S, Save, Cur_E);
+      IO (S, Save, Bond_Start);
+      IO (S, Save, Said_N); IO (S, Save, Cmd_N); IO (S, Save, Acts_N);
+      IO (S, Save, Learned_Total);
+      IO (S, Save, Turn_Tick);
+      IO (S, Save, Turn_Words);
+      IO (S, Save, Log);
+   end State_IO;
 
 end Sim_Visit;

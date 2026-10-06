@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  See sim_store.ads.
 pragma Ada_2022;
 
@@ -103,5 +103,26 @@ package body Sim_Store is
    end Orphan;
 
    function Count (S : Store) return Natural is (Natural (S.Lines.Length));
+
+   procedure Mark_First (S : in out Store; N : Natural) is
+   begin
+      for I in 1 .. Natural'Min (N, Natural (S.Lines.Length)) loop S.Hit.Replace_Element (I, True); end loop;
+   end Mark_First;
+
+   function Fits (S : Store; N : Natural; Upto : Int) return Boolean is
+   begin
+      if Natural (S.Lines.Length) < N then return False; end if;
+      for I in 1 .. Natural (S.Lines.Length) loop
+         declare
+            T : constant Int := Tick_Of (To_String (S.Lines (I)));
+         begin
+            if (I <= N and then T > Upto) or else (I > N and then T in 0 .. Upto - 1) then return False; end if;
+         end;
+      end loop;
+      return True;
+   end Fits;
+
+   function Has_Key (S : Store; Key : String) return Boolean is (S.Index.Contains (Key));
+   function Path_Of (S : Store) return String is (To_String (S.Path));
 
 end Sim_Store;

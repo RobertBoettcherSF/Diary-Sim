@@ -1,6 +1,8 @@
---  Version: 0.004
+--  Version: 0.005
 --  See sim_preport.ads.
 pragma Ada_2022;
+
+with Sim_Ckpt;
 
 with Ada.Containers.Vectors;
 with Ada.Strings.Unbounded;
@@ -379,5 +381,40 @@ package body Sim_Preport is
       end loop;
       return Msg ("preport.digest", Img (Rounds), Img (Lie_Total), Img (Natural (Entries.Length)), Sgn (Int (Big)));
    end Digest_Line;
+
+   --  0.058: the checkpoint.  Not in it: Inputs (Robert's challenges, read from diaries/challenges.txt at every start).
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean) is
+      procedure IO is new Sim_Ckpt.IO (Integer);
+      procedure IO is new Sim_Ckpt.IO (Int);
+      procedure IO is new Sim_Ckpt.IO (Entry_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Counts);
+      procedure IO is new Sim_Ckpt.IO (Ints);
+   begin
+      IO (S, Save, Seed_V);
+      IO (S, Save, Entries);
+      IO (S, Save, Latest);
+      IO (S, Save, Lie_Rounds); IO (S, Save, Challenged);
+      IO (S, Save, Rounds);
+      IO (S, Save, Last_T);
+      IO (S, Save, Prev_Tick);
+      IO (S, Save, Prev_Pets);
+      IO (S, Save, M_Min); IO (S, Save, M_Max); IO (S, Save, Lie_Min); IO (S, Save, Lie_Max); IO (S, Save, Hon_Base); IO (S, Save, Brev_W);
+      IO (S, Save, Warm_W); IO (S, Save, Trust_W); IO (S, Save, Stand_W); IO (S, Save, Lie_Scale); IO (S, Save, Rosy_W); IO (S, Save, Tone1);
+      IO (S, Save, Tone2); IO (S, Save, Tone3); IO (S, Save, Cost); IO (S, Save, Width);
+   end State_IO;
+
+   procedure Inputs_Done_Before (Tick : Int) is
+   begin
+      for X of Inputs loop X.Done := X.Tick < Tick; end loop;   --  a challenge of tick T takes effect at T + 1
+   end Inputs_Done_Before;
+
+   function Inputs_Before (Tick : Int) return Natural is
+      N : Natural := 0;
+   begin
+      for X of Inputs loop
+         if X.Tick < Tick then N := N + 1; end if;
+      end loop;
+      return N;
+   end Inputs_Before;
 
 end Sim_Preport;

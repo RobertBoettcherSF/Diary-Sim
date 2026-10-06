@@ -1,4 +1,4 @@
---  Version: 0.057
+--  Version: 0.058
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -28,7 +28,7 @@ pragma Ada_2022;
 
 with Ada.Calendar, Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Maps, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Finalization, Ada.Strings.Fixed, Ada.Streams.Stream_IO, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
-     GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chat, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Records, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Trial, Sim_Util, Sim_Visit, Sim_Voice, Sim_Wordstat, Sim_Evolve, Sim_Active, Sim_World;
+     GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Ckpt, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chat, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Records, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Trial, Sim_Util, Sim_Visit, Sim_Voice, Sim_Wordstat, Sim_Evolve, Sim_Active, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
 
 procedure Diary_Sim is
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.057";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.058";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -145,6 +145,27 @@ procedure Diary_Sim is
    Start_Pct, Teach_Pct, Coin_Pct, Coin_Cap, Bench_Steps : Int := 0;
    Vocab    : Str_Vectors.Vector;
    Disk     : array (Entity_Id) of Str_Vectors.Vector;      --  complete lines on disk
+   Disk_Base : array (Entity_Id) of Natural := [others => 0];   --  0.058: lines before Disk (E) (a start from state.ckpt reads only the
+                                                                --  lines after the checkpoint): line N of the diary is Disk (E) (N - Disk_Base (E))
+   --  0.058, the state checkpoint (state.ckpt in the save folder, see Ckpt_Write): written at the end of every run that wrote ticks
+   --  and at a clean stop; a start whose files still fit it loads it instead of replaying ticks 1 .. Ckpt_Tick.
+   Ckpt_Path : constant String := "state.ckpt";
+   Ckpt_Format : constant String := "diary-sim-ckpt 1";
+   Replay_Opt : Boolean := False;                    --  --replay: never load the checkpoint (make verify replays anyway)
+   Ckpt_Used : Boolean := False;                     --  this run started from the checkpoint
+   Ckpt_Tick : Natural := 0;                         --  its tick (when used)
+   Ckpt_Seed : Int := -1;
+   Ckpt_Off : array (Entity_Id) of Long_Long_Integer := [others => 0];   --  the diary bytes up to the checkpoint's tick
+   Ckpt_Why : Unbounded_String;                      --  why it was not used ("missing", "stale (...)")
+   Ckpt_Start_Line : Unbounded_String;               --  the start line (Ckpt_Start_Text): console, the night's status lines and box
+   Ckpt_Load_Secs : Duration := 0.0;
+   Ckpt_Last_Write : Ada.Calendar.Time := Ada.Calendar.Clock;   --  a night writes it at most every night.ckpt_seconds (and at its end)
+   Ckpt_Written : Natural := 0;                      --  checkpoints written by this run
+   Ckpt_Write_Secs : Duration := 0.0;                --  the last one: seconds and bytes
+   Ckpt_Bytes : Long_Long_Integer := 0;
+   Last_Ckpt_Tick : Int := 0;                        --  the tick of the last one written
+   Data_Hash : Unbounded_String;                     --  the data/*.txt files as the program started (another number is another world)
+   Replay_Wait_Ms : Natural := 0;                    --  DIARY_TEST_REPLAY_MS (tests only): a pause per replayed tick
    St       : array (Entity_Id) of State := [others => (80, 0, 3)];
    Out_File : array (Entity_Id) of TIO.File_Type;
    Pending  : Unbounded_String;                             --  output held until the seed line
@@ -1034,6 +1055,8 @@ procedure Diary_Sim is
    function Forced (Tick : Int) return Natural is (Natural'Value ("tick " & Img (Tick)));   --  always fails
    pragma No_Inline (Forced);   --  the symbolic trace of a forced crash names it, also in an optimized build
 
+   function Disk_Len (E : Entity_Id) return Natural is (Disk_Base (E) + Natural (Disk (E).Length));
+
    procedure Load_Diary (E : Entity_Id; Disk_Seed : in out Int) is
       Lines : Str_Vectors.Vector;
       Found : Boolean;
@@ -1042,7 +1065,7 @@ procedure Diary_Sim is
       for I in 1 .. Natural (Lines.Length) loop
          declare
             L : constant String := Lines (I);
-            N : constant Int := Int (Disk (E).Length) + 1;
+            N : constant Int := Int (Disk_Len (E)) + 1;
          begin
             if Complete (L) then
                if Field (L, "tick") /= N then
@@ -1058,6 +1081,69 @@ procedure Diary_Sim is
          end;
       end loop;
    end Load_Diary;
+
+   --  0.058, a start from the checkpoint: the diary from byte Offset on (the first Base lines are the checkpoint's); the same checks.
+   procedure Load_Diary_From (E : Entity_Id; Offset : Long_Long_Integer; Base : Natural; Disk_Seed : Int) is
+      package SIO renames Ada.Streams.Stream_IO;
+      use type Ada.Streams.Stream_Element_Offset;
+      F : SIO.File_Type;
+      Line_No : Natural := 0;
+      Part : Unbounded_String;   --  a line across two blocks
+      B : Ada.Streams.Stream_Element_Array (1 .. 262_144);
+      N : Ada.Streams.Stream_Element_Offset;
+      procedure One (L : String) is
+         Want : constant Int := Int (Disk_Len (E)) + 1;
+      begin
+         Line_No := Line_No + 1;
+         if Complete (L) then
+            if Field (L, "tick") /= Want then
+               raise Diary_Error with Msg ("err.gap", Name (E), Img (Base + Line_No), Img (Field (L, "tick")), Img (Want));
+            elsif Disk_Seed >= 0 and then Field (L, "seed") /= Disk_Seed then
+               raise Diary_Error with Msg ("err.seed", Name (E), Img (Base + Line_No), Img (Field (L, "seed")), Img (Disk_Seed));
+            end if;
+            Disk (E).Append (L);
+         elsif L'Length > 0 then
+            Warn (Msg ("warn.bad_line", Name (E), Img (Base + Line_No)));
+         end if;
+      end One;
+   begin
+      Disk (E).Clear;
+      Disk_Base (E) := Base;
+      SIO.Open (F, SIO.In_File, Path (E));
+      if Long_Long_Integer (SIO.Size (F)) > Offset then
+         SIO.Set_Index (F, SIO.Positive_Count (Offset + 1));
+         loop
+            SIO.Read (F, B, N);
+            exit when N < 1;
+            declare
+               T : String (1 .. Natural (N));
+               From : Positive := 1;
+            begin
+               for I in T'Range loop T (I) := Character'Val (B (Ada.Streams.Stream_Element_Offset (I))); end loop;
+               for I in T'Range loop
+                  if T (I) = ASCII.LF then
+                     if Length (Part) > 0 then
+                        Append (Part, T (From .. I - 1));
+                        One (To_String (Part));
+                        Part := Null_Unbounded_String;
+                     else
+                        One (T (From .. I - 1));
+                     end if;
+                     From := I + 1;
+                  end if;
+               end loop;
+               if From <= T'Last then Append (Part, T (From .. T'Last)); end if;
+            end;
+            exit when N < B'Last;
+         end loop;
+         if Length (Part) > 0 then One (To_String (Part)); end if;
+      end if;
+      SIO.Close (F);
+   exception
+      when others =>
+         if SIO.Is_Open (F) then SIO.Close (F); end if;
+         raise;
+   end Load_Diary_From;
 
    --  0.057: the last line of a diary without reading the whole file (a night run checks its own diaries after every session; reading
    --  them whole cost more than the session itself on a big save).  True: the file ends with a line break and its last line is complete
@@ -1726,6 +1812,12 @@ procedure Diary_Sim is
    begin
       return Img (T / 10) & "." & Img (T mod 10);
    end Tenths_Text;
+
+   function Secs_Text (D : Duration) return String is   --  "0.42"
+      H : constant Natural := Natural (Duration'Max (0.0, D) * 100);
+   begin
+      return Img (H / 100) & "." & (if H mod 100 < 10 then "0" else "") & Img (H mod 100);
+   end Secs_Text;
 
    procedure Append_Log (Label, Text : String) is
       Old : Str_Vectors.Vector;
@@ -4574,10 +4666,10 @@ procedure Diary_Sim is
             Emit_Screen_Lines (Tick);
             Emit_Chess_Lines (Tick);
             Emit_Robot_Lines (Tick);
-            if Tick <= Int (Disk (E).Length) then   --  already on disk: compare, do not write
-               if No_Ts (Line) /= No_Ts (Disk (E) (Positive (Tick))) then
+            if Tick <= Int (Disk_Len (E)) then   --  already on disk: compare, do not write
+               if No_Ts (Line) /= No_Ts (Disk (E) (Positive (Tick - Int (Disk_Base (E))))) then
                   raise Drift_Error with Msg ("err.drift", Name (E), Img (Tick),
-                                              Diff_At (No_Ts (Disk (E) (Positive (Tick))), No_Ts (Line)));
+                                              Diff_At (No_Ts (Disk (E) (Positive (Tick - Int (Disk_Base (E))))), No_Ts (Line)));
                end if;
                Verified := Verified + 1;
             else
@@ -4587,6 +4679,7 @@ procedure Diary_Sim is
                   TIO.Put_Line (Out_File (E), Line);
                   TIO.Flush (Out_File (E));
                   if Night_Mode then Disk (E).Append (Line); end if;   --  0.057: the next session of a night needs no reread of the diary
+                  --  (0.058: a start from state.ckpt holds only the lines after the checkpoint, Disk_Base counts the others)
                end if;
                Written := Written + 1;
             end if;
@@ -4961,7 +5054,7 @@ procedure Diary_Sim is
          Append (Fails, " " & P & " missing or empty;");
          return;
       end if;
-      if Kind = 'd' and then Night_Mode and then Expect > 0 and then Diary_Tail_Ok (P, Natural (Expect)) then   --  0.057: a night checks the end
+      if Kind = 'd' and then (Night_Mode or else Ckpt_Used) and then Expect > 0 and then Diary_Tail_Ok (P, Natural (Expect)) then   --  0.057: a night checks the end
          Lines := Expect;   --  of its own diary (it wrote every line of this run; the older ones were read and compared at its start)
          return;
       end if;
@@ -4984,7 +5077,7 @@ procedure Diary_Sim is
       Know : Unbounded_String;
    begin
       for E in Entity_Id loop
-         if not Disk (E).Is_Empty then Have := Have + 1; end if;
+         if Disk_Len (E) > 0 then Have := Have + 1; end if;
          Append (Know, (if E = 1 then "" else " ") & Name (E) & " " & Img (Known_Count (E)));
       end loop;
       if Total_Lines = 0 then return Msg ("import.none", Img (Seed)); end if;
@@ -5252,6 +5345,7 @@ procedure Diary_Sim is
    --  A liberated wesen of a new session moves to the location its own dice name (record + effect).
    procedure Start_Life (R : Session_Rec) is
    begin
+      Sim_Ledger.Keep_From (R.Start);   --  0.058: the ledger keeps the ticks of the newest session (and the sums of all)
       Sim_Active.Open (R.N, R.Start, (if R.Active and then R.Screen then R.Active_Level else 0), R.Slowfloor);   --  closes the window of the previous active session (dormancies), opens this one
       Emit_Active_Lines;
       Sim_Dharma.Begin_Life (Seed, R.Start, R.N, L_Max + 1, R.Dharma, R.Players4);
@@ -5426,6 +5520,23 @@ procedure Diary_Sim is
    end Check_Dharma_At;
 
    --  A stored session must reproduce its votes when the replay reaches its start tick.
+   procedure Start_Sessions_At (T : Int) is   --  0.058: alone after a start from the checkpoint (the session end at T is in it)
+   begin
+      for R of Sessions loop
+         if R.Start = T then
+            declare
+               V : constant Kalpa_Votes := Votes_At (T);
+            begin
+               if V /= R.Votes then
+                  raise Drift_Error with Msg ("err.session", Img (R.N), Img (R.Start), "votes " & Votes_Text (R.Votes),
+                                              "votes " & Votes_Text (V));
+               end if;
+               Start_Life (R);
+            end;
+         end if;
+      end loop;
+   end Start_Sessions_At;
+
    procedure Check_Sessions_At (T : Int) is
       Has_Vote : constant Boolean := (for some R of Word_Votes => R.Tick = T);
       Now_T : constant Tok_Array := (if Has_Vote then Words_Now (T) else [others => Null_Unbounded_String]);   --  before the session end's records, as a new session end does (active=1: a record line can wake a word)
@@ -5442,19 +5553,7 @@ procedure Diary_Sim is
             end;
          end if;
       end loop;
-      for R of Sessions loop
-         if R.Start = T then
-            declare
-               V : constant Kalpa_Votes := Votes_At (T);
-            begin
-               if V /= R.Votes then
-                  raise Drift_Error with Msg ("err.session", Img (R.N), Img (R.Start), "votes " & Votes_Text (R.Votes),
-                                              "votes " & Votes_Text (V));
-               end if;
-               Start_Life (R);
-            end;
-         end if;
-      end loop;
+      Start_Sessions_At (T);
    end Check_Sessions_At;
 
 
@@ -7143,6 +7242,8 @@ procedure Diary_Sim is
          Box.Append (Msg ("night.box.sessions", Img (Night_Done), Img (Night_First_S), Img (Night_Last_S), Img (Night_Last_Tick)));
       end if;
       Box.Append (if Length (Night_Replay_Line) > 0 then To_String (Night_Replay_Line) else Msg ("night.box.replay_no"));
+      if Length (Ckpt_Start_Line) > 0 then Box.Append (To_String (Ckpt_Start_Line)); end if;   --  0.058: checkpoint or replay, the start time
+      if Ckpt_Written > 0 then Box.Append (Msg ("ckpt.written", Img (Last_Ckpt_Tick), Img (Ckpt_Bytes / 1024), Secs_Text (Ckpt_Write_Secs))); end if;
       Box.Append (Msg ("night.box.time", Elapsed_Text (Since (Night_T0))));
       Box.Append (Msg ("night.box.speed", Avg_Text, Ticks_Per_Sec, Size_Text (Size_Now), Growth_Text));
       if Night_Verified > 0 then Box.Append (Msg ("night.box.verified", Img (Night_Verified))); end if;
@@ -7249,6 +7350,447 @@ procedure Diary_Sim is
    --  The next session of a night run: the diaries have Ticks lines each now (this process wrote them), the world in memory is at that tick.
    --  What a run started by hand would have built by replaying them is reset or reloaded here: the lines on disk, the files kept open, the
    --  counters of "this run".  The rest (session record, snapshots, import text) is redone by the loop body, as it does for any run.
+   --  ---- 0.058: the state checkpoint (state.ckpt in the save folder) ---------------------------------------------------------
+   --  The header is text, one "key value" per line up to the line "end": the format, the build, the data hash, the seed, the tick,
+   --  the bytes of each diary up to that tick, the counts the files must still give at that tick (Ckpt_Counts, the record lines of
+   --  each store), the sections and the length and hash of the payload, and the fingerprint of every record file (Sim_Ckpt.File_Print).
+   --  The payload is the State_IO of every module and of this program, in sections with a marker.  What the files give (the
+   --  diaries, sessions.txt, the record files, Robert's inputs) is not in it: every start reads them as before (Load_*), and the
+   --  restore only sets what the replay of ticks 1 .. tick would have built from them.
+   Ckpt_Error : exception;
+   Sect_Count : constant := 16;
+   Sect_At : array (1 .. Sect_Count + 1) of Ada.Streams.Stream_Element_Offset := [others => 0];   --  where each section starts
+   Ckpt_Data : aliased Sim_Ckpt.Mem_Stream;   --  the file read by Ckpt_Probe (header and payload)
+   Ckpt_Pay_At : Ada.Streams.Stream_Element_Offset := 0;   --  the payload starts after this byte
+   Ckpt_Head : Str_Vectors.Vector;
+   Store_Count : constant := 15;
+
+   function Sect_Name (K : Positive) return String is
+     (case K is when 1 => "world", when 2 => "dharma", when 3 => "things", when 4 => "screen", when 5 => "games", when 6 => "robot",
+                when 7 => "govern", when 8 => "preport", when 9 => "next", when 10 => "trial", when 11 => "records", when 12 => "visit",
+                when 13 => "active", when 14 => "ledger", when 15 => "main", when others => "end");
+
+   procedure With_Store (K : Positive; Act : not null access procedure (S : in out Sim_Store.Store)) is
+   begin
+      case K is
+         when 1 => Act (Screen_Store);
+         when 2 => Act (Chess_Store);
+         when 3 => Act (Robot_Store);
+         when 4 => Act (Govern_Store);
+         when 5 => Act (Preport_Store);
+         when 6 => Act (Next_Store);
+         when 7 => Act (Trial_Store);
+         when 8 => Act (Votes_Store);
+         when 9 => Act (Pets_Store);
+         when 10 => Act (Dict_Store);
+         when 11 => Act (Anns_Store);
+         when 12 => Act (Bals_Store);
+         when 13 => Act (Visit_Store);
+         when 14 => Act (Chat_Store);
+         when others => Act (Active_Store);
+      end case;
+   end With_Store;
+
+   --  The variables of this program the replay builds (the input lists and the lines of the files are not among them).
+   procedure Main_State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean) is
+      procedure IO is new Sim_Ckpt.IO (Integer);
+      procedure IO is new Sim_Ckpt.IO (Int);
+      procedure IO is new Sim_Ckpt.IO (Boolean);
+      procedure IO is new Sim_Ckpt.IO (State);
+      procedure IO is new Sim_Ckpt.IO (Entity_Id);
+      procedure IO is new Sim_Ckpt.IO (List_Id);
+      procedure IO is new Sim_Ckpt.IO (All_Stats);
+      procedure IO is new Sim_Ckpt.IO (Str_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Sim_Chat.Sample_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Unbounded_String);
+   begin
+      IO (S, Save, Cur_Tick); IO (S, Save, Last_Done);
+      IO (S, Save, Did_Learn); IO (S, Save, Did_Coin); IO (S, Save, Did_Bench); IO (S, Save, Did_Teach);
+      IO (S, Save, Pre_Energy_G); IO (S, Save, Last_Act); IO (S, Save, Votes_Of); IO (S, Save, World_Active); IO (S, Save, Last_Verb);
+      for E in Entity_Id loop
+         IO (S, Save, St (E));
+         IO (S, Save, Pending_Word (E)); IO (S, Save, Pending_From (E));
+         for A in Action loop IO (S, Save, Act_Count (E, A)); end loop;
+         IO (S, Save, Voice_Act (E));
+         for K in 1 .. 5 loop IO (S, Save, Voice_Hist (E, K)); end loop;
+         for V in World_Verb loop IO (S, Save, Verb_Count (E, V)); end loop;
+         IO (S, Save, Rate_Pct (E)); IO (S, Save, Load (E)); IO (S, Save, Hist (E)); IO (S, Save, Cool (E)); IO (S, Save, Streak (E));
+         IO (S, Save, Since_Work (E)); IO (S, Save, Cool_N (E)); IO (S, Save, Cut_N (E)); IO (S, Save, Quick_N (E));
+         IO (S, Save, Chat_Start_Mood (E));
+         declare   --  without its "ts" (a replay writes the time of now; the frame shows only "t" and "text")
+            D : Unbounded_String := (if Save then To_Unbounded_String (No_Ts (To_String (Last_Diary (E)))) else Null_Unbounded_String);
+         begin
+            IO (S, Save, D);
+            if not Save then Last_Diary (E) := D; end if;
+         end;
+      end loop;
+      IO (S, Save, Last_Phase);
+      IO (S, Save, Rest_Active); IO (S, Save, Grant_Active);
+      IO (S, Save, Screen_Active); IO (S, Save, Screen_N); IO (S, Save, Scr_Lines);
+      IO (S, Save, Chess_Active); IO (S, Save, Chess_N); IO (S, Save, Chess_Lines);
+      IO (S, Save, Robot_Active); IO (S, Save, Robot_N); IO (S, Save, Robot_Lines);
+      IO (S, Save, Govern_Active); IO (S, Save, Scoin_Active); IO (S, Save, Govern_Lines); IO (S, Save, Gov_Since);
+      IO (S, Save, Preport_Active); IO (S, Save, Preport_End); IO (S, Save, Preport_Lines);
+      IO (S, Save, Next_Active); IO (S, Save, Next_End); IO (S, Save, Next_Lines);
+      IO (S, Save, Visit_Active); IO (S, Save, Visit_E); IO (S, Save, Visit_Start); IO (S, Save, Visit_End); IO (S, Save, Visit_Wait);
+      IO (S, Save, Trial_Active); IO (S, Save, Trial_Lines);
+      IO (S, Save, Chat_Active); IO (S, Save, Symbols_Active); IO (S, Save, Active_N); IO (S, Save, Chat_N);
+      IO (S, Save, Chat_Samples); IO (S, Save, Chat_Session_Count);
+      IO (S, Save, World_Flushed);
+      for K in Eff_Hit'Range loop IO (S, Save, Eff_Hit (K)); end loop;
+      IO (S, Save, Grant_Report);
+   end Main_State_IO;
+
+   --  Everything, in sections; a section marker that does not come back is a broken or foreign payload.
+   procedure All_State_IO (S : not null access Sim_Ckpt.Mem_Stream; Save : Boolean) is
+      procedure Mark (K : Positive) is
+         X : Integer := 77_000 + K;
+      begin
+         Sect_At (K) := (if Save then S.Last else S.Pos);
+         if Save then
+            Integer'Write (S, X);
+         else
+            Integer'Read (S, X);
+            if X /= 77_000 + K then raise Ckpt_Error with "section " & Sect_Name (K); end if;
+         end if;
+      end Mark;
+   begin
+      Mark (1); Sim_World.State_IO (S, Save);
+      Mark (2); Sim_Dharma.State_IO (S, Save);
+      Mark (3); Sim_Things.State_IO (S, Save);
+      Mark (4); Sim_Screen.State_IO (S, Save);
+      Mark (5); Sim_Games.State_IO (S, Save);
+      Mark (6); Sim_Robot.State_IO (S, Save);
+      Mark (7); Sim_Govern.State_IO (S, Save);
+      Mark (8); Sim_Preport.State_IO (S, Save);
+      Mark (9); Sim_Next.State_IO (S, Save);
+      Mark (10); Sim_Trial.State_IO (S, Save);
+      Mark (11); Sim_Records.State_IO (S, Save);
+      Mark (12); Sim_Visit.State_IO (S, Save);
+      Mark (13); Sim_Active.State_IO (S, Save);
+      Mark (14); Sim_Ledger.State_IO (S, Save);
+      Mark (15); Main_State_IO (S, Save);
+      Mark (16);
+      Sect_At (Sect_Count + 1) := (if Save then S.Last else S.Pos);
+   end All_State_IO;
+
+   --  What the files give at tick C: the sessions begun before C, the word votes up to C and Robert's inputs that have taken effect
+   --  by then.  Equal at the write and at the load, or the files were changed behind the checkpoint (an old input added or removed).
+   function Ckpt_Counts (C : Int) return String is
+      Ses, Vot, Gr, Vi, Ch : Natural := 0;
+   begin
+      for R of Sessions loop if R.Start < C then Ses := Ses + 1; end if; end loop;
+      for R of Word_Votes loop if R.Tick <= C then Vot := Vot + 1; end if; end loop;
+      for G of Grants loop if G.Tick < C then Gr := Gr + 1; end if; end loop;
+      for X of Visit_Inputs loop if X.Tick <= C then Vi := Vi + 1; end if; end loop;
+      for X of Chat_Inputs loop if X.Tick <= C then Ch := Ch + 1; end if; end loop;
+      return "sessions=" & Img (Ses) & " votes=" & Img (Vot) & " says=" & Img (Sim_Dharma.Addresses_Before (C)) & " grants=" & Img (Gr)
+        & " vetoes=" & Img (Sim_Govern.Inputs_Before (C)) & " challenges=" & Img (Sim_Preport.Inputs_Before (C))
+        & " visit=" & Img (Vi) & " chat=" & Img (Ch);
+   end Ckpt_Counts;
+
+   function Head_Get (Head : Str_Vectors.Vector; Key : String) return String is
+   begin
+      for L of Head loop
+         if L'Length > Key'Length and then L (L'First .. L'First + Key'Length) = Key & " " then return L (L'First + Key'Length + 1 .. L'Last); end if;
+      end loop;
+      return "";
+   end Head_Get;
+
+   --  The header checks shared by the start and by --verify: "" when the checkpoint fits the build, the data, the seed and the files.
+   function Ckpt_Fits (Head : Str_Vectors.Vector; Data : Sim_Ckpt.Mem_Stream; Pay_At : Ada.Streams.Stream_Element_Offset) return String is
+      use type Ada.Streams.Stream_Element_Offset;
+   begin
+      if Head.Is_Empty or else Head.First_Element /= Ckpt_Format then return Msg ("ckpt.why.version", "format"); end if;
+      if Head_Get (Head, "build") /= Build then return Msg ("ckpt.why.version", "build " & Head_Get (Head, "build")); end if;
+      if Head_Get (Head, "data") /= To_String (Data_Hash) then return Msg ("ckpt.why.version", "data/*.txt"); end if;
+      if Head_Get (Head, "payload") /= Img (Int (Data.Last - Pay_At)) & " " & Sim_Ckpt.Hex (Sim_Ckpt.Hash_Of (Data, Pay_At + 1, Data.Last)) then
+         return Msg ("ckpt.why.corrupt", "payload");
+      end if;
+      for L of Head loop
+         if L'Length > 5 and then L (L'First .. L'First + 4) = "file " then
+            declare
+               A : constant Natural := Fx.Index (L, " ", L'First + 5);
+               B : constant Natural := (if A = 0 then 0 else Fx.Index (L, " ", A + 1));
+            begin
+               if B = 0 then return Msg ("ckpt.why.corrupt", "file line"); end if;
+               if Sim_Ckpt.File_Print (L (B + 1 .. L'Last), Long_Long_Integer'Value (L (L'First + 5 .. A - 1))) /= L (A + 1 .. B - 1) then
+                  return Msg ("ckpt.why.stale", L (B + 1 .. L'Last));
+               end if;
+            end;
+         end if;
+      end loop;
+      return "";
+   exception
+      when others => return Msg ("ckpt.why.corrupt", "header");
+   end Ckpt_Fits;
+
+   --  Before the diaries are read: may this start use the checkpoint?  Sets Ckpt_Used (and Ckpt_Tick, Ckpt_Seed, Ckpt_Off) or Ckpt_Why.
+   procedure Ckpt_Probe is
+      Ok : Boolean;
+      procedure No (Why : String) is
+      begin
+         Ckpt_Used := False;
+         Ckpt_Why := To_Unbounded_String (Why);
+         Sim_Ckpt.Clear (Ckpt_Data);
+      end No;
+   begin
+      Ckpt_Used := False;
+      if Replay_Opt then No (Msg ("ckpt.why.forced")); return; end if;
+      if Limit ("ckpt.enabled", 1) = 0 then No (Msg ("ckpt.why.off")); return; end if;
+      if not Ada.Directories.Exists (Ckpt_Path) then No (Msg ("ckpt.why.missing")); return; end if;
+      Sim_Ckpt.Read_File (Ckpt_Path, Ckpt_Head, Ckpt_Data, Ok);
+      if not Ok then No (Msg ("ckpt.why.corrupt", "unreadable")); return; end if;
+      Ckpt_Pay_At := Ckpt_Data.Pos;
+      declare
+         Why : constant String := Ckpt_Fits (Ckpt_Head, Ckpt_Data, Ckpt_Pay_At);
+         C : constant Natural := Natural'Value (Head_Get (Ckpt_Head, "tick"));
+      begin
+         if Why /= "" then No (Why); return; end if;
+         if C = 0 then No (Msg ("ckpt.why.corrupt", "tick 0")); return; end if;
+         if Explicit and then More < 0 and then Ticks >= 0 and then Ticks < Int (C) then
+            No (Msg ("ckpt.why.ticks", Img (Ticks), Img (C)));
+            return;
+         end if;
+         for E in Entity_Id loop
+            Ckpt_Off (E) := Int'Value (Head_Get (Ckpt_Head, "diary" & Img (Integer (E))));
+         end loop;
+         Ckpt_Seed := Int'Value (Head_Get (Ckpt_Head, "seed"));
+         Ckpt_Tick := C;
+         Ckpt_Used := True;
+      end;
+   exception
+      when others => No (Msg ("ckpt.why.corrupt", "header"));
+   end Ckpt_Probe;
+
+   --  The whole diaries after all (the checkpoint does not fit after all): as a start without it.
+   procedure Ckpt_Full_Diaries is
+      Seed_D : Int := Disk_Seed;
+   begin
+      for E in Entity_Id loop
+         Disk (E).Clear;
+         Disk_Base (E) := 0;
+         Load_Diary (E, Seed_D);
+      end loop;
+   end Ckpt_Full_Diaries;
+
+   --  After every Load_* of the start: the files must still give the counts of the checkpoint, then its payload replaces the state of
+   --  ticks 1 .. C.  Anything that does not fit puts the state back as it was (Pristine) and the start replays everything.
+   procedure Ckpt_Restore is
+      use type Ada.Streams.Stream_Element_Offset;
+      Pristine : aliased Sim_Ckpt.Mem_Stream;
+      C : constant Int := Int (Ckpt_Tick);
+      Fail : Unbounded_String;
+   begin
+      if not Ckpt_Used then return; end if;
+      if Head_Get (Ckpt_Head, "counts") /= Ckpt_Counts (C) then
+         Append_Log ("CKPT", "counts at the write: " & Head_Get (Ckpt_Head, "counts") & ASCII.LF & "counts now: " & Ckpt_Counts (C) & ASCII.LF);
+         Fail := To_Unbounded_String ("inputs or sessions before tick " & Img (C));
+      elsif Natural (World_Stored.Length) < Natural'Value (Head_Get (Ckpt_Head, "world"))
+        or else Natural (Eff_Stored.Length) < Natural'Value (Head_Get (Ckpt_Head, "eff"))
+      then
+         Fail := To_Unbounded_String ("world.txt / grants.txt");
+      else
+         for K in 1 .. Store_Count loop
+            declare
+               N : constant Natural := Natural'Value (Head_Get (Ckpt_Head, "store" & Img (K)));
+               procedure Fit (S : in out Sim_Store.Store) is
+               begin
+                  if Length (Fail) = 0 and then not Sim_Store.Fits (S, N, C) then Fail := To_Unbounded_String (Sim_Store.Path_Of (S)); end if;
+               end Fit;
+            begin
+               With_Store (K, Fit'Access);
+            end;
+         end loop;
+      end if;
+      if Length (Fail) = 0 then
+         All_State_IO (Pristine'Access, True);
+         Ckpt_Data.Pos := Ckpt_Pay_At;
+         begin
+            All_State_IO (Ckpt_Data'Access, False);
+            if Ckpt_Data.Pos /= Ckpt_Data.Last then Fail := To_Unbounded_String ("payload length");
+            elsif Last_Done /= C then Fail := To_Unbounded_String ("tick");
+            elsif World_Flushed > Natural (World_Stored.Length) then Fail := To_Unbounded_String ("world.txt");
+            end if;
+         exception
+            when E : others => Fail := To_Unbounded_String ("payload: " & Ada.Exceptions.Exception_Message (E));
+         end;
+         if Length (Fail) > 0 then
+            Pristine.Pos := 0;
+            All_State_IO (Pristine'Access, False);
+         end if;
+         Sim_Ckpt.Clear (Pristine);
+      end if;
+      Sim_Ckpt.Clear (Ckpt_Data);
+      if Length (Fail) > 0 then
+         Ckpt_Used := False;
+         Ckpt_Why := To_Unbounded_String (Msg ("ckpt.why.stale", To_String (Fail)));
+         Ckpt_Full_Diaries;
+         return;
+      end if;
+      --  what the replay of 1 .. C would have marked in the lists read from the files
+      for K in 1 .. Store_Count loop
+         declare
+            N : constant Natural := Natural'Value (Head_Get (Ckpt_Head, "store" & Img (K)));
+            procedure Mark (S : in out Sim_Store.Store) is
+            begin
+               Sim_Store.Mark_First (S, N);
+            end Mark;
+         begin
+            With_Store (K, Mark'Access);
+         end;
+      end loop;
+      for G of Grants loop G.Done := G.Tick < C; end loop;   --  a grant of tick T takes effect before tick T + 1
+      Sim_Govern.Inputs_Done_Before (C);
+      Sim_Preport.Inputs_Done_Before (C);
+      for X of Visit_Inputs loop X.Done := X.Tick <= C; end loop;   --  handled at their tick
+      for X of Chat_Inputs loop X.Done := X.Tick <= C; end loop;
+      Ckpt_Load_Secs := Since (T_Run);
+   end Ckpt_Restore;
+
+   --  At the end of a run that wrote ticks (and at a clean stop): the state of tick Last_Done, with the files as they are now.
+   --  Never fatal: a checkpoint that cannot be written is left out (the next start replays, or loads an older one and replays the rest).
+   procedure Ckpt_Write is
+      T0 : constant Ada.Calendar.Time := Ada.Calendar.Clock;
+      C : constant Int := Last_Done;
+      Data : aliased Sim_Ckpt.Mem_Stream;
+      H : Unbounded_String;
+      Files : Str_Vectors.Vector;
+      Ok : Boolean := True;
+      procedure Line (K, V : String) is
+      begin
+         Append (H, K & " " & V & ASCII.LF);
+      end Line;
+   begin
+      if Preview or else Ledger_Mode or else C <= 0 or else Limit ("ckpt.enabled", 1) = 0 then return; end if;
+      for E in Entity_Id loop
+         if not Diary_Tail_Ok (Path (E), Natural (C)) then Ok := False; end if;
+      end loop;
+      for K in 1 .. Store_Count loop
+         declare
+            procedure Fit (S : in out Sim_Store.Store) is
+            begin
+               if not Sim_Store.Fits (S, Sim_Store.Count (S), C) then Ok := False; end if;
+            end Fit;
+         begin
+            With_Store (K, Fit'Access);
+         end;
+      end loop;
+      if not Ok then
+         Append_Log ("CKPT", Msg ("ckpt.notwritten", Img (C)) & ASCII.LF);
+         return;
+      end if;
+      All_State_IO (Data'Access, True);
+      Append (H, Ckpt_Format & ASCII.LF);
+      Line ("build", Build);
+      Line ("data", To_String (Data_Hash));
+      Line ("seed", Img (Seed));
+      Line ("tick", Img (C));
+      Line ("written", Local_Stamp);
+      for E in Entity_Id loop Line ("diary" & Img (Integer (E)), Img (Sim_Ckpt.File_Size (Path (E)))); end loop;
+      Line ("counts", Ckpt_Counts (C));
+      for K in 1 .. Store_Count loop
+         declare
+            procedure Cnt (S : in out Sim_Store.Store) is
+            begin
+               Line ("store" & Img (K), Img (Sim_Store.Count (S)));
+            end Cnt;
+         begin
+            With_Store (K, Cnt'Access);
+         end;
+      end loop;
+      Line ("world", Img (Integer (World_Stored.Length)));
+      Line ("eff", Img (Integer (Eff_Stored.Length)));
+      for K in 1 .. Sect_Count loop Line ("section" & Img (K), Sect_Name (K) & " " & Img (Int (Sect_At (K)))); end loop;
+      Line ("payload", Img (Int (Data.Last)) & " " & Sim_Ckpt.Hex (Sim_Ckpt.Hash_Of (Data, 1, Data.Last)));
+      Sim_Ckpt.Record_Files (Files);
+      for P of Files loop
+         declare
+            Size : constant Long_Long_Integer := Sim_Ckpt.File_Size (P);
+         begin
+            Line ("file " & Img (Int (Size)), Sim_Ckpt.File_Print (P, Size) & " " & P);
+         end;
+      end loop;
+      Append (H, "end" & ASCII.LF);
+      Sim_Ckpt.Write_File (Ckpt_Path, To_String (H), Data);
+      Ckpt_Bytes := Int (Length (H)) + Int (Data.Last);
+      Sim_Ckpt.Clear (Data);
+      Ckpt_Write_Secs := Since (T0);
+      Ckpt_Written := Ckpt_Written + 1;
+      Last_Ckpt_Tick := C;
+      Ckpt_Last_Write := Ada.Calendar.Clock;
+      Append_Log ("CKPT", Msg ("ckpt.written", Img (C), Img (Ckpt_Bytes / 1024), Secs_Text (Ckpt_Write_Secs)) & ASCII.LF);
+   exception
+      when E : others =>
+         Sim_Ckpt.Clear (Data);
+         begin
+            if Ada.Directories.Exists (Ckpt_Path) then Ada.Directories.Delete_File (Ckpt_Path); end if;
+         exception
+            when others => null;
+         end;
+         Append_Log ("CKPT", Msg ("ckpt.failed", Ada.Exceptions.Exception_Message (E)) & ASCII.LF);
+   end Ckpt_Write;
+
+   --  --verify: the replay has rebuilt the state of its last tick; a checkpoint of that tick must hold exactly the same bytes.
+   function Ckpt_Verify return String is
+      use type Ada.Streams.Stream_Element_Offset, Ada.Streams.Stream_Element;
+      Head : Str_Vectors.Vector;
+      Ok : Boolean;
+      Now : aliased Sim_Ckpt.Mem_Stream;
+      At_Diff : Ada.Streams.Stream_Element_Offset := 0;
+   begin
+      if not Ada.Directories.Exists (Ckpt_Path) then return Msg ("ckpt.verify.skip", Msg ("ckpt.why.missing")); end if;
+      Sim_Ckpt.Read_File (Ckpt_Path, Head, Ckpt_Data, Ok);
+      if not Ok then return Msg ("ckpt.verify.skip", Msg ("ckpt.why.corrupt", "unreadable")); end if;
+      declare
+         Pay : constant Ada.Streams.Stream_Element_Offset := Ckpt_Data.Pos;
+         Why : constant String := Ckpt_Fits (Head, Ckpt_Data, Pay);
+         C : constant Int := Int'Value (Head_Get (Head, "tick"));
+      begin
+         if Why /= "" then Sim_Ckpt.Clear (Ckpt_Data); return Msg ("ckpt.verify.skip", Why); end if;
+         if C /= Last_Done then Sim_Ckpt.Clear (Ckpt_Data); return Msg ("ckpt.verify.skip", Msg ("ckpt.why.tick", Img (C), Img (Last_Done))); end if;
+         All_State_IO (Now'Access, True);
+         if Now.Last /= Ckpt_Data.Last - Pay then At_Diff := Ada.Streams.Stream_Element_Offset'Min (Now.Last, Ckpt_Data.Last - Pay) + 1; end if;
+         for I in 1 .. Ada.Streams.Stream_Element_Offset'Min (Now.Last, Ckpt_Data.Last - Pay) loop
+            if Now.Buf (I) /= Ckpt_Data.Buf (Pay + I) then At_Diff := I; exit; end if;
+         end loop;
+         Sim_Ckpt.Clear (Now);
+         Sim_Ckpt.Clear (Ckpt_Data);
+         if At_Diff = 0 then return Msg ("ckpt.verify.same", Img (C)); end if;
+         declare
+            K : Positive := 1;
+         begin
+            for J in 1 .. Sect_Count loop
+               if Sect_At (J) < At_Diff then K := J; end if;
+            end loop;
+            if Ada.Directories.Exists (Ckpt_Path & ".bad") then Ada.Directories.Delete_File (Ckpt_Path & ".bad"); end if;
+            Ada.Directories.Rename (Ckpt_Path, Ckpt_Path & ".bad");
+            Ada.Command_Line.Set_Exit_Status (1);
+            return Msg ("ckpt.verify.diff", Img (C), Sect_Name (K), Img (Int (At_Diff - Sect_At (K))));
+         end;
+      end;
+   exception
+      when E : others =>
+         Sim_Ckpt.Clear (Ckpt_Data);
+         return Msg ("ckpt.verify.skip", Ada.Exceptions.Exception_Message (E));
+   end Ckpt_Verify;
+
+   --  The line of the start: the checkpoint and how long the start took, or why everything is replayed.
+   function Ckpt_Start_Text return String is
+     (if Ckpt_Used then Msg ("ckpt.used", Img (Ckpt_Tick), Secs_Text (Ckpt_Load_Secs), Img (Integer'Max (0, Verify_To - Ckpt_Tick)))
+      else Msg ("ckpt.replay", To_String (Ckpt_Why), Img (Verify_To)));
+
+   --  A night writes the checkpoint after a session when night.ckpt_seconds have passed since the last one, and after the session
+   --  that is (most likely) its last: a limit, q or a signal.  A crash in between costs the replay of the sessions after it.
+   function Night_Ckpt_Due return Boolean is
+      Every_S : constant Int := Limit ("night.ckpt_seconds", 60);
+   begin
+      return Every_S <= 0 or else Since (Ckpt_Last_Write) >= Duration (Every_S)
+        or else Sim_Quit.Requested or else Sim_Quit.Key_Q
+        or else (Night_Max_S > 0 and then Int (Night_Done) + 1 >= Night_Max_S)
+        or else (Night_Max_Secs > 0.0 and then Since (Night_T0) + Duration'Max (5.0, 2 * Last_Dur) >= Night_Max_Secs);
+   end Night_Ckpt_Due;
+
    procedure Night_Next_Session is
       Seed_D : Int := Disk_Seed;
       Old : constant Natural := Common;
@@ -7262,12 +7804,13 @@ procedure Diary_Sim is
       Ticks := Int (Common) + Night_Per;
       for E in Entity_Id loop
          Cur_Name := To_Unbounded_String (Name (E));
-         if Natural (Disk (E).Length) /= Common or else not Diary_Tail_Ok (Path (E), Common) then   --  0.057: else the lines in memory are the file
+         if Disk_Len (E) /= Common or else not Diary_Tail_Ok (Path (E), Common) then   --  0.057: else the lines in memory are the file
             Disk (E).Clear;
+            Disk_Base (E) := 0;
             Load_Diary (E, Seed_D);
          end if;
-         if Natural (Disk (E).Length) /= Common then
-            raise Diary_Error with Msg ("night.err.length", Name (E), Img (Integer (Disk (E).Length)), Img (Common), Img (Old));
+         if Disk_Len (E) /= Common then
+            raise Diary_Error with Msg ("night.err.length", Name (E), Img (Integer (Disk_Len (E))), Img (Common), Img (Old));
          end if;
       end loop;
       Cur_Name := To_Unbounded_String ("-");
@@ -7281,6 +7824,8 @@ procedure Diary_Sim is
    end Night_Next_Session;
 
 begin
+   Data_Hash := To_Unbounded_String (Sim_Ckpt.Dir_Hash (Ada.Directories.Containing_Directory (Data_Path ("limits.txt"))));   --  the data Load_Data reads
+   Replay_Wait_Ms := Natural'Value ("0" & GNAT.OS_Lib.Getenv ("DIARY_TEST_REPLAY_MS").all);
    Load_Data;
    while I <= Ada.Command_Line.Argument_Count loop
       declare
@@ -7300,6 +7845,7 @@ begin
             if not Found then Con.Put_Line ("diary_sim: data/help.txt not found (--ticks --seed --every --fresh --crash-at)"); end if;
             return;
          elsif Opt = "--fresh" then Fresh := True;
+         elsif Opt = "--replay" then Replay_Opt := True;   --  0.058: replay from tick 1, the checkpoint is not loaded (it is written again)
          elsif Opt = "--yes" then Yes := True;
          elsif Opt = "--verbose" then Verbose := True;
          elsif Opt = "--report" then Report_Mode := True;
@@ -7535,11 +8081,34 @@ begin
       end if;
    end if;
    Ada.Directories.Create_Path ("diaries");
+   if Has_Diaries and then not Fresh and then not Verify_View then   --  0.058: the checkpoint, if it fits (else Ckpt_Why says why not)
+      Ckpt_Probe;
+   else
+      Ckpt_Why := To_Unbounded_String (Msg (if Verify_View then "ckpt.why.verify" else "ckpt.why.missing"));
+   end if;
+   if Ckpt_Used then
+      begin
+         Disk_Seed := Ckpt_Seed;
+         for E in Entity_Id loop
+            Cur_Name := To_Unbounded_String (Name (E));
+            Load_Diary_From (E, Ckpt_Off (E), Ckpt_Tick, Disk_Seed);   --  only the lines after the checkpoint's tick
+         end loop;
+      exception
+         when Ex : others =>   --  the diary does not go on from the checkpoint: the whole diaries, as without one
+            Ckpt_Used := False;
+            Ckpt_Why := To_Unbounded_String (Msg ("ckpt.why.stale", Ada.Exceptions.Exception_Message (Ex)));
+            Disk_Seed := -1;
+            for E in Entity_Id loop
+               Disk (E).Clear;
+               Disk_Base (E) := 0;
+            end loop;
+      end;
+   end if;
    for E in Entity_Id loop
       Cur_Name := To_Unbounded_String (Name (E));
-      Load_Diary (E, Disk_Seed);
-      Common := (if E = 1 then Natural (Disk (E).Length) else Natural'Min (Common, Natural (Disk (E).Length)));
-      Longest := Natural'Max (Longest, Natural (Disk (E).Length));
+      if not Ckpt_Used then Load_Diary (E, Disk_Seed); end if;
+      Common := (if E = 1 then Disk_Len (E) else Natural'Min (Common, Disk_Len (E)));
+      Longest := Natural'Max (Longest, Disk_Len (E));
       Append (Names, (if E = 1 then "" else " ") & Name (E) & "(" & Kind (E) & ")");
    end loop;
    Cur_Name := To_Unbounded_String ("-");
@@ -7557,8 +8126,8 @@ begin
    end if;
    if not Ledger_Mode then Con.Put_Line (Msg ("entities", To_String (Names))); end if;
    for E in Entity_Id loop
-      if Natural (Disk (E).Length) < Longest then
-         Warn (Msg ("warn.behind", Name (E), Img (Integer (Disk (E).Length)), Img (Longest), Img (Common)));
+      if Disk_Len (E) < Longest then
+         Warn (Msg ("warn.behind", Name (E), Img (Integer (Disk_Len (E))), Img (Longest), Img (Common)));
       end if;
    end loop;
 
@@ -7632,6 +8201,18 @@ begin
    Load_Active_Params;
    Load_Challenges;
    Set_Ledger_From;
+   if Ent_Missing > 0 and then Ckpt_Used then   --  the replay writes the entity files again: it has to run
+      Ckpt_Used := False;
+      Ckpt_Why := To_Unbounded_String (Msg ("ckpt.why.stale", "entities/"));
+      Sim_Ckpt.Clear (Ckpt_Data);
+      Ckpt_Full_Diaries;
+   end if;
+   Ckpt_Restore;   --  0.058: the state of ticks 1 .. Ckpt_Tick from state.ckpt (or nothing, and Ckpt_Used is False)
+   if Ckpt_Used then
+      Append_Log ("CKPT", Msg ("ckpt.used", Img (Ckpt_Tick), Secs_Text (Ckpt_Load_Secs), Img (Integer'Max (0, Common - Ckpt_Tick))) & ASCII.LF);
+   elsif not Ledger_Mode or else Verify_View then
+      Append_Log ("CKPT", Msg ("ckpt.replay", To_String (Ckpt_Why), Img (Common)) & ASCII.LF);
+   end if;
    if not Ledger_Mode then Write_Debug ("RUN", ""); end if;   --  stub: a kill -9 still leaves a file
 
    Sessions_Loop : loop   --  once for a normal run; a night run goes round once per session (the replay below only in the first)
@@ -7639,10 +8220,25 @@ begin
    Verify_To := (if Explicit then Natural'Min (Common, Natural (Ticks)) else Common);
    if Night_Done = 0 then
       Night_Phase := 0;
-      Check_Sessions_At (0);
-      for Tick in Int range 1 .. Int (Verify_To) loop
+      Ckpt_Start_Line := To_Unbounded_String (Ckpt_Start_Text);   --  0.058: how this start got its state
+      if Ledger_Mode then
+         null;
+      elsif Night_On then
+         Recent.Append (To_String (Ckpt_Start_Line));
+         Append_Log ("NIGHT", To_String (Ckpt_Start_Line) & ASCII.LF);
+         if not Tty_Out then Con.Put_Line_Now (To_String (Ckpt_Start_Line)); Flush_Out; end if;
+      else
+         Con.Put_Line (To_String (Ckpt_Start_Line));
+      end if;
+      if Ckpt_Used then
+         Start_Sessions_At (Int (Ckpt_Tick));   --  a session the replay would begin at the checkpoint's tick
+      else
+         Check_Sessions_At (0);
+      end if;
+      for Tick in Int range (if Ckpt_Used then Int (Ckpt_Tick) + 1 else 1) .. Int (Verify_To) loop
          Do_Tick (Tick);
          Check_Sessions_At (Tick);
+         if Replay_Wait_Ms > 0 then delay Duration (Replay_Wait_Ms) / 1000.0; end if;   --  tests only: a long replay on a small save
          if Night_On and then Tick mod 8 = 0 then Night_Tick; end if;
          Quit_Seen := Sim_Quit.Requested or else (Night_On and then Sim_Quit.Key_Q);
          exit when Quit_Seen;
@@ -7652,7 +8248,7 @@ begin
       declare
          Total : Natural := 0;
       begin
-         for E in Entity_Id loop Total := Total + Natural (Disk (E).Length); end loop;
+         for E in Entity_Id loop Total := Total + Disk_Len (E); end loop;
          Import_Done := True;
          Import_Block := To_Unbounded_String (Import_Text (Total));
          if not Ledger_Mode then Con.Put_Line (To_String (Import_Block)); end if;
@@ -7676,6 +8272,7 @@ begin
             Verify_Chat (Last_Done);
             Verify_Active (Last_Done);
             Con.Put_Line (Msg ("verify.ok", Img (Verify_To), Img (Integer (Sessions.Length)), Tenths_Text (Ada.Calendar."-" (Ada.Calendar.Clock, T_Run))));
+            Con.Put_Line (Ckpt_Verify);   --  0.058: the checkpoint against the state the replay has just rebuilt
          elsif Voices_View then Con.Put (Voices_Text); elsif Elo_View then Con.Put (Elo_Text); elsif Govern_View then Con.Put (Govern_Text); elsif Audit_View then Con.Put (Audit_Text); elsif Next_View then Con.Put (Next_Text); elsif Trial_View then Con.Put (Trials_Text); elsif Rec_View then Con.Put (Lines_Text (Sim_Records.Divergence)); elsif Dict_View then Con.Put (Lines_Text (Sim_Records.Dictionary)); elsif Bal_View then Con.Put (Lines_Text (Sim_Records.Ballots)); elsif Robot_View then Con.Put (Robot_Text); elsif Screens_View then Con.Put (Screens_Text); else Con.Put_Line (Sim_Ledger.Report (Seed, Ledger_From, Ledger_Full)); end if;
          return;
       end if;
@@ -7746,7 +8343,9 @@ begin
       Verify_Visit (Last_Done);
       Verify_Chat (Last_Done);
       Verify_Active (Last_Done);
+      if not Night_On or else Night_Ckpt_Due then Ckpt_Write; end if;   --  0.058: the state of this session end (a night: see Night_Ckpt_Due)
    end if;
+   if Quit_Seen and then Last_Done > Int (Common) then Ckpt_Write; end if;   --  a clean stop inside the session: the state of its last tick
    if Quit_Seen then   --  Ctrl-C / SIGTERM / SIGHUP: everything written so far is flushed; a rerun resumes
       declare
          By_Key : constant Boolean := Night_On and then not Sim_Quit.Requested;   --  q during the replay of the first session: nothing new exists
@@ -7894,7 +8493,7 @@ begin
       Save ("summary.jsonl", Json);
       --  Export check: re-open and count what is on disk now.
       for E in Entity_Id loop
-         Check_File (Path (E), Natural'Max (Natural (Disk (E).Length), Natural (Ticks)), 'd', N, Fails);
+         Check_File (Path (E), Natural'Max (Disk_Len (E), Natural (Ticks)), 'd', N, Fails);
          D_Files := D_Files + 1;
          D_Lines := D_Lines + N;
          for K in Side_Kind loop

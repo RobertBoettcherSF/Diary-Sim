@@ -1,6 +1,8 @@
---  Version: 0.004
+--  Version: 0.005
 --  See sim_records.ads.
 pragma Ada_2022;
+
+with Sim_Ckpt;
 
 with Ada.Characters.Handling;
 with Ada.Containers.Vectors;
@@ -867,5 +869,31 @@ package body Sim_Records is
       if Dict_All.Is_Empty then R.Append (Msg ("rec.dict.none")); end if;
       return R;
    end Dictionary;
+
+   --  0.058: the checkpoint.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean) is
+      procedure IO is new Sim_Ckpt.IO (Integer);
+      procedure IO is new Sim_Ckpt.IO (Int);
+      procedure IO is new Sim_Ckpt.IO (Boolean);
+      procedure IO is new Sim_Ckpt.IO (Prop_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Ann_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Sess_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Str_Vectors.Vector);
+   begin
+      IO (S, Save, Seed_V);
+      IO (S, Save, Is_Active); IO (S, Save, Is_Quality);
+      IO (S, Save, Sess_N);
+      IO (S, Save, Scan_Init);
+      IO (S, Save, Last_Scan);
+      IO (S, Save, V_N); IO (S, Save, A_N); IO (S, Save, L_N); IO (S, Save, B_N);
+      IO (S, Save, Voted_N); IO (S, Save, Agreed_N);
+      IO (S, Save, Ses_Agreed); IO (S, Save, Ses_Rejected); IO (S, Save, Ses_Ann);
+      IO (S, Save, Pending);
+      IO (S, Save, Anns);
+      IO (S, Save, Sess_List);
+      for E in Entity_Id loop IO (S, Save, Mood_P (E)); IO (S, Save, Cost_P (E)); end loop;
+      IO (S, Save, Votes_Out); IO (S, Save, Pets_Out); IO (S, Save, Dict_Out); IO (S, Save, Anns_Out); IO (S, Save, Bals_Out);
+      IO (S, Save, Votes_All); IO (S, Save, Pets_All); IO (S, Save, Dict_All); IO (S, Save, Anns_All); IO (S, Save, Bals_All);
+   end State_IO;
 
 end Sim_Records;

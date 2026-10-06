@@ -1,4 +1,4 @@
---  Version: 0.007
+--  Version: 0.008
 --  Governance of diary_sim (govern=1 sessions; needs rest=1): the players (Player 1, Player 2, Player 3) decide what happens to the
 --  petitions of the wesen they watch.  A SHORT WHITELIST of rule levers (data/govern.txt: recovery rate, cool-down length, the mood
 --  cost of work, the quick-rest energy) can each be moved a small step by a petition of the matching topic, never past its bounds.
@@ -11,6 +11,8 @@
 --  Pure functions of (seed, wesen, tick, salts) and of the replayed state.  Nothing here runs without a govern=1 session.
 --  PROOF-LATER: Importance 4/10, Urgency 3/10, SPARK2 (bounded lever arithmetic, weighted dice, record parsing)
 pragma Ada_2022;
+
+with Ada.Streams;
 
 with Sim_Dharma;
 with Sim_Util;
@@ -61,5 +63,10 @@ package Sim_Govern is
    procedure Adjust (E : Entity_Id; Trust_By, Stand_By : Integer);
    function View return Str_Vectors.Vector;                           --  --govern / make govern (ids; the output layer maps names)
    function Describe (Line : String) return String;                   --  one D line as a sentence
+
+   --  0.058: the state the replay builds, for the checkpoint (state.ckpt): Save writes it, else it is read back.
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean);
+   procedure Inputs_Done_Before (Tick : Int);   --  the inputs read at the start: those of ticks before Tick are done
+   function Inputs_Before (Tick : Int) return Natural;   --  how many of them (the checkpoint compares the count)
 
 end Sim_Govern;

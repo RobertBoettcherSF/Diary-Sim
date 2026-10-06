@@ -1,5 +1,7 @@
---  Version: 0.003
+--  Version: 0.004
 pragma Ada_2022;
+
+with Sim_Ckpt;
 
 with Ada.Containers.Ordered_Maps, Ada.Strings.Fixed, Ada.Strings.Unbounded;
 use Ada.Strings.Unbounded;
@@ -554,4 +556,25 @@ package body Sim_Things is
       end loop;
       return Res;
    end Camera;
+   --  0.058: the checkpoint (the word lists of data/things.txt are read again at the start).
+   procedure State_IO (S : not null access Ada.Streams.Root_Stream_Type'Class; Save : Boolean) is
+      procedure IO is new Sim_Ckpt.IO (Integer);
+      procedure IO is new Sim_Ckpt.IO (Int);
+      procedure IO is new Sim_Ckpt.IO (Pos_Array);
+      procedure IO is new Sim_Ckpt.IO (Placed_Array);
+      procedure IO is new Sim_Ckpt.IO (Chunk_Maps.Map);
+      procedure IO is new Sim_Ckpt.IO (Str_Vectors.Vector);
+      procedure IO is new Sim_Ckpt.IO (Name_Maps.Map);
+   begin
+      IO (S, Save, Seed_V);
+      IO (S, Save, Chunk); IO (S, Save, Pct1); IO (S, Save, Pct2); IO (S, Save, Churn_Period); IO (S, Save, Appear);
+      IO (S, Save, Wear); IO (S, Save, Radius); IO (S, Save, Leash); IO (S, Save, Sense); IO (S, Save, Mut_Pct);
+      for I in 0 .. 3 loop IO (S, Save, LM_X (I)); IO (S, Save, LM_Y (I)); end loop;
+      IO (S, Save, PX); IO (S, Save, PY);
+      IO (S, Save, Is_Placed);
+      IO (S, Save, Chunk_Edits);
+      IO (S, Save, Log);
+      IO (S, Save, Names);
+   end State_IO;
+
 end Sim_Things;
