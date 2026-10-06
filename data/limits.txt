@@ -584,13 +584,18 @@ carry.words_cap = 5
 # 0) (moodrest.soft = 0: no shrinking); then the mood drifts pull_pct percent of the way back to the resting mood, pull_high_pct
 # above the band.  The mood goal of checkin.txt: every wesen at least goal_pct percent of the window within goal_near of the band,
 # none below 0 for goal_pct percent or more.  Changing a number changes the replay of the moodrest=1 sessions (make verify-full).
-moodrest.enabled = 1
+moodrest.enabled = 2
 moodrest.band_lo = 60
 moodrest.band_hi = 80
 moodrest.core_lo = 30
 moodrest.core_hi = 70
 moodrest.pull_pct = 5
 moodrest.pull_high_pct = 15
+# 0.063 moodrest=2 (moodrest.enabled = 2; 1 = the 0.062 rule above, 0 = off): each tick ONE point towards the resting mood with
+# the probability pull_bp / 10000 per point of gap (expected drift = rate x gap, a swing fades halfway in about 0.69 / rate
+# ticks: 15 -> ~460 ticks); above band_hi pull_high_bp; the soft bounds round by a die (no dead zone)
+moodrest.pull_bp = 15
+moodrest.pull_high_bp = 45
 moodrest.soft = 1
 moodrest.goal_near = 10
 moodrest.goal_pct = 50

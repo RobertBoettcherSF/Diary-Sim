@@ -1,4 +1,4 @@
---  Version: 0.062
+--  Version: 0.063
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.062";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.063";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -654,6 +654,10 @@ procedure Diary_Sim is
    --  back to the resting mood, moodrest.pull_high_pct above the band (adaptation).  Set by Start_Life, derived from the sessions
    --  after a checkpoint load (no state of its own).
    Moodrest_Active : Boolean := False;
+   --  0.063 moodrest=2: the same resting moods, but the drift is a one-point step taken with the probability rate x gap (a die
+   --  of 10000: moodrest.pull_bp basis points per point of gap, pull_high_bp above the band), and the soft bounds round by a
+   --  die too; so the expected drift is rate x gap with no rounding dead zone and no state of its own
+   Moodrest_Level : Positive := 1;
    Rest_Mood_Known : Boolean := False;
    Rest_Mood_Of : array (Entity_Id) of Integer := [others => 0];
    function Rest_Mood (E : Entity_Id) return Integer is
@@ -696,6 +700,35 @@ procedure Diary_Sim is
       end;
       return Clamp (M, M_Min, M_Max);
    end Mood_Rest_Step;
+   function Mood_Rest_Step2 (E : Entity_Id; From, To : Integer; Tick : Int) return Integer is
+      Mid : constant Integer := (M_Max + M_Min) / 2;
+      D : constant Integer := To - From;
+      Soft : constant Boolean := Limit ("moodrest.soft", 1) /= 0;
+      M : Integer := From + D;
+      --  N / Den rounded by a die: the remainder becomes one more point with the probability |remainder| / Den
+      function Div_Die (N, Den : Integer; Salt : Natural) return Integer is
+         Q : constant Integer := N / Den;
+         R : constant Integer := abs (N rem Den);
+      begin
+         if R > 0 and then Roll (Seed, Positive (E), Tick, Salt, Den) <= R then return Q + (if N > 0 then 1 else -1); end if;
+         return Q;
+      end Div_Die;
+   begin
+      if Soft and then D > 0 and then From > Mid and then M_Max > Mid then M := From + Div_Die (D * (M_Max - From), M_Max - Mid, 23105);
+      elsif Soft and then D < 0 and then From < Mid and then Mid > M_Min then M := From + Div_Die (D * (From - M_Min), Mid - M_Min, 23105);
+      end if;
+      declare
+         Gap : constant Integer := Rest_Mood (E) - M;
+         Bp : constant Int := Int'Max (0, (if M > Integer (Limit ("moodrest.band_hi", 80)) then Limit ("moodrest.pull_high_bp", 45)
+                                           else Limit ("moodrest.pull_bp", 15)));
+         P : constant Int := Int'Min (10_000, Bp * Int (abs Gap));
+      begin
+         if Gap /= 0 and then P > 0 and then Int (Roll (Seed, Positive (E), Tick, 23106, 10_000)) <= P then
+            M := M + (if Gap > 0 then 1 else -1);
+         end if;
+      end;
+      return Clamp (M, M_Min, M_Max);
+   end Mood_Rest_Step2;
    Carry_W : array (Entity_Id) of Positive := [others => 1];
    function Carry_Choice (E : Entity_Id; Tick : Int; Base : Action) return Action is
       Eid : constant Positive := Positive (E);
@@ -1239,7 +1272,7 @@ procedure Diary_Sim is
       end if;
       if Moodrest_Active then   --  0.062 moodrest=1: soft bounds and the drift to the resting mood (ledger: in the rest-model part)
          declare
-            M : constant Integer := Mood_Rest_Step (E, Pre_Mo, S.Mood);
+            M : constant Integer := (if Moodrest_Level >= 2 then Mood_Rest_Step2 (E, Pre_Mo, S.Mood, Tick) else Mood_Rest_Step (E, Pre_Mo, S.Mood));
          begin
             M_After_Base := M_After_Base + (M - S.Mood);
             S.Mood := M;
@@ -5330,6 +5363,7 @@ procedure Diary_Sim is
       Carry : Boolean := False;         --  carry=1 (0.061): word carrying among the wesen: target, teacher pull, relief, favours (Sim_Carry)
       Carry2 : Boolean := False;        --  carry=2 (0.062, with Carry): a lesson is an exchange of several words both ways
       Moodrest : Boolean := False;      --  moodrest=1 (0.062): resting moods, soft bounds (Mood_Rest_Step)
+      Moodrest2 : Boolean := False;     --  moodrest=2 (0.063): the drift as a one-point step by a die (Mood_Rest_Step2)
    end record;
    package Session_Vectors is new Ada.Containers.Vectors (Positive, Session_Rec);
    Sessions : Session_Vectors.Vector;
@@ -5350,7 +5384,7 @@ procedure Diary_Sim is
       & " src=" & (if R.By_Vote then "vote" else "explicit") & (if R.Dharma then " dharma=1" else "")
       & (if R.World then " world=1" else "") & (if R.Rest then " rest=1" else "") & (if R.Grant then " grant=1" else "")
       & (if R.Symstrict then " symstrict=1" else "") & (if R.Slowfloor then " slowfloor=1" else "")   --  build 0.054, before screen=1: older checks anchor the end
-      & (if R.Carry then (if R.Carry2 then " carry=2" else " carry=1") else "") & (if R.Moodrest then " moodrest=1" else "")   --  0.061 / 0.062, before screen=1
+      & (if R.Carry then (if R.Carry2 then " carry=2" else " carry=1") else "") & (if R.Moodrest then (if R.Moodrest2 then " moodrest=2" else " moodrest=1") else "")   --  0.061 / 0.062, before screen=1
       & (if R.Screen then " screen=1" else "") & (if R.Chess then " chess=1" else "") & (if R.Chessrules then " chessrules=2" else "")
       & (if R.Robot then " robot=1" else "") & (if R.Govern then " govern=1" else "") & (if R.Scoin then " scoin=1" else "")
       & (if R.Preport then " preport=1" else "") & (if R.Players4 then " players4=1" else "") & (if R.Nextticks then " nextticks=1" else "") & (if R.Trial then " trial=1" else "") & (if R.Rec2 and then R.Records then " records=2" elsif R.Records then " records=1" else "")
@@ -5413,7 +5447,8 @@ procedure Diary_Sim is
       R.Chat := Token (L, "chat") = "1";
       R.Carry := Token (L, "carry") = "1" or else Token (L, "carry") = "2";
       R.Carry2 := Token (L, "carry") = "2";
-      R.Moodrest := Token (L, "moodrest") = "1";
+      R.Moodrest := Token (L, "moodrest") = "1" or else Token (L, "moodrest") = "2";
+      R.Moodrest2 := Token (L, "moodrest") = "2";
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
         and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0 and then (R.Visit_Who > 0 or else not R.Visit);
       while OK and then K < 4 loop
@@ -5569,6 +5604,7 @@ procedure Diary_Sim is
       Preport_Active := False;
       Sim_Carry.Reset;
       Moodrest_Active := False;
+      Moodrest_Level := 1;
       Preport_End := -1;
       Next_Active := False;
       Next_End := -1;
@@ -5623,6 +5659,7 @@ procedure Diary_Sim is
       Chess_Active := R.Chess;
       Sim_Carry.Begin_Session (R.Carry, (if R.Carry2 then 2 else 1));
       Moodrest_Active := R.Moodrest;
+      Moodrest_Level := (if R.Moodrest2 then 2 else 1);
       Sim_Games.Set_Rules (if R.Chessrules then 2 else 0);
       Robot_Active := R.Robot;
       Govern_Active := R.Govern;
@@ -5913,7 +5950,8 @@ procedure Diary_Sim is
 
    function Carry_Wanted return Boolean is (Limit ("carry.enabled", 2) /= 0);   --  carry=1 (0.061): word carrying in new sessions
    function Carry2_Wanted return Boolean is (Limit ("carry.enabled", 2) >= 2);  --  carry=2 (0.062): exchanges (carry.enabled = 1: carry=1)
-   function Moodrest_Wanted return Boolean is (Limit ("moodrest.enabled", 1) /= 0);   --  moodrest=1 (0.062)
+   function Moodrest_Wanted return Boolean is (Limit ("moodrest.enabled", 2) /= 0);   --  moodrest=1 (0.062) or 2 (0.063)
+   function Moodrest2_Wanted return Boolean is (Limit ("moodrest.enabled", 2) >= 2);   --  moodrest=2 (0.063)
 
    function Preport_Wanted return Boolean is (Govern_Wanted and then Limit ("preport.enabled", 1) /= 0);   --  preport=1 needs the governance (the D records)
 
@@ -5936,7 +5974,7 @@ procedure Diary_Sim is
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
                Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => Visit_Mode, Visit_Who => Visit_Who, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted, Carry2 => Carry2_Wanted, Moodrest => Moodrest_Wanted);
+               Visit => Visit_Mode, Visit_Who => Visit_Who, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted, Carry2 => Carry2_Wanted, Moodrest => Moodrest_Wanted, Moodrest2 => Moodrest2_Wanted);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -5953,7 +5991,7 @@ procedure Diary_Sim is
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
                World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => False, Visit_Who => 0, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted, Carry2 => Carry2_Wanted, Moodrest => Moodrest_Wanted);
+               Visit => False, Visit_Who => 0, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted, Carry2 => Carry2_Wanted, Moodrest => Moodrest_Wanted, Moodrest2 => Moodrest2_Wanted);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);
@@ -6564,6 +6602,7 @@ procedure Diary_Sim is
       Sim_Screen.Begin_Session (Scoin_Active);
       Sim_Carry.Begin_Session (Carry_Wanted, (if Carry2_Wanted then 2 else 1));
       Moodrest_Active := Moodrest_Wanted;
+      Moodrest_Level := (if Moodrest2_Wanted then 2 else 1);
       if Rest_Active then Rest_Begin (Seed); end if;
       Con.Put (To_String (Pending));
       Con.Put_Line (Msg ("preview.head", Img (Seed), Img (Total)));
@@ -8114,12 +8153,14 @@ procedure Diary_Sim is
    procedure Derive_Session_Flags (C : Int) is
       Lvl : Positive := 1;
       Mr : Boolean := False;
+      Mr2 : Boolean := False;
    begin
       for R of Sessions loop
-         if R.Start < C then Lvl := (if R.Carry2 then 2 else 1); Mr := R.Moodrest; end if;
+         if R.Start < C then Lvl := (if R.Carry2 then 2 else 1); Mr := R.Moodrest; Mr2 := R.Moodrest2; end if;
       end loop;
       Sim_Carry.Set_Level (Lvl);
       Moodrest_Active := Mr;
+      Moodrest_Level := (if Mr2 then 2 else 1);
    end Derive_Session_Flags;
 
    procedure Ckpt_Restore is
