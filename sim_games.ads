@@ -49,6 +49,7 @@ package Sim_Games is
                    Detail : in out Ada.Strings.Unbounded.Unbounded_String);
    --  Once per tick before the wesen: the clock of the side to move in every running game (timeout).
    procedure Clock (Tick : Int; Lines : in out Str_Vectors.Vector);
+   procedure Reindex;   --  0.060: after the state was read from a checkpoint (the first running game is searched from game 1 again)
    --  Mood from finished games, handed over once (at the wesen's step).
    function Take_Mood (E : Entity_Id) return Integer;
    function On_Holiday (E : Entity_Id; Tick : Int) return Boolean;

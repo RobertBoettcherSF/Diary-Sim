@@ -3,7 +3,7 @@ pragma Ada_2022;
 
 with Sim_Ckpt;
 
-with Ada.Characters.Handling, Ada.Containers.Vectors, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
+with Ada.Characters.Handling, Ada.Containers.Vectors, Ada.Containers.Indefinite_Hashed_Maps, Ada.Environment_Variables, Ada.Strings.Hash, Interfaces, Ada.Strings.Fixed, Ada.Strings.Unbounded, Sim_Util;
 use Ada.Strings.Unbounded;
 use Sim_Util;
 
@@ -229,6 +229,135 @@ package body Sim_World is
    Cache_Steps : array (Entity_Id) of Int := [others => -1];
    Cache_Row   : array (Entity_Id) of Interfaces.Unsigned_64 := [others => 0];
 
+   --  0.060: indices of the word table.  The lexicon of a big save has ~25000 words, and Find (a text), Nth_Known, Nth_Usable,
+   --  Teachable_Count and Nth_Teachable walked the whole table word by word, several times per tick: O(lexicon) per tick.  Now:
+   --  * Find: a hash map text -> the FIRST word with that text, filled up to Count on demand (the table only grows, a text never
+   --    changes), so it returns what the scan returned;
+   --  * the four counts / picks: bit mirrors (64 words per Unsigned_64) of Known, Dormant, Symbol and Sym_Text, the same predicates
+   --    word by word, counted with a popcount; the n-th match in table order is the n-th set bit.  Learn_Word, Set_Dormant and the
+   --    Add_* keep them up to date; Init and Reindex (after the state was read from a checkpoint) drop them, the next use rebuilds.
+   --  DIARY_CHECK_INDEX=1 (tests, make check): every call also runs the old scan and stops with Program_Error if they differ.
+   use type Interfaces.Unsigned_64;
+   subtype U64 is Interfaces.Unsigned_64;
+   package U64_Vectors is new Ada.Containers.Vectors (Natural, U64);
+   package Text_Index_Maps is new Ada.Containers.Indefinite_Hashed_Maps (String, Positive, Ada.Strings.Hash, "=");
+   Check_Index : constant Boolean := Ada.Environment_Variables.Exists ("DIARY_CHECK_INDEX");
+   Mir_Ok : Boolean := False;
+   Mir_Known, Mir_Dorm : array (Entity_Id) of U64_Vectors.Vector;
+   Mir_Sym, Mir_Sym_T : U64_Vectors.Vector;
+   Text_Index : Text_Index_Maps.Map;
+   Text_Index_N : Natural := 0;   --  words 1 .. Text_Index_N are in Text_Index
+
+   function Pop (X : U64) return Natural is
+      V : U64 := X - (Interfaces.Shift_Right (X, 1) and 16#5555_5555_5555_5555#);
+   begin
+      V := (V and 16#3333_3333_3333_3333#) + (Interfaces.Shift_Right (V, 2) and 16#3333_3333_3333_3333#);
+      V := (V + Interfaces.Shift_Right (V, 4)) and 16#0F0F_0F0F_0F0F_0F0F#;
+      return Natural (Interfaces.Shift_Right (V * 16#0101_0101_0101_0101#, 56));
+   end Pop;
+
+   function Get (V : U64_Vectors.Vector; I : Natural) return U64 is (if I < Natural (V.Length) then V (I) else 0);
+
+   procedure Bit_Set (V : in out U64_Vectors.Vector; W : Positive; On : Boolean) is
+      I : constant Natural := (W - 1) / 64;
+      B : constant U64 := Interfaces.Shift_Left (1, (W - 1) mod 64);
+   begin
+      while Natural (V.Length) <= I loop V.Append (0); end loop;
+      if On then V (I) := V (I) or B; else V (I) := V (I) and not B; end if;
+   end Bit_Set;
+
+   --  The bits of word W (W <= Count) from the vectors.
+   procedure Mirror_Word (W : Positive) is
+   begin
+      Bit_Set (Mir_Sym, W, Table (W).Symbol);
+      Bit_Set (Mir_Sym_T, W, Table (W).Sym_Text);
+      for E in Entity_Id loop
+         Bit_Set (Mir_Known (E), W, W <= Natural (Known (E).Length) and then Known (E) (W));
+         Bit_Set (Mir_Dorm (E), W, W <= Natural (Dormant (E).Length) and then Dormant (E) (W));
+      end loop;
+   end Mirror_Word;
+
+   procedure Mirror is
+   begin
+      if Mir_Ok then return; end if;
+      Mir_Sym.Clear;
+      Mir_Sym_T.Clear;
+      for E in Entity_Id loop
+         Mir_Known (E).Clear;
+         Mir_Dorm (E).Clear;
+      end loop;
+      for W in 1 .. Natural (Table.Length) loop Mirror_Word (W); end loop;
+      Mir_Ok := True;
+   end Mirror;
+
+   procedure Reindex is
+   begin
+      Mir_Ok := False;
+      Text_Index.Clear;
+      Text_Index_N := 0;
+   end Reindex;
+
+   --  The position (1 .. 64) of the N-th set bit of X (X has at least N).
+   function Nth_Bit (X : U64; N : Positive) return Positive is
+      K : Natural := 0;
+   begin
+      for B in 0 .. 63 loop
+         if (Interfaces.Shift_Right (X, B) and 1) = 1 then
+            K := K + 1;
+            if K = N then return B + 1; end if;
+         end if;
+      end loop;
+      return 64;
+   end Nth_Bit;
+
+   type Pick_Kind is (P_Known, P_Usable, P_Teach);
+
+   --  The matches of word block I (bits of words 64 I + 1 .. 64 I + 64) for a kind: the same predicate as the scans below.
+   function Block (K : Pick_Kind; From, To : Entity_Id; I : Natural) return U64 is
+      Kf : constant U64 := Get (Mir_Known (From), I);
+   begin
+      case K is
+         when P_Known => return Kf;
+         when P_Usable => return Kf and not Get (Mir_Dorm (From), I);   --  (only with Dormant_On)
+         when P_Teach =>
+            declare
+               Kt : constant U64 := Get (Mir_Known (To), I);
+               Dt : constant U64 := (if Dormant_On and then Wake_Teach then Get (Mir_Dorm (To), I) else 0);
+               Df : constant U64 := (if Dormant_On then Get (Mir_Dorm (From), I) else 0);
+               Bl : constant U64 := (if Symbols_Hidden then Get (Mir_Sym, I) or (if Symbols_Strict then Get (Mir_Sym_T, I) else 0) else 0);
+            begin
+               return Kf and ((not Kt) or Dt) and (not Bl) and (not Df);
+            end;
+      end case;
+   end Block;
+
+   function Blocks return Natural is ((Natural (Table.Length) + 63) / 64);
+
+   function Pick_Count (K : Pick_Kind; From, To : Entity_Id) return Natural is
+      N : Natural := 0;
+   begin
+      Mirror;
+      for I in 0 .. Blocks - 1 loop N := N + Pop (Block (K, From, To, I)); end loop;
+      return N;
+   end Pick_Count;
+
+   --  The N-th matching word in table order, 1 if there are fewer (as the scans).
+   function Pick_Nth (K : Pick_Kind; From, To : Entity_Id; N : Positive) return Positive is
+      Left : Natural := N;
+   begin
+      Mirror;
+      for I in 0 .. Blocks - 1 loop
+         declare
+            X : constant U64 := Block (K, From, To, I);
+            C : constant Natural := Pop (X);
+         begin
+            if C >= Left then return 64 * I + Nth_Bit (X, Left); end if;
+            Left := Left - C;
+         end;
+      end loop;
+      return 1;
+   end Pick_Nth;
+
    procedure Init (Base_Words : Str_Vectors.Vector; Seed, Start_Percent : Int) is
    begin
       R30_On := Limit ("rule30.enabled", 1) /= 0;
@@ -260,6 +389,7 @@ package body Sim_World is
       Dormant_On := False;
       Slow := [others => False];
       Wake_Teach := False;
+      Reindex;
       Table.Clear;
       for W of Base_Words loop
          Table.Append (Word_Rec'(Text => To_Unbounded_String (W), Sym_Text => Symbol_Text (W), others => <>));
@@ -319,6 +449,9 @@ package body Sim_World is
       end loop;
       if Dormant (E) (W) /= On then
          Dormant (E) (W) := On;
+         if Mir_Ok then
+            if W <= Natural (Table.Length) then Bit_Set (Mir_Dorm (E), W, On); else Mir_Ok := False; end if;
+         end if;
          if On then Dormant_N (E) := Dormant_N (E) + 1; else Dormant_N (E) := Dormant_N (E) - 1; end if;
       end if;
    end Set_Dormant;
@@ -355,6 +488,9 @@ package body Sim_World is
       end loop;
       if not Known (E) (W) then Known_N (E) := Known_N (E) + 1; end if;
       Known (E) (W) := True;
+      if Mir_Ok then
+         if W <= Natural (Table.Length) then Bit_Set (Mir_Known (E), W, True); else Mir_Ok := False; end if;
+      end if;
       while Natural (Taught (E).Length) < W loop
          Taught (E).Append (0);
       end loop;
@@ -372,17 +508,39 @@ package body Sim_World is
       elsif W <= Natural (Via_World (E).Length) and then Via_World (E).Element (W) then "the world"
       else "start");
 
-   function Find (Text : String) return Natural is
+   function Scan_Find (Text : String) return Natural is
    begin
       for W in 1 .. Count loop
          if Word (W) = Text then return W; end if;
       end loop;
       return 0;
+   end Scan_Find;
+
+   function Find (Text : String) return Natural is   --  0.060: the text index (see Mirror)
+      R : Natural := 0;
+   begin
+      if Text_Index_N > Count then Text_Index.Clear; Text_Index_N := 0; end if;
+      while Text_Index_N < Count loop
+         Text_Index_N := Text_Index_N + 1;
+         declare
+            T : constant String := Word (Text_Index_N);
+         begin
+            if not Text_Index.Contains (T) then Text_Index.Insert (T, Text_Index_N); end if;   --  the first word with the text
+         end;
+      end loop;
+      declare
+         C : constant Text_Index_Maps.Cursor := Text_Index.Find (Text);
+      begin
+         if Text_Index_Maps.Has_Element (C) then R := Text_Index_Maps.Element (C); end if;
+      end;
+      if Check_Index and then R /= Scan_Find (Text) then raise Program_Error with "index: Find " & Text; end if;
+      return R;
    end Find;
 
    function Add_Coined (Text : String; P1, P2 : Natural; By : Entity_Id) return Positive is
    begin
       Table.Append (Word_Rec'(Text => To_Unbounded_String (Text), P1 => P1, P2 => P2, Coiner => Positive (By), Sym_Text => Symbol_Text (Text), others => <>));
+      if Mir_Ok then Mirror_Word (Count); end if;
       return Count;
    end Add_Coined;
 
@@ -390,6 +548,7 @@ package body Sim_World is
    begin
       Table.Append (Word_Rec'(Text => To_Unbounded_String (Text), Kind => Kind, Variant => Variant_Of,
                               Meaning => To_Unbounded_String (Meaning), Symbol => Symbol_Text (Text), Sym_Text => Symbol_Text (Text), others => <>));
+      if Mir_Ok then Mirror_Word (Count); end if;
       return Count;
    end Add_World_Word;
 
@@ -438,7 +597,7 @@ package body Sim_World is
 
    function Known_Count (E : Entity_Id) return Natural is (Known_N (E));   --  was a scan of the whole table at every call (40 % of a replay)
 
-   function Nth_Known (E : Entity_Id; N : Positive) return Positive is
+   function Scan_Nth_Known (E : Entity_Id; N : Positive) return Positive is
       K : Natural := 0;
    begin
       for W in 1 .. Count loop
@@ -448,15 +607,22 @@ package body Sim_World is
          end if;
       end loop;
       return 1;
+   end Scan_Nth_Known;
+
+   function Nth_Known (E : Entity_Id; N : Positive) return Positive is
+      R : constant Positive := Pick_Nth (P_Known, E, E, N);
+   begin
+      if Check_Index and then R /= Scan_Nth_Known (E, N) then raise Program_Error with "index: Nth_Known"; end if;
+      return R;
    end Nth_Known;
 
    function Usable_Count (E : Entity_Id) return Natural is
      (if Dormant_On then Known_N (E) - Natural'Min (Known_N (E), Dormant_N (E)) else Known_N (E));
 
-   function Nth_Usable (E : Entity_Id; N : Positive) return Positive is
+   function Scan_Nth_Usable (E : Entity_Id; N : Positive) return Positive is
       K : Natural := 0;
    begin
-      if not Dormant_On then return Nth_Known (E, N); end if;
+      if not Dormant_On then return Scan_Nth_Known (E, N); end if;
       for W in 1 .. Count loop
          if Knows (E, W) and then not Is_Dormant (E, W) then
             K := K + 1;
@@ -464,6 +630,13 @@ package body Sim_World is
          end if;
       end loop;
       return 1;
+   end Scan_Nth_Usable;
+
+   function Nth_Usable (E : Entity_Id; N : Positive) return Positive is
+      R : constant Positive := Pick_Nth ((if Dormant_On then P_Usable else P_Known), E, E, N);
+   begin
+      if Check_Index and then R /= Scan_Nth_Usable (E, N) then raise Program_Error with "index: Nth_Usable"; end if;
+      return R;
    end Nth_Usable;
 
    function Is_Start (E : Entity_Id; W : Positive) return Boolean is
@@ -471,16 +644,23 @@ package body Sim_World is
       and then not (W <= Natural (Taught (E).Length) and then Taught (E).Element (W) /= 0)
       and then not (W <= Natural (Via_World (E).Length) and then Via_World (E).Element (W)));
 
-   function Teachable_Count (From, To : Entity_Id) return Natural is
+   function Scan_Teachable_Count (From, To : Entity_Id) return Natural is
       N : Natural := 0;
    begin
       for W in 1 .. Count loop
          if Knows (From, W) and then (not Knows (To, W) or else (Wake_Teach and then Asleep (To, W))) and then not Blocked (W) and then not Asleep (From, W) then N := N + 1; end if;
       end loop;
       return N;
+   end Scan_Teachable_Count;
+
+   function Teachable_Count (From, To : Entity_Id) return Natural is
+      R : constant Natural := Pick_Count (P_Teach, From, To);
+   begin
+      if Check_Index and then R /= Scan_Teachable_Count (From, To) then raise Program_Error with "index: Teachable_Count"; end if;
+      return R;
    end Teachable_Count;
 
-   function Nth_Teachable (From, To : Entity_Id; N : Positive) return Positive is
+   function Scan_Nth_Teachable (From, To : Entity_Id; N : Positive) return Positive is
       K : Natural := 0;
    begin
       for W in 1 .. Count loop
@@ -490,12 +670,16 @@ package body Sim_World is
          end if;
       end loop;
       return 1;
+   end Scan_Nth_Teachable;
+
+   function Nth_Teachable (From, To : Entity_Id; N : Positive) return Positive is
+      R : constant Positive := Pick_Nth (P_Teach, From, To, N);
+   begin
+      if Check_Index and then R /= Scan_Nth_Teachable (From, To, N) then raise Program_Error with "index: Nth_Teachable"; end if;
+      return R;
    end Nth_Teachable;
 
    --  ---- personality -------------------------------------------------------------------
-
-   use type Interfaces.Unsigned_64;
-   subtype U64 is Interfaces.Unsigned_64;
 
    function Ring_Mask return U64 is (Interfaces.Shift_Left (1, R30_Width) - 1);
 

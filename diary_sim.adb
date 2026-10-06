@@ -26,7 +26,7 @@ pragma Interrupt_State (SIGINT, USER);
 pragma Interrupt_State (SIGTERM, USER);
 pragma Ada_2022;
 
-with Ada.Calendar, Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Maps, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
+with Ada.Calendar, Ada.Characters.Handling, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Maps, Ada.Containers.Ordered_Maps, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Finalization, Ada.Strings.Fixed, Ada.Streams.Stream_IO, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
      GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Ckpt, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chat, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Records, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Trial, Sim_Util, Sim_Visit, Sim_Voice, Sim_Wordstat, Sim_Evolve, Sim_Active, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
@@ -177,6 +177,8 @@ procedure Diary_Sim is
    Ckpt_Fmt_Used : Integer := 0;                     --  the format of the checkpoint this start loaded
    Ckpt_Verify_Diff : Boolean := False;              --  --verify: the checkpoint differed from the replay
    Ckpt_Test_Extra : Unbounded_String;               --  DIARY_TEST_CKPT_EXTRA=<section> (tests only): that section streams one Integer more
+   Replay_Progress : Natural := 0;                   --  0.060: DIARY_REPLAY_PROGRESS=<n>: a stderr line every n replayed ticks (tick, seconds, ticks/s)
+   Prog_T0 : constant Ada.Calendar.Time := Ada.Calendar.Clock;   --  0.060: the start of the program
    Replay_Wait_Ms : Natural := 0;                    --  DIARY_TEST_REPLAY_MS (tests only): a pause per replayed tick
    Tick_Wait_Ms : Natural := 0;                      --  DIARY_TEST_TICK_MS (tests only): a pause per new tick (a signal inside a session)
    St       : array (Entity_Id) of State := [others => (80, 0, 3)];
@@ -5236,6 +5238,51 @@ procedure Diary_Sim is
    package Word_Vote_Vectors is new Ada.Containers.Vectors (Positive, Word_Vote);
    Word_Votes : Word_Vote_Vectors.Vector;
 
+   --  0.060: indices by tick of the stored session records.  The replay asked at EVERY tick which D / C / Y / L / R lines, W votes and
+   --  S records belong to that tick, by scanning the whole history (Token + Img per stored line): O(history) per tick, so a replay and
+   --  a live session got slower with every session (40 ticks/s on a 777000-tick save).  The lists keep the order of sessions.txt, so
+   --  every check sees the same lines in the same order as the scans did.
+   package Idx_Vectors is new Ada.Containers.Vectors (Positive, Positive);
+   package Idx_By_Text is new Ada.Containers.Indefinite_Hashed_Maps (String, Idx_Vectors.Vector, Ada.Strings.Hash, "=", Idx_Vectors."=");
+   package Idx_By_Tick is new Ada.Containers.Ordered_Maps (Int, Idx_Vectors.Vector, "<", Idx_Vectors."=");
+   Dharma_By_Tick : Idx_By_Text.Map;   --  the text of the tick= token (as Token gives it) -> lines of Dharma_Stored
+   Votes_By_Tick : Idx_By_Tick.Map;    --  W record tick -> Word_Votes
+   Sessions_By_Start : Idx_By_Tick.Map;   --  S record start -> Sessions
+
+   procedure Idx_Add (M : in out Idx_By_Tick.Map; Key : Int; I : Positive) is
+      C : constant Idx_By_Tick.Cursor := M.Find (Key);
+   begin
+      if Idx_By_Tick.Has_Element (C) then
+         M.Reference (C).Append (I);
+      else
+         M.Insert (Key, Idx_Vectors.To_Vector (I, 1));
+      end if;
+   end Idx_Add;
+
+   procedure Dharma_Add (L : String) is
+      K : constant String := Token (L, "tick");
+      C : constant Idx_By_Text.Cursor := Dharma_By_Tick.Find (K);
+   begin
+      Dharma_Stored.Append (L);
+      if Idx_By_Text.Has_Element (C) then
+         Dharma_By_Tick.Reference (C).Append (Natural (Dharma_Stored.Length));
+      else
+         Dharma_By_Tick.Insert (K, Idx_Vectors.To_Vector (Natural (Dharma_Stored.Length), 1));
+      end if;
+   end Dharma_Add;
+
+   procedure Session_Add (R : Session_Rec) is
+   begin
+      Sessions.Append (R);
+      Idx_Add (Sessions_By_Start, R.Start, Natural (Sessions.Length));
+   end Session_Add;
+
+   procedure Vote_Add (R : Word_Vote) is
+   begin
+      Word_Votes.Append (R);
+      Idx_Add (Votes_By_Tick, R.Tick, Natural (Word_Votes.Length));
+   end Vote_Add;
+
    function Dashed (S : String) return String is
       R : String := S;
    begin
@@ -5307,6 +5354,9 @@ procedure Diary_Sim is
       Sessions.Clear;
       Word_Votes.Clear;
       Dharma_Stored.Clear;
+      Dharma_By_Tick.Clear;
+      Votes_By_Tick.Clear;
+      Sessions_By_Start.Clear;
       World_Active := False;
       Rest_Active := False;
       Grant_Active := False;
@@ -5337,17 +5387,17 @@ procedure Diary_Sim is
             elsif L'Length > Bmark'Length and then L (L'First .. L'First + Bmark'Length - 1) = Bmark then
                Disk_Build := To_Unbounded_String (L (L'First + Bmark'Length .. L'Last));
             elsif L'Length > 0 and then L (L'First) in 'D' | 'C' | 'Y' | 'L' | 'R' then
-               Dharma_Stored.Append (L);
+               Dharma_Add (L);
             elsif L'Length > 0 and then L (L'First) = 'W' then
                declare
                   V : Word_Vote;
                begin
                   Parse_Word_Vote (L, V, OK);
-                  if OK then Word_Votes.Append (V); else Warn (Msg ("warn.session_bad", Img (I))); end if;
+                  if OK then Vote_Add (V); else Warn (Msg ("warn.session_bad", Img (I))); end if;
                end;
             elsif L'Length > 0 and then L (L'First) = 'S' then
                Parse_Session (L, R, OK);
-               if OK then Sessions.Append (R); else Warn (Msg ("warn.session_bad", Img (I))); end if;
+               if OK then Session_Add (R); else Warn (Msg ("warn.session_bad", Img (I))); end if;
             elsif L'Length > 0 and then L (L'First) /= '#' then
                Warn (Msg ("warn.session_bad", Img (I)));
             end if;
@@ -5488,12 +5538,16 @@ procedure Diary_Sim is
       Votes : Kalpa_Votes := [others => 0];
       En : Sim_Dharma.Energies;
       N : Int := 0;
+      C : constant Idx_By_Text.Cursor := Dharma_By_Tick.Find (Img (T));   --  0.060: the lines of this tick (was a scan of all of them)
    begin
-      for L of Dharma_Stored loop
-         if Token (L, "tick") = Img (T) then
+      if not Idx_By_Text.Has_Element (C) then return; end if;
+      for I of Dharma_By_Tick.Constant_Reference (C) loop
+         declare
+            L : constant String := Dharma_Stored (I);
+         begin
             Stored.Append (L);
             if N = 0 then N := To_Num (L (L'First + 1 .. Fx.Index (L, " ") - 1)); end if;
-         end if;
+         end;
       end loop;
       if Stored.Is_Empty or else N < 1 then return; end if;
       for R of Sessions loop if Int (R.N) = N then Votes := R.Votes; end if; end loop;
@@ -5534,38 +5588,41 @@ procedure Diary_Sim is
 
    --  A stored session must reproduce its votes when the replay reaches its start tick.
    procedure Start_Sessions_At (T : Int) is   --  0.058: alone after a start from the checkpoint (the session end at T is in it)
+      C : constant Idx_By_Tick.Cursor := Sessions_By_Start.Find (T);   --  0.060: the sessions of this start tick, in file order
    begin
-      for R of Sessions loop
-         if R.Start = T then
-            declare
-               V : constant Kalpa_Votes := Votes_At (T);
-            begin
-               if V /= R.Votes then
-                  raise Drift_Error with Msg ("err.session", Img (R.N), Img (R.Start), "votes " & Votes_Text (R.Votes),
-                                              "votes " & Votes_Text (V));
-               end if;
-               Start_Life (R);
-            end;
-         end if;
+      if not Idx_By_Tick.Has_Element (C) then return; end if;
+      for I of Sessions_By_Start.Constant_Reference (C) loop
+         declare
+            R : constant Session_Rec := Sessions (I);
+            V : constant Kalpa_Votes := Votes_At (T);
+         begin
+            if V /= R.Votes then
+               raise Drift_Error with Msg ("err.session", Img (R.N), Img (R.Start), "votes " & Votes_Text (R.Votes),
+                                           "votes " & Votes_Text (V));
+            end if;
+            Start_Life (R);
+         end;
       end loop;
    end Start_Sessions_At;
 
    procedure Check_Sessions_At (T : Int) is
-      Has_Vote : constant Boolean := (for some R of Word_Votes => R.Tick = T);
+      C : constant Idx_By_Tick.Cursor := Votes_By_Tick.Find (T);   --  0.060: the W records of this tick (was two scans of all of them)
+      Has_Vote : constant Boolean := Idx_By_Tick.Has_Element (C);
       Now_T : constant Tok_Array := (if Has_Vote then Words_Now (T) else [others => Null_Unbounded_String]);   --  before the session end's records, as a new session end does (active=1: a record line can wake a word)
    begin
       Check_Dharma_At (T);
-      for R of Word_Votes loop
-         if R.Tick = T then
+      if Has_Vote then
+         for I of Votes_By_Tick.Constant_Reference (C) loop
             declare
+               R : constant Word_Vote := Word_Votes (I);
                Now : constant Tok_Array := Now_T;
             begin
                if Now /= R.Tok then
                   raise Drift_Error with Msg ("err.words", Img (R.N), Img (R.Tick), Tok_Text (R.Tok), Tok_Text (Now));
                end if;
             end;
-         end if;
-      end loop;
+         end loop;
+      end if;
       Start_Sessions_At (T);
    end Check_Sessions_At;
 
@@ -5596,7 +5653,7 @@ procedure Diary_Sim is
    procedure Append_Session (R : Session_Rec) is
    begin
       Append_Text (Session_Line (R));
-      Sessions.Append (R);
+      Session_Add (R);
    end Append_Session;
 
    --  The end of a session: every wesen names a favourite word; the vote goes to sessions.txt.
@@ -5620,7 +5677,7 @@ procedure Diary_Sim is
       if World_Active then Append (Text, ASCII.LF & World_Line (R.N, Tick)); end if;
       if Rest_Active then Append (Text, ASCII.LF & Rest_Line (R.N, Tick)); end if;
       Append_Text (To_String (Text));   --  W, D x4, C, Y x3 (and L in a world session) in one write
-      Word_Votes.Append (R);
+      Vote_Add (R);
       Rec_End (Tick, To_String (C_Text));   --  records=1: favourites, collective vote, words voted, announcements
       Words_Text := To_Unbounded_String (Msg ("words.line", Img (R.N), Words_Short (R.Tok)));
    end Record_Word_Vote;
@@ -7852,6 +7909,8 @@ procedure Diary_Sim is
          end;
          begin
             All_State_Read (Ckpt_Data'Access, Ckpt_L);
+            Sim_Games.Reindex;   --  0.060: the derived indices of the modules
+            Sim_World.Reindex;
             if Last_Done /= C then Fail := To_Unbounded_String ("tick");
             elsif World_Flushed > Natural (World_Stored.Length) then Fail := To_Unbounded_String ("world.txt");
             end if;
@@ -7863,6 +7922,8 @@ procedure Diary_Sim is
          end;
          if Length (Fail) > 0 then
             All_State_Read (Pristine'Access, Pristine_L);
+            Sim_Games.Reindex;   --  0.060: the derived indices of the modules
+            Sim_World.Reindex;
          end if;
          Sim_Ckpt.Clear (Pristine);
       end if;
@@ -8062,6 +8123,18 @@ procedure Diary_Sim is
                  and then (Last_Dur >= 0.5 or else Since (Ckpt_Last_Write) >= 0.5));   --  short sessions: at most 2 writes a second
    end Night_Ckpt_Due;
 
+   Prog_Last_T : Ada.Calendar.Time := Prog_T0;
+   Prog_Last_Tick : Int := 0;
+   procedure Progress_Line (Tick : Int) is   --  DIARY_REPLAY_PROGRESS: tick, seconds since the start, ticks/s since the last line
+      Now : constant Ada.Calendar.Time := Ada.Calendar.Clock;
+      D : constant Duration := Now - Prog_Last_T;
+   begin
+      TIO.Put_Line (TIO.Standard_Error, "replay-progress: tick " & Img (Tick) & " at " & Tenths_Text (Now - Prog_T0) & " s, "
+                    & Img (Int (Float (Tick - Prog_Last_Tick) / Float (Duration'Max (0.001, D)))) & " ticks/s");
+      Prog_Last_T := Now;
+      Prog_Last_Tick := Tick;
+   end Progress_Line;
+
    procedure Night_Next_Session is
       Seed_D : Int := Disk_Seed;
       Old : constant Natural := Common;
@@ -8100,6 +8173,7 @@ begin
    Data_Hash := To_Unbounded_String (Sim_Ckpt.Lines_Hash (Data_Lines));
    Ckpt_Test_Extra := To_Unbounded_String (GNAT.OS_Lib.Getenv ("DIARY_TEST_CKPT_EXTRA").all);
    Replay_Wait_Ms := Natural'Value ("0" & GNAT.OS_Lib.Getenv ("DIARY_TEST_REPLAY_MS").all);
+   Replay_Progress := Natural'Value ("0" & GNAT.OS_Lib.Getenv ("DIARY_REPLAY_PROGRESS").all);
    Tick_Wait_Ms := Natural'Value ("0" & GNAT.OS_Lib.Getenv ("DIARY_TEST_TICK_MS").all);
    Load_Data;
    while I <= Ada.Command_Line.Argument_Count loop
@@ -8520,6 +8594,7 @@ begin
          Do_Tick (Tick);
          Check_Sessions_At (Tick);
          if Replay_Wait_Ms > 0 then delay Duration (Replay_Wait_Ms) / 1000.0; end if;   --  tests only: a long replay on a small save
+         if Replay_Progress > 0 and then Tick mod Int (Replay_Progress) = 0 then Progress_Line (Tick); end if;
          if Night_On and then Tick mod 8 = 0 then Night_Tick; end if;
          Quit_Seen := Sim_Quit.Requested or else (Night_On and then Sim_Quit.Key_Q);
          exit when Quit_Seen;

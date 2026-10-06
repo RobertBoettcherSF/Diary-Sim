@@ -47,6 +47,7 @@ package Sim_World is
    --  From: the entity that taught the word (0: nobody, e.g. a start word).
    procedure Learn_Word (E : Entity_Id; W : Positive; From : Natural := 0);
    function Find (Text : String) return Natural;   --  0: no such word
+   procedure Reindex;   --  0.060: after the state was read from a checkpoint: the word indices are built again at the next use
    function Add_Coined (Text : String; P1, P2 : Natural; By : Entity_Id) return Positive;
    function Parents (W : Positive) return String;   --  "hand+phone" or "" for a base word
    --  Where E's word W came from: "start" (start slice), "taught by <id>" or "coined by <id>".

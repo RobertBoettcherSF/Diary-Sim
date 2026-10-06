@@ -38,6 +38,22 @@ package body Sim_Games is
    type Table_Array is array (0 .. 32) of Natural;
 
    Games : Game_Vectors.Vector;
+   --  0.060: every game before First_Run is finished (a finished game never runs again), so the clock and the search of a pair's
+   --  running game start there instead of at game 1 (both scanned the whole history at every tick: O(games) per tick)
+   First_Run : Positive := 1;
+
+   procedure Skip_Done is
+   begin
+      if First_Run > Natural (Games.Length) + 1 then First_Run := 1; end if;
+      while First_Run <= Natural (Games.Length) and then Games.Constant_Reference (First_Run).Res /= Running loop
+         First_Run := First_Run + 1;
+      end loop;
+   end Skip_Done;
+
+   procedure Reindex is
+   begin
+      First_Run := 1;
+   end Reindex;
    Seed_V : Int := 0;
    Holiday_Until : Ints := [others => -1];
    Pending : array (Comp_Id) of Integer := [others => 0];
@@ -99,6 +115,7 @@ package body Sim_Games is
    begin
       Seed_V := Seed;
       Games.Clear;
+      First_Run := 1;
       Holiday_Until := [others => -1];
       Pending := [others => 0];
       Last_End := [others => [others => -1_000_000]];
@@ -250,7 +267,8 @@ package body Sim_Games is
       if Forced /= 0 then
          Gi := Forced;
       else
-         for I in 1 .. Natural (Games.Length) loop
+         Skip_Done;
+         for I in First_Run .. Natural (Games.Length) loop
             if Games (I).Res = Running and then ((Games (I).W = A and then Games (I).B = B) or else (Games (I).W = B and then Games (I).B = A)) then
                Gi := I;
             end if;
@@ -466,17 +484,18 @@ package body Sim_Games is
    --  The clock of the side to move runs every tick unless that side is on holiday; a flagged side loses on time.
    procedure Clock (Tick : Int; Lines : in out Str_Vectors.Vector) is
    begin
-      for I in 1 .. Natural (Games.Length) loop
+      Skip_Done;
+      for I in First_Run .. Natural (Games.Length) loop
          if Games (I).Res = Running then
-            declare
-               G : Game_Rec := Games (I);
-               White_To_Move : constant Boolean := Sim_Chess."=" (G.Pos.To_Move, Sim_Chess.White);
-               Mover : constant Comp_Id := (if White_To_Move then G.W else G.B);
+            declare   --  0.060: the idle count in place (was a copy of the whole game, moves and keys, per tick)
+               White_To_Move : constant Boolean := Sim_Chess."=" (Games.Constant_Reference (I).Pos.To_Move, Sim_Chess.White);
+               Mover : constant Comp_Id := (if White_To_Move then Games.Constant_Reference (I).W else Games.Constant_Reference (I).B);
+               Idle : Natural;
             begin
                if not Holiday_C (Mover, Tick) then
-                  G.Idle := G.Idle + 1;
-                  Games.Replace_Element (I, G);
-                  if G.Idle >= Timeout then Finish (I, (if White_To_Move then Black_Wins else White_Wins), "timeout", Tick, Lines); end if;
+                  Games.Reference (I).Idle := Games.Constant_Reference (I).Idle + 1;
+                  Idle := Games.Constant_Reference (I).Idle;
+                  if Idle >= Timeout then Finish (I, (if White_To_Move then Black_Wins else White_Wins), "timeout", Tick, Lines); end if;
                end if;
             end;
          end if;
