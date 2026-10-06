@@ -565,6 +565,8 @@ carry.relief_energy = 20
 # a teacher has at least this energy and at most this mood; the die of the pull in percent
 carry.teacher_energy = 60
 carry.teacher_mood = 0
+# 0.062: in a moodrest=1 session the bound is the wesen's own resting mood + this margin (the moods rest at 60..80 there)
+carry.teacher_rest_margin = 0
 carry.pull_pct = 30
 # carried lessons per session (all teachers together): what learning may cost the target
 carry.session_cap = 24

@@ -705,7 +705,11 @@ procedure Diary_Sim is
       if St (E).Energy < Sim_Carry.Relief_Energy then
          return (if Base = Talk then Rest else Base);
       end if;
-      if St (E).Energy >= Sim_Carry.Teacher_Energy and then St (E).Mood <= Sim_Carry.Teacher_Mood
+      --  0.062: in a moodrest=1 session the moods rest at 60..80, so "mood <= carry.teacher_mood" would stop all teaching: there a
+      --  wesen at or below its own resting mood (+ carry.teacher_rest_margin) may teach
+      if St (E).Energy >= Sim_Carry.Teacher_Energy
+        and then St (E).Mood <= (if Moodrest_Active then Rest_Mood (E) + Integer (Limit ("carry.teacher_rest_margin", 0))
+                                 else Sim_Carry.Teacher_Mood)
         and then Sim_Carry.Lessons < Sim_Carry.Session_Cap
         and then Roll (Seed, Eid, Tick, 23101, 100) <= Sim_Carry.Pull_Pct
       then
