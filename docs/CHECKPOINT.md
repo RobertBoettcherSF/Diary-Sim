@@ -1,6 +1,6 @@
 # The state checkpoint (`state.ckpt`)
 
-Version: 0.004 (build 0.061; the checkpoint itself came with build 0.058, README "The state checkpoint")
+Version: 0.005 (build 0.062; the checkpoint itself came with build 0.058, README "The state checkpoint")
 
 A start used to replay the whole history to rebuild the state in memory: 13 minutes for 300000 ticks, about 35 minutes on Robert's
 774600-tick save, growing every night. `state.ckpt` in the save folder holds the end state of the last run, so a start loads it in
@@ -87,6 +87,14 @@ uses the new one. `make check` caught exactly that (scenario 56: a raised `activ
 those keys, and only those, are compared one by one; the check proves that a refused start gives byte for byte the files of a run
 without the checkpoint. A format 1 checkpoint (0.058) has neither rule-file hashes nor start values; it is loaded without the
 comparison (0.059 changes no number in `data/`, and the check proves the 0.058 checkpoint gives the files of a full replay).
+
+## Build 0.062: no format change
+`carry=2` and `moodrest=1` add no streamed state: the carry level and the moodrest flag are derived from the session records
+(the last session that starts before the checkpoint tick), the resting moods from `data/limits.txt` and the birth rows. Format 3
+stays; formats 1 and 2 still load. `make check` (scenario 66) proves it with `tests/ckpt061.tar.gz` (1200 ticks, the format 3
+checkpoint 0.061 wrote): it loads with +0 ticks replayed and, with the 0.061 rules, two more sessions give byte for byte the
+files and the payload 0.061 gave (`tests/ckpt061.expect`).  The layout hash changed only by a name (the script reaches
+declarations by name); the payload is proven identical, so it is recorded without a bump.
 
 ## Format 3: the section "carry" (build 0.061)
 

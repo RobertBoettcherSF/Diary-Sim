@@ -1,5 +1,5 @@
 #!/bin/sh
-# Version: 0.002
+# Version: 0.003
 # make test (build 0.061): a quick smoke test in seconds (make check is the full one, ~16 min): the layout guard; a fresh save of 2
 # sessions in a scratch folder, make verify-full and make verify on it; the 0.059 checkpoint fixture (tests/ckpt059.tar.gz) loads
 # and 2 more sessions give the files 0.059 gave (tests/ckpt059.expect).  Exit 0 = all passed.
@@ -15,7 +15,7 @@ run "$w/s" --continuous --session-ticks 120 --max-sessions 2 --end-check-ticks 0
   && ok "fresh save of 2 sessions; verify-full and the incremental verify pass" || bad "fresh save / verify ($(tail -n 2 "$w/n.txt" "$w/vf.txt" "$w/vi.txt" 2>/dev/null | tr '\n' ' ' | cut -c1-200))"
 # 0.061: without word carrying (carry.enabled = 0 in a data copy) the new sessions follow the 0.059 rules: the same record files; the
 # format 3 payload is 0.059's plus the section "carry" (24 bytes head + its body)
-mkdir -p "$w/f" "$w/nc"; tar -C "$w/f" -xzf tests/ckpt059.tar.gz; cp -r data "$w/nc/data"; sed -i 's/^carry.enabled = .*/carry.enabled = 0/' "$w/nc/data/limits.txt"
+mkdir -p "$w/f" "$w/nc"; tar -C "$w/f" -xzf tests/ckpt059.tar.gz; cp -r data "$w/nc/data"; sed -i 's/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/' "$w/nc/data/limits.txt"
 ( cd "$w/nc" && run "$w/f/save" --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 ) > "$w/f.txt" 2>&1
 ( cd "$w/f/save" && for f in $(find diaries entities -type f | LC_ALL=C sort); do printf '%s %s\n' "$(sed 's/"ts":"[^"]*"//' "$f" | cksum | tr -s ' ' | cut -d' ' -f1-2)" "$f"; done
   LC_ALL=C sed -n '/^tick /{p;q;}' state.ckpt ) > "$w/k.txt"

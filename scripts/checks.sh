@@ -17,7 +17,7 @@ bad() { echo "  FAIL -- $*"; fails=$((fails + 1)); }
 idn() { sed 's/^\([a-z]*\) *=.*/\1 = \1/' "$root/data/names.txt" > "$1/names.txt"; }
 idata="$w/idata"; mkdir -p "$idata"; cp -r "$root/data/." "$idata/"; idn "$idata"
 # screens (and later chess) change the dice of the words: the older scenarios run with them off; their own scenarios switch them on
-sed -i 's/^screen.enabled = .*/screen.enabled = 0/; s/^chess.enabled = .*/chess.enabled = 0/; s/^robot.enabled = .*/robot.enabled = 0/; s/^govern.enabled = .*/govern.enabled = 0/; s/^screen.coin_enabled = .*/screen.coin_enabled = 0/; s/^players4.enabled = .*/players4.enabled = 0/; s/^preport.pause = .*/preport.pause = 0/; s/^chessrules.enabled = .*/chessrules.enabled = 0/; s/^trial.enabled = .*/trial.enabled = 0/; s/^carry.enabled = .*/carry.enabled = 0/' "$idata/limits.txt"
+sed -i 's/^screen.enabled = .*/screen.enabled = 0/; s/^chess.enabled = .*/chess.enabled = 0/; s/^robot.enabled = .*/robot.enabled = 0/; s/^govern.enabled = .*/govern.enabled = 0/; s/^screen.coin_enabled = .*/screen.coin_enabled = 0/; s/^players4.enabled = .*/players4.enabled = 0/; s/^preport.pause = .*/preport.pause = 0/; s/^chessrules.enabled = .*/chessrules.enabled = 0/; s/^trial.enabled = .*/trial.enabled = 0/; s/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/' "$idata/limits.txt"
 mkdir -p "$w/ib/bin"; cp "$bin" "$w/ib/bin/"; cp -r "$idata" "$w/ib/data"; bin="$w/ib/bin/diary_sim"   # the binary beside its identity-names data
 lines() { cat "$1"/*.jsonl | wc -l; }
 dups()  { for f in "$1"/*.jsonl; do grep '}}$' "$f" | grep -o '"tick":[0-9]*' | sort | uniq -d; done | wc -l; }
@@ -2422,16 +2422,16 @@ env -u DIARY_VERBOSE "$nb" --active --home "$w/nt/fl_on" > fl_a.txt 2>&1
 # symbols=1 but symbols.strict = 0 (the leak of builds before 0.054: an old blend or coin like 71634866 is taught again), then the default
 rm -rf "$w/nt/ss" "$w/nt/ss_o" "$w/nt/ss_l"; mkdir -p "$w/nt/ss_o/bin" "$w/nt/ss_l/bin"; cp "$nb" "$w/nt/ss_o/bin/"; cp "$nb" "$w/nt/ss_l/bin/"
 cp -r "$root/data" "$w/nt/ss_o/data"; cp -r "$root/data" "$w/nt/ss_l/data"
-sed -i 's/^symbols.enabled = .*/symbols.enabled = 0/; s/^records.enabled = .*/records.enabled = 0/; s/^active.slow_floor = .*/active.slow_floor = 0/; s/^carry.enabled = .*/carry.enabled = 0/' "$w/nt/ss_o/data/limits.txt"
-sed -i 's/^symbols.strict = .*/symbols.strict = 0/; s/^active.slow_floor = .*/active.slow_floor = 0/; s/^carry.enabled = .*/carry.enabled = 0/' "$w/nt/ss_l/data/limits.txt"   # the rules of build 0.053 (no carrying: 0.061)
+sed -i 's/^symbols.enabled = .*/symbols.enabled = 0/; s/^records.enabled = .*/records.enabled = 0/; s/^active.slow_floor = .*/active.slow_floor = 0/; s/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/' "$w/nt/ss_o/data/limits.txt"
+sed -i 's/^symbols.strict = .*/symbols.strict = 0/; s/^active.slow_floor = .*/active.slow_floor = 0/; s/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/' "$w/nt/ss_l/data/limits.txt"   # the rules of build 0.053 (no carrying: 0.061)
 ( cd "$w/nt/ss_o" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/ss" --seed 2 --ticks 6000 --yes --every 100000 > /dev/null 2>&1 )
 ( cd "$w/nt/ss_l" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/ss" --continuous --session-ticks 3000 --max-sessions 1 > /dev/null 2>&1 )
 sym_after() { awk -v t="$2" '$4 > t && ($2 ~ /^[0-9]+$/ || $2 ~ /^[a-h][1-8][a-h][1-8][qrbn]?$/)' "$1"/entities/*/words.txt | wc -l; }
 ss_c=$(awk '$3 == "coined" && $2 ~ /^[0-9]+$/' "$w/nt/ss"/entities/*/words.txt | wc -l); ss_leak=$(sym_after "$w/nt/ss" 6000)
 rm -rf "$w/nt/ss_c" "$w/nt/ss_l2"; cp -r "$w/nt/ss" "$w/nt/ss_c"; cp -r "$w/nt/ss_l" "$w/nt/ss_l2"; cp -r "$root/data/limits.txt" "$w/nt/ss_l2/data/limits.txt"
-sed -i 's/^symbols.strict = .*/symbols.strict = 0/; s/^carry.enabled = .*/carry.enabled = 0/' "$w/nt/ss_l2/data/limits.txt"   # the control: today's rules but symbols.strict = 0
+sed -i 's/^symbols.strict = .*/symbols.strict = 0/; s/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/' "$w/nt/ss_l2/data/limits.txt"   # the control: today's rules but symbols.strict = 0
 # 0.061: test and control without word carrying (its own dice; scenario 65), so the two differ only in symbols.strict
-rm -rf "$w/nt/ss_n"; mkdir -p "$w/nt/ss_n"; cp -r "$root/data" "$w/nt/ss_n/data"; sed -i 's/^carry.enabled = .*/carry.enabled = 0/' "$w/nt/ss_n/data/limits.txt"
+rm -rf "$w/nt/ss_n"; mkdir -p "$w/nt/ss_n"; cp -r "$root/data" "$w/nt/ss_n/data"; sed -i 's/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/' "$w/nt/ss_n/data/limits.txt"
 ( cd "$w/nt/ss_l2" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/ss_c" --continuous --session-ticks 3000 --max-sessions 3 > /dev/null 2>&1 )
 ( cd "$w/nt/ss_n" && env -u DIARY_VERBOSE "$nb" --home "$w/nt/ss" --continuous --session-ticks 3000 --max-sessions 3 ) > ss.txt 2>&1; rcs=$?
 ss_new=$(sym_after "$w/nt/ss" 9000); ss_ctl=$(sym_after "$w/nt/ss_c" 9000)
@@ -2698,7 +2698,7 @@ mkdir -p "$c7/a" "$c7/r"; tar -C "$c7/a" -xzf "$root/tests/ckpt059.tar.gz"; tar 
 grep -aq '^build 0.059$' "$c7/a/save/state.ckpt" && head -1 "$c7/a/save/state.ckpt" | grep -q '^diary-sim-ckpt 2$'; f59=$?
 # 0.061: the new sessions run without word carrying (carry.enabled = 0, a data copy): the 0.059 rules; the payload of format 3 is
 # that of 0.059 plus the section "carry" (scenario 65 runs them with carry=1)
-mkdir -p "$c7/nc"; cp -r "$root/data" "$c7/nc/data"; sed -i 's/^carry.enabled = .*/carry.enabled = 0/' "$c7/nc/data/limits.txt"
+mkdir -p "$c7/nc"; cp -r "$root/data" "$c7/nc/data"; sed -i 's/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/' "$c7/nc/data/limits.txt"
 r7nc() { ( cd "$c7/nc" && env -u DIARY_VERBOSE "$bin" --home "$@" ); }
 # the lines of k7 without the payload, and the payload length less the carry section (head + body) of a format 3 checkpoint
 k7p() { grep -v '^payload ' "$1"; }
@@ -2775,7 +2775,7 @@ c8="$w/c65"; rm -rf "$c8"; mkdir -p "$c8"; cd "$c8" || exit 1
 # the 0.059 fixture (600 ticks, format 2) continued by 2 sessions: "on" with carrying (a teacher may have any mood here: the young
 # wesen are cheerful), "off" without it (carry.enabled = 0); both from the same data otherwise
 for d in on off; do mkdir -p "$c8/$d"; cp -r "$root/data" "$c8/$d/data"; tar -C "$c8/$d" -xzf "$root/tests/ckpt059.tar.gz"; done
-sed -i 's/^carry.teacher_mood = .*/carry.teacher_mood = 100/' "$c8/on/data/limits.txt"; sed -i 's/^carry.enabled = .*/carry.enabled = 0/' "$c8/off/data/limits.txt"
+sed -i 's/^carry.teacher_mood = .*/carry.teacher_mood = 100/; s/^carry.enabled = .*/carry.enabled = 1/; s/^moodrest.enabled = .*/moodrest.enabled = 0/' "$c8/on/data/limits.txt"; sed -i 's/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/' "$c8/off/data/limits.txt"
 r8() { d=$1; shift; ( cd "$c8/$d" && env -u DIARY_VERBOSE "$bin" --home "$c8/$d/save" "$@" < /dev/null ); }
 r8 on --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 > on.txt 2>&1; rcn=$?
 r8 off --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 > off.txt 2>&1; rcf=$?
@@ -2847,12 +2847,84 @@ grep -q '^start: checkpoint of tick 1200 loaded in [0-9.]* s (+0 ticks replayed)
 DIARY_HOME="$c8/on/save" make --no-print-directory -C "$root" ship SHIP_VERIFY=0 > sh8.txt 2>&1 < /dev/null; rcs=$?
 sumr=$(sed -n '/^-----/,$p' sh8.txt | wc -l | tr -d ' ')
 [ $rcs = 0 ] && grep -q '^carry: [0-9]* acts.*; fav [0-9]*;.* Pareto \(yes\|no\)' sh8.txt && [ "$(grep '^carry:' sh8.txt | wc -c)" -le 80 ] && [ "$sumr" -le 20 ] \
-  && grep -q '^carry (s[0-9]*-s[0-9]*): [0-9]* lessons carried, [0-9]* distinct words; pairs (teacher>learner): .*; missing-by-one since the last ship: .*; favours open [0-9]* .*; min energy: .*; Pareto: \(yes\|no\)' "$c8/on/save/checkin.txt" \
+  && grep -q '^carry (s[0-9]*-s[0-9]*): [0-9]* lessons, [0-9]* distinct words taught; pairs (teacher>learner): .*; missing-by-one since the last ship: .*; favours open [0-9]* .*; min energy: .*; Pareto: \(yes\|no\)' "$c8/on/save/checkin.txt" \
   && ! grep -v '^ *--' "$root/sim_carry.adb" "$root/sim_carry.ads" | grep -q -e 'mod 4' -e '1 \.\. 4' -e 'range 1 \.\. 4' \
   && ok "the carry line: '$(grep '^carry:' sh8.txt)' (summary $sumr lines) and the full line in checkin.txt; Sim_Carry has no fixed wesen count" \
   || bad "carry line ($rcs, $sumr lines): $(grep -m 1 '^carry' sh8.txt)"
 grep -q 'Build 0.061' "$root/README.md" && grep -q 'carry=1' "$root/data/help.txt" && grep -q 'Format 3' "$root/docs/CHECKPOINT.md" && grep -q '^carry.relief_energy = 20$' "$root/data/limits.txt" \
   && ok "README (build 0.061), --help, docs/CHECKPOINT.md (format 3) and data/limits.txt (carry.*) describe word carrying" || bad "0.061 docs"
+cd "$w" || exit 1
+
+echo "== 66. build 0.062: carry=2 (a lesson is an exchange) and moodrest=1 (resting moods 60-80); the 0.061 fixture (format 3) loads with +0 =="
+c9="$w/c66"; rm -rf "$c9"; mkdir -p "$c9/orig"; cd "$c9" || exit 1
+tar -C "$c9/orig" -xzf "$root/tests/ckpt061.tar.gz"
+# tests/ckpt061.tar.gz: 1200 ticks (the ckpt059 fixture + 2 carry=1 sessions, teacher_mood 100) with the format 3 state.ckpt that 0.061
+# wrote; tests/ckpt061.expect: the files and the payload after 0.061 ran 2 more sessions from it.  fx = the same rules (carry=1, no
+# moodrest); c2 = carry=2 alone; mr = moodrest=1 alone (carry=1); both; cap1 = carry=2 with carry.words_cap = 1
+for d in fx c2 mr both both2 cap1; do mkdir -p "$c9/$d"; cp -r "$root/data" "$c9/$d/data"; tar -C "$c9/$d" -xzf "$root/tests/ckpt061.tar.gz"
+  sed -i 's/^carry.teacher_mood = .*/carry.teacher_mood = 100/' "$c9/$d/data/limits.txt"; done
+lm() { sed -i "s/^carry.enabled = .*/carry.enabled = $2/; s/^moodrest.enabled = .*/moodrest.enabled = $3/" "$c9/$1/data/limits.txt"; }
+lm fx 1 0; lm c2 2 0; lm mr 1 1; lm both 2 1; lm both2 2 1; lm cap1 2 0; sed -i 's/^carry.words_cap = .*/carry.words_cap = 1/' "$c9/cap1/data/limits.txt"
+r9() { d=$1; shift; ( cd "$c9/$d" && env -u DIARY_VERBOSE "$bin" --home "$c9/$d/save" "$@" < /dev/null ); }
+rc9=0; for d in fx c2 mr both both2 cap1; do r9 $d --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 > $d.txt 2>&1 || rc9=1
+  grep -q '^start: checkpoint of tick 1200 loaded in [0-9.]* s (+0 ticks replayed)$' $d.txt || rc9=2; done
+k7 "$c9/fx/save" > kfx.txt; k7 "$c9/both/save" > kb1.txt; k7 "$c9/both2/save" > kb2.txt
+[ $rc9 = 0 ] && cmp -s kfx.txt "$root/tests/ckpt061.expect" && cmp -s kb1.txt kb2.txt \
+  && ok "a 0.061 state.ckpt (format 3, tests/ckpt061.tar.gz) loads with +0 ticks replayed in every variant; 2 more sessions with the 0.061 rules give byte for byte the files and the payload 0.061 gave (tests/ckpt061.expect); carry=2 + moodrest=1 twice from it: the same bytes" \
+  || bad "0.061 fixture in 0.062 (rc $rc9): $(diff kfx.txt "$root/tests/ckpt061.expect" | head -3 | tr '\n' ' ')"
+# (a) old sessions unchanged (the 1200 old ticks of every diary, S1-S4); the markers of the new sessions S5, S6
+old=0; mk=""; for d in c2 mr both cap1; do for e in ada gemini replika robert; do
+    head -n 1200 "$c9/orig/save/diaries/$e.jsonl" | sed 's/"ts":"[^"]*"//' > o1.txt; head -n 1200 "$c9/$d/save/diaries/$e.jsonl" | sed 's/"ts":"[^"]*"//' > o2.txt
+    cmp -s o1.txt o2.txt || old=1; done
+  grep '^S[1-4] ' "$c9/orig/save/diaries/sessions.txt" > s1.txt; grep '^S[1-4] ' "$c9/$d/save/diaries/sessions.txt" > s2.txt; cmp -s s1.txt s2.txt || old=1
+  mk="$mk $d:$(grep -c '^S[56] .* carry=2 moodrest=1\( \|$\)' "$c9/$d/save/diaries/sessions.txt"),$(grep -c '^S[56] .* carry=2\( \|$\)' "$c9/$d/save/diaries/sessions.txt"),$(grep -c '^S[56] .* carry=1 moodrest=1\( \|$\)' "$c9/$d/save/diaries/sessions.txt")"; done
+nmo=$(grep -c 'moodrest=1\|carry=2' "$c9/fx/save/diaries/sessions.txt")
+[ $old = 0 ] && [ "$mk" = " c2:0,2,0 mr:0,0,2 both:2,2,0 cap1:0,2,0" ] && [ "$nmo" = 0 ] \
+  && ok "old sessions unchanged (1200 ticks of every diary, S1-S4) under carry=2, moodrest=1 and both; the new sessions carry their markers (carry=2 / moodrest=1 / carry=2 moodrest=1), none with them off" \
+  || bad "0.062 markers / old sessions (old=$old$mk fx=$nmo)"
+# (b) carry=2: exchanges; at most words_cap words each way (1 + energy / 25); every word taught (both ways) is in the learner's
+# words.txt; favours settled in the meeting when words came back
+xw() { for e in ada gemini replika robert; do grep -o "exchanged words with [a-z]*: taught [^;]*; learned [^,]*" "$c9/$1/save/diaries/$e.jsonl" | sed "s/^/$e /"; done; }
+xw c2 > x2.txt; xw cap1 > xc.txt
+xs() { awk '{ t = $0; sub(/; learned.*/, "", t); sub(/.*: taught /, "", t); b = $0; sub(/.*; learned /, "", b); nt = gsub(/\047[^\047]*\047/, "", t); nb = gsub(/\047[^\047]*\047/, "", b)
+  n++; st += nt; sb += nb; if (nt > mt) mt = nt; if (nb > mb) mb = nb } END { print n + 0, st + 0, sb + 0, mt + 0, mb + 0 }' "$1"; }
+set -- $(xs x2.txt); xn=$1; xt=$2; xb=$3; xmt=$4; xmb=$5; set -- $(xs xc.txt); cn=$1; cmt=$4; cmb=$5
+miss=$(awk '{ e = $1; l = $5; sub(/:$/, "", l); t = $0; sub(/; learned.*/, "", t); sub(/.*: taught /, "", t); b = $0; sub(/.*; learned /, "", b)
+  while (match(t, /\047[^\047]*\047/)) { print l, substr(t, RSTART + 1, RLENGTH - 2); t = substr(t, RSTART + RLENGTH) }
+  while (match(b, /\047[^\047]*\047/)) { print e, substr(b, RSTART + 1, RLENGTH - 2); b = substr(b, RSTART + RLENGTH) } }' x2.txt | while read -r who wd; do
+  awk -v w="$wd" '!/^#/ && $2 == w { f = 1 } END { exit !f }' "$c9/c2/save/entities/$who/words.txt" || echo "$who $wd"; done | wc -l | tr -d ' ')
+nst=$(cat "$c9"/c2/save/diaries/*.jsonl | grep -o 'back, the favour settled' | wc -l | tr -d ' ')
+ncar=$(tail -q -n 600 "$c9"/c2/save/diaries/*.jsonl | grep -o "carried the word '[^']*' to [a-z]*" | wc -l | tr -d ' ')
+[ "${xn:-0}" -gt 5 ] && [ "$xmt" -ge 2 ] && [ "$xmt" -le 5 ] && [ "$xmb" -le 5 ] && [ "$xb" -gt 0 ] && [ "$miss" = 0 ] && [ "$nst" -gt 0 ] && [ "$ncar" = 0 ] \
+  && [ "${cn:-0}" -gt 0 ] && [ "$cmt" = 1 ] && [ "$cmb" -le 1 ] \
+  && ok "carry=2: $xn exchanges, $xt words taught and $xb learned back (at most $xmt / $xmb per lesson, cap 5; with carry.words_cap = 1: at most $cmt / $cmb); every word of an exchange is in the learner's words.txt; $nst favours settled in the meeting; no one-way lesson" \
+  || bad "carry=2 exchange (n=$xn t=$xt b=$xb max $xmt/$xmb miss=$miss settled=$nst carried=$ncar cap1 $cn $cmt/$cmb)"
+# (c) moodrest=1: the moods of the new ticks against the same sessions without it: fewer ticks at +95 or more, more in or near the
+# band 60..80, the median of every wesen within 60-10 .. 80+10
+ms() { for e in ada gemini replika robert; do tail -n 600 "$c9/$1/save/diaries/$e.jsonl" | sed -n 's/.*"mood":\(-*[0-9]*\).*/\1/p' | sort -n | awk -v e=$e '{ a[NR] = $1; if ($1 >= 95) h++; if ($1 >= 50 && $1 <= 90) b++ } END { print e, a[int((NR + 1) / 2)], h + 0, b + 0 }'; done; }
+ms fx > mfx.txt; ms mr > mmr.txt; ms both > mbo.txt
+hf=$(awk '{ s += $3 } END { print s + 0 }' mfx.txt); hm=$(awk '{ s += $3 } END { print s + 0 }' mmr.txt); bf=$(awk '{ s += $4 } END { print s + 0 }' mfx.txt); bm=$(awk '{ s += $4 } END { print s + 0 }' mmr.txt)
+medok=$(cat mmr.txt mbo.txt | awk '$2 < 50 || $2 > 90 { f = 1 } END { print f ? "no" : "yes" }')
+[ "$hm" -lt "$hf" ] && [ "$bm" -gt "$bf" ] && [ "$medok" = yes ] \
+  && ok "moodrest=1: ticks at +95 or more $hf -> $hm, in or near 60..80 $bf -> $bm (of 2400); medians (moodrest, both): $(awk '{ printf "%s%s", (NR > 1 ? " " : ""), $2 }' mmr.txt) / $(awk '{ printf "%s%s", (NR > 1 ? " " : ""), $2 }' mbo.txt)" \
+  || bad "moodrest (>=95 $hf -> $hm; band $bf -> $bm; medians ok=$medok)"
+# (d) both: verify-full replays it byte for byte; the next start loads the format 3 checkpoint (+0 ticks); the ship lines
+r9 both --verify-full > vf.txt 2>&1; rvf=$?
+r9 both --continuous --session-ticks 300 --max-sessions 1 --end-check-ticks 0 > b3.txt 2>&1
+DIARY_HOME="$c9/both/save" make --no-print-directory -C "$root" ship SHIP_VERIFY=0 > sh9.txt 2>&1 < /dev/null; rcs=$?
+sumr=$(sed -n '/^-----/,$p' sh9.txt | wc -l | tr -d ' ')
+[ $rvf = 0 ] && grep -q '^verify: checkpoint of tick 1800 = the replayed state, byte for byte$' vf.txt && grep -q '^start: checkpoint of tick 1800 loaded in [0-9.]* s (+0 ticks replayed)$' b3.txt \
+  && [ "$(head -1 "$c9/both/save/state.ckpt")" = "diary-sim-ckpt 3" ] && [ $rcs = 0 ] && [ "$sumr" -le 20 ] \
+  && grep -q '^carry: [0-9]* acts.*; w [0-9.]*/[0-9.]*;.* Pareto \(yes\|no\)' sh9.txt && [ "$(grep '^carry:' sh9.txt | wc -c)" -le 80 ] \
+  && grep -q '^mood: median .*; in 60-80 [0-9]*%; goal \(met\|no\)$' sh9.txt && [ "$(grep '^mood:' sh9.txt | wc -c)" -le 80 ] \
+  && [ "$(grep -c '^  mood stats: [A-Za-z]* median -*[0-9]*, p10 -*[0-9]*, p90 -*[0-9]*; >=+95 [0-9]*%, <=-95 [0-9]*%, in 60..80 [0-9]*%, near [0-9]*%, <0 [0-9]*%$' "$c9/both/save/checkin.txt")" = 4 ] \
+  && grep -q '^  mood goal (more than 50% of the window within 10 of 60..80, none below 0 more than 50%): \(met\|not met (.*)\)$' "$c9/both/save/checkin.txt" \
+  && grep -q '^carry (s[0-9]*-s[0-9]*): .*; words per lesson: out [0-9.]* ([0-9]* words), back [0-9.]* ([0-9]* words) in [0-9]* exchanges .*(per wesen: ' "$c9/both/save/checkin.txt" \
+  && ok "carry=2 + moodrest=1: verify-full = the checkpoint byte for byte; the next start loads format 3 with +0 ticks; ship: '$(grep '^carry:' sh9.txt)', '$(grep '^mood:' sh9.txt)' (summary $sumr lines); mood stats and the mood goal in checkin.txt" \
+  || bad "0.062 verify / reload / ship ($rvf $rcs $sumr): $(grep -m 1 -e '^start' b3.txt) $(grep -m 2 -e '^carry:' -e '^mood:' sh9.txt | tr '\n' ' ')"
+grep -q 'Build 0.062' "$root/README.md" && grep -q 'carry=2' "$root/data/help.txt" && grep -q 'moodrest=1' "$root/data/help.txt" && grep -q 'ckpt061' "$root/docs/CHECKPOINT.md" \
+  && grep -q '^moodrest.band_lo = 60$' "$root/data/limits.txt" && grep -q '^carry.words_cap = 5$' "$root/data/limits.txt" && grep -q 'moodrest' "$root/docs/EVOLVE.md" \
+  && ok "README (build 0.062), --help, docs/CHECKPOINT.md (ckpt061, no format change), docs/EVOLVE.md and data/limits.txt (moodrest.*, carry.words_*) describe 0.062" || bad "0.062 docs"
 cd "$w" || exit 1
 
 rm -rf "$w"

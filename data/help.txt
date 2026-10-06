@@ -258,6 +258,12 @@ teaches it one of them (carry.pull_pct, at most carry.session_cap lessons a
 session); the learner owes a favour, the teacher gains standing and a little
 mood, and a debtor later helps with its work. Below carry.relief_energy (20)
 a wesen rests instead of teaching. No player, no grant. checkin: carry line.
+Exchange lessons (carry=2 session, build 0.062; carry.enabled=1: one-word
+lessons, 0: off): the learner gets 1 + energy/25 words (carry.words_cap) and
+teaches the teacher words it lacks back in the same meeting; words back
+settle the favour at once. Resting moods (moodrest=1, moodrest.enabled=0:
+off): each wesen rests at a mood in 60..80 from its birth row; the mood drifts
+there, faster above 80. checkin: mood stats and the mood goal line.
 Size (make footprint, make small): bin/diary_sim (-g -O0) is ~9 MB, of which
 ~4 MB is debug info and symbols. make small builds bin/diary_sim_small (-Os,
 no -g, gc-sections, stripped): ~2.9 MB, same output. See README, Footprint.

@@ -1,5 +1,5 @@
 # Evolutionary pressure on words and on chess (previews built, the rest design)
-Version: 0.007
+Version: 0.008
 
 Build state: **step 1 (`symbols=1`) is built** (build 0.047), **step 1 (`symbols=1`)**, **step 2 (`make evolve` preview)** and **step 3 (`make active` preview)** are built (build 0.048); **the real `active=1` (section 13) is built** (build 0.049); everything else is design only.
 
@@ -216,4 +216,20 @@ Robert (Brahma) asked for it after the 0.060 slice: Abel missed 2142 of the word
 * **Relief.** Below `carry.relief_energy` (20) a wesen rests instead of talking (teaching).
 * **Report.** `checkin.txt` and the summary: `carry:` acts, top teacher>learner pairs, the missing-by-one change of the wesen that missed most, open favours, the top teacher's mood change and Pareto (nobody ended the window lower on mood or energy); the full line in checkin.txt also lists every wesen's missing-by-one before/after, mood and lowest energy.
 * **Checkpoint.** Format 3 adds the section `carry`; a format 1 / 2 checkpoint still loads (docs/CHECKPOINT.md). Checks: scenario 65.
+
+## 16. Exchange lessons (`carry=2`) and resting moods (`moodrest=1`) (BUILT, build 0.062, new sessions only)
+Robert's 0.061 slice: 142 carry acts, all Adam>Abel; Adam's missing count rose by 152 while Abel's fell only 33; Adam's mood went
+-26 -> -49 while the others sat at 97-100. "Realistically one would learn more than one word", and moods near the maximum are
+unrealistic: reaching a good mood is the goal, staying above it is unnatural.
+* **carry=2.** A lesson is an exchange: the teacher teaches 1 + (learner's energy)/25 words (cap `carry.words_cap`), the learner
+  repays in the same meeting with 1 + (teacher's energy)/25 words the teacher lacks (from the teacher's all-but-one set, salt 23104).
+  Words back settle the favour at once (`detail.exchanged`), none back leaves it owed (`detail.exchanged0`). Teacher choice and
+  relief as in carry=1. The first word is learned at the learner's next step as before, the others at once (words.txt "taught").
+  Open: same-topic preference.
+* **moodrest=1.** Resting mood per wesen in `moodrest.band_lo..band_hi` (60..80) from `Core_Percent` of its birth Rule 30 row
+  (30..70 % mapped linearly, clamped); override `moodrest.<name>`. After every step: soft bounds (a gain above the middle shrinks
+  with the room left to +100, a loss below it with the room left to -100), then a pull towards the rest level of `pull_pct` %
+  (`pull_high_pct` % above the band). The mood ledger books it in "rest model".
+* Both flags come from the session records (no checkpoint state); the tunables are read live, so changing them changes the
+  replay of the sessions that used them (as every other tunable).
 

@@ -105,6 +105,25 @@ diaries, entities and summary files are byte for byte the same.
   of the run, `warnings:n`, `export-failed`. It is information only; nothing in the simulation reads it (`data/limits.txt`).
   `@@SECTIONS` gives the line of each header in `run_report.txt`.
 
+## Build 0.062: lessons as exchanges (`carry=2`) and resting moods (`moodrest=1`)
+
+Two new session markers; each is on by default and off in `data/limits.txt`; old sessions replay byte for byte; no checkpoint
+format change (format 3; a 0.061 checkpoint loads with +0 ticks replayed, `tests/ckpt061.tar.gz`).
+
+* `carry=2` (`carry.enabled = 2`; 1 = the 0.061 one-word lessons, 0 = off): a lesson is an exchange. The teacher (chosen as in
+  carry=1, relief below 20 kept) teaches the learner 1 + energy/25 words (cap `carry.words_cap` 5; the learner's energy) of the
+  words the learner lacks and all the others know; in the same meeting the learner teaches back up to 1 + (teacher's energy)/25
+  words the teacher lacks and all the others know. If anything came back the favour is settled at once, else it stays owed.
+  Coining is unchanged. Not done: a preference for words of the same topic (the words follow the table order).
+* `moodrest=1` (`moodrest.enabled`): every wesen has a resting mood in 60..80 (`moodrest.band_lo/hi`), derived from its birth
+  personality (the share of 1-bits in its Rule 30 row, `core_lo/hi` 30..70 mapped onto the band), so a new wesen gets one; a
+  `moodrest.<name> = N` line overrides it. Each tick the mood drifts towards it (`pull_pct` 5 %, above the band `pull_high_pct`
+  15 %: adaptation); gains shrink near +100 and losses near -100 (`soft`).
+* `make ship`: the carry line shows the words per lesson out / back (`w 2.0/0.9`) and Pareto per wesen in checkin.txt; the mood
+  line shows the median per wesen, the share in the band and the mood goal; checkin.txt has per wesen the median, p10, p90, the
+  shares at >= +95, <= -95, in the band, near it and below 0, and the "mood goal" line (met: every wesen more than `goal_pct` 50 %
+  within `goal_near` 10 of the band, none below 0 more than 50 %).
+
 ## Build 0.061: word carrying (`carry=1` sessions)
 
 * **The wesen carry words to the one who misses most.** In new sessions (`carry=1`) a wesen with spare energy and a low mood may
