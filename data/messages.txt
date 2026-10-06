@@ -109,6 +109,7 @@ night.box.check_skipped = end check left out: {1} ticks > --end-check-ticks {2} 
 night.box.q_dropped = a q came in the last session: ignored, the limit was reached
 verify.ok = verify: OK, {1} ticks replayed from the files and compared with everything stored ({2} sessions), {3} s
 ckpt.used = start: checkpoint of tick {1} loaded in {2} s (+{3} ticks replayed)
+ckpt.used.plain = start: checkpoint of tick {1} loaded (+{2} ticks replayed)
 ckpt.replay = replay: checkpoint {1} - {2} ticks replayed
 ckpt.why.missing = missing
 ckpt.why.forced = off (--replay)

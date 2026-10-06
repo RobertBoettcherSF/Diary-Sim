@@ -163,9 +163,9 @@ procedure Diary_Sim is
    Ckpt_Written : Natural := 0;                      --  checkpoints written by this run
    Ckpt_Write_Secs : Duration := 0.0;                --  the last one: seconds and bytes
    Ckpt_Bytes : Long_Long_Integer := 0;
-   Last_Ckpt_Tick : Int := 0;                        --  the tick of the last one written
    Data_Hash : Unbounded_String;                     --  the data/*.txt files as the program started (another number is another world)
    Replay_Wait_Ms : Natural := 0;                    --  DIARY_TEST_REPLAY_MS (tests only): a pause per replayed tick
+   Tick_Wait_Ms : Natural := 0;                      --  DIARY_TEST_TICK_MS (tests only): a pause per new tick (a signal inside a session)
    St       : array (Entity_Id) of State := [others => (80, 0, 3)];
    Out_File : array (Entity_Id) of TIO.File_Type;
    Pending  : Unbounded_String;                             --  output held until the seed line
@@ -7243,7 +7243,6 @@ procedure Diary_Sim is
       end if;
       Box.Append (if Length (Night_Replay_Line) > 0 then To_String (Night_Replay_Line) else Msg ("night.box.replay_no"));
       if Length (Ckpt_Start_Line) > 0 then Box.Append (To_String (Ckpt_Start_Line)); end if;   --  0.058: checkpoint or replay, the start time
-      if Ckpt_Written > 0 then Box.Append (Msg ("ckpt.written", Img (Last_Ckpt_Tick), Img (Ckpt_Bytes / 1024), Secs_Text (Ckpt_Write_Secs))); end if;
       Box.Append (Msg ("night.box.time", Elapsed_Text (Since (Night_T0))));
       Box.Append (Msg ("night.box.speed", Avg_Text, Ticks_Per_Sec, Size_Text (Size_Now), Growth_Text));
       if Night_Verified > 0 then Box.Append (Msg ("night.box.verified", Img (Night_Verified))); end if;
@@ -7364,6 +7363,25 @@ procedure Diary_Sim is
    Ckpt_Pay_At : Ada.Streams.Stream_Element_Offset := 0;   --  the payload starts after this byte
    Ckpt_Head : Str_Vectors.Vector;
    Store_Count : constant := 15;
+
+   --  ckpt_log.txt in the save folder: one time stamped line per load, write or refusal (the last 200 lines; run_log.txt keeps its
+   --  one entry per run).  Not in views (they write nothing).
+   procedure Ckpt_Log (Text : String) is
+      Old : Str_Vectors.Vector;
+      Found : Boolean;
+      F : TIO.File_Type;
+   begin
+      if Ledger_Mode or else Preview then return; end if;
+      Read_Lines ("ckpt_log.txt", Old, Found);
+      TIO.Create (F, TIO.Out_File, "ckpt_log.txt.tmp");
+      for I in Integer'Max (1, Natural (Old.Length) - 198) .. Natural (Old.Length) loop TIO.Put_Line (F, Old (I)); end loop;
+      TIO.Put_Line (F, Local_Stamp & " " & Text);
+      TIO.Close (F);
+      if Ada.Directories.Exists ("ckpt_log.txt") then Ada.Directories.Delete_File ("ckpt_log.txt"); end if;
+      Ada.Directories.Rename ("ckpt_log.txt.tmp", "ckpt_log.txt");
+   exception
+      when others => null;
+   end Ckpt_Log;
 
    function Sect_Name (K : Positive) return String is
      (case K is when 1 => "world", when 2 => "dharma", when 3 => "things", when 4 => "screen", when 5 => "games", when 6 => "robot",
@@ -7568,9 +7586,15 @@ procedure Diary_Sim is
       Seed_D : Int := Disk_Seed;
    begin
       for E in Entity_Id loop
-         Disk (E).Clear;
-         Disk_Base (E) := 0;
-         Load_Diary (E, Seed_D);
+         declare
+            Was_Open : constant Boolean := TIO.Is_Open (Out_File (E));   --  opened for the new ticks already: closed while it is read
+         begin
+            if Was_Open then TIO.Close (Out_File (E)); end if;
+            Disk (E).Clear;
+            Disk_Base (E) := 0;
+            Load_Diary (E, Seed_D);
+            if Was_Open then TIO.Open (Out_File (E), TIO.Append_File, Path (E)); end if;
+         end;
       end loop;
    end Ckpt_Full_Diaries;
 
@@ -7584,7 +7608,7 @@ procedure Diary_Sim is
    begin
       if not Ckpt_Used then return; end if;
       if Head_Get (Ckpt_Head, "counts") /= Ckpt_Counts (C) then
-         Append_Log ("CKPT", "counts at the write: " & Head_Get (Ckpt_Head, "counts") & ASCII.LF & "counts now: " & Ckpt_Counts (C) & ASCII.LF);
+         Ckpt_Log ("counts at the write: " & Head_Get (Ckpt_Head, "counts") & "; now: " & Ckpt_Counts (C));
          Fail := To_Unbounded_String ("inputs or sessions before tick " & Img (C));
       elsif Natural (World_Stored.Length) < Natural'Value (Head_Get (Ckpt_Head, "world"))
         or else Natural (Eff_Stored.Length) < Natural'Value (Head_Get (Ckpt_Head, "eff"))
@@ -7677,7 +7701,7 @@ procedure Diary_Sim is
          end;
       end loop;
       if not Ok then
-         Append_Log ("CKPT", Msg ("ckpt.notwritten", Img (C)) & ASCII.LF);
+         Ckpt_Log (Msg ("ckpt.notwritten", Img (C)));
          return;
       end if;
       All_State_IO (Data'Access, True);
@@ -7717,9 +7741,8 @@ procedure Diary_Sim is
       Sim_Ckpt.Clear (Data);
       Ckpt_Write_Secs := Since (T0);
       Ckpt_Written := Ckpt_Written + 1;
-      Last_Ckpt_Tick := C;
       Ckpt_Last_Write := Ada.Calendar.Clock;
-      Append_Log ("CKPT", Msg ("ckpt.written", Img (C), Img (Ckpt_Bytes / 1024), Secs_Text (Ckpt_Write_Secs)) & ASCII.LF);
+      Ckpt_Log (Msg ("ckpt.written", Img (C), Img (Ckpt_Bytes / 1024), Secs_Text (Ckpt_Write_Secs)));
    exception
       when E : others =>
          Sim_Ckpt.Clear (Data);
@@ -7728,7 +7751,7 @@ procedure Diary_Sim is
          exception
             when others => null;
          end;
-         Append_Log ("CKPT", Msg ("ckpt.failed", Ada.Exceptions.Exception_Message (E)) & ASCII.LF);
+         Ckpt_Log (Msg ("ckpt.failed", Ada.Exceptions.Exception_Message (E)));
    end Ckpt_Write;
 
    --  --verify: the replay has rebuilt the state of its last tick; a checkpoint of that tick must hold exactly the same bytes.
@@ -7776,8 +7799,9 @@ procedure Diary_Sim is
    end Ckpt_Verify;
 
    --  The line of the start: the checkpoint and how long the start took, or why everything is replayed.
-   function Ckpt_Start_Text return String is
-     (if Ckpt_Used then Msg ("ckpt.used", Img (Ckpt_Tick), Secs_Text (Ckpt_Load_Secs), Img (Integer'Max (0, Verify_To - Ckpt_Tick)))
+   function Ckpt_Start_Text (Timed : Boolean) return String is   --  Timed: with the seconds (a night; a plain run keeps its console the same run by run)
+     (if Ckpt_Used and then Timed then Msg ("ckpt.used", Img (Ckpt_Tick), Secs_Text (Ckpt_Load_Secs), Img (Integer'Max (0, Verify_To - Ckpt_Tick)))
+      elsif Ckpt_Used then Msg ("ckpt.used.plain", Img (Ckpt_Tick), Img (Integer'Max (0, Verify_To - Ckpt_Tick)))
       else Msg ("ckpt.replay", To_String (Ckpt_Why), Img (Verify_To)));
 
    --  A night writes the checkpoint after a session when night.ckpt_seconds have passed since the last one, and after the session
@@ -7826,6 +7850,7 @@ procedure Diary_Sim is
 begin
    Data_Hash := To_Unbounded_String (Sim_Ckpt.Dir_Hash (Ada.Directories.Containing_Directory (Data_Path ("limits.txt"))));   --  the data Load_Data reads
    Replay_Wait_Ms := Natural'Value ("0" & GNAT.OS_Lib.Getenv ("DIARY_TEST_REPLAY_MS").all);
+   Tick_Wait_Ms := Natural'Value ("0" & GNAT.OS_Lib.Getenv ("DIARY_TEST_TICK_MS").all);
    Load_Data;
    while I <= Ada.Command_Line.Argument_Count loop
       declare
@@ -8208,11 +8233,6 @@ begin
       Ckpt_Full_Diaries;
    end if;
    Ckpt_Restore;   --  0.058: the state of ticks 1 .. Ckpt_Tick from state.ckpt (or nothing, and Ckpt_Used is False)
-   if Ckpt_Used then
-      Append_Log ("CKPT", Msg ("ckpt.used", Img (Ckpt_Tick), Secs_Text (Ckpt_Load_Secs), Img (Integer'Max (0, Common - Ckpt_Tick))) & ASCII.LF);
-   elsif not Ledger_Mode or else Verify_View then
-      Append_Log ("CKPT", Msg ("ckpt.replay", To_String (Ckpt_Why), Img (Common)) & ASCII.LF);
-   end if;
    if not Ledger_Mode then Write_Debug ("RUN", ""); end if;   --  stub: a kill -9 still leaves a file
 
    Sessions_Loop : loop   --  once for a normal run; a night run goes round once per session (the replay below only in the first)
@@ -8220,16 +8240,16 @@ begin
    Verify_To := (if Explicit then Natural'Min (Common, Natural (Ticks)) else Common);
    if Night_Done = 0 then
       Night_Phase := 0;
-      Ckpt_Start_Line := To_Unbounded_String (Ckpt_Start_Text);   --  0.058: how this start got its state
+      Ckpt_Start_Line := To_Unbounded_String (Ckpt_Start_Text (Timed => Night_On));   --  0.058: how this start got its state
       if Ledger_Mode then
          null;
       elsif Night_On then
          Recent.Append (To_String (Ckpt_Start_Line));
-         Append_Log ("NIGHT", To_String (Ckpt_Start_Line) & ASCII.LF);
          if not Tty_Out then Con.Put_Line_Now (To_String (Ckpt_Start_Line)); Flush_Out; end if;
       else
          Con.Put_Line (To_String (Ckpt_Start_Line));
       end if;
+      if not Ledger_Mode then Ckpt_Log (Ckpt_Start_Text (Timed => True)); end if;
       if Ckpt_Used then
          Start_Sessions_At (Int (Ckpt_Tick));   --  a session the replay would begin at the checkpoint's tick
       else
@@ -8296,7 +8316,7 @@ begin
             Night_Replay_Line := To_Unbounded_String
               (Msg ("night.replay_done", Img (Verify_To), Img (Base_S), Tenths_Text (Since (Night_T0)), Img (Sessions.Last_Element.N), Img (Verify_To + 1),
                     (if Lv = "" then Msg ("night.active_off") else "active=" & Lv)));
-            Append_Log ("NIGHT", To_String (Night_Replay_Line) & ASCII.LF);
+            Append_Log ("NIGHT", To_String (Night_Replay_Line) & ASCII.LF & To_String (Ckpt_Start_Line) & ASCII.LF);
             if not Tty_Out then Con.Put_Line_Now (To_String (Night_Replay_Line)); Flush_Out; end if;
          end;
       end if;
@@ -8310,6 +8330,7 @@ begin
       S_Start := Ada.Calendar.Clock;
       for Tick in Int range Int (Verify_To) + 1 .. Ticks loop
          Do_Tick (Tick);
+         if Tick_Wait_Ms > 0 then delay Duration (Tick_Wait_Ms) / 1000.0; end if;   --  tests only
          if Night_On and then (Chat_Mode or else Tick mod 8 = 0) then Night_Tick; end if;
          Check_Dharma_At (Tick);   --  a stored session end beyond the common tick (a diary was behind)
          if Tick > Int (Common) and then Tick mod Every = 0 and then not (Visit_Mode and then Visit_Active and then not Visit_Left) then

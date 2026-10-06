@@ -139,7 +139,7 @@ grep -q 'import OK: 4 entities, 1000 ticks verified, continuing from 1001 (4000 
   && grep -q 'entities/ present (4/4' again.txt && grep -q 'turns this run 200' again.txt && grep -q 'resumed from tick 1000' again.txt \
   && grep -q 'export OK: diaries/ 4 files, 4800 lines' again.txt && ok "resumed run: import OK with the right numbers, report, export OK" || bad "resumed-run lines"
 cmp <(sed -n '/^report:/,/^export OK/p' again.txt) <(sed -n '/^report:/,/^export OK/p' run_report.txt | grep -v '^== ') && grep -q '^import OK' run_report.txt && ok "run_report.txt holds the same import/report lines" || bad "run_report.txt differs"
-[ "$(wc -l < again.txt)" -le 77 ] && ok "console output $(wc -l < again.txt) lines (<= 77, with the treadmill block and the robot / governance off line)" || bad "console output too long"
+[ "$(wc -l < again.txt)" -le 78 ] && ok "console output $(wc -l < again.txt) lines (<= 78, with the treadmill block, the robot / governance off line and the checkpoint line of 0.058)" || bad "console output too long"
 rm -rf entities; "$bin" --ticks=1200 | grep -q 'entities/ rebuilt (4 of 4' && ok "missing entities/ reported as rebuilt" || bad "no rebuilt message"
 fresh_copy; sed -i '300s/"text":"[a-z]/"text":"X/' diaries/robert.jsonl
 "$bin" --ticks=1000 > drift.txt; grep -q 'import FAILED: backup and code have drifted: robert tick 300' drift.txt && ok "drift: console says 'import FAILED' with entity and tick" || bad "no import FAILED"
@@ -1439,7 +1439,7 @@ for d in a b; do
   cp -r "$idata" "$w/sm/$d/data"; sed -i 's/^chess.enabled = .*/chess.enabled = 1/; s/^govern.enabled = .*/govern.enabled = 1/; s/^trial.enabled = .*/trial.enabled = 1/; s/^screen.enabled = .*/screen.enabled = 1/; s/^robot.enabled = .*/robot.enabled = 1/' "$w/sm/$d/data/limits.txt"
   x="$w/sm/$d/bin/diary_sim"; [ $d = b ] && x="$w/sm/$d/bin/diary_sim_small"
   mkdir -p "$w/sm/$d/h"; ( cd "$w/sm/$d" && export DIARY_HOME="$w/sm/$d/h" && { "$x" --seed 42 --ticks 400 --yes --every 5000; "$x" --more 200 --every 5000; "$x" --trials; "$x" --elo; "$x" --govern; "$x" --more 0 --every 5000 --debug-section run; } 2>&1 | sed "s#$w/sm/$d/h#H#g" > "$w/sm/$d/out.txt" )
-  ( cd "$w/sm/$d/h" && find . -type f | sort | while read -r f; do case $f in ./debug*|./last*|./run_report*|./run_log*|./trend*|./night_console*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done > "$w/sm/$d/files.txt" )
+  ( cd "$w/sm/$d/h" && find . -type f | sort | while read -r f; do case $f in ./debug*|./last*|./run_report*|./run_log*|./trend*|./night_console*|./state.ckpt*|./ckpt_log*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done > "$w/sm/$d/files.txt" )
 done
 [ -s "$w/sm/a/out.txt" ] && cmp -s "$w/sm/a/out.txt" "$w/sm/b/out.txt" && cmp -s "$w/sm/a/files.txt" "$w/sm/b/files.txt" && grep -q '^T[0-9]' "$w/sm/a/out.txt" && ok "the small binary gives the same console output and byte-identical diaries / entities / reports as the dev build ($(wc -l < "$w/sm/a/files.txt") files compared; trials, Elo, governance included)" || bad "small vs dev output"
 ( cd "$w/sm/src" && make footprint > "$w/sm/fp.txt" 2>&1 ); grep -q '^source  : ' "$w/sm/fp.txt" && grep -q '^data    : ' "$w/sm/fp.txt" && grep -q '^binary  : bin/diary_sim_small ' "$w/sm/fp.txt" && grep -q '^units   : ' "$w/sm/fp.txt" && grep -q '^runtime : ' "$w/sm/fp.txt" && ok "make footprint prints source, data, binary (stripped / debug share), per-unit and runtime sizes" || bad "footprint"
@@ -1538,8 +1538,8 @@ bad_b=$(grep '^B[0-9]' diaries/ballots.txt | awk '{ for (i = 1; i <= NF; i++) { 
 nwin=0; for b in $(grep '^B[0-9]' diaries/ballots.txt | sed -E 's/^B[0-9]+ t=[0-9]+ s=([0-9]+) mean=([^ ]+) .* win=([a-z]+) .*/\1:\2:\3/'); do s_=${b%%:*}; r_=${b#*:}; m_=${r_%%:*}; w_=${r_##*:}; grep -q " s=$s_ st=[AR] word=$w_ slot=[a-z]* mean=$m_ " diaries/dictionary.txt && nwin=$((nwin + 1)); done
 [ "$nb" -ge 3 ] && [ "$bad_b" = 0 ] && [ "$nwin" = "$nb" ] && head -1 diaries/ballots.txt | grep -q '^# seed 42$' && ok "secret ballots: $nb B lines (2 or 3 forms for a meaning, every player's pick, tally sums to the players, a die only on a tie); the winner is the form that went to the yes/no vote and into the dictionary" || bad "ballots ($nb $bad_b $nwin)"
 leak=0
-for b in $(grep '^B[0-9]' diaries/ballots.txt | sed -E 's/.* alts=([a-z,]*) .* win=([a-z]*) .*/\1:\2/'); do alts=${b%%:*}; win=${b##*:}; for a in ${alts//,/ }; do [ "$a" = "$win" ] && continue; if grep -rlw -- "$a" . "$w/rq/"*.out 2>/dev/null | grep -qv 'ballots.txt'; then leak=$((leak + 1)); fi; done; done
-grep -rl ' picks=' . 2>/dev/null | grep -qv 'ballots.txt' && leak=$((leak + 1))
+for b in $(grep '^B[0-9]' diaries/ballots.txt | sed -E 's/.* alts=([a-z,]*) .* win=([a-z]*) .*/\1:\2/'); do alts=${b%%:*}; win=${b##*:}; for a in ${alts//,/ }; do [ "$a" = "$win" ] && continue; if grep -rlw --exclude='state.ckpt*' -- "$a" . "$w/rq/"*.out 2>/dev/null | grep -qv 'ballots.txt'; then leak=$((leak + 1)); fi; done; done
+grep -rl --exclude='state.ckpt*' ' picks=' . 2>/dev/null | grep -qv 'ballots.txt' && leak=$((leak + 1))   # state.ckpt (0.058): the program's own state, like ballots.txt never shown
 for o in --divergence --dictionary --inbox --govern --audit --robot; do "$w/rq/bin/diary_sim" $o > "$w/rq/view.out" 2>&1; grep -q ' picks=\|^B[0-9]' "$w/rq/view.out" && leak=$((leak + 1)); done
 grep -q 'kind=ballot' diaries/votes.txt && leak=$((leak + 1))
 [ "$nb" -ge 3 ] && [ "$leak" = 0 ] && ok "the ballot is secret: no losing form and no pick appears in any other file or player-visible view (diaries, votes, announcements, inbox, divergence, dictionary, govern, audit)" || bad "ballot leaks ($leak)"
@@ -1595,7 +1595,7 @@ vl=$(wc -l < "$w/sh/vtail.txt")
 [ "$miss" = 0 ] && [ "$miss2" = 0 ] && [ "$vl" -gt 100 ] && grep -q '^== chess ==' save/run_report.txt && grep -q '^== ledger ==' save/run_report.txt && ok "run_report.txt is complete: every line of the verbose console ($vl lines) and of the short form is in it" || bad "run_report.txt incomplete ($miss $miss2 $vl)"
 # --verbose and DIARY_VERBOSE=1 print the old whole report; the simulation is untouched by any of it
 nrm() { sed 's#/sh/[a-z]*/#/sh/X/#g' "$1"; }
-sums() { ( cd "$1/save" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./run_log*|./trend*|./night_console*|./debug*|./last*|./voice_log*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
+sums() { ( cd "$1/save" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./run_log*|./trend*|./night_console*|./debug*|./last*|./voice_log*|./state.ckpt*|./ckpt_log*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
 diff <(nrm ../flag/c1.txt) <(nrm ../envv/c1.txt) > /dev/null && diff <(nrm ../flag/c2.txt) <(nrm ../envv/c2.txt) > /dev/null && grep -q '^chess games' ../flag/c1.txt && grep -q '^treadmill' ../flag/c1.txt && grep -q '^please attach debug.txt' ../flag/c1.txt && ! grep -q '^@@TRACE\|^Full report:' ../flag/c1.txt \
   && ok "--verbose = DIARY_VERBOSE=1: the whole report as before (no marker, no pointer), $vl lines after 'report:'" || bad "verbose output"
 sums "$w/sh/short" > "$w/sh/s1.txt"; sums "$w/sh/flag" > "$w/sh/s2.txt"; sums "$w/sh/envv" > "$w/sh/s3.txt"
@@ -1629,7 +1629,7 @@ ns=$(grep -c '^s[0-9]* t[0-9]* [0-9][0-9]:[0-9][0-9]:[0-9][0-9] | ' night.txt); 
 [ "$rcn" = 0 ] && [ "$ns" = 3 ] && grep -q '^night run: sessions of 60 ticks; max sessions: 3; max hours: 12' night.txt && grep -q '^+-- night run finished' night.txt && grep -q '^| stopped: the number of sessions was reached' night.txt \
   && ! grep -q '^@@\|Full report\|^report:\|^treadmill' night.txt && [ "$nlines" -le 24 ] && [ "$(grep -c "^  [0-9]h[0-9][0-9]m[0-9][0-9]s | .* KB (+.* KB) | .*/session | .* tick/s | left " night.txt)" = 3 ] && grep -v '^Save folder\|^Saved to' night.txt | awk 'length > 79 { n++ } END { exit n > 0 }' \
   && ok "make night, no terminal, MAX_SESSIONS=3: one status line per session (3) with its timer line (elapsed, save folder size and growth, seconds per session, ticks per second, time left), a final box, no report spam ($nlines lines, <= 79 columns), exit 0" || bad "night console ($rcn $ns $nlines)"
-nsums() { ( cd "$1" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./run_log*|./trend*|./night_console*|./debug*|./last*|./voice_log*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
+nsums() { ( cd "$1" || exit 1; find . -type f | sort | while read -r f; do case $f in ./run_report*|./run_log*|./trend*|./night_console*|./debug*|./last*|./voice_log*|./state.ckpt*|./ckpt_log*) ;; *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
 nsums "$w/nt/night" > ns1.txt; nsums "$w/nt/hand" > ns2.txt
 [ -s ns1.txt ] && cmp -s ns1.txt ns2.txt && ok "three night sessions are byte for byte three hand-made --more 60 runs (diaries, entities, summary, records: $(wc -l < ns1.txt) files)" || bad "night differs from hand runs"
 # make verify: OK on a night save; a changed diary line is DRIFT (exit 1); the night run against the same sessions by hand, run_report.txt included
@@ -1726,7 +1726,7 @@ PY
   big="$w/nt/big"; env -u DIARY_VERBOSE "$nb" --home "$big" --seed 42 --ticks 6000 --yes --every 100000 > /dev/null 2>&1
   bsum() { ( cd "$1/diaries" && cat ./*.jsonl | cksum ); }
   # 1. q during the very first replay: stops at once, nothing lost
-  rm -rf "$w/nt/qr"; cp -r "$big" "$w/nt/qr"; b0=$(bsum "$w/nt/qr")
+  rm -rf "$w/nt/qr"; cp -r "$big" "$w/nt/qr"; b0=$(bsum "$w/nt/qr"); rm -f "$w/nt/qr/state.ckpt"   # 0.058: without the checkpoint the replay happens
   python3 "$w/nt/ptyq.py" q_replay "$nb" "$w/nt/qr" --session-ticks 300 --max-sessions 5 > qr.txt 2>&1
   el=$(sed -n 's/^ELAPSED=//p' qr.txt); ex=$(sed -n 's/^EXIT=//p' qr.txt)
   env -u DIARY_VERBOSE "$nb" --home "$w/nt/qr" --more 5 --yes > qr2.txt 2>&1; rcr=$?
@@ -1755,14 +1755,14 @@ PY
     && awk 'length > 79 { n++ } END { exit n > 0 }' hdr.txt && [ "$fr" -ge 2 ] \
     && ok "the header shows mood, energy, words and petitions of all four wesen and, for all four players, the wesen watched, its mood, grant/refuse and stance, in 79 columns" || bad "header table"
   # 4. Ctrl-C and SIGHUP (the terminal is closed) during the replay: clean stop, a rerun resumes
-  rm -rf "$w/nt/qi"; cp -r "$big" "$w/nt/qi"; b0=$(bsum "$w/nt/qi")
+  rm -rf "$w/nt/qi"; cp -r "$big" "$w/nt/qi"; b0=$(bsum "$w/nt/qi"); rm -f "$w/nt/qi/state.ckpt"   # 0.058: without the checkpoint the replay happens
   python3 "$w/nt/ptyq.py" int_replay "$nb" "$w/nt/qi" --max-sessions 5 > qi.txt 2>&1
   el=$(sed -n 's/^ELAPSED=//p' qi.txt); ex=$(sed -n 's/^EXIT=//p' qi.txt)
   env -u DIARY_VERBOSE "$nb" --home "$w/nt/qi" --more 5 --yes > qi2.txt 2>&1
   [ "$ex" = 130 ] && awk -v e="$el" 'BEGIN { exit !(e < 1.5) }' && grep -q 'received: stopped after tick' qi.txt && [ "$(bsum "$w/nt/qi")" != "$b0" ] || true
   [ "$ex" = 130 ] && awk -v e="$el" 'BEGIN { exit !(e < 1.5) }' && grep -q 'SIGINT received: stopped after tick' qi.txt && grep -q '^| stopped: Ctrl-C' qi.txt && grep -q '^import OK: 4 entities, 6000 ticks verified' qi2.txt \
     && ok "Ctrl-C during the replay: stops at the next tick ($el s), exit 130, a rerun resumes from the save" || bad "Ctrl-C ($ex, $el s)"
-  rm -rf "$w/nt/qh"; cp -r "$big" "$w/nt/qh"
+  rm -rf "$w/nt/qh"; cp -r "$big" "$w/nt/qh"; rm -f "$w/nt/qh/state.ckpt"   # 0.058: without the checkpoint the replay happens
   python3 "$w/nt/ptyq.py" hup_replay "$nb" "$w/nt/qh" --max-sessions 5 > qh.txt 2>&1
   el=$(sed -n 's/^ELAPSED=//p' qh.txt); ex=$(sed -n 's/^EXIT=//p' qh.txt)
   env -u DIARY_VERBOSE "$nb" --home "$w/nt/qh" --more 5 --yes > qh2.txt 2>&1; env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/qh" > qh3.txt 2>&1; rch=$?
@@ -1798,7 +1798,7 @@ sed -i 's/^voice.enabled = .*/voice.enabled = 0/; s/^voice.log = .*/voice.log = 
 env -u DIARY_VERBOSE "$nb" --continuous --home "$w/nt/von" --session-ticks 200 --max-sessions 2 --seed 42 < /dev/null > von.txt 2>&1
 ( cd "$w/nt/vd" && env -u DIARY_VERBOSE bin/diary_sim --continuous --home "$w/nt/voff" --session-ticks 200 --max-sessions 2 --seed 42 < /dev/null > "$w/nt/voff.txt" 2>&1 )
 env -u DIARY_VERBOSE "$nb" --verify --home "$w/nt/von" > vov.txt 2>&1; rcvv=$?
-vn() { ( cd "$1" || exit 1; find . -type f ! -name 'voice_log.txt' ! -name 'run_*' ! -name 'trend.txt' ! -name 'night_*' ! -name 'debug.txt' ! -name 'last*' | sort | while read -r f; do case $f in *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^#' "$f" | cksum | sed "s#\$# $f#";; *) cksum < "$f" | sed "s#\$# $f#";; esac; done ); }
+vn() { ( cd "$1" || exit 1; find . -type f ! -name 'voice_log.txt' ! -name 'run_*' ! -name 'trend.txt' ! -name 'night_*' ! -name 'debug.txt' ! -name 'last*' ! -name 'state.ckpt*' ! -name 'ckpt_log.txt' | sort | while read -r f; do case $f in *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^#' "$f" | cksum | sed "s#\$# $f#";; *) cksum < "$f" | sed "s#\$# $f#";; esac; done ); }
 vn "$w/nt/von" > vn1.txt; vn "$w/nt/voff" > vn2.txt
 if [ -s "$w/nt/von/voice_log.txt" ]; then vlong=$(sed 's/^t=[0-9]* //' "$w/nt/von/voice_log.txt" | awk 'length($0) > 150 || length($0) < 8' | wc -l); else vlong=-1; fi
 [ -s vn1.txt ] && cmp -s vn1.txt vn2.txt && [ "$vlong" = 0 ] && [ ! -e "$w/nt/voff/voice_log.txt" ] && [ "$rcvv" = 0 ] && grep -q '^verify: OK' vov.txt \
@@ -1855,7 +1855,7 @@ env -u DIARY_VERBOSE "$nb" --chatlog --home "$w/nt/ch" > chl.txt 2>&1
   && tail -1 "$w/nt/ch/diaries/sessions.txt" > /dev/null && grep -c ' chat=1' "$w/nt/ch/diaries/sessions.txt" | grep -q '^1$' \
   && ok "--chat with a script: @adam / @Eve / @ru / @jeh / @ob get answers from their templates, an unknown name, a name that fits two (@o) and an unknown order get error lines, /status /pause /resume /mood /trend /words /help answer; $cn C lines in diaries/chat.txt (format C<n> t= who= to= h= text=, numbered 1..$cn, none over 150 characters), the session carries chat=1, make verify passes, make chatlog and the plain console show them" || bad "chat script ($rcc, $cn lines, fmt $badfmt, len $badlen, seq $seqok, verify $rcv2)"
 cmp -s "$cf" "$w/nt/ch2/diaries/chat.txt" && ok "the answers are deterministic: the same script on a copy of the same save gives the same chat.txt byte for byte" || bad "chat answers differ between two runs"
-cs() { ( cd "$1" || exit 1; find . -type f ! -name 'chat.txt' ! -name 'voice_log.txt' ! -name 'run_*' ! -name 'trend.txt' ! -name 'night_*' ! -name 'debug.txt' ! -name 'last*' | sort | while read -r f; do case $f in *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | sed 's/ chat=1//' | cksum | sed "s#\$# $f#";; *) cksum < "$f" | sed "s#\$# $f#";; esac; done ); }
+cs() { ( cd "$1" || exit 1; find . -type f ! -name 'chat.txt' ! -name 'voice_log.txt' ! -name 'run_*' ! -name 'trend.txt' ! -name 'night_*' ! -name 'debug.txt' ! -name 'last*' ! -name 'state.ckpt*' ! -name 'ckpt_log.txt' | sort | while read -r f; do case $f in *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; ./diaries/sessions.txt) grep -v '^# build' "$f" | sed 's/ chat=1//' | cksum | sed "s#\$# $f#";; *) cksum < "$f" | sed "s#\$# $f#";; esac; done ); }
 cs "$w/nt/ch" > cs1.txt; cs "$w/nt/cp" > cs2.txt
 [ -s cs1.txt ] && cmp -s cs1.txt cs2.txt && [ ! -e "$w/nt/cp/diaries/chat.txt" ] && ! grep -q 'chat=1' "$w/nt/cp/diaries/sessions.txt" \
   && ok "the chat does not change the simulation: a session with $cn chat lines and the same session without leave every other diary, entity file and record byte for byte the same ($(wc -l < cs1.txt) files; only the chat=1 marker of sessions.txt and chat.txt differ); a plain run has no marker and no chat.txt" || bad "chat changes the simulation ($(diff cs1.txt cs2.txt | head -3 | tr '\n' ' '))"
@@ -2327,9 +2327,12 @@ walls=$(grep -E '^make [a-z]+ wall time: [0-9]+m[0-5][0-9]s \([0-9]+s\)$' ck.txt
   && tl ck.txt | grep -q '^make checkin wall time: ' && grep -q "^replay done: $ckt ticks in [0-9.]* s; NEW from s$((ckn + 1)), tick $((ckt + 1)) (active=2)\$" ck.txt && [ "$(awk 'length > 79' ck.txt | grep -c 'replay done')" = 0 ] \
   && grep -q '^| replay done: ' ck.txt && grep -q '^verify: OK' ck.txt && grep -q "replay done: $ckt ticks" "$w/nt/ck/run_log.txt" \
   && ok "make checkin: night (new session $((ckn + 1)) after the replay line 'replay done: $ckt ticks in ... s; NEW from s$((ckn + 1)), tick $((ckt + 1)) (active=2)', <= 79 columns, also in the box and run_log.txt), then active, wordstat, frustration, evolve, verify, each with === and its wall time; the checkin total last" || bad "make checkin ($rck '$secs' '$walls' $ckt $ckn)"
-rm -rf "$w/nt/ck3"; cp -r "$w/nt/a2" "$w/nt/ck3"
-( env -u DIARY_VERBOSE "$nb" --home "$w/nt/ck3" --continuous --session-ticks 60 --max-sessions 1 > ck3.txt 2>&1 < /dev/null & p=$!; sleep 2; kill -TERM $p; wait $p )
-grep -q '^| replay not finished: no new session ran' ck3.txt && ! grep -q '^replay done' ck3.txt && grep -q 'make checkin' "$root/README.md" && grep -q '^checkin:' "$root/Makefile" && grep -q 'replay done' "$root/data/help.txt" \
+# 0.058: deterministic.  The checkpoint is removed (else there is no replay to interrupt), DIARY_TEST_REPLAY_MS=20 makes every
+# replayed tick take 20 ms (tests only), and SIGTERM goes out as soon as the start line says the replay begins (not after a fixed sleep).
+rm -rf "$w/nt/ck3"; cp -r "$w/nt/a2" "$w/nt/ck3"; rm -f "$w/nt/ck3/state.ckpt"
+( DIARY_TEST_REPLAY_MS=20 env -u DIARY_VERBOSE "$nb" --home "$w/nt/ck3" --continuous --session-ticks 60 --max-sessions 1 > ck3.txt 2>&1 < /dev/null & p=$!
+  for _ in $(seq 300); do grep -q '^replay: checkpoint missing - [0-9]* ticks replayed$' ck3.txt && break; sleep 0.1; done; kill -TERM $p; wait $p )
+grep -q '^replay: checkpoint missing - [0-9]* ticks replayed$' ck3.txt && grep -q '^| replay not finished: no new session ran' ck3.txt && ! grep -q '^replay done' ck3.txt && grep -q 'make checkin' "$root/README.md" && grep -q '^checkin:' "$root/Makefile" && grep -q 'replay done' "$root/data/help.txt" \
   && ok "a night stopped during the replay says 'replay not finished: no new session ran' in its box; README, Makefile and --help describe make checkin and the replay line" || bad "replay not finished"
 cd "$w" || exit 1
 
@@ -2499,6 +2502,62 @@ DIARY_HOME="$w/nt/spd" make --no-print-directory -C "$root" ship SHIP_VERIFY=1 >
   && [ "$rcv" != 0 ] && grep -q '^VERDICT: FAIL:.* verify failed;' "$w/nt/spd/checkin.txt" && grep -q '^night: none (reports only)' "$w/nt/spd/checkin.txt" \
   && grep -q '^SHIP_SESSIONS ?= 0$' "$root/Makefile" && grep -q 'REPORTS ONLY' "$root/Makefile" && grep -q 'make ship.*(by day) runs NO night' "$root/README.md" \
   && ok "make ship SHIP_VERIFY_TICKS=10: verify skipped (the end check of the last night quoted), still PASS, and the deltas since the last ship (+0 sessions, the same top topic); make ship SHIP_VERIFY=1 on a save that DRIFTs: exit $rcv, VERDICT: FAIL verify failed; Makefile and README say reports only" || bad "make ship verify skip / fail ($rcs $rcv)"
+cd "$w" || exit 1
+
+echo "== 62. build 0.058: the state checkpoint (state.ckpt): a start loads it instead of replaying, with byte for byte the files of a full replay; a changed file or checkpoint is refused (full replay); a signal inside a session, then the resume =="
+ck="$w/ckp"; rm -rf "$ck"; mkdir -p "$ck/bin"; cp "$bin" "$ck/bin/"; cp -r "$root/data" "$ck/data"; cb="$ck/bin/diary_sim"; cd "$ck" || exit 1
+ckr() { env -u DIARY_VERBOSE "$cb" --home "$@"; }
+# the record files: the diaries without "ts" (the clock), everything else as it is (inbox.txt is a view, rewritten)
+cks() { ( cd "$1" || exit 1; for f in $(ls diaries/* entities/*/* | grep -v '^diaries/inbox.txt$'); do case $f in *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
+# N = 4 sessions (explicit and voted lengths, Robert's words in between)
+ckr "$ck/a" --seed 42 --more 150 --every 5000 --yes > c1.txt 2>&1; ckr "$ck/a" --more 150 --every 5000 > c2.txt 2>&1
+ckr "$ck/a" --say ada --text "rest a little" > /dev/null 2>&1; ckr "$ck/a" --more 150 --every 5000 > c3.txt 2>&1; ckr "$ck/a" --every 5000 > c4.txt 2>&1
+grep -q '^replay: checkpoint missing - 0 ticks replayed$' c1.txt && grep -q '^start: checkpoint of tick 300 loaded (+0 ticks replayed)$' c3.txt \
+  && head -1 "$ck/a/state.ckpt" | grep -q '^diary-sim-ckpt 1$' && grep -aq '^build 0.058$' "$ck/a/state.ckpt" && grep -q ' checkpoint: tick [0-9]*, [0-9]* KB, written in [0-9.]* s$' "$ck/a/ckpt_log.txt" \
+  && ok "every run writes state.ckpt (header: format, build, ...); the next start loads it and says so ('start: checkpoint of tick 300 loaded (+0 ticks replayed)'), a first start says 'replay: checkpoint missing'; ckpt_log.txt has the write times" || bad "checkpoint written / loaded"
+# (a) M = 3 more sessions from the checkpoint, (b) the same 3 on a copy without it (full replay each time): the same files
+cp -r "$ck/a" "$ck/b"; used=0; full=0
+for k in 1 2 3; do
+  [ $k = 2 ] && { ckr "$ck/a" --say all --text "good morning" > /dev/null 2>&1; ckr "$ck/b" --say all --text "good morning" > /dev/null 2>&1; }
+  ckr "$ck/a" --more 120 --every 5000 > ca$k.txt 2>&1 && grep -q '^start: checkpoint of tick [0-9]* loaded (+0 ticks replayed)$' ca$k.txt && used=$((used + 1))
+  rm -f "$ck/b/state.ckpt"; ckr "$ck/b" --more 120 --every 5000 > cb$k.txt 2>&1 && grep -q '^replay: checkpoint missing - [0-9]* ticks replayed$' cb$k.txt && full=$((full + 1))
+done
+cks "$ck/a" > ka.txt; cks "$ck/b" > kb.txt; ckr "$ck/a" --verify > cv.txt 2>&1; rcv=$?
+ckr "$ck/b" --replay --more 0 --every 5000 > cr.txt 2>&1; rcr=$?
+[ "$used" = 3 ] && [ "$full" = 3 ] && [ -s ka.txt ] && cmp -s ka.txt kb.txt && [ $rcv = 0 ] && grep -q '^verify: OK' cv.txt && grep -q '^verify: checkpoint of tick [0-9]* = the replayed state, byte for byte$' cv.txt \
+  && [ $rcr = 0 ] && grep -q '^replay: checkpoint off (--replay) - [0-9]* ticks replayed$' cr.txt \
+  && ok "3 sessions resumed from the checkpoint and the same 3 with a full replay each leave every record file byte for byte the same ($(wc -l < ka.txt) files, diaries without ts); make verify: OK and the checkpoint equals the replayed state byte for byte; --replay replays anyway" || bad "checkpoint against full replay ($used $full $rcv $rcr)"
+# refused: a changed file, an old input added behind it, a broken or foreign checkpoint; each start replays everything and says why
+cp -r "$ck/a" "$ck/t1"; sed -i '$s/"ts":"2/"ts":"3/' "$ck/t1/diaries/ada.jsonl"   # the same size, a byte the replay does not compare
+ckr "$ck/t1" --more 60 --every 5000 > t1.txt 2>&1; rc1=$?; ckr "$ck/t1" --verify > t1v.txt 2>&1; rc1v=$?
+cp -r "$ck/a" "$ck/t2"; sed -i '$s/ t=\([0-9]\)/ t=\1/; $s/$/x/' "$ck/t2/diaries/chess.txt"   # a changed record line
+ckr "$ck/t2" --more 60 --every 5000 > t2.txt 2>&1; rc2=$?
+cp -r "$ck/a" "$ck/t3"; echo "K99999 t=5 ada add w=3 src=x s=3" >> "$ck/t3/diaries/screens.txt"   # an invented old line after the checkpoint's part
+ckr "$ck/t3" --more 60 --every 5000 > t3.txt 2>&1; rc3=$?
+cp -r "$ck/a" "$ck/t4"; echo "A99 tick=5 session=1 to=ada kind=say by=player re=- text=late words" >> "$ck/t4/diaries/says.txt"   # an old input added
+ckr "$ck/t4" --more 60 --every 5000 > t4.txt 2>&1
+cp -r "$ck/a" "$ck/t5"; python3 -c "import sys; p=sys.argv[1]; b=bytearray(open(p,'rb').read()); b[-100]^=1; open(p,'wb').write(b)" "$ck/t5/state.ckpt"
+ckr "$ck/t5" --more 60 --every 5000 > t5.txt 2>&1; rc5=$?
+cp -r "$ck/a" "$ck/t6"; sed -i '0,/^build 0.058$/s//build 0.057/' "$ck/t6/state.ckpt"
+ckr "$ck/t6" --more 60 --every 5000 > t6.txt 2>&1; rc6=$?
+[ $rc1 = 0 ] && grep -q '^replay: checkpoint stale (diaries/ada.jsonl) - [0-9]* ticks replayed$' t1.txt && [ $rc1v = 0 ] && grep -q '^verify: OK' t1v.txt \
+  && [ $rc2 != 0 ] && grep -q '^replay: checkpoint stale (diaries/chess.txt)' t2.txt && grep -q 'chess.txt .* differs from the replay\|import FAILED' t2.txt \
+  && [ $rc3 != 0 ] && grep -q '^replay: checkpoint stale (diaries/screens.txt)' t3.txt \
+  && grep -q '^replay: checkpoint stale (inputs or sessions before tick [0-9]*)' t4.txt \
+  && [ $rc5 = 0 ] && grep -q '^replay: checkpoint corrupt (payload)' t5.txt && [ $rc6 = 0 ] && grep -q '^replay: checkpoint version (build 0.057)' t6.txt \
+  && ok "refused, with a full replay and the reason on the console: a changed byte (stale; the replay passes, verify OK), a changed record line (stale, then DRIFT), an invented old record line after the checkpoint's part (stale, DRIFT), an old input added (stale), a broken payload (corrupt), another build (version)" || bad "checkpoint refusals ($rc1 $rc1v $rc2 $rc3 $rc5 $rc6)"
+# SIGHUP inside a session: a clean stop writes the checkpoint of its last tick; the bare rerun loads it and finishes the session; the files equal an uninterrupted run
+cp -r "$ck/a" "$ck/h"; cp -r "$ck/a" "$ck/u"; n0=$(wc -l < "$ck/h/diaries/ada.jsonl")
+( DIARY_TEST_TICK_MS=5 env -u DIARY_VERBOSE "$cb" --home "$ck/h" --more 400 --every 5000 > h1.txt 2>&1 & p=$!
+  for _ in $(seq 300); do [ "$(wc -l < "$ck/h/diaries/ada.jsonl")" -gt $((n0 + 100)) ] && break; sleep 0.1; done; kill -HUP $p; wait $p; echo "rc=$?" > h1rc.txt )
+hk=$(grep -a '^tick ' "$ck/h/state.ckpt" | awk '{ print $2 }')
+ckr "$ck/h" --every 5000 > h2.txt 2>&1; rch=$?; ckr "$ck/u" --more 400 --every 5000 > u1.txt 2>&1
+cks "$ck/h" > kh.txt; cks "$ck/u" > ku.txt; ckr "$ck/h" --verify > hv.txt 2>&1; rchv=$?
+[ "$(cat h1rc.txt)" = rc=130 ] && [ -n "$hk" ] && [ "$hk" -gt $((n0 + 100)) ] && [ "$hk" -lt $((n0 + 400)) ] && grep -q "^start: checkpoint of tick $hk loaded (+0 ticks replayed)\$" h2.txt && [ $rch = 0 ] \
+  && [ "$(wc -l < "$ck/h/diaries/ada.jsonl")" = $((n0 + 400)) ] && cmp -s kh.txt ku.txt && [ $rchv = 0 ] && grep -q '^verify: checkpoint of tick [0-9]* = the replayed state' hv.txt \
+  && ok "SIGHUP inside a session (tick $hk of $((n0 + 1))..$((n0 + 400))): exit 130 and the checkpoint of that tick; the bare rerun loads it and finishes the session; every record file equals the uninterrupted run; verify OK" || bad "SIGHUP then resume ($(cat h1rc.txt) $hk $rch $rchv)"
+grep -q 'state.ckpt' "$root/README.md" && grep -q -- '--replay' "$root/data/help.txt" && grep -q 'make slice' "$root/README.md" && grep -q '^slice:' "$root/Makefile" && grep -q '^SLICE_MINUTES ?= 20$' "$root/Makefile" \
+  && grep -q 'sim_ckpt.ads sim_ckpt.adb' "$root/Makefile" && ok "README, --help and the Makefile describe the checkpoint, --replay and make slice (SLICE_MINUTES ?= 20)" || bad "checkpoint docs"
 cd "$w" || exit 1
 
 
