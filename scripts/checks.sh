@@ -2422,8 +2422,8 @@ env -u DIARY_VERBOSE "$nb" --active --home "$w/nt/fl_on" > fl_a.txt 2>&1
 # symbols=1 but symbols.strict = 0 (the leak of builds before 0.054: an old blend or coin like 71634866 is taught again), then the default
 rm -rf "$w/nt/ss" "$w/nt/ss_o" "$w/nt/ss_l"; mkdir -p "$w/nt/ss_o/bin" "$w/nt/ss_l/bin"; cp "$nb" "$w/nt/ss_o/bin/"; cp "$nb" "$w/nt/ss_l/bin/"
 cp -r "$root/data" "$w/nt/ss_o/data"; cp -r "$root/data" "$w/nt/ss_l/data"
-sed -i 's/^symbols.enabled = .*/symbols.enabled = 0/; s/^records.enabled = .*/records.enabled = 0/; s/^active.slow_floor = .*/active.slow_floor = 0/' "$w/nt/ss_o/data/limits.txt"
-sed -i 's/^symbols.strict = .*/symbols.strict = 0/; s/^active.slow_floor = .*/active.slow_floor = 0/' "$w/nt/ss_l/data/limits.txt"   # the rules of build 0.053
+sed -i 's/^symbols.enabled = .*/symbols.enabled = 0/; s/^records.enabled = .*/records.enabled = 0/; s/^active.slow_floor = .*/active.slow_floor = 0/; s/^carry.enabled = .*/carry.enabled = 0/' "$w/nt/ss_o/data/limits.txt"
+sed -i 's/^symbols.strict = .*/symbols.strict = 0/; s/^active.slow_floor = .*/active.slow_floor = 0/; s/^carry.enabled = .*/carry.enabled = 0/' "$w/nt/ss_l/data/limits.txt"   # the rules of build 0.053 (no carrying: 0.061)
 ( cd "$w/nt/ss_o" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/ss" --seed 2 --ticks 6000 --yes --every 100000 > /dev/null 2>&1 )
 ( cd "$w/nt/ss_l" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/ss" --continuous --session-ticks 3000 --max-sessions 1 > /dev/null 2>&1 )
 sym_after() { awk -v t="$2" '$4 > t && ($2 ~ /^[0-9]+$/ || $2 ~ /^[a-h][1-8][a-h][1-8][qrbn]?$/)' "$1"/entities/*/words.txt | wc -l; }
@@ -2526,13 +2526,14 @@ cd "$w" || exit 1
 echo "== 62. build 0.058: the state checkpoint (state.ckpt): a start loads it instead of replaying, with byte for byte the files of a full replay; a changed file or checkpoint is refused (full replay); a signal inside a session, then the resume =="
 ck="$w/ckp"; rm -rf "$ck"; mkdir -p "$ck/bin"; cp "$bin" "$ck/bin/"; cp -r "$root/data" "$ck/data"; cb="$ck/bin/diary_sim"; cd "$ck" || exit 1
 ckr() { env -u DIARY_VERBOSE "$cb" --home "$@"; }
+cfmt=$(sed -n 's/^ *Ckpt_Format : constant := \([0-9]*\);.*/\1/p' "$root/diary_sim.adb")   # the format this build writes (3 since 0.061)
 # the record files: the diaries without "ts" (the clock), everything else as it is (inbox.txt is a view, rewritten)
 cks() { ( cd "$1" || exit 1; for f in $(ls diaries/* entities/*/* | grep -v '^diaries/inbox.txt$'); do case $f in *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
 # N = 4 sessions (explicit and voted lengths, Robert's words in between)
 ckr "$ck/a" --seed 42 --more 150 --every 5000 --yes > c1.txt 2>&1; ckr "$ck/a" --more 150 --every 5000 > c2.txt 2>&1
 ckr "$ck/a" --say ada --text "rest a little" > /dev/null 2>&1; ckr "$ck/a" --more 150 --every 5000 > c3.txt 2>&1; ckr "$ck/a" --every 5000 > c4.txt 2>&1
 grep -q '^replay: checkpoint missing - 0 ticks replayed$' c1.txt && grep -q '^start: checkpoint of tick 300 loaded (+0 ticks replayed)$' c3.txt \
-  && head -1 "$ck/a/state.ckpt" | grep -q '^diary-sim-ckpt 2$' && grep -aq '^build 0\.[0-9]*$' "$ck/a/state.ckpt" && grep -q ' checkpoint: tick [0-9]*, [0-9]* KB, written in [0-9.]* s$' "$ck/a/ckpt_log.txt" \
+  && head -1 "$ck/a/state.ckpt" | grep -q "^diary-sim-ckpt $cfmt\$" && grep -aq '^build 0\.[0-9]*$' "$ck/a/state.ckpt" && grep -q ' checkpoint: tick [0-9]*, [0-9]* KB, written in [0-9.]* s$' "$ck/a/ckpt_log.txt" \
   && ok "every run writes state.ckpt (header: format, build, ...); the next start loads it and says so ('start: checkpoint of tick 300 loaded (+0 ticks replayed)'), a first start says 'replay: checkpoint missing'; ckpt_log.txt has the write times" || bad "checkpoint written / loaded"
 # (a) M = 3 more sessions from the checkpoint, (b) the same 3 on a copy without it (full replay each time): the same files
 cp -r "$ck/a" "$ck/b"; used=0; full=0
@@ -2617,10 +2618,10 @@ if [ -x "$o58/bin/diary_sim" ] && "$o58/bin/diary_sim" --help 2>&1 | grep -q -- 
   k6 "$c6/sa" > ka.txt; k6 "$c6/sb" > kb.txt; r6 n "$c6/sa" --verify > nav.txt 2>&1; rcv=$?
   [ -n "$t58" ] && head -1 "$c6/s/state.ckpt" | grep -q '^diary-sim-ckpt 1$' && grep -aq '^build 0.058$' "$c6/s/state.ckpt" \
     && grep -q "^start: checkpoint of tick $t58 loaded (+0 ticks replayed)\$" na1.txt && [ -n "$ld58" ] \
-    && grep -q 'checkpoint: format 1 (build 0.058) loaded, the same state layout; the next write is format 2$' "$c6/sa/ckpt_log.txt" \
-    && [ "$used" = 3 ] && [ "$full" = 3 ] && [ -s ka.txt ] && cmp -s ka.txt kb.txt && head -1 "$c6/sa/state.ckpt" | grep -q '^diary-sim-ckpt 2$' \
+    && grep -q "checkpoint: format 1 (build 0.058) loaded, the same state layout; the next write is format $cfmt\$" "$c6/sa/ckpt_log.txt" \
+    && [ "$used" = 3 ] && [ "$full" = 3 ] && [ -s ka.txt ] && cmp -s ka.txt kb.txt && head -1 "$c6/sa/state.ckpt" | grep -q "^diary-sim-ckpt $cfmt\$" \
     && [ $rcv = 0 ] && grep -q '^verify: OK' nav.txt && grep -q '^verify: checkpoint of tick [0-9]* = the replayed state, byte for byte$' nav.txt \
-    && ok "a format 1 checkpoint written by the 0.058 binary (git 87a2a7c, tick $t58) loads in 0.059 without a replay (start in $ld58 s, ckpt_log: 'format 1 (build 0.058) loaded'); 3 sessions on it and the same 3 with a full replay each leave every record file byte for byte the same ($(wc -l < ka.txt) files); then format 2; make verify OK" \
+    && ok "a format 1 checkpoint written by the 0.058 binary (git 87a2a7c, tick $t58) loads in 0.059 without a replay (start in $ld58 s, ckpt_log: 'format 1 (build 0.058) loaded'); 3 sessions on it and the same 3 with a full replay each leave every record file byte for byte the same ($(wc -l < ka.txt) files); then format $cfmt; make verify OK" \
     || bad "0.058 checkpoint in 0.059 ($t58 $used $full $rcv ld=$ld58)"
   echo "   (0.058 checkpoint: $(head -1 "$c6/s/state.ckpt"), $(grep -a '^build ' "$c6/s/state.ckpt"), tick $t58; 0.059 start: $(grep -m 1 "^start:" na1.txt); loaded in $ld58 s)"
 else
