@@ -1,4 +1,4 @@
---  Version: 0.003
+--  Version: 0.004
 --  See sim_ckpt.ads.
 pragma Ada_2022;
 
@@ -168,12 +168,18 @@ package body Sim_Ckpt is
       for N of Got loop Into.Append (N); end loop;
    end Sorted_Names;
 
+   --  only the record files themselves (*.txt, *.jsonl): a stray file (an editor backup, a .tmp, a copy made by a backup tool) does
+   --  not make the checkpoint stale
+   function Is_Record (N : String) return Boolean is
+     ((N'Length > 4 and then N (N'Last - 3 .. N'Last) = ".txt")
+      or else (N'Length > 6 and then N (N'Last - 5 .. N'Last) = ".jsonl"));
+
    procedure Record_Files (Into : in out Sim_Util.Str_Vectors.Vector) is
       Names, Ents : Sim_Util.Str_Vectors.Vector;
    begin
       Sorted_Names ("diaries", "*", True, Names);
       for N of Names loop
-         if N /= "inbox.txt" and then (N'Length < 4 or else N (N'Last - 3 .. N'Last) /= ".tmp") then   --  inbox.txt: a view, rewritten
+         if N /= "inbox.txt" and then Is_Record (N) then   --  inbox.txt: a view, rewritten
             Into.Append ("diaries/" & N);
          end if;
       end loop;
@@ -181,7 +187,9 @@ package body Sim_Ckpt is
       for E of Ents loop
          Names.Clear;
          Sorted_Names ("entities/" & E, "*", True, Names);
-         for N of Names loop Into.Append ("entities/" & E & "/" & N); end loop;
+         for N of Names loop
+            if Is_Record (N) then Into.Append ("entities/" & E & "/" & N); end if;
+         end loop;
       end loop;
    end Record_Files;
 
