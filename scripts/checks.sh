@@ -2508,7 +2508,7 @@ ckr="$w/nt/spr/checkin.txt"; sumr=$(sed -n '/^-\{79\}$/,$p' spr.txt)
   && ! grep -q 'night run:' spr.txt && [ "$(echo "$sumr" | wc -l)" -le 20 ] && [ "$(echo "$sumr" | grep -v '^attach this' | awk 'length > 79' | wc -l)" = 0 ] \
   && tail -n 1 spr.txt | grep -Eq '^make ship wall time: [0-9]+m[0-5][0-9]s \([0-9]+s\)$' \
   && grep -q '^roles (s[0-9]*-s[0-9]*): rest [A-Za-z]* [0-9]*%, work [A-Za-z]* [0-9]*%, teach ' "$ckr" && grep -q '^shared words: [0-9]* of [0-9]* known by all four ([0-9]*%); pairs 0\.[0-9]* to [01]\.[0-9]*$' "$ckr" \
-  && grep -q '^petition topics (s[0-9]*-s[0-9]*): ' "$ckr" && grep -q '^mood: spread [0-9]* ([A-Za-z]* -*[0-9]* to [A-Za-z]* -*[0-9]*), mean -*[0-9]*$' "$ckr" \
+  && grep -q '^petition topics (s[0-9]*-s[0-9]*): ' "$ckr" && grep -q '^  mood: spread [0-9]* ([A-Za-z]* -*[0-9]* to [A-Za-z]* -*[0-9]*), mean -*[0-9]*$' "$ckr" \
   && grep -q '^since the last ship: no stamp yet' "$ckr" && grep -q "^sessions=$nsr\$" "$w/nt/spr/ship_stamp.txt" && grep -qF '== early signals: the lines above in full, from the files (no replay) ==' "$ckr" \
   && [ "$(sed -n '1p;3,/^wall time: /p' "$ckr" | awk 'length > 79' | wc -l)" = 0 ] && grep -q '^wall time: ' "$ckr" \
   && ok "make ship (default): no night run, stdin closed (no q), ${dtr}s; VERDICT: PASS with the same verdict lines as a night (the save size, the last night's stop reason and sessions, verify OK); diaries, run_log.txt (but the VERIFY entry of the passed verify, 0.059) and night_console.txt unchanged; 'last full verify: <date> (N ticks), today' (also in ship_stamp.txt); early signals (roles, shared words, petition topics, mood spread; no stamp yet, ship_stamp.txt written)" || bad "make ship reports only ($rcr)"

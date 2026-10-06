@@ -1,5 +1,5 @@
 #!/bin/sh
-# Version: 0.009
+# Version: 0.010
 # make ship (by day) and make night-ship (overnight): Robert's ONE command; both write ONE file, checkin.txt in the save folder
 # (../diary-data next to the source folder, or --home / $DIARY_HOME: bin/diary_sim --folder says where), with the same VERDICT header
 # on top, and print a short summary and the path of that file.  Exit status 0 = PASS, 1 = FAIL.
@@ -406,7 +406,7 @@ else voc_sh=0; voc_s4=0; voc_ov=0; voc_per=-; voc_miss=-; voc_line="shared: no w
 # missing-by-one per wesen now (the vocabulary count above) against the last stamp; mood and energy per wesen at the start and the
 # end of the window from trend.txt (the session before the window, the last one): Pareto = nobody ended lower on mood or energy.
 : > "$tmp/carry.txt"
-n_carry=$(awk -v lo="${first:-0}" -v hi="${last:-0}" '/^S[0-9]/ && / carry=1/ { n = substr($1, 2) + 0; if (n >= lo && n <= hi) c++ } END { print c + 0 }' "$folder/diaries/sessions.txt" 2>/dev/null)
+n_carry=$(awk -v lo="${first:-0}" -v hi="${last:-0}" '/^S[0-9]/ && / carry=[12]/ { n = substr($1, 2) + 0; if (n >= lo && n <= hi) c++ } END { print c + 0 }' "$folder/diaries/sessions.txt" 2>/dev/null)
 if [ "${n_carry:-0}" -gt 0 ]; then
   for e in $ids; do
     j="$folder/diaries/$e.jsonl"; [ -f "$j" ] || continue
@@ -415,11 +415,23 @@ if [ "${n_carry:-0}" -gt 0 ]; then
         en = $0; if (sub(/.*"energy":/, "", en)) { en = en + 0; if (!seen++ || en < mn) mn = en }
         x = $0; while (match(x, /carried the word \047[^\047]*\047 to [a-z]+/)) { m = substr(x, RSTART, RLENGTH); x = substr(x, RSTART + RLENGTH)
           w = m; sub(/^carried the word \047/, "", w); sub(/\047.*/, "", w); l = m; sub(/.* to /, "", l); p[l]++; wd[w] = 1 }
-        x = $0; while (match(x, /returned a favour/)) { x = substr(x, RSTART + RLENGTH); rf++ } }
-      END { for (l in p) print "P", e, l, p[l]; for (w in wd) print "W", w; print "R", e, rf + 0; if (seen) print "E", e, mn }' >> "$tmp/carry.txt"
+        x = $0; while (match(x, /returned a favour/)) { x = substr(x, RSTART + RLENGTH); rf++ }
+        # 0.062 carry=2: an exchange; the words taught (out) and learned back, each word in quotes
+        x = $0; while (match(x, /exchanged words with [a-z]+: taught [^;]*; learned [^,]*(back|nothing back)/)) { m = substr(x, RSTART, RLENGTH); x = substr(x, RSTART + RLENGTH)
+          l = m; sub(/^exchanged words with /, "", l); sub(/:.*/, "", l); p[l]++; xl++
+          a = m; sub(/; learned.*/, "", a); sub(/.*: taught /, "", a); b = m; sub(/.*; learned /, "", b)
+          wo += gsub(/\047[^\047]*\047/, "&", a); if (b !~ /^nothing/) { wb += gsub(/\047[^\047]*\047/, "&", b); st++ }
+          while (match(a, /\047[^\047]*\047/)) { wd[substr(a, RSTART + 1, RLENGTH - 2)] = 1; a = substr(a, RSTART + RLENGTH) } }
+        x = $0; while (match(x, /carried the word \047/)) { x = substr(x, RSTART + RLENGTH); c1++ } }
+      END { for (l in p) print "P", e, l, p[l]; for (w in wd) print "W", w; print "R", e, rf + 0; if (seen) print "E", e, mn
+        print "X", e, xl + 0, wo + 0, wb + 0, st + 0, c1 + 0 }' >> "$tmp/carry.txt"
   done
   c_all=$(cat "$folder"/diaries/*.jsonl 2>/dev/null | grep -o "carried the word '[^']*' to [a-z]*" | wc -l | tr -d ' ')
   c_ret=$(cat "$folder"/diaries/*.jsonl 2>/dev/null | grep -o 'returned a favour' | wc -l | tr -d ' ')
+  # 0.062: an exchange is a lesson that owes a favour; words back in the same meeting settle it at once
+  c_x=$(cat "$folder"/diaries/*.jsonl 2>/dev/null | grep -o 'exchanged words with [a-z]*: taught' | wc -l | tr -d ' ')
+  c_st=$(cat "$folder"/diaries/*.jsonl 2>/dev/null | grep -o 'back, the favour settled' | wc -l | tr -d ' ')
+  c_all=$((c_all + c_x)); c_ret=$((c_ret + c_st))
   # mood and energy per wesen at the start of the window (the trend line of the session before it, else its first) and the end
   t_a=$(awk -v f="${first:-0}" '/^T / { s = $2; sub(/session=/, "", s); s = s + 0; if (s == f - 1 || (s == f && !b)) b = $0 } END { print b }' "$tr" 2>/dev/null)
   t_b=$(grep '^T ' "$tr" 2>/dev/null | tail -n 1)
@@ -427,7 +439,7 @@ if [ "${n_carry:-0}" -gt 0 ]; then
   set -- "$(me "$t_a" mood)" "$(me "$t_b" mood)" "$(me "$t_a" energy)" "$(me "$t_b" energy)"
   carry_out=$(awk -v ids="$ids" -v names="$names" -v ma="$1" -v mb="$2" -v ea="$3" -v eb="$4" -v miss="$voc_miss" -v pmiss="$(sv vocab_missing)" \
     -v c_all="$c_all" -v c_ret="$c_ret" -v win="$win" '
-    { if ($1 == "P") { pr[$2 " " $3] += $4; acts += $4; by[$2] += $4 } else if ($1 == "W") nw++; else if ($1 == "R") ret += $3; else if ($1 == "E") mn[$2] = $3 }
+    { if ($1 == "P") { pr[$2 " " $3] += $4; acts += $4; by[$2] += $4 } else if ($1 == "W") nw++; else if ($1 == "R") ret += $3; else if ($1 == "E") mn[$2] = $3; else if ($1 == "X") { xl += $3; wo += $4; wb += $5; st += $6; c1 += $7 } }
     END { ne = split(ids, id, " "); split(names, nm, " "); for (i = 1; i <= ne; i++) nmo[id[i]] = nm[i]
       split(ma, a1, ","); split(mb, b1, ","); split(ea, a2, ","); split(eb, b2, ","); split(miss, m1, ","); split(pmiss, m0, ",")
       np = 0; for (k in pr) { np++; pk[np] = k }   # the pairs, most lessons first (then by name)
@@ -446,21 +458,24 @@ if [ "${n_carry:-0}" -gt 0 ]; then
           if (dn < 0) worse = worse (worse != "" ? ", " : "") n " energy " dn
           if (dm < 0 || dn < 0) wm = wm (wm != "" ? "," : "") n } }
       par = (a1[1] == "" ? "?" : (worse == "" ? "yes" : "no (" worse ")")); pars = (a1[1] == "" ? "?" : (wm == "" ? "yes" : "no (" wm ")"))
+      wl = (xl > 0) ? sprintf(" w %.1f/%.1f;", (wo + c1) / (xl + c1), wb / xl) : ""   # words per lesson out / back (carry=2)
+      wfull = (xl > 0) ? sprintf("; words per lesson: out %.2f (%d words), back %.2f (%d words) in %d exchanges (%d settled at once, %d owed), %d one-word lessons (carry=1)", (wo + c1) / (xl + c1), wo + c1, wb / xl, wb, xl, st, xl - st, c1) : "; words per lesson: 1 out, 0 back (carry=1 only)"
+      pw = ""; for (i = 1; i <= ne; i++) { e = id[i]; if (!(e in md)) continue; pw = pw (pw != "" ? ", " : "") nmo[e] " " ((md[e] < 0 || b2[i] - a2[i] < 0) ? "worse" : "not worse") }
       tm = (top != "" && (top in md)) ? sprintf(" %s mood %+d;", nmo[top], md[top]) : ""
       tg = (best != "") ? sprintf(" %s miss %+d;", best, bd) : ""
       nwr = split(wm, wq, ","); parc = (a1[1] == "" ? "?" : (wm == "" ? "yes" : "no"))
       for (k = (np < 2 ? np : 2); k >= 0; k--) {   # the terminal line: as many top pairs as fit in 79 columns (Pareto names first shortened)
         p2 = ""; for (i = 1; i <= k; i++) { split(pk[i], q, " "); p2 = p2 ", " nmo[q[1]] ">" nmo[q[2]] " " pr[pk[i]] }
-        for (z = 1; z <= 2; z++) { short = acts + 0 " acts" p2 ";" tg " fav " (c_all - c_ret) ";" tm " Pareto " (z == 1 ? pars : parc)
+        for (z = 1; z <= 2; z++) { short = acts + 0 " acts" p2 ";" wl tg " fav " (c_all - c_ret) ";" tm " Pareto " (z == 1 ? pars : parc)
           if (length(short) <= 72) break }
         if (length(short) <= 72) break }
-      full = "carry (" win "): " acts + 0 " lessons carried, " nw + 0 " distinct words; pairs (teacher>learner): " (np ? pairs : "none") \
-        "; missing-by-one since the last ship: " mf "; favours open " (c_all - c_ret) " (carried " c_all ", returned " c_ret " in all; " ret + 0 " returned in the window)" \
-        "; mood: " mo "; min energy: " en "; Pareto: " par
+      full = "carry (" win "): " acts + 0 " lessons, " nw + 0 " distinct words taught; pairs (teacher>learner): " (np ? pairs : "none") \
+        "; missing-by-one since the last ship: " mf "; favours open " (c_all - c_ret) " (lessons " c_all ", returned or settled " c_ret " in all; " ret + 0 " returned in the window)" \
+        wfull "; mood: " mo "; min energy: " en "; Pareto: " par (pw != "" ? " (per wesen: " pw ")" : "")
       print short; print full }' "$tmp/carry.txt")
   carry_line="carry: $(echo "$carry_out" | sed -n 1p)"; carry_full=$(echo "$carry_out" | sed -n 2p)
 else
-  carry_line="carry: no carry=1 session in the window (build 0.061 starts them)"; carry_full=$carry_line
+  carry_line="carry: no carry=1/2 session in the window (builds 0.061/0.062 start them)"; carry_full=$carry_line
 fi
 # petition topics of the window
 awk -v lo="${first:-0}" -v hi="${last:-0}" '/^P[0-9]/ { s = $0; sub(/.* s=/, "", s); s = s + 0; if (s < lo || s > hi) next
@@ -480,6 +495,28 @@ mood_info=$(echo "$tnames $moods" | awk '{ nn = split($1, nm, ","); nm2 = split(
   printf "%d %s %d %s %d %d\n", m[hi] - m[lo], (lo <= nn ? nm[lo] : lo), m[lo], (hi <= nn ? nm[hi] : hi), m[hi], int(s / nm2) }')
 set -- $mood_info
 if [ -n "$6" ]; then spread=$1; mood_line="mood: spread $1 ($2 $3 to $4 $5), mean $6"; else spread=-; mood_line="mood: no trend line yet"; fi
+# 0.062 mood stats over the window diaries (every tick's state): per wesen the median, the 10th / 90th percentile, the share of
+# ticks at +95 or more and at -95 or less, in the resting band (data/limits.txt moodrest.band_lo .. band_hi), below 0; the mood
+# goal: every wesen more than goal_pct % of the window within goal_near of the band, and none below 0 for more than goal_pct %.
+lim() { v=$(sed -n "s/^$1 *= *\(-*[0-9]*\).*/\1/p" data/limits.txt 2>/dev/null | tail -n 1); echo "${v:-$2}"; }
+b_lo=$(lim moodrest.band_lo 60); b_hi=$(lim moodrest.band_hi 80); g_near=$(lim moodrest.goal_near 10); g_pct=$(lim moodrest.goal_pct 50)
+: > "$tmp/moods.txt"
+for e in $ids; do j="$folder/diaries/$e.jsonl"; [ -f "$j" ] || continue
+  tail -n $((hit - lot + 5)) "$j" | awk -v lo="$lot" '{ t = $0; sub(/.*"tick":/, "", t); if (t + 0 <= lo) next
+    m = $0; if (sub(/.*"mood":/, "", m)) print m + 0 }' | sort -n | awk -v n="$(nm $e)" -v bl="$b_lo" -v bh="$b_hi" -v gn="$g_near" '
+    { a[NR] = $1; if ($1 >= 95) h++; if ($1 <= -95) l++; if ($1 >= bl && $1 <= bh) b++; if ($1 >= bl - gn && $1 <= bh + gn) nb++; if ($1 < 0) z++ }
+    END { if (NR == 0) exit; p9 = int(NR * 0.9 + 0.5); if (p9 < 1) p9 = 1
+      printf "%s %d %d %d %.0f %.0f %.0f %.0f %.0f\n", n, a[int((NR + 1) / 2)], a[int(NR * 0.1) + 1], a[p9], \
+      100 * h / NR, 100 * l / NR, 100 * b / NR, 100 * nb / NR, 100 * z / NR }' >> "$tmp/moods.txt"
+done
+if [ -s "$tmp/moods.txt" ]; then
+  mood_stats=$(awk -v bl="$b_lo" -v bh="$b_hi" '{ printf "  mood stats: %s median %d, p10 %d, p90 %d; >=+95 %d%%, <=-95 %d%%, in %d..%d %d%%, near %d%%, <0 %d%%\n", $1, $2, $3, $4, $5, $6, bl, bh, $7, $8, $9 }' "$tmp/moods.txt")
+  mood_goal=$(awk -v gp="$g_pct" -v gn="$g_near" -v bl="$b_lo" -v bh="$b_hi" '{ if ($8 <= gp) f = f (f ? ", " : "") $1 " near " $8 "%"; if ($9 > gp) f = f (f ? ", " : "") $1 " <0 " $9 "%" }
+    END { printf "  mood goal (more than %d%% of the window within %d of %d..%d, none below 0 more than %d%%): %s\n", gp, gn, bl, bh, gp, (f == "" ? "met" : "not met (" f ")") }' "$tmp/moods.txt")
+  for k in 4 3; do mood_short=$(awk -v k="$k" -v bl="$b_lo" -v bh="$b_hi" -v gp="$g_pct" '{ ms = ms (NR > 1 ? ", " : "") substr($1, 1, k) " " $2; b += $7; if ($8 <= gp || $9 > gp) f = 1 }
+    END { printf "mood: median %s; in %d-%d %d%%; goal %s", ms, bl, bh, b / NR, (f ? "no" : "met") }' "$tmp/moods.txt")
+    [ ${#mood_short} -le 79 ] && break; done
+else mood_stats="  mood stats: no diary lines in the window"; mood_goal="  mood goal: -"; mood_short="mood: no diary lines in the window"; fi
 # deltas since the last ship (its stamp in the save folder), then the new stamp
 if [ -f "$stampf" ]; then
   p_made=$(sv made); p_mode=$(sv mode); p_top=$(sv top)
@@ -573,7 +610,10 @@ total=$(( $(date +%s) - t0 ))
   echo "$carry_line" | cut -c1-79
   echo "$shared_line" | cut -c1-79
   if [ "$np" -gt 0 ]; then echo "petition topics${win:+ ($win)}: $topics (of $np)" | cut -c1-79; else echo "petition topics${win:+ ($win)}: none"; fi
-  echo "$mood_line" | cut -c1-79
+  echo "$mood_short" | cut -c1-79
+  echo "  $mood_line"
+  echo "$mood_stats"
+  echo "$mood_goal"
   echo "$delta_line" | cut -c1-79
   echo "$grow_line" | cut -c1-79
   if [ "$night" = 1 ]; then echo "wall time: total $(secs $total) (night $(secs $dn), reports $(secs $drep))"; else echo "wall time: total $(secs $total) (no night, reports $(secs $drep))"; fi
