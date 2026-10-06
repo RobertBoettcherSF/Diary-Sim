@@ -1,4 +1,4 @@
---  Version: 0.004
+--  Version: 0.005
 pragma Ada_2022;
 
 with Sim_Ckpt;
@@ -130,7 +130,7 @@ package body Sim_Things is
       if Roll (Seed_V, K, 1, 8100, 100) <= Pct1 then Res.Append (Thing'(Ent => K, Sub => 1)); end if;
       if Roll (Seed_V, K, 2, 8100, 100) <= Pct2 then Res.Append (Thing'(Ent => K, Sub => 2)); end if;
       if Chunk_Maps.Has_Element (C) then
-         for E of Chunk_Maps.Element (C) loop
+         for E of Chunk_Edits (C) loop   --  0.060: the edits of the chunk in place (Element copied the whole vector per call)
             if E.X = X and then E.Y = Y then
                declare
                   Idx : Natural := 0;
@@ -364,12 +364,7 @@ package body Sim_Things is
       C : constant Chunk_Maps.Cursor := Chunk_Edits.Find (K);
    begin
       if Chunk_Maps.Has_Element (C) then
-         declare
-            V : Edit_Vectors.Vector := Chunk_Maps.Element (C);
-         begin
-            V.Append (R);
-            Chunk_Edits.Replace_Element (C, V);
-         end;
+         Chunk_Edits.Reference (C).Append (R);   --  0.060: in place (the copy and the Replace_Element were O(edits of the chunk))
       else
          declare
             V : Edit_Vectors.Vector;
