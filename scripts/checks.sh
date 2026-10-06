@@ -1558,6 +1558,9 @@ grep -q 'rec.quality' "$root/data/limits.txt" && grep -q 'rec.mean_cooldown' "$r
 
 echo "== 48. console: short form by default (no markers, no pointer), run_report.txt complete, run_log.txt entries, VERBOSE=1 = the old output, make report, make runlog =="
 rm -rf "$w/sh"; mkdir -p "$w/sh/bin"; cp "$bin" "$w/sh/bin/"; cp -r "$root/data" "$w/sh/data"
+# 0.063: without resting moods (moodrest.enabled = 0): the anomaly listing below needs a wesen that ends low, which the old
+# mood model gives in these 500 ticks; resting moods (0.062/0.063) keep every wesen above -50 (scenarios 66, 67 test them)
+sed -i 's/^moodrest.enabled = .*/moodrest.enabled = 0/' "$w/sh/data/limits.txt"
 sh_run() {   # sh_run HOME 'env prefix' args...: the same two sessions (seed 42, 300 + 200 ticks)
   h=$1; pre=$2; shift 2; mkdir -p "$w/sh/$h"
   ( cd "$w/sh/$h" || exit 1; export DIARY_HOME="$w/sh/$h/save"; env -u DIARY_VERBOSE $pre "$w/sh/bin/diary_sim" --seed 42 --ticks 300 --yes --every 100 "$@" > c1.txt 2>&1
