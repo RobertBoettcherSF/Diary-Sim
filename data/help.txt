@@ -78,12 +78,15 @@ usage: diary_sim [options]      (values: --ticks=N or --ticks N)
 --voices       the four wesen messages the night header shows (make voices;
                data/voices.txt; read-only)
 --verify       replay the whole history from the files and compare it with
-               everything stored; one OK line (make verify; writes nothing)
+               everything stored; one OK line (make verify); when it passes,
+               a VERIFY entry in run_log.txt and a fresh state.ckpt (weekly)
 --replay       replay the whole history at the start even if the state
                checkpoint (state.ckpt in the save folder) fits; without it a
                start loads the checkpoint (seconds) and replays only newer
-               ticks; a stale or broken one is refused: full replay, and the
-               start says why ('replay: checkpoint stale ...').  make slice:
+               ticks; a new build loads it too (0.059: a state format, not a
+               build); a stale or broken one, or one of another state layout,
+               is refused: full replay, and the start says why ('replay:
+               checkpoint stale ...').  make slice:
                a night with a budget of SLICE_MINUTES (20) minutes + reports
   --debug        also write debug_digest.txt (make run|demo DEBUG=1)
   --debug-section=NAME  print one block of debug_full.txt (drift trace players

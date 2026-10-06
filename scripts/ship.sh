@@ -1,5 +1,5 @@
 #!/bin/sh
-# Version: 0.005
+# Version: 0.006
 # make ship (by day) and make night-ship (overnight): Robert's ONE command; both write ONE file, checkin.txt in the save folder
 # (../diary-data next to the source folder, or --home / $DIARY_HOME: bin/diary_sim --folder says where), with the same VERDICT header
 # on top, and print a short summary and the path of that file.  Exit status 0 = PASS, 1 = FAIL.
@@ -225,6 +225,25 @@ elif [ "$vrc" = night ]; then ver="OK by the night's end check ($nightchk)"
 elif [ "$vrc" = skip ] && [ "$hup" = 1 ]; then ver="skipped (terminal closed); last end check: ${lastchk:-none}"
 elif [ "$vrc" = skip ]; then ver="skipped ($n_ticks ticks > $vmax); night end check: ${lastchk:-none} (make verify by hand)"
 else ver="FAILED (exit $vrc) $(grep -m 1 -i 'drift\|differs\|failed\|skipped' "$tmp/verify.txt" | cut -c1-60)"; fi
+# 0.059: the last PASSED full replay (make verify, a ship's verify, the night's end check): the newest "full verify: OK, N ticks" entry
+# (VERIFY) or "verify: ok ticks=N" entry (NIGHT) of run_log.txt with the time stamp of its entry, else the one kept in ship_stamp.txt
+# (run_log.txt keeps only its last report.log_keep entries; a night writes one per session).  Due after 7 days (weekly drift check).
+lv=$(awk '/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9] [A-Z]/ { st = substr($0, 1, 16); next }
+  /^full verify: OK, [0-9]+ ticks/ { t = $4; sub(/,$/, "", t); if (st != "") v = st " " t }
+  /^verify: ok ticks=[0-9]+$/ { t = $2; sub(/^ticks=/, "", t); if (st != "") v = st " " t }
+  END { print v }' "$rl" 2>/dev/null)
+p_lv=$(sv last_verify)
+if [ -n "$p_lv" ] && { [ -z "$lv" ] || [ "$(printf '%s\n%s\n' "$p_lv" "$lv" | sort | tail -n 1)" = "$p_lv" ]; }; then lv=$p_lv; fi
+if [ -n "$lv" ]; then
+  lv_d=${lv% *}; lv_t=${lv##* }
+  lv_s=$(date -d "$lv_d" +%s 2>/dev/null || date -j -f '%Y-%m-%d %H:%M' "$lv_d" +%s 2>/dev/null)
+  if [ -n "$lv_s" ]; then
+    lv_n=$(( ($(date +%s) - lv_s) / 86400 ))
+    case $lv_n in 0) lv_ago="today" ;; 1) lv_ago="1 day ago" ;; *) lv_ago="$lv_n days ago" ;; esac
+    [ "$lv_n" -ge 7 ] && lv_ago="$lv_ago - due: make verify (weekly)"
+  else lv_ago="age unknown"; fi
+  lv_line="last full verify: $lv_d ($lv_t ticks), $lv_ago"
+else lv_line="last full verify: none on record - due: make verify (weekly)"; fi
 # ---- early signals (cheap, from the files of the save; no replay) ---------------------------------------------------------------
 # the window: the sessions of this night, or (reports only) of the last night; the diaries of at most its last 30000 ticks
 nm() { v=$(sed -n "s/^$1 = \([A-Za-z]*\).*/\1/p" data/names.txt 2>/dev/null | head -n 1); echo "${v:-$1}"; }
@@ -392,6 +411,7 @@ total=$(( $(date +%s) - t0 ))
   echo "mint-slow at the floor: $floor"
   echo "chess/number strings learned: since symbols=1: ${ws_sym:--}; $strict_txt"
   echo "verify: $ver"
+  echo "$lv_line" | cut -c1-79
   echo "$ck_line" | cut -c1-79
   echo "reports window: $wtxt" | cut -c1-79
   echo "roles${win:+ ($win)}: $roles_txt" | cut -c1-79
@@ -450,6 +470,7 @@ else w1="no night: run_log.txt entries of the last night"; w2="no night: the ses
   echo "moods=${moods:--}"; echo "spread=$spread"; echo "shared_all=$sh_all"; echo "shared_pct=$sh_pct"; echo "jaccard=$sh_pairs"
   echo "top=${top:--}"; echo "topics=${topics_all:--}"
   echo "reports_secs=$drep"
+  [ -n "$lv" ] && echo "last_verify=$lv"
   echo "vocab_shared=$voc_sh"; echo "vocab_all=$voc_s4"; echo "vocab_overlap=$voc_ov"; echo "vocab_known=$voc_per"; echo "vocab_missing=$voc_miss"
   # make night-ship: the time after the planned stop of the night (the last session, the end check, the reports): the next reserve
   if [ "$mode" != ship ] && [ "$plan_stop" -gt 0 ] && [ "$stopped" = 0 ] && [ "$hup" = 0 ]; then

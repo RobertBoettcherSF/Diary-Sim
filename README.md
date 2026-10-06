@@ -105,7 +105,17 @@ diaries, entities and summary files are byte for byte the same.
   of the run, `warnings:n`, `export-failed`. It is information only; nothing in the simulation reads it (`data/limits.txt`).
   `@@SECTIONS` gives the line of each header in `run_report.txt`.
 
-## The state checkpoint: `state.ckpt` (build 0.058)
+## The state checkpoint: `state.ckpt` (build 0.058; a state format since 0.059)
+
+**Build 0.059 (details and reasoning: [docs/CHECKPOINT.md](docs/CHECKPOINT.md)).** The checkpoint belongs to a STATE FORMAT
+(`diary-sim-ckpt 2`), not to the build: a new zip loads it in seconds instead of the full replay. Each module's state is a tagged
+section (name, byte length, hash); a section whose tag or length does not fit this build is refused with `layout (state layout
+changed: <module>)` and a full replay. A format 1 checkpoint of build 0.058 has the same layout and loads too. `data/` is no reason
+any more: display text (`messages.txt`, `help.txt`, ...) is not even hashed, and a changed rule file (`limits.txt`, ...) only prints
+`data changed since the checkpoint (make verify replays everything): limits.txt`. `make check` fails with `bump Ckpt_Format` when
+the `State_IO` code changed without a new format (`scripts/ckpt_layout.sh`, `make ckpt-layout`). A passed `make verify` writes a
+fresh checkpoint and a `VERIFY` entry in `run_log.txt`; `checkin.txt` shows `last full verify: <date> (N ticks)`: run `make verify`
+about once a week (the drift check). The text below is the 0.058 description; where it says build or data, read the above.
 
 A start used to replay the whole history (every tick since tick 1) to rebuild the state, minutes on a save of a few hundred thousand
 ticks. Now every run that wrote sessions (night, checkin, chat, run) and every clean stop (q, SIGHUP/SIGTERM, the time limit) writes
@@ -116,7 +126,8 @@ a crash leaves the old one; the times go to `ckpt_log.txt` (`checkpoint: tick N,
 
 A start loads it only if everything fits, and replays only the ticks after it; the first console line says which:
 `start: checkpoint of tick 300300 loaded in 2.00 s (+0 ticks replayed)` or `replay: checkpoint missing - 300300 ticks replayed`
-(also `stale (...)`, `version`, `corrupt`, `forced`, `off`). Refused, and replayed from scratch, are: another build or data, a record file
+(also `stale (...)`, `version`, `layout`, `corrupt`, `forced`, `off`). Refused, and replayed from scratch, are (0.059: not another build or
+data; another state format or layout), a record file
 that is shorter or changed in its recorded part, inputs or records added behind the checkpoint's tick (the counts), a store whose lines
 do not fit its tick, a broken payload (hash) and a section marker or end state that does not fit. A refused checkpoint never touches the
 files; the run replays and writes a new one. `--replay` replays anyway; `make verify` always replays the whole history and then compares
@@ -148,7 +159,8 @@ Measured (box, build 0.058): a save of 300000 ticks / 1000 sessions / 365 MB sta
   whether the save has a state checkpoint (`checkpoint: state.ckpt of tick N, M MB: the start loads it if it fits the files`), and the
   verdict line `checkpoint:` says how the start went (`start loaded t300300 in 2.00 s` or `start full replay (missing) in
   795 s`) and what the end wrote (`end t300600 27.2 MB 0.50 s`). The end check and `make verify` replay only saves of at most
-  `SLICE_VERIFY_TICKS` (30000) ticks. The first run of a new build replays the history once (the checkpoint belongs to its build).
+  `SLICE_VERIFY_TICKS` (30000) ticks. Since build 0.059 a new build loads the checkpoint of the old one (the same state format;
+a 0.058 checkpoint too); only a changed state layout replays the history once.
 * **`make ship`** (by day) runs NO night and needs no q: it builds if needed, then `make active`, `make wordstat`,
   `make frustration` and `make evolve` on the save as it is, and `make verify` only if the save has at most `SHIP_VERIFY_TICKS`
   (150000) ticks: verify replays the whole history, which takes minutes on a big save, so above that the end check of the last

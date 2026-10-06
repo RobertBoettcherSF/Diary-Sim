@@ -485,7 +485,8 @@ night.verify_every = 0
 # Status lines of finished sessions kept under the header (a terminal); the rest of the screen is for the voices and the chat line.
 night.recent = 2
 # The state checkpoint (build 0.058, state.ckpt in the save folder): enabled 1 = every run that wrote sessions and every clean stop writes it and
-# a start loads it when build, data/ and the record files fit (0 = never: every start replays the whole history); a night writes it after a
+# a start loads it when its state format (0.059: not the build, not data/) and the record files fit (0 = never: every start replays the whole
+# history; docs/CHECKPOINT.md); a night writes it after a
 # session when ckpt_seconds have passed since the last one, and always before it stops.
 ckpt.enabled = 1
 night.ckpt_seconds = 60

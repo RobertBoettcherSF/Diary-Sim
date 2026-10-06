@@ -2487,7 +2487,8 @@ echo "== 61. make ship by day = reports only: no night, no q, the save untouched
 cd "$w/nt" || exit 1
 rm -rf "$w/nt/spr"; cp -r "$w/nt/a2" "$w/nt/spr"; rm -f "$w/nt/spr/checkin.txt"
 dsum() { (cd "$1" && find diaries -type f | sort | xargs cat | cksum); }
-d0=$(dsum "$w/nt/spr"); rl0=$(cat "$w/nt/spr/run_log.txt" 2>/dev/null | cksum); nc0=$(cat "$w/nt/spr/night_console.txt" 2>/dev/null | cksum)
+rlx() { awk '/^[0-9][0-9][0-9][0-9]-[0-9-]* [0-9:]* VERIFY$/ { skip = 1; next } /^[0-9][0-9][0-9][0-9]-[0-9-]* [0-9:]* [A-Z]/ { skip = 0 } !skip' "$1" 2>/dev/null | cksum; }   # 0.059: without the VERIFY entries
+d0=$(dsum "$w/nt/spr"); rl0=$(rlx "$w/nt/spr/run_log.txt"); nc0=$(cat "$w/nt/spr/night_console.txt" 2>/dev/null | cksum)
 nsr=$(grep -c '^S[0-9]' "$w/nt/spr/diaries/sessions.txt")
 tr0=$(date +%s); DIARY_HOME="$w/nt/spr" make --no-print-directory -C "$root" ship > spr.txt 2>&1 < /dev/null; rcr=$?; dtr=$(( $(date +%s) - tr0 ))
 ckr="$w/nt/spr/checkin.txt"; sumr=$(sed -n '/^-\{79\}$/,$p' spr.txt)
@@ -2496,18 +2497,19 @@ ckr="$w/nt/spr/checkin.txt"; sumr=$(sed -n '/^-\{79\}$/,$p' spr.txt)
   && grep -q '^new sessions: 0; newest: [0-9]* (s[0-9]* to s'"$nsr"'), active=2: ' "$ckr" && grep -q '^verify: OK ([0-9]* ticks replayed from the files)$' "$ckr" \
   && grep -q '^wall time: total [0-9]*m[0-9][0-9]s (no night, reports [0-9]*m[0-9][0-9]s)$' "$ckr" && [ "$(keys "$ckr")" = "$(keys "$ck")" ] \
   && grep -qF '== no night: run_log.txt entries of the last night ==' "$ckr" && grep -qF '== make evolve (exit 0' "$ckr" && grep -qF '== make verify (exit 0' "$ckr" \
-  && [ "$(dsum "$w/nt/spr")" = "$d0" ] && [ "$(cat "$w/nt/spr/run_log.txt" 2>/dev/null | cksum)" = "$rl0" ] && [ "$(cat "$w/nt/spr/night_console.txt" 2>/dev/null | cksum)" = "$nc0" ] \
+  && [ "$(dsum "$w/nt/spr")" = "$d0" ] && [ "$(rlx "$w/nt/spr/run_log.txt")" = "$rl0" ] && grep -q '^full verify: OK, [0-9]* ticks' "$w/nt/spr/run_log.txt" \
+  && grep -q '^last full verify: [0-9-]* [0-9:]* ([0-9]* ticks), today$' "$ckr" && grep -q '^last_verify=[0-9-]* [0-9:]* [0-9]*$' "$w/nt/spr/ship_stamp.txt" && [ "$(cat "$w/nt/spr/night_console.txt" 2>/dev/null | cksum)" = "$nc0" ] \
   && ! grep -q 'night run:' spr.txt && [ "$(echo "$sumr" | wc -l)" -le 20 ] && [ "$(echo "$sumr" | grep -v '^attach this' | awk 'length > 79' | wc -l)" = 0 ] \
   && tail -n 1 spr.txt | grep -Eq '^make ship wall time: [0-9]+m[0-5][0-9]s \([0-9]+s\)$' \
   && grep -q '^roles (s[0-9]*-s[0-9]*): rest [A-Za-z]* [0-9]*%, work [A-Za-z]* [0-9]*%, teach ' "$ckr" && grep -q '^shared words: [0-9]* of [0-9]* known by all four ([0-9]*%); pairs 0\.[0-9]* to [01]\.[0-9]*$' "$ckr" \
   && grep -q '^petition topics (s[0-9]*-s[0-9]*): ' "$ckr" && grep -q '^mood: spread [0-9]* ([A-Za-z]* -*[0-9]* to [A-Za-z]* -*[0-9]*), mean -*[0-9]*$' "$ckr" \
   && grep -q '^since the last ship: no stamp yet' "$ckr" && grep -q "^sessions=$nsr\$" "$w/nt/spr/ship_stamp.txt" && grep -qF '== early signals: the lines above in full, from the files (no replay) ==' "$ckr" \
   && [ "$(sed -n '1p;3,/^wall time: /p' "$ckr" | awk 'length > 79' | wc -l)" = 0 ] && grep -q '^wall time: ' "$ckr" \
-  && ok "make ship (default): no night run, stdin closed (no q), ${dtr}s; VERDICT: PASS with the same verdict lines as a night (the save size, the last night's stop reason and sessions, verify OK); diaries, run_log.txt and night_console.txt unchanged; early signals (roles, shared words, petition topics, mood spread; no stamp yet, ship_stamp.txt written)" || bad "make ship reports only ($rcr)"
+  && ok "make ship (default): no night run, stdin closed (no q), ${dtr}s; VERDICT: PASS with the same verdict lines as a night (the save size, the last night's stop reason and sessions, verify OK); diaries, run_log.txt (but the VERIFY entry of the passed verify, 0.059) and night_console.txt unchanged; 'last full verify: <date> (N ticks), today' (also in ship_stamp.txt); early signals (roles, shared words, petition topics, mood spread; no stamp yet, ship_stamp.txt written)" || bad "make ship reports only ($rcr)"
 DIARY_HOME="$w/nt/spr" make --no-print-directory -C "$root" ship SHIP_VERIFY_TICKS=10 > sps.txt 2>&1 < /dev/null; rcs=$?
 cp "$ckr" sps_ck.txt
 DIARY_HOME="$w/nt/spd" make --no-print-directory -C "$root" ship SHIP_VERIFY=1 > spv.txt 2>&1 < /dev/null; rcv=$?
-[ "$rcs" = 0 ] && sed -n 3p sps_ck.txt | grep -q '^VERDICT: PASS$' && grep -q '^verify: skipped ([0-9]* ticks > 10); night end check: ' sps_ck.txt && grep -qF '== make verify (skipped, ' sps_ck.txt \
+[ "$rcs" = 0 ] && sed -n 3p sps_ck.txt | grep -q '^VERDICT: PASS$' && grep -q '^verify: skipped ([0-9]* ticks > 10); night end check: ' sps_ck.txt && grep -q '^last full verify: [0-9-]* [0-9:]* ([0-9]* ticks), today$' sps_ck.txt && grep -qF '== make verify (skipped, ' sps_ck.txt \
   && grep -q '^since [0-9-]* [0-9:]*: +0 sessions, spread +0, all 4 +0, overlap +0 pts, top same$' sps_ck.txt && grep -q '^the stamp of the last ship:$' sps_ck.txt \
   && [ "$rcv" != 0 ] && grep -q '^VERDICT: FAIL:.* verify failed;' "$w/nt/spd/checkin.txt" && grep -q '^night: none (reports only)' "$w/nt/spd/checkin.txt" \
   && grep -q '^SHIP_SESSIONS ?= 0$' "$root/Makefile" && grep -q 'REPORTS ONLY' "$root/Makefile" && grep -q 'make ship.*(by day) runs NO night' "$root/README.md" \
@@ -2523,7 +2525,7 @@ cks() { ( cd "$1" || exit 1; for f in $(ls diaries/* entities/*/* | grep -v '^di
 ckr "$ck/a" --seed 42 --more 150 --every 5000 --yes > c1.txt 2>&1; ckr "$ck/a" --more 150 --every 5000 > c2.txt 2>&1
 ckr "$ck/a" --say ada --text "rest a little" > /dev/null 2>&1; ckr "$ck/a" --more 150 --every 5000 > c3.txt 2>&1; ckr "$ck/a" --every 5000 > c4.txt 2>&1
 grep -q '^replay: checkpoint missing - 0 ticks replayed$' c1.txt && grep -q '^start: checkpoint of tick 300 loaded (+0 ticks replayed)$' c3.txt \
-  && head -1 "$ck/a/state.ckpt" | grep -q '^diary-sim-ckpt 1$' && grep -aq '^build 0.058$' "$ck/a/state.ckpt" && grep -q ' checkpoint: tick [0-9]*, [0-9]* KB, written in [0-9.]* s$' "$ck/a/ckpt_log.txt" \
+  && head -1 "$ck/a/state.ckpt" | grep -q '^diary-sim-ckpt 2$' && grep -aq '^build 0\.[0-9]*$' "$ck/a/state.ckpt" && grep -q ' checkpoint: tick [0-9]*, [0-9]* KB, written in [0-9.]* s$' "$ck/a/ckpt_log.txt" \
   && ok "every run writes state.ckpt (header: format, build, ...); the next start loads it and says so ('start: checkpoint of tick 300 loaded (+0 ticks replayed)'), a first start says 'replay: checkpoint missing'; ckpt_log.txt has the write times" || bad "checkpoint written / loaded"
 # (a) M = 3 more sessions from the checkpoint, (b) the same 3 on a copy without it (full replay each time): the same files
 cp -r "$ck/a" "$ck/b"; used=0; full=0
@@ -2548,14 +2550,17 @@ cp -r "$ck/a" "$ck/t4"; echo "A99 tick=5 session=1 to=ada kind=say by=player re=
 ckr "$ck/t4" --more 60 --every 5000 > t4.txt 2>&1
 cp -r "$ck/a" "$ck/t5"; python3 -c "import sys; p=sys.argv[1]; b=bytearray(open(p,'rb').read()); b[-100]^=1; open(p,'wb').write(b)" "$ck/t5/state.ckpt"
 ckr "$ck/t5" --more 60 --every 5000 > t5.txt 2>&1; rc5=$?
-cp -r "$ck/a" "$ck/t6"; sed -i '0,/^build 0.058$/s//build 0.057/' "$ck/t6/state.ckpt"
+cp -r "$ck/a" "$ck/t6"; sed -i '1s/.*/diary-sim-ckpt 9/' "$ck/t6/state.ckpt"   # 0.059: another FORMAT (the build is information only)
 ckr "$ck/t6" --more 60 --every 5000 > t6.txt 2>&1; rc6=$?
+cp -r "$ck/a" "$ck/t7"; sed -i '0,/^build 0\.[0-9]*$/s//build 0.057/' "$ck/t7/state.ckpt"
+ckr "$ck/t7" --more 60 --every 5000 > t7.txt 2>&1; rc7=$?
 [ $rc1 = 0 ] && grep -q '^replay: checkpoint stale (diaries/ada.jsonl) - [0-9]* ticks replayed$' t1.txt && [ $rc1v = 0 ] && grep -q '^verify: OK' t1v.txt \
   && [ $rc2 != 0 ] && grep -q '^replay: checkpoint stale (diaries/chess.txt)' t2.txt && grep -q 'chess.txt .* differs from the replay\|import FAILED' t2.txt \
   && [ $rc3 != 0 ] && grep -q '^replay: checkpoint stale (diaries/screens.txt)' t3.txt \
   && grep -q '^replay: checkpoint stale (inputs or sessions before tick [0-9]*)' t4.txt \
-  && [ $rc5 = 0 ] && grep -q '^replay: checkpoint corrupt (payload)' t5.txt && [ $rc6 = 0 ] && grep -q '^replay: checkpoint version (build 0.057)' t6.txt \
-  && ok "refused, with a full replay and the reason on the console: a changed byte (stale; the replay passes, verify OK), a changed record line (stale, then DRIFT), an invented old record line after the checkpoint's part (stale, DRIFT), an old input added (stale), a broken payload (corrupt), another build (version)" || bad "checkpoint refusals ($rc1 $rc1v $rc2 $rc3 $rc5 $rc6)"
+  && [ $rc5 = 0 ] && grep -q '^replay: checkpoint corrupt (payload)' t5.txt && [ $rc6 = 0 ] && grep -q '^replay: checkpoint version (format 9, newer than this build' t6.txt \
+  && [ $rc7 = 0 ] && grep -q '^start: checkpoint of tick [0-9]* loaded' t7.txt \
+  && ok "refused, with a full replay and the reason on the console: a changed byte (stale; the replay passes, verify OK), a changed record line (stale, then DRIFT), an invented old record line after the checkpoint's part (stale, DRIFT), an old input added (stale), a broken payload (corrupt), another format (version); 0.059: another build in the header still loads" || bad "checkpoint refusals ($rc1 $rc1v $rc2 $rc3 $rc5 $rc6 $rc7)"
 # SIGHUP inside a session: a clean stop writes the checkpoint of its last tick; the bare rerun loads it and finishes the session; the files equal an uninterrupted run
 cp -r "$ck/a" "$ck/h"; cp -r "$ck/a" "$ck/u"; n0=$(wc -l < "$ck/h/diaries/ada.jsonl")
 ( DIARY_TEST_TICK_MS=5 env -u DIARY_VERBOSE "$cb" --home "$ck/h" --more 400 --every 5000 > h1.txt 2>&1 & p=$!
@@ -2568,6 +2573,102 @@ cks "$ck/h" > kh.txt; cks "$ck/u" > ku.txt; ckr "$ck/h" --verify > hv.txt 2>&1; 
   && ok "SIGHUP inside a session (tick $hk of $((n0 + 1))..$((n0 + 400))): exit 130 and the checkpoint of that tick; the bare rerun loads it and finishes the session; every record file equals the uninterrupted run; verify OK" || bad "SIGHUP then resume ($(cat h1rc.txt) $hk $rch $rchv)"
 grep -q 'state.ckpt' "$root/README.md" && grep -q -- '--replay' "$root/data/help.txt" && grep -q 'make slice' "$root/README.md" && grep -q '^slice:' "$root/Makefile" && grep -q '^SLICE_MINUTES ?= 20$' "$root/Makefile" \
   && grep -q 'sim_ckpt.ads sim_ckpt.adb' "$root/Makefile" && ok "README, --help and the Makefile describe the checkpoint, --replay and make slice (SLICE_MINUTES ?= 20)" || bad "checkpoint docs"
+cd "$w" || exit 1
+
+echo "== 63. build 0.059: the checkpoint belongs to a state format: a 0.058 checkpoint loads; a changed layout replays (section tags and lengths); data/ is information; make verify refreshes it; the layout guard =="
+c6="$w/c63"; rm -rf "$c6"; mkdir -p "$c6"; cd "$c6" || exit 1
+# the record files of a save: diaries without "ts" (the clock), everything else as it is (inbox.txt is a view)
+k6() { ( cd "$1" || exit 1; for f in $(ls diaries/* entities/*/* | grep -v '^diaries/inbox.txt$'); do case $f in *.jsonl) sed -E 's/"ts":"[^"]*",//' "$f" | cksum | sed "s#\$# $f#";; *) cksum "$f";; esac; done ); }
+# a binary beside its own data/ (each one reads data/ of its current folder)
+mkb() { mkdir -p "$c6/$1/bin"; cp "$2" "$c6/$1/bin/diary_sim"; cp -r "$3" "$c6/$1/data"; }
+r6() { d=$1; shift; ( cd "$c6/$d" && env -u DIARY_VERBOSE ./bin/diary_sim --home "$@" ); }
+mkb n "$bin" "$root/data"
+# (a) build 0.058 from git (commit 87a2a7c in a worktree under /tmp; cached in /tmp/diary-sim-0.058-87a2a7c), or DS058_BIN + DS058_DATA
+o58=/tmp/diary-sim-0.058-87a2a7c
+if [ -n "$DS058_BIN" ] && [ -x "$DS058_BIN" ]; then mkdir -p "$o58/bin"; cp "$DS058_BIN" "$o58/bin/diary_sim"; cp -r "${DS058_DATA:-$(dirname "$DS058_BIN")/../data}" "$o58/data"; fi
+if ! [ -x "$o58/bin/diary_sim" ] && git -C "$root" rev-parse -q --verify '87a2a7c^{commit}' > /dev/null 2>&1; then
+  wt=/tmp/ds058_check_wt.$$; rm -rf "$wt"; git -C "$root" worktree prune > /dev/null 2>&1
+  if git -C "$root" worktree add --detach "$wt" 87a2a7c > /dev/null 2>&1 && make -C "$wt" all OPT=-O0 > "$c6/build058.txt" 2>&1; then
+    rm -rf "$o58"; mkdir -p "$o58/bin"; cp "$wt/bin/diary_sim" "$o58/bin/"; cp -r "$wt/data" "$o58/data"
+  fi
+  git -C "$root" worktree remove --force "$wt" > /dev/null 2>&1; rm -rf "$wt"; git -C "$root" worktree prune > /dev/null 2>&1
+fi
+if [ -x "$o58/bin/diary_sim" ] && "$o58/bin/diary_sim" --help 2>&1 | grep -q -- '--replay'; then
+  mkb o "$o58/bin/diary_sim" "$o58/data"
+  # N = 3 sessions with the 0.058 binary (Robert's words in between); its last run writes a format 1 checkpoint
+  r6 o "$c6/s" --seed 42 --more 150 --every 5000 --yes > o1.txt 2>&1; r6 o "$c6/s" --say ada --text "rest a little" > /dev/null 2>&1
+  r6 o "$c6/s" --more 150 --every 5000 > o2.txt 2>&1; r6 o "$c6/s" --every 5000 > o3.txt 2>&1
+  t58=$(grep -a '^tick ' "$c6/s/state.ckpt" | cut -d' ' -f2)
+  cp -r "$c6/s" "$c6/sa"; cp -r "$c6/s" "$c6/sb"; used=0; full=0
+  # M = 3 sessions with 0.059: (a) from the 0.058 checkpoint, then its own; (b) the same with a full replay each time
+  for k in 1 2 3; do
+    [ $k = 2 ] && { r6 n "$c6/sa" --say all --text "good morning" > /dev/null 2>&1; r6 n "$c6/sb" --say all --text "good morning" > /dev/null 2>&1; }
+    r6 n "$c6/sa" --more 120 --every 5000 > na$k.txt 2>&1 && grep -q '^start: checkpoint of tick [0-9]* loaded (+0 ticks replayed)$' na$k.txt && used=$((used + 1))
+    rm -f "$c6/sb/state.ckpt"; r6 n "$c6/sb" --more 120 --every 5000 > nb$k.txt 2>&1 && grep -q '^replay: checkpoint missing - [0-9]* ticks replayed$' nb$k.txt && full=$((full + 1))
+  done
+  ld58=$(grep -m 1 " start: checkpoint of tick $t58 loaded in " "$c6/sa/ckpt_log.txt" | sed -n 's/.* loaded in \([0-9.]*\) s.*/\1/p')
+  k6 "$c6/sa" > ka.txt; k6 "$c6/sb" > kb.txt; r6 n "$c6/sa" --verify > nav.txt 2>&1; rcv=$?
+  [ -n "$t58" ] && head -1 "$c6/s/state.ckpt" | grep -q '^diary-sim-ckpt 1$' && grep -aq '^build 0.058$' "$c6/s/state.ckpt" \
+    && grep -q "^start: checkpoint of tick $t58 loaded (+0 ticks replayed)\$" na1.txt && [ -n "$ld58" ] \
+    && grep -q 'checkpoint: format 1 (build 0.058) loaded, the same state layout; the next write is format 2$' "$c6/sa/ckpt_log.txt" \
+    && [ "$used" = 3 ] && [ "$full" = 3 ] && [ -s ka.txt ] && cmp -s ka.txt kb.txt && head -1 "$c6/sa/state.ckpt" | grep -q '^diary-sim-ckpt 2$' \
+    && [ $rcv = 0 ] && grep -q '^verify: OK' nav.txt && grep -q '^verify: checkpoint of tick [0-9]* = the replayed state, byte for byte$' nav.txt \
+    && ok "a format 1 checkpoint written by the 0.058 binary (git 87a2a7c, tick $t58) loads in 0.059 without a replay (start in $ld58 s, ckpt_log: 'format 1 (build 0.058) loaded'); 3 sessions on it and the same 3 with a full replay each leave every record file byte for byte the same ($(wc -l < ka.txt) files); then format 2; make verify OK" \
+    || bad "0.058 checkpoint in 0.059 ($t58 $used $full $rcv ld=$ld58)"
+  echo "   (0.058 checkpoint: $(head -1 "$c6/s/state.ckpt"), $(grep -a '^build ' "$c6/s/state.ckpt"), tick $t58; 0.059 start: $(grep -m 1 "^start:" na1.txt); loaded in $ld58 s)"
+else
+  echo "  SKIP -- no 0.058 binary (no git history here and no DS058_BIN): the format 1 proof runs in the source folder"
+fi
+# (b) a changed state layout (tests only: DIARY_TEST_CKPT_EXTRA=<section> streams one Integer more there): refused with its name, full replay, same files
+r6 n "$c6/l" --seed 7 --more 200 --every 5000 --yes > /dev/null 2>&1; r6 n "$c6/l" --more 100 --every 5000 > /dev/null 2>&1
+for v in l1 l2 l3 lr; do cp -r "$c6/l" "$c6/$v"; done; rm -f "$c6/lr/state.ckpt"
+( cd "$c6/n" && DIARY_TEST_CKPT_EXTRA=dharma env -u DIARY_VERBOSE ./bin/diary_sim --home "$c6/l1" --more 80 --every 5000 ) > l1.txt 2>&1; rl1=$?
+( cd "$c6/n" && DIARY_TEST_CKPT_EXTRA=main env -u DIARY_VERBOSE ./bin/diary_sim --home "$c6/l2" --more 80 --every 5000 ) > l2.txt 2>&1
+r6 n "$c6/l2" --more 0 --every 5000 > l2b.txt 2>&1   # written with the field more, read without it
+r6 n "$c6/lr" --more 80 --every 5000 > lr.txt 2>&1
+k6 "$c6/l1" > kl1.txt; k6 "$c6/lr" > klr.txt
+[ $rl1 = 0 ] && grep -q '^replay: checkpoint layout (state layout changed: dharma) - 300 ticks replayed$' l1.txt && cmp -s kl1.txt klr.txt \
+  && grep -q '^replay: checkpoint layout (state layout changed: main) - 300 ticks replayed$' l2.txt && grep -q '^replay: checkpoint layout (state layout changed: main) - 380 ticks replayed$' l2b.txt \
+  && ok "a section that reads more bytes than it holds (a field added: dharma, main) or fewer (a field removed) is refused: 'replay: checkpoint layout (state layout changed: <module>)', a full replay with the same files as a run without the checkpoint" || bad "layout change ($rl1)"
+# (c) data/: display text never counts, a comment neither; a changed rule file is information, the checkpoint loads anyway
+for v in d1 d2 d3; do cp -r "$c6/l" "$c6/$v"; rm -rf "$c6/n$v"; cp -r "$c6/n" "$c6/n$v"; done
+echo "x.test = only text" >> "$c6/nd1/data/messages.txt"; sed -i 's/^\(--replay .*\)$/\1 /' "$c6/nd1/data/help.txt"; echo "# a comment only" >> "$c6/nd2/data/limits.txt"
+sed -i 's/^night.recent = .*/night.recent = 3/' "$c6/nd3/data/limits.txt"
+for v in d1 d2 d3; do r6 n$v "$c6/$v" --more 30 --every 5000 > $v.txt 2>&1; done
+grep -q '^start: checkpoint of tick 300 loaded' d1.txt && ! grep -q '^data changed' d1.txt && grep -q '^start: checkpoint of tick 300 loaded' d2.txt && ! grep -q '^data changed' d2.txt \
+  && grep -q '^start: checkpoint of tick 300 loaded' d3.txt && grep -q '^data changed since the checkpoint (make verify replays everything): limits.txt$' d3.txt \
+  && grep -aq '^datafile limits.txt [0-9a-f]*$' "$c6/l/state.ckpt" && ! grep -aq '^datafile messages.txt' "$c6/l/state.ckpt" \
+  && grep -q 'data changed since the checkpoint' "$c6/d3/ckpt_log.txt" \
+  && ok "data/: a changed messages.txt / help.txt (not hashed) or a comment in limits.txt: loaded, no word; a changed number in limits.txt: loaded with 'data changed since the checkpoint (make verify replays everything): limits.txt'" || bad "data changes"
+# (d) make verify refreshes the checkpoint and writes its VERIFY entry; the next start loads that checkpoint, the same files as a full replay
+cp -r "$c6/l" "$c6/v"; rm -f "$c6/v/state.ckpt"; r6 n "$c6/v" --verify > v1.txt 2>&1; rcv1=$?
+cp -r "$c6/v" "$c6/vb"; rm -f "$c6/vb/state.ckpt"
+r6 n "$c6/v" --more 90 --every 5000 > v2.txt 2>&1; r6 n "$c6/vb" --more 90 --every 5000 > vb2.txt 2>&1
+k6 "$c6/v" > kv.txt; k6 "$c6/vb" > kvb.txt; r6 n "$c6/v" --verify > v3.txt 2>&1; rcv3=$?
+cp -r "$c6/v" "$c6/vd"; sed -i '5s/"text":"[a-z]/"text":"X/' "$c6/vd/diaries/ada.jsonl"; cp "$c6/vd/state.ckpt" vd0.ckpt; r6 n "$c6/vd" --verify > vd.txt 2>&1; rcvd=$?
+[ $rcv1 = 0 ] && grep -q '^verify: checkpoint not compared (missing)$' v1.txt && grep -q '^verify: fresh checkpoint of tick 300 written ([0-9]* KB, [0-9.]* s)$' v1.txt \
+  && grep -q '^full verify: OK, 300 ticks, [0-9]* sessions, [0-9.]* s$' "$c6/v/run_log.txt" && grep -q '^start: checkpoint of tick 300 loaded' v2.txt && cmp -s kv.txt kvb.txt \
+  && [ $rcv3 = 0 ] && grep -q '^verify: checkpoint of tick 390 = the replayed state, byte for byte$' v3.txt && [ "$(grep -c '^full verify: OK' "$c6/v/run_log.txt")" = 2 ] \
+  && [ $rcvd = 1 ] && ! grep -q 'fresh checkpoint' vd.txt && cmp -s vd0.ckpt "$c6/vd/state.ckpt" && [ "$(grep -c '^full verify: OK' "$c6/vd/run_log.txt")" = 2 ] \
+  && ok "make verify (passed) writes a fresh checkpoint and 'full verify: OK, N ticks' in run_log.txt; the next start loads it and gives the files of a full replay; a DRIFT verify writes neither" || bad "verify refresh ($rcv1 $rcv3 $rcvd)"
+# (e) the layout guard: the State_IO code and what it streams against "ckpt_layout: <format> <hash>" in docs/CHECKPOINT.md
+g6() { rm -rf "$c6/g"; mkdir -p "$c6/g/docs" "$c6/g/scripts"; cp "$root"/*.ad? "$c6/g/"; cp "$root/docs/CHECKPOINT.md" "$c6/g/docs/"; cp "$root/scripts/ckpt_layout.sh" "$c6/g/scripts/"; }
+"$root/scripts/ckpt_layout.sh" --check "$root" > g0.txt 2>&1; rg0=$?
+g6; sed -i 's/^      IO (S, Save, Count);$/      IO (S, Save, Count);\n      IO (S, Save, Latest);/' "$c6/g/sim_next.adb"; "$c6/g/scripts/ckpt_layout.sh" --check "$c6/g" > g1.txt 2>&1; rg1=$?
+g6; sed -i 's/^      Energy, Mood, Location : Integer;/      Energy, Mood, Location, Extra : Integer;/' "$c6/g/diary_sim.adb"; "$c6/g/scripts/ckpt_layout.sh" --check "$c6/g" > g2.txt 2>&1; rg2=$?
+g6; sed -i 's/^   Max_Topics : constant := \([0-9]*\);/   Max_Topics : constant := 1\1;/' "$c6/g/sim_world.adb"; "$c6/g/scripts/ckpt_layout.sh" --check "$c6/g" > g3.txt 2>&1; rg3=$?
+g6; sed -i 's/^      IO (S, Save, Count);$/      IO  (S,  Save, Count);   --  only spacing and a comment/' "$c6/g/sim_next.adb"; sed -i 's/Ckpt_Log (Msg ("ckpt.notwritten", Img (C)));/Ckpt_Log (Msg ("ckpt.notwritten", Img (C)) \& "");/' "$c6/g/diary_sim.adb"
+"$c6/g/scripts/ckpt_layout.sh" --check "$c6/g" > g4.txt 2>&1; rg4=$?
+g6; sed -i 's/^   Ckpt_Format : constant := \([0-9]*\);/   Ckpt_Format : constant := 9\1;/' "$c6/g/diary_sim.adb"; "$c6/g/scripts/ckpt_layout.sh" --check "$c6/g" > g5.txt 2>&1; rg5=$?
+fmt=$(sed -n 's/^ *Ckpt_Format : constant := \([0-9]*\);.*/\1/p' "$root/diary_sim.adb")
+[ $rg0 = 0 ] && grep -q "^ckpt_layout: PASS (format $fmt, " g0.txt && grep -q "^ckpt_layout: $fmt [0-9a-f]*\$" "$root/docs/CHECKPOINT.md" \
+  && [ $rg1 = 1 ] && grep -q 'bump Ckpt_Format$' g1.txt && [ $rg2 = 1 ] && grep -q 'bump Ckpt_Format$' g2.txt && [ $rg3 = 1 ] && grep -q 'bump Ckpt_Format$' g3.txt \
+  && [ $rg4 = 0 ] && [ $rg5 = 1 ] && grep -q "record the line 'ckpt_layout: 9$fmt " g5.txt && grep -q '^ckpt-layout:' "$root/Makefile" \
+  && ok "layout guard: PASS on the tree (ckpt_layout: $fmt in docs/CHECKPOINT.md); FAIL 'bump Ckpt_Format' for a field more in a State_IO, a component more in a streamed record (State), another array bound (Max_Topics); spacing, comments and other code: PASS; a bumped format not recorded: FAIL 'record the line'" \
+  || bad "layout guard ($rg0 $rg1 $rg2 $rg3 $rg4 $rg5: $(head -c 200 g0.txt))"
+grep -q 'state layout changed' "$root/docs/CHECKPOINT.md" && grep -q 'data changed since the checkpoint' "$root/docs/CHECKPOINT.md" && grep -q 'last full verify' "$root/docs/CHECKPOINT.md" \
+  && grep -q 'docs/CHECKPOINT.md' "$root/README.md" && grep -q 'fresh state.ckpt' "$root/data/help.txt" && grep -q 'last full verify' "$root/scripts/ship.sh" \
+  && ok "docs/CHECKPOINT.md (what invalidates, data/ reasoning, the guard, weekly verify), README, --help and ship.sh describe build 0.059" || bad "0.059 docs"
 cd "$w" || exit 1
 
 

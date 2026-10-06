@@ -1,4 +1,4 @@
-# Version: 0.048
+# Version: 0.049
 # make ship       ROBERT'S DAY COMMAND (after unzipping over the source folder; the save in ../diary-data stays): REPORTS ONLY, no
 #                 night, no q, seconds: build if needed, then active, wordstat, frustration, evolve on the save as it is, and verify if the
 #                 save has at most SHIP_VERIFY_TICKS (150000) ticks (verify replays the whole history, minutes on a big save; the
@@ -26,8 +26,13 @@
 #                 the history (minutes on a big save); the verdict line "checkpoint:" says loaded or full replay (and why), the startup
 #                 time and what the end wrote.  The end check / verify replay only saves of at most SLICE_VERIFY_TICKS (30000) ticks.
 # state.ckpt      (0.058) every run that wrote sessions and every clean stop (q, SIGHUP/SIGTERM, time limit) writes the checkpoint;
-#                 a start uses it only if build, data/ and the record files fit, else it replays and says why.  --replay (make verify)
-#                 always replays from scratch.  ckpt.enabled = 0 in data/limits.txt switches it off.
+#                 (0.059) it belongs to a STATE FORMAT (diary-sim-ckpt 2; a 0.058 format 1 checkpoint loads too), not to the build: a new
+#                 zip loads it; a start replays only if the state layout changed (tagged sections), the file is broken or a record file
+#                 does not fit, and says why.  data/ changes are information only ("data changed since the checkpoint ...").
+#                 --replay and make verify always replay from scratch; a passed make verify writes a fresh checkpoint.
+#                 ckpt.enabled = 0 in data/limits.txt switches it off.  docs/CHECKPOINT.md.
+# make ckpt-layout  the layout guard: the State_IO code against "ckpt_layout: <format> <hash>" in docs/CHECKPOINT.md (part of make check;
+#                 FAIL = bump Ckpt_Format)
 # make            build bin/diary_sim      make GNATMAKE=gnatmake-12  (GNAT 12)
 # make portable   0-warning build with GNAT 14 and 12 in a copy without .git
 # make run        build, then AUTO-LOAD and continue (no menu): prints "Save folder: <path>" and
@@ -68,7 +73,9 @@
 #                 trend.txt and run_log.txt get a line per session.  At the end (limits) a child process replays the WHOLE history from the
 #                 files (make verify); night.verify_every in data/limits.txt = also every N sessions.  Do not use say/grant/veto during a
 #                 night run: quit first.
-# make verify     replay the whole history from the files and compare it with everything stored; prints one OK line (exit 1: DRIFT)
+# make verify     replay the whole history from the files and compare it with everything stored; prints one OK line (exit 1: DRIFT);
+#                 (0.059) when it passes: a VERIFY entry in run_log.txt (checkin.txt: "last full verify: <date> (N ticks)") and a fresh
+#                 state.ckpt.  The drift check: run it about once a week (a full replay, ~35 min on a 775k-tick save)
 # make bench      seconds per session: 20 sessions of 300 ticks after a 6000-tick save, the old way (one program start per session)
 #                 against the night run (BENCH_SESSIONS, BENCH_TICKS, BENCH_BASE); diaries of both must be identical
 # make trend      the last 40 lines of trend.txt (one line per session: mood, energy, words, petitions, votes, trials, anomalies)
@@ -144,7 +151,7 @@ OPT ?= -O2
 JOBS ?= -j0
 FLAGS = -g $(OPT) -gnatwa -gnat2022 -gnata $(JOBS)
 
-.PHONY: ship night-ship slice checkin chat chatlog voices wordstat evolve active frustration all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog trend night verify bench share small footprint
+.PHONY: ckpt-layout ship night-ship slice checkin chat chatlog voices wordstat evolve active frustration all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog trend night verify bench share small footprint
 export WESEN PLAYER TEXT AS
 
 # Every user-facing target prints its wall time as the LAST line (scripts/timed.sh), e.g. "make wordstat wall time: 0m12s (12s)":
@@ -336,6 +343,9 @@ checkin: all
 	$(STEP) "verify" $$(date +%s) $(QUIET) bin/diary_sim --verify
 	@echo "=== checkin done ==="
 	@scripts/timed.sh "checkin" $(T0) 1 true
+
+ckpt-layout:
+	@scripts/ckpt_layout.sh --check
 
 check: version-check all
 	$(TIMED) scripts/checks.sh
