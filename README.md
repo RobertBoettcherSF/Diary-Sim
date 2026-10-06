@@ -123,6 +123,9 @@ diaries, entities and summary files are byte for byte the same.
   the end check), at least 60 s and at most a quarter of the budget. The live screen and the box say `slice run` / `night run` /
   `ship run`. `checkin.txt` has a `growth:` line (the three file groups that grew most since the last ship; state.ckpt left out).
   No more `cut: write error: Broken pipe` from `scripts/ship.sh`.
+* **`make test`**: a smoke test in seconds (the layout guard, a fresh save with `make verify-full` and `make verify`, and
+  `tests/ckpt059.tar.gz`: a save with a checkpoint written by 0.059 must load and continue exactly as 0.059 did). `make check` is the
+  full test (~16 min).
 
 ## The state checkpoint: `state.ckpt` (build 0.058; a state format since 0.059)
 

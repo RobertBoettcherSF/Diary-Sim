@@ -148,6 +148,8 @@
 #                 as it is); the only difference: no symbols, so a crash report shows addresses instead of names.  make footprint: the
 #                 sizes (source, data, per unit, stripped / unstripped, debug share) of the files that exist
 # make check      version headers + the resume/replay/drift/crash checks
+# make test       (0.060) the smoke test in seconds: layout guard, a fresh save with verify-full and verify, the 0.059 checkpoint
+#                 fixture tests/ckpt059.tar.gz (loads; 2 more sessions = tests/ckpt059.expect, what 0.059 wrote)
 # make checkin    the older paste (humans: use make ship / make night-ship): a night run of CHECKIN_SESSIONS (40) sessions of CHECKIN_TICKS (300) ticks (no q needed; it says
 #                 when the history replay is done and the new sessions begin), then active, wordstat, frustration, evolve, verify,
 #                 each after "=== make <x> ===" with its own wall-time line; the last line is the wall time of the whole checkin.
@@ -160,7 +162,7 @@ OPT ?= -O2
 JOBS ?= -j0
 FLAGS = -g $(OPT) -gnatwa -gnat2022 -gnata $(JOBS)
 
-.PHONY: ckpt-layout ship night-ship slice checkin chat chatlog voices wordstat evolve active frustration all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog trend night verify verify-full sim-print bench share small footprint
+.PHONY: ckpt-layout ship night-ship slice checkin chat chatlog voices wordstat evolve active frustration all version-check portable run play menu demo check clean say answer inbox map ledger grant screens elo perft robot govern veto approve audit challenge next visit trials divergence dictionary ballots report runlog trend night verify verify-full sim-print test bench share small footprint
 export WESEN PLAYER TEXT AS
 
 # Every user-facing target prints its wall time as the LAST line (scripts/timed.sh), e.g. "make wordstat wall time: 0m12s (12s)":
@@ -364,6 +366,10 @@ ckpt-layout:
 
 check: version-check all
 	$(TIMED) scripts/checks.sh
+
+# make test (0.060): the smoke test in seconds (layout guard, a fresh save with verify-full and verify, the 0.059 checkpoint fixture)
+test: version-check all
+	$(TIMED) scripts/smoke_test.sh
 
 small:
 	mkdir -p obj_small bin
