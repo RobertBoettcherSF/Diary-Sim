@@ -157,10 +157,12 @@ diaries, entities and summary files are byte for byte the same.
   stay whole-save (they read the word lists, the record files and the chess games, which grow linearly; the evolve word loop no longer
   costs words x sessions); the early signals were already windowed. Each report step prints a progress line with its time.
 * **Vocabulary goal (0.057).** Right under the VERDICT: `shared (3 of 4): N / 40000` = plain words (no chess move, no number) known by
-  at least ceiling(3/4 of the wesen), the change since the last ship, the stricter all-four count, the overlap (all four / mean known
-  per wesen), the known words per wesen and who is missing most often among the words known by all but one. One read of
+  at least ceiling(3/4 of the wesen), the change since the last ship, the stricter all-four count, the overlap (all four / every distinct
+  plain word, in percent), the known words per wesen and who is missing most often among the words known by all but one. One read of
   `entities/*/words.txt`. `used: not tracked yet`: the files keep no per-word record of who said or wrote a word (a first-use line per
   wesen and word in new sessions' records would be needed). `SHIP_VOCAB_GOAL` changes the 40000.
+  The `since` line keeps COUNTS and the OVERLAP apart: `all 4 +N, overlap -P pts` (a count grows while the overlap falls when the
+  vocabulary grows faster); against a 0.056 stamp it uses that stamp's `shared_all` / `shared_pct`.
 * **Speed (0.057).** `trend.txt` lines of new sessions end with `secs=` (wall seconds of the session, end report included), `loop=`
   (its tick loop) and `tps=` (new ticks per second of the loop). A night no longer rereads every diary between sessions and at each
   session's export check (it checks the last line of each diary and keeps the lines it wrote in memory): that was the part of a

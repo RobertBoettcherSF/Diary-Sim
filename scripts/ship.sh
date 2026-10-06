@@ -243,7 +243,7 @@ if [ -n "$5" ]; then sh_all=$1; sh_pct=$3; shared_line="shared words: $1 of $2 k
 else sh_all=0; sh_pct=0; sh_pairs="-"; shared_line="shared words: none yet"; fi
 # the vocabulary goal (Robert: a shared vocabulary of 40000 words).  HEADLINE: plain words (no chess move, no number) known by at least
 # ceiling(3/4 of the wesen) (3 of 4 today; from $ids, no fixed count); beside it the stricter all-wesen count, the overlap (all /
-# mean known per wesen), the known words per wesen and who is missing most often among the words known by all but one.  One read of entities/*/words.txt.  "used" (spoken or
+# every distinct plain word known by anyone, in percent; a count can grow while the overlap falls), the known words per wesen and who is missing most often among the words known by all but one.  One read of entities/*/words.txt.  "used" (spoken or
 # written by each knower) is not recorded per word in the files yet.
 goal=${SHIP_VOCAB_GOAL:-40000}
 voc=$(for e in $ids; do f="$folder/entities/$e/words.txt"; [ -f "$f" ] && awk -v e="$e" '!/^#/ && NF >= 2 { print e, $2 }' "$f"; done | sort -u | awk -v ids="$ids" '
@@ -251,11 +251,11 @@ voc=$(for e in $ids; do f="$folder/entities/$e/words.txt"; [ -f "$f" ] && awk -v
   BEGIN { ne = split(ids, ord, " "); th = int((3 * ne + 3) / 4) }   # the threshold: ceiling(3/4 of the wesen), 3 of 4 today
   { if (chess($2) || num($2)) next; n[$1]++; c[$2]++; has[$1, $2] = 1; seen[$1] = 1 }
   END { k = 0; for (e in seen) k++; if (k < ne || ne < 2) { print "none"; exit }
-    for (x in c) { if (c[x] >= th) s3++; if (c[x] == ne) s4++
+    u = 0; for (x in c) { u++; if (c[x] >= th) s3++; if (c[x] == ne) s4++
       if (c[x] == ne - 1) for (i = 1; i <= ne; i++) if (!has[ord[i], x]) miss[ord[i]]++ }
     s = 0; per = ""; mi = ""; best = ord[1]
     for (i = 1; i <= ne; i++) { e = ord[i]; s += n[e]; per = per (i > 1 ? "," : "") n[e]; mi = mi (i > 1 ? "," : "") miss[e] + 0; if (miss[e] + 0 > miss[best] + 0) best = e }
-    printf "%d %d %d %s %s %s %d %d %d\n", s3 + 0, s4 + 0, int(1000 * s4 / (s / ne) + 0.5), per, mi, best, miss[best] + 0, th, ne }')
+    printf "%d %d %d %s %s %s %d %d %d\n", s3 + 0, s4 + 0, int(1000 * s4 / u + 0.5), per, mi, best, miss[best] + 0, th, ne }')
 set -- $voc
 if [ -n "$9" ]; then voc_sh=$1; voc_s4=$2; voc_ov=$(awk -v x="$3" 'BEGIN { printf "%.1f", x / 10 }'); voc_per=$4; voc_miss=$5; miss_e=$6; miss_n=$7; v_th=$8; v_ne=$9
   voc_pct=$(awk -v a="$1" -v g="$goal" 'BEGIN { printf "%.1f", 100 * a / g }')
@@ -263,10 +263,11 @@ if [ -n "$9" ]; then voc_sh=$1; voc_s4=$2; voc_ov=$(awk -v x="$3" 'BEGIN { print
   [ -n "$p_vsh" ] || p_vsh=-; [ -n "$p_vs4" ] || p_vs4=-
   voc_d=$(dlt "$voc_sh" "$p_vsh"); voc_d4=$(dlt "$voc_s4" "$p_vs4")
   if [ -n "$p_vov" ]; then voc_od=$(awk -v a="$voc_ov" -v b="$p_vov" 'BEGIN { d = a - b; printf "%s%.1f", (d >= 0 ? "+" : ""), d }'); else voc_od="?"; fi
-  voc_line="shared ($v_th of $v_ne): $voc_sh / $goal ($voc_pct%), $voc_d since last ship"
+  if [ "$voc_d" = "?" ]; then vtail="no count in the last stamp"; else vtail="$voc_d since last ship"; fi
+  voc_line="shared ($v_th of $v_ne): $voc_sh / $goal ($voc_pct%), $vtail"
   voc_line2="  all $v_ne: $voc_s4 ($voc_d4); overlap $voc_ov% ($voc_od); known per wesen: $voc_per"
   voc_line3="  most often missing: $(nm "$miss_e") ($miss_n words); used: not tracked yet"
-  voc_full="vocabulary goal: shared ($v_th of $v_ne) $voc_sh / $goal ($voc_pct%), $voc_d since the last ship = plain words (no chess move, no number) known by at least $v_th wesen; all $v_ne: $voc_s4 ($voc_d4); overlap $voc_ov% (all $v_ne / mean known per wesen, $voc_od points); known per wesen ($ids): $voc_per; missing among the words known by all but one ($ids): $voc_miss; used: not tracked yet (the files keep no per-word record of who said or wrote a word)"
+  voc_full="vocabulary goal: shared ($v_th of $v_ne) $voc_sh / $goal ($voc_pct%), $voc_d since the last ship = plain words (no chess move, no number) known by at least $v_th wesen; all $v_ne: $voc_s4 ($voc_d4); overlap $voc_ov% (all $v_ne / every distinct plain word, $voc_od points); known per wesen ($ids): $voc_per; missing among the words known by all but one ($ids): $voc_miss; used: not tracked yet (the files keep no per-word record of who said or wrote a word)"
 else voc_sh=0; voc_s4=0; voc_ov=0; voc_per=-; voc_miss=-; voc_line="shared: no word lists of every wesen yet (goal $goal)"; voc_line2=""; voc_line3=""; voc_full=$voc_line; fi
 # petition topics of the window
 awk -v lo="${first:-0}" -v hi="${last:-0}" '/^P[0-9]/ { s = $0; sub(/.* s=/, "", s); s = s + 0; if (s < lo || s > hi) next
@@ -290,9 +291,22 @@ if [ -n "$6" ]; then spread=$1; mood_line="mood: spread $1 ($2 $3 to $4 $5), mea
 if [ -f "$stampf" ]; then
   p_made=$(sv made); p_mode=$(sv mode); p_top=$(sv top)
   if [ "$top" = "$p_top" ]; then tt="top topic the same"; ts="top same"; else tt="top topic ${top:--} (was ${p_top:--})"; ts="top ${top:--} (was ${p_top:--})"; fi
-  delta_full="since the last ship ($p_made, make $p_mode): $(dlt "$n_all" "$(sv sessions)") sessions, mood spread $(dlt "$spread" "$(sv spread)"), shared words $(dlt "$sh_pct" "$(sv shared_pct)")%, $tt; moods $(sv moods) -> ${moods:--}"
-  for ts in "$ts" "top ${top:--}" "top changed"; do   # the first form that fits on a 79-column line
-    delta_line="since $(echo "$p_made" | cut -c6-16) ($p_mode): $(dlt "$n_all" "$(sv sessions)") sessions, spread $(dlt "$spread" "$(sv spread)"), shared $(dlt "$sh_pct" "$(sv shared_pct)")%, $ts"
+  # COUNTS and the OVERLAP apart (a count can grow while the overlap falls when the vocabulary grows faster): the shared (3 of 4)
+  # count, the all-wesen count and the overlap in percentage points.  A 0.056 stamp has no vocab_* keys: then the all-four count
+  # and the percent of the "shared words" line (shared_all, shared_pct; the same definition in both builds); no 3-of-4 delta.
+  nw=$(echo $ids | wc -w)
+  pts() { awk -v a="$1" -v b="$2" 'BEGIN { if (a == "" || b == "" || a == "-" || b == "-") { print "?"; exit }; d = a - b
+    if (d > -0.05 && d < 0.05) print "+0"; else if (d >= 1 || d <= -1) printf "%+.0f\n", d; else printf "%+.1f\n", d }'; }
+  if [ -n "$(sv vocab_shared)" ] && [ "$(sv vocab_shared)" != - ]; then
+    d_sh=$(dlt "$voc_sh" "$(sv vocab_shared)"); d_all=$(dlt "$voc_s4" "$(sv vocab_all)"); d_ov=$(pts "$voc_ov" "$(sv vocab_overlap)")
+    ov_txt="plain words, was $(sv vocab_overlap)%, now $voc_ov%"
+  else
+    d_sh="?"; d_all=$(dlt "$sh_all" "$(sv shared_all)"); d_ov=$(pts "$sh_pct" "$(sv shared_pct)")
+    ov_txt="all words of the shared words line, was $(sv shared_pct)%, now $sh_pct%; the last stamp has no 3-of-$nw count"
+  fi
+  delta_full="since the last ship ($p_made, make $p_mode): $(dlt "$n_all" "$(sv sessions)") sessions, mood spread $(dlt "$spread" "$(sv spread)"), shared (${v_th:-?} of $nw) $d_sh, all $nw $d_all, overlap $d_ov pts ($ov_txt), $tt; moods $(sv moods) -> ${moods:--}"
+  for ts in ", $ts" ", top changed" ""; do   # the first form that fits on a 79-column line
+    delta_line="since $(echo "$p_made" | cut -c6-16): $(dlt "$n_all" "$(sv sessions)") sessions, spread $(dlt "$spread" "$(sv spread)"), all $nw $d_all, overlap $d_ov pts$ts"
     [ $(printf '%s' "$delta_line" | wc -c) -le 79 ] && break
   done
 else delta_full="since the last ship: no stamp yet (ship_stamp.txt is written now; the next ship compares with it)"; delta_line="since the last ship: no stamp yet (written now, the next ship compares)"; fi

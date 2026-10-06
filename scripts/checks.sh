@@ -2495,7 +2495,7 @@ DIARY_HOME="$w/nt/spr" make --no-print-directory -C "$root" ship SHIP_VERIFY_TIC
 cp "$ckr" sps_ck.txt
 DIARY_HOME="$w/nt/spd" make --no-print-directory -C "$root" ship SHIP_VERIFY=1 > spv.txt 2>&1 < /dev/null; rcv=$?
 [ "$rcs" = 0 ] && sed -n 3p sps_ck.txt | grep -q '^VERDICT: PASS$' && grep -q '^verify: skipped ([0-9]* ticks > 10); night end check: ' sps_ck.txt && grep -qF '== make verify (skipped, ' sps_ck.txt \
-  && grep -q '^since [0-9-]* [0-9:]* (ship): +0 sessions, spread +0, shared +0%, top same$' sps_ck.txt && grep -q '^the stamp of the last ship:$' sps_ck.txt \
+  && grep -q '^since [0-9-]* [0-9:]*: +0 sessions, spread +0, all 4 +0, overlap +0 pts, top same$' sps_ck.txt && grep -q '^the stamp of the last ship:$' sps_ck.txt \
   && [ "$rcv" != 0 ] && grep -q '^VERDICT: FAIL:.* verify failed;' "$w/nt/spd/checkin.txt" && grep -q '^night: none (reports only)' "$w/nt/spd/checkin.txt" \
   && grep -q '^SHIP_SESSIONS ?= 0$' "$root/Makefile" && grep -q 'REPORTS ONLY' "$root/Makefile" && grep -q 'make ship.*(by day) runs NO night' "$root/README.md" \
   && ok "make ship SHIP_VERIFY_TICKS=10: verify skipped (the end check of the last night quoted), still PASS, and the deltas since the last ship (+0 sessions, the same top topic); make ship SHIP_VERIFY=1 on a save that DRIFTs: exit $rcv, VERDICT: FAIL verify failed; Makefile and README say reports only" || bad "make ship verify skip / fail ($rcs $rcv)"
