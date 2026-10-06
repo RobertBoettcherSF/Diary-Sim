@@ -1,5 +1,5 @@
 #!/bin/sh
-# Version: 0.008
+# Version: 0.009
 # make ship (by day) and make night-ship (overnight): Robert's ONE command; both write ONE file, checkin.txt in the save folder
 # (../diary-data next to the source folder, or --home / $DIARY_HOME: bin/diary_sim --folder says where), with the same VERDICT header
 # on top, and print a short summary and the path of that file.  Exit status 0 = PASS, 1 = FAIL.
@@ -401,6 +401,67 @@ if [ -n "$9" ]; then voc_sh=$1; voc_s4=$2; voc_ov=$(awk -v x="$3" 'BEGIN { print
   voc_line3="  most often missing: $(nm "$miss_e") ($miss_n words); used: not tracked yet"
   voc_full="vocabulary goal: shared ($v_th of $v_ne) $voc_sh / $goal ($voc_pct%), $voc_d since the last ship = plain words (no chess move, no number) known by at least $v_th wesen; all $v_ne: $voc_s4 ($voc_d4); overlap $voc_ov% (all $v_ne / every distinct plain word, $voc_od points); known per wesen ($names): $voc_per; missing among the words known by all but one ($names): $voc_miss; used: not tracked yet (the files keep no per-word record of who said or wrote a word)"
 else voc_sh=0; voc_s4=0; voc_ov=0; voc_per=-; voc_miss=-; voc_line="shared: no word lists of every wesen yet (goal $goal)"; voc_line2=""; voc_line3=""; voc_full=$voc_line; fi
+# 0.061 word carrying (carry=1 sessions): from the diaries of the window the carried lessons per teacher -> learner pair and the
+# distinct words, the favours returned, per wesen the lowest energy; the open favours from the whole diaries (carried - returned);
+# missing-by-one per wesen now (the vocabulary count above) against the last stamp; mood and energy per wesen at the start and the
+# end of the window from trend.txt (the session before the window, the last one): Pareto = nobody ended lower on mood or energy.
+: > "$tmp/carry.txt"
+n_carry=$(awk -v lo="${first:-0}" -v hi="${last:-0}" '/^S[0-9]/ && / carry=1/ { n = substr($1, 2) + 0; if (n >= lo && n <= hi) c++ } END { print c + 0 }' "$folder/diaries/sessions.txt" 2>/dev/null)
+if [ "${n_carry:-0}" -gt 0 ]; then
+  for e in $ids; do
+    j="$folder/diaries/$e.jsonl"; [ -f "$j" ] || continue
+    tail -n $((hit - lot + 5)) "$j" | awk -v lo="$lot" -v e="$e" '
+      { t = $0; sub(/.*"tick":/, "", t); t = t + 0; if (t <= lo) next
+        en = $0; if (sub(/.*"energy":/, "", en)) { en = en + 0; if (!seen++ || en < mn) mn = en }
+        x = $0; while (match(x, /carried the word \047[^\047]*\047 to [a-z]+/)) { m = substr(x, RSTART, RLENGTH); x = substr(x, RSTART + RLENGTH)
+          w = m; sub(/^carried the word \047/, "", w); sub(/\047.*/, "", w); l = m; sub(/.* to /, "", l); p[l]++; wd[w] = 1 }
+        x = $0; while (match(x, /returned a favour/)) { x = substr(x, RSTART + RLENGTH); rf++ } }
+      END { for (l in p) print "P", e, l, p[l]; for (w in wd) print "W", w; print "R", e, rf + 0; if (seen) print "E", e, mn }' >> "$tmp/carry.txt"
+  done
+  c_all=$(cat "$folder"/diaries/*.jsonl 2>/dev/null | grep -o "carried the word '[^']*' to [a-z]*" | wc -l | tr -d ' ')
+  c_ret=$(cat "$folder"/diaries/*.jsonl 2>/dev/null | grep -o 'returned a favour' | wc -l | tr -d ' ')
+  # mood and energy per wesen at the start of the window (the trend line of the session before it, else its first) and the end
+  t_a=$(awk -v f="${first:-0}" '/^T / { s = $2; sub(/session=/, "", s); s = s + 0; if (s == f - 1 || (s == f && !b)) b = $0 } END { print b }' "$tr" 2>/dev/null)
+  t_b=$(grep '^T ' "$tr" 2>/dev/null | tail -n 1)
+  me() { echo "$1" | sed -n "s/.* $2=\([-0-9,]*\) .*/\1/p"; }
+  set -- "$(me "$t_a" mood)" "$(me "$t_b" mood)" "$(me "$t_a" energy)" "$(me "$t_b" energy)"
+  carry_out=$(awk -v ids="$ids" -v names="$names" -v ma="$1" -v mb="$2" -v ea="$3" -v eb="$4" -v miss="$voc_miss" -v pmiss="$(sv vocab_missing)" \
+    -v c_all="$c_all" -v c_ret="$c_ret" -v win="$win" '
+    { if ($1 == "P") { pr[$2 " " $3] += $4; acts += $4; by[$2] += $4 } else if ($1 == "W") nw++; else if ($1 == "R") ret += $3; else if ($1 == "E") mn[$2] = $3 }
+    END { ne = split(ids, id, " "); split(names, nm, " "); for (i = 1; i <= ne; i++) nmo[id[i]] = nm[i]
+      split(ma, a1, ","); split(mb, b1, ","); split(ea, a2, ","); split(eb, b2, ","); split(miss, m1, ","); split(pmiss, m0, ",")
+      np = 0; for (k in pr) { np++; pk[np] = k }   # the pairs, most lessons first (then by name)
+      for (i = 1; i <= np; i++) for (j = i + 1; j <= np; j++) if (pr[pk[j]] > pr[pk[i]] || (pr[pk[j]] == pr[pk[i]] && pk[j] < pk[i])) { t = pk[i]; pk[i] = pk[j]; pk[j] = t }
+      pairs = ""; for (i = 1; i <= np; i++) { split(pk[i], q, " "); pairs = pairs (i > 1 ? ", " : "") nmo[q[1]] ">" nmo[q[2]] " " pr[pk[i]] }
+      top = ""; for (i = 1; i <= ne; i++) if (by[id[i]] > by[top] + 0) top = id[i]
+      ms = ""; mf = ""; en = ""; worse = ""; wm = ""
+      for (i = 1; i <= ne; i++) { e = id[i]; n = nmo[e]
+        d = (i in m0 && m0[i] != "" && m0[i] != "-") ? m1[i] - m0[i] : "?"; ds = (d == "?") ? "?" : sprintf("%+d", d)
+        mf = mf (i > 1 ? ", " : "") n " " (i in m0 ? m0[i] : "?") "->" m1[i] " (" ds ")"
+        if (d != "?" && (best == "" || m0[i] + 0 > bm)) { best = n; bd = d; bm = m0[i] + 0 }   # the wesen that missed the most
+        en = en (i > 1 ? ", " : "") n " " (e in mn ? mn[e] : "-")
+        if (a1[i] != "" && b1[i] != "") { dm = b1[i] - a1[i]; dn = b2[i] - a2[i]; md[e] = dm
+          mo = mo (i > 1 ? ", " : "") n " " a1[i] "->" b1[i] " (" sprintf("%+d", dm) ")"
+          if (dm < 0) worse = worse (worse != "" ? ", " : "") n " mood " dm
+          if (dn < 0) worse = worse (worse != "" ? ", " : "") n " energy " dn
+          if (dm < 0 || dn < 0) wm = wm (wm != "" ? "," : "") n } }
+      par = (a1[1] == "" ? "?" : (worse == "" ? "yes" : "no (" worse ")")); pars = (a1[1] == "" ? "?" : (wm == "" ? "yes" : "no (" wm ")"))
+      tm = (top != "" && (top in md)) ? sprintf(" %s mood %+d;", nmo[top], md[top]) : ""
+      tg = (best != "") ? sprintf(" %s miss %+d;", best, bd) : ""
+      nwr = split(wm, wq, ","); parc = (a1[1] == "" ? "?" : (wm == "" ? "yes" : "no"))
+      for (k = (np < 2 ? np : 2); k >= 0; k--) {   # the terminal line: as many top pairs as fit in 79 columns (Pareto names first shortened)
+        p2 = ""; for (i = 1; i <= k; i++) { split(pk[i], q, " "); p2 = p2 ", " nmo[q[1]] ">" nmo[q[2]] " " pr[pk[i]] }
+        for (z = 1; z <= 2; z++) { short = acts + 0 " acts" p2 ";" tg " fav " (c_all - c_ret) ";" tm " Pareto " (z == 1 ? pars : parc)
+          if (length(short) <= 72) break }
+        if (length(short) <= 72) break }
+      full = "carry (" win "): " acts + 0 " lessons carried, " nw + 0 " distinct words; pairs (teacher>learner): " (np ? pairs : "none") \
+        "; missing-by-one since the last ship: " mf "; favours open " (c_all - c_ret) " (carried " c_all ", returned " c_ret " in all; " ret + 0 " returned in the window)" \
+        "; mood: " mo "; min energy: " en "; Pareto: " par
+      print short; print full }' "$tmp/carry.txt")
+  carry_line="carry: $(echo "$carry_out" | sed -n 1p)"; carry_full=$(echo "$carry_out" | sed -n 2p)
+else
+  carry_line="carry: no carry=1 session in the window (build 0.061 starts them)"; carry_full=$carry_line
+fi
 # petition topics of the window
 awk -v lo="${first:-0}" -v hi="${last:-0}" '/^P[0-9]/ { s = $0; sub(/.* s=/, "", s); s = s + 0; if (s < lo || s > hi) next
   t = $0; sub(/.* topic=/, "", t); sub(/ .*/, "", t); n[t]++ } END { for (t in n) print n[t], t }' "$folder/diaries/petitions.txt" 2>/dev/null | sort -k1,1nr -k2 > "$tmp/topics.txt"
@@ -509,6 +570,7 @@ total=$(( $(date +%s) - t0 ))
   echo "$ck_line" | cut -c1-79
   echo "reports window: $wtxt" | cut -c1-79
   echo "roles${win:+ ($win)}: $roles_txt" | cut -c1-79
+  echo "$carry_line" | cut -c1-79
   echo "$shared_line" | cut -c1-79
   if [ "$np" -gt 0 ]; then echo "petition topics${win:+ ($win)}: $topics (of $np)" | cut -c1-79; else echo "petition topics${win:+ ($win)}: none"; fi
   echo "$mood_line" | cut -c1-79
@@ -536,6 +598,7 @@ else w1="no night: run_log.txt entries of the last night"; w2="no night: the ses
   echo "window: sessions ${win:-none}, diaries of ticks $((lot + 1)) to $hit (at most the last 30000)"
   echo "roles, per wesen: id name ticks rest% work%"; cat "$tmp/roles.txt"
   echo "roles, per wesen: id name words-taught petitions-filed"; cat "$tmp/teach.txt"
+  echo "$carry_full"
   echo "$shared_line"
   echo "$voc_full"
   echo "petition topics: ${topics_all:-none} (of $np)"
@@ -584,7 +647,8 @@ else w1="no night: run_log.txt entries of the last night"; w2="no night: the ses
 
 say "-------------------------------------------------------------------------------"
 # the terminal: the verdict without its detail lines (they are in checkin.txt): the vocabulary details and the reports window,
-# and 'last full verify' unless it is due (0.059: the summary stays at 20 lines)
-while IFS= read -r l; do case $l in "  "*|"reports window:"*|"last full verify: "*today|"last full verify: "*ago|"last verify: "*today|"last verify: "*ago|"growth"*) printf '%s\n' "$l" >> "$log" 2>/dev/null ;; *) say "$l" ;; esac; done < "$tmp/verdict.txt"
+# and 'last full verify' unless it is due (0.059: the summary stays at 20 lines; 0.061: the carry line in, symstrict / chess strings /
+# shared words out: they are in checkin.txt, and a chess string after symstrict=1 is in the VERDICT anyway)
+while IFS= read -r l; do case $l in "  "*|"reports window:"*|"last full verify: "*today|"last full verify: "*ago|"last verify: "*today|"last verify: "*ago|"growth"*|"newest sessions symstrict=1:"*|"chess/number strings learned:"*|"shared words:"*) printf '%s\n' "$l" >> "$log" 2>/dev/null ;; *) say "$l" ;; esac; done < "$tmp/verdict.txt"
 say "attach this ONE file: $out"
 case $verdict in PASS*) exit 0 ;; *) exit 1 ;; esac
