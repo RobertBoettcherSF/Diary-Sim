@@ -1739,9 +1739,12 @@ PY
   python3 "$w/nt/ptyq.py" q_first "$nb" "$w/nt/qf" --session-ticks 3000 --max-sessions 5 > qf.txt 2>&1
   el=$(sed -n 's/^ELAPSED=//p' qf.txt); ex=$(sed -n 's/^EXIT=//p' qf.txt)
   env -u DIARY_VERBOSE "$nb" --verify-full --home "$w/nt/qf" > qf2.txt 2>&1; rcv=$?
-  [ "$ex" = 0 ] && awk -v e="$el" 'BEGIN { exit !(e < 15) }' && grep -q 'q pressed: stopping\.\.\.' qf.txt && grep -q '^| stopped: you pressed q' qf.txt && grep -q 'reason=q sessions=1 ' "$w/nt/qf/run_log.txt" \
-    && [ "$rcv" = 0 ] && grep -q '^verify: OK, 9000 ticks' qf2.txt && [ "$(grep -c '^T ' "$w/nt/qf/trend.txt")" = 2 ] \
-    && ok "q during the first new ticks: the session finishes (3000 ticks, $el s), diaries/trend/run_log written (reason=q), exit 0, make verify: OK on 9000 ticks" || bad "q in the first session (exit $ex, $el s, verify $rcv)"
+  # 0.060: a 3000-tick session takes well under a second now, so the first header with "session N, tick T of" (the trigger) may come in
+  # a later session than the first: K = the sessions of the run; q stops it before the limit of 5, the session of the q finishes
+  qk=$(sed -n 's/.*reason=q sessions=\([0-9]*\) .*/\1/p' "$w/nt/qf/run_log.txt" | tail -n 1); qk=${qk:-0}
+  [ "$ex" = 0 ] && awk -v e="$el" 'BEGIN { exit !(e < 15) }' && grep -q 'q pressed: stopping\.\.\.' qf.txt && grep -q '^| stopped: you pressed q' qf.txt && [ "$qk" -ge 1 ] && [ "$qk" -le 4 ] \
+    && [ "$rcv" = 0 ] && grep -q "^verify: OK, $((6000 + 3000 * qk)) ticks" qf2.txt && [ "$(grep -c '^T ' "$w/nt/qf/trend.txt")" = $((qk + 1)) ] \
+    && ok "q during the new ticks: the session in progress finishes (3000 ticks each, $qk of 5 sessions, $el s after the key), diaries/trend/run_log written (reason=q), exit 0, make verify-full: OK on $((6000 + 3000 * qk)) ticks" || bad "q in the first session (exit $ex, $el s, verify $rcv, sessions $qk)"
   # 3. q between two sessions of an advanced night run; the header: wesen AND players, mood and energy, 80 columns
   rm -rf "$w/nt/qb"; cp -r "$big" "$w/nt/qb"
   python3 "$w/nt/ptyq.py" q_between "$nb" "$w/nt/qb" --session-ticks 100 --max-sessions 50 > qb.txt 2>&1
