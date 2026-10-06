@@ -2476,7 +2476,7 @@ DIARY_HOME="$w/nt/spn" make --no-print-directory -C "$root" slice SLICE_MINUTES=
 [ "$rcs" = 0 ] && sed -n 1p "$ckn" | grep -q '^diary-sim checkin (make slice): attach this ONE file' && sed -n 3p "$ckn" | grep -q '^VERDICT: PASS$' \
   && grep -q '^stop reason: max_hours (the time limit was reached)$' "$ckn" && grep -q '^night: sessions of 30 ticks; max sessions: no limit; one budget of 0.15 min$' "$ckn" \
   && grep -q '^budget: 0.15 min; stop [0-9:]*, reserve 0m00s; due [0-9:]*, written [0-9:]* ' "$ckn" && [ "$(keys "$ckn")" = "$(keys "$ck")" ] \
-  && grep -q '^checkpoint: state.ckpt of tick [0-9]*, [0-9]* MB: the start loads it if it fits the files$' sps.txt \
+  && grep -q '^checkpoint: state.ckpt of tick [0-9][0-9]*, [0-9]* MB: the start loads it if it fits the files$' sps.txt \
   && grep -q '^checkpoint: start loaded t[0-9]* in [0-9.]* s; end t[0-9]* [0-9.]* MB [0-9.]* s$' "$ckn" && grep -q '^checkpoint: start ' sps.txt \
   && grep -q '^slice_post_secs=[0-9]*$' "$w/nt/spn/ship_stamp.txt" && grep -q '^post_secs=[0-9]*$' "$w/nt/spn/ship_stamp.txt" && grep -q '^make slice wall time: ' sps.txt \
   && grep -q '^slice: all' "$root/Makefile" && grep -q '^# make slice ' "$root/Makefile" && grep -q 'make slice SLICE_MINUTES=10' "$root/README.md" \
@@ -2646,11 +2646,11 @@ grep -q '^start: checkpoint of tick 300 loaded' d1.txt && ! grep -q '^data chang
   && grep -q '^replay: checkpoint data (a start value changed: active.slow_coin_pct 50 -> 100) - 300 ticks replayed$' d4.txt && [ -s kd4.txt ] && cmp -s kd4.txt kd4r.txt \
   && ok "data/: a changed messages.txt / help.txt (not hashed) or a comment in limits.txt: loaded, no word; a changed number read later (night.recent): loaded with 'data changed since the checkpoint (make verify-full replays everything): limits.txt'; a changed number the start read (active.slow_coin_pct): 'replay: checkpoint data (a start value changed: ...)', the files of a full replay" || bad "data changes"
 # (d) make verify refreshes the checkpoint and writes its VERIFY entry; the next start loads that checkpoint, the same files as a full replay
-cp -r "$c6/l" "$c6/v"; rm -f "$c6/v/state.ckpt"; r6 n "$c6/v" --verify > v1.txt 2>&1; rcv1=$?
+cp -r "$c6/l" "$c6/v"; rm -f "$c6/v/state.ckpt"; r6 n "$c6/v" --verify-full > v1.txt 2>&1; rcv1=$?
 cp -r "$c6/v" "$c6/vb"; rm -f "$c6/vb/state.ckpt"
 r6 n "$c6/v" --more 90 --every 5000 > v2.txt 2>&1; r6 n "$c6/vb" --more 90 --every 5000 > vb2.txt 2>&1
-k6 "$c6/v" > kv.txt; k6 "$c6/vb" > kvb.txt; r6 n "$c6/v" --verify > v3.txt 2>&1; rcv3=$?
-cp -r "$c6/v" "$c6/vd"; sed -i '5s/"text":"[a-z]/"text":"X/' "$c6/vd/diaries/ada.jsonl"; cp "$c6/vd/state.ckpt" vd0.ckpt; r6 n "$c6/vd" --verify > vd.txt 2>&1; rcvd=$?
+k6 "$c6/v" > kv.txt; k6 "$c6/vb" > kvb.txt; r6 n "$c6/v" --verify-full > v3.txt 2>&1; rcv3=$?
+cp -r "$c6/v" "$c6/vd"; sed -i '5s/"text":"[a-z]/"text":"X/' "$c6/vd/diaries/ada.jsonl"; cp "$c6/vd/state.ckpt" vd0.ckpt; r6 n "$c6/vd" --verify-full > vd.txt 2>&1; rcvd=$?
 [ $rcv1 = 0 ] && grep -q '^verify: checkpoint not compared (missing)$' v1.txt && grep -q '^verify: fresh checkpoint of tick 300 written ([0-9]* KB, [0-9.]* s)$' v1.txt \
   && grep -q '^full verify: OK, 300 ticks, [0-9]* sessions, [0-9.]* s$' "$c6/v/run_log.txt" && grep -q '^start: checkpoint of tick 300 loaded' v2.txt && cmp -s kv.txt kvb.txt \
   && [ $rcv3 = 0 ] && grep -q '^verify: checkpoint of tick 390 = the replayed state, byte for byte$' v3.txt && [ "$(grep -c '^full verify: OK' "$c6/v/run_log.txt")" = 2 ] \
@@ -2676,6 +2676,82 @@ grep -q 'state layout changed' "$root/docs/CHECKPOINT.md" && grep -q 'data chang
   && ok "docs/CHECKPOINT.md (what invalidates, data/ reasoning, the guard, weekly verify), README, --help and ship.sh describe build 0.059" || bad "0.059 docs"
 cd "$w" || exit 1
 
+echo "== 64. build 0.060: a 0.059 checkpoint loads; indices = the old scans; incremental make verify / verify-full and their due rules; the reserve, the budget estimate, the growth line, the run label; no Broken pipe =="
+c7="$w/c64"; rm -rf "$c7"; mkdir -p "$c7"; cd "$c7" || exit 1
+r7() { ( cd "$root" && env -u DIARY_VERBOSE "$bin" --home "$@" ); }
+# the record files and the state of a save: diaries without "ts" (the clock), the checkpoint payload line and tick
+k7() { ( cd "$1" || exit 1; for f in $(find diaries entities -type f | LC_ALL=C sort); do printf '%s %s\n' "$(sed 's/"ts":"[^"]*"//' "$f" | cksum | tr -s ' ' | cut -d' ' -f1-2)" "$f"; done
+  LC_ALL=C sed -n '/^payload /{p;q;}' state.ckpt; LC_ALL=C sed -n '/^tick /{p;q;}' state.ckpt ); }
+# (a) tests/ckpt059.tar.gz: a save of 600 ticks with the format 2 state.ckpt that build 0.059 wrote; tests/ckpt059.expect: the files
+# and the checkpoint payload after 0.059 itself ran 2 more sessions of 300 ticks from it.  0.060 must load it and give the same.
+mkdir -p "$c7/a" "$c7/r"; tar -C "$c7/a" -xzf "$root/tests/ckpt059.tar.gz"; tar -C "$c7/r" -xzf "$root/tests/ckpt059.tar.gz"
+grep -aq '^build 0.059$' "$c7/a/save/state.ckpt" && head -1 "$c7/a/save/state.ckpt" | grep -q '^diary-sim-ckpt 2$'; f59=$?
+DIARY_CHECK_INDEX=1 r7 "$c7/a/save" --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 < /dev/null > a.txt 2>&1; rca=$?
+rm -f "$c7/r/save/state.ckpt"; DIARY_CHECK_INDEX=1 r7 "$c7/r/save" --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 < /dev/null > r.txt 2>&1; rcr=$?
+k7 "$c7/a/save" > ka.txt; k7 "$c7/r/save" > kr.txt
+[ $f59 = 0 ] && [ $rca = 0 ] && [ $rcr = 0 ] && grep -q '^start: checkpoint of tick 600 loaded in [0-9.]* s (+0 ticks replayed)$' a.txt && grep -q '^replay: checkpoint missing - 600 ticks replayed$' r.txt \
+  && cmp -s ka.txt "$root/tests/ckpt059.expect" && cmp -s kr.txt "$root/tests/ckpt059.expect" && ! grep -q 'index check' a.txt r.txt \
+  && ok "a 0.059 state.ckpt (format 2, tests/ckpt059.tar.gz) loads in 0.060 (+0 ticks replayed); 2 more sessions give byte for byte the record files and the checkpoint payload that 0.059 gave from it (tests/ckpt059.expect, times aside), and so does a full replay of the 0.059 sessions; every index lookup cross-checked against the old scan (DIARY_CHECK_INDEX=1)" \
+  || bad "0.059 checkpoint in 0.060 ($f59 $rca $rcr): $(diff ka.txt "$root/tests/ckpt059.expect" | head -3)"
+# (b) incremental verify: verify-full writes state.verified.ckpt and the full= stamp (fingerprint, format); then one session; make verify
+# replays only the new ticks; a changed OLD diary line: verify-full is DRIFT
+v="$c7/a/save"; sp=$("$root/scripts/sim_print.sh")
+r7 "$v" --verify-full --sim-print "$sp" > vf.txt 2>&1; rcf=$?
+r7 "$v" --continuous --session-ticks 300 --max-sessions 1 --end-check-ticks 0 < /dev/null > v1.txt 2>&1
+t0v=$(date +%s); r7 "$v" --verify --sim-print "$sp" > vi.txt 2>&1; rci=$?; dvi=$(( $(date +%s) - t0v )); st_i=$(grep '^incr=' "$v/verify_stamp.txt")
+r7 "$v" --verify --sim-print "$sp" > vi2.txt 2>&1; rci2=$?
+fmt7=$(sed -n 's/^ *Ckpt_Format : constant := \([0-9]*\);.*/\1/p' "$root/diary_sim.adb")
+cp -r "$v" "$c7/vd"; sed -i '5s/"text":"[a-z]/"text":"X/' "$c7/vd/diaries/ada.jsonl"; r7 "$c7/vd" --verify-full > vd.txt 2>&1; rcd=$?
+[ $rcf = 0 ] && grep -q '^verify: OK, 1200 ticks replayed from the files' vf.txt && [ -s "$v/state.verified.ckpt" ] && grep -q "^full=[0-9-]* [0-9:]* 1200 $sp $fmt7\$" "$v/verify_stamp.txt" \
+  && [ $rci = 0 ] && grep -q '^verify: OK (incremental), ticks 1201 to 1500 replayed from the verified checkpoint of tick 1200 ' vi.txt && grep -q '^verify: checkpoint of tick 1500 = the replayed state, byte for byte$' vi.txt \
+  && echo "$st_i" | grep -q '^incr=[0-9-]* [0-9:]* 1200 1500$' && grep -q '^incremental verify: OK, ticks 1201 to 1500, ' "$v/run_log.txt" && grep -q '^full verify: OK, 1200 ticks' "$v/run_log.txt" \
+  && [ $rci2 = 0 ] && grep -q 'verified checkpoint of tick 1500 ' vi2.txt && [ $rcd = 1 ] && ! grep -q 'fresh checkpoint' vd.txt \
+  && grep -q '^verify-full:' "$root/Makefile" && grep -q 'bin/diary_sim --verify --sim-print' "$root/Makefile" \
+  && ok "make verify-full: 1200 ticks, state.verified.ckpt and 'full=<date> 1200 <fingerprint> $fmt7' in verify_stamp.txt; after one session make verify replays only ticks 1201-1500 from the verified checkpoint (${dvi}s), compares the checkpoint byte for byte, 'incr=' stamp and an 'incremental verify' run_log entry; the next starts at 1500; a changed old diary line: verify-full DRIFT (exit 1)" \
+  || bad "incremental verify ($rcf $rci $rci2 $rcd)"
+# (c) the simulation fingerprint: comments, spacing, the Build constant, the menu or a script do not change it; a code line of the
+# simulation or a rule number of data/ does
+fp() { mkdir -p "$c7/fp"; rm -rf "$c7/fp"/*; cp "$root"/*.ad? "$c7/fp/"; mkdir -p "$c7/fp/data" "$c7/fp/scripts"; cp "$root"/data/*.txt "$c7/fp/data/"; cp "$root/scripts/sim_print.sh" "$c7/fp/scripts/"; }
+fp; p0=$("$c7/fp/scripts/sim_print.sh"); sed -i '2s/$/   --  a comment/' "$c7/fp/sim_world.adb"; sed -i 's/^\( *Build : constant String := "\)[0-9.]*"/\19.999"/' "$c7/fp/diary_sim.adb"
+echo '-- x' >> "$c7/fp/sim_menu.adb"; sed -i 's/^\(night.box.title = \)/\1 /' "$c7/fp/data/messages.txt"; p1=$("$c7/fp/scripts/sim_print.sh")
+fp; sed -i '0,/^   end Reindex;/s//   end Reindex;\n   X_Fp_Test : Integer := 0;/' "$c7/fp/sim_world.adb"; p2=$("$c7/fp/scripts/sim_print.sh")
+fp; sed -i '0,/^\([a-z_.]* = \)\([0-9][0-9]*\)/s//\1\21/' "$c7/fp/data/limits.txt"; p3=$("$c7/fp/scripts/sim_print.sh")
+[ "$p0" = "$sp" ] && echo "$p0" | grep -Eq '^[0-9a-f]{16}$' && [ "$p1" = "$p0" ] && [ "$p2" != "$p0" ] && [ "$p3" != "$p0" ] && [ "$(make --no-print-directory -s -C "$root" sim-print)" = "$p0" ] \
+  && ok "scripts/sim_print.sh (make sim-print) = $p0: the same after a comment, another Build constant, a menu change and a messages.txt change; another after a code line of sim_world.adb or a rule number of data/limits.txt" \
+  || bad "simulation fingerprint ($p0 $p1 $p2 $p3)"
+# (d) checkin.txt (make ship, reports only): the due rules of make verify-full and make verify; the growth line
+s7="$c7/a/save"
+DIARY_HOME="$s7" make --no-print-directory -C "$root" ship SHIP_VERIFY=0 > sh1.txt 2>&1 < /dev/null; rc1=$?; cp "$s7/checkin.txt" sh1_ck.txt
+old=$(date -d '-35 days' '+%Y-%m-%d %H:%M' 2>/dev/null); oldi=$(date -d '-8 days' '+%Y-%m-%d %H:%M' 2>/dev/null)
+printf '# test\nfull=%s 1200 0123456789abcdef 1\nincr=%s 1200 1500\n' "$old" "$oldi" > "$s7/verify_stamp.txt"
+DIARY_HOME="$s7" make --no-print-directory -C "$root" ship SHIP_VERIFY=0 > sh2.txt 2>&1 < /dev/null; rc2=$?; cp "$s7/checkin.txt" sh2_ck.txt
+sed -n '/^-\{79\}$/,$p' sh2.txt > sh2_sum.txt
+[ $rc1 = 0 ] && grep -q '^last full verify: [0-9-]* [0-9:]* (1200 ticks), today$' sh1_ck.txt && grep -q '^last verify: [0-9-]* [0-9:]* (up to tick 1500), today$' sh1_ck.txt \
+  && grep -q '^growth: first sizes now; largest: diaries [0-9.]* MB, ' sh1_ck.txt && ! grep -q '^last full verify' sh1.txt \
+  && [ $rc2 = 0 ] && grep -q '^last full verify: [0-9-]* (1200 ticks), 35 days ago; verify-full due$' sh2_ck.txt \
+  && grep -q "^  verify-full due: monthly (30 days); the simulation changed since (fingerprint 0123456789abcdef, now $sp); state format 1, now $fmt7\$" sh2_ck.txt \
+  && grep -q '^last verify: [0-9-]* (ticks 1201-1500), 8 days ago; verify due (weekly)$' sh2_ck.txt && grep -q '^growth since [0-9-]* [0-9:]*: ' sh2_ck.txt \
+  && grep -q 'verify-full due$' sh2_sum.txt && grep -q 'verify due (weekly)$' sh2_sum.txt && ! grep -q '^growth' sh2_sum.txt && [ "$(wc -l < sh2_sum.txt)" -le 22 ] \
+  && ok "checkin.txt: 'last full verify: <date> (1200 ticks), today' and 'last verify: ...' from verify_stamp.txt; with a stamp 35 days old, of another fingerprint and state format: 'verify-full due' with the three reasons, an 8-day-old incremental: 'verify due (weekly)' (both on the terminal); 'growth:' the largest groups, then 'growth since <last ship>:'" \
+  || bad "verify due lines / growth ($rc1 $rc2)"
+# (e) make slice without a checkpoint on a too small budget: the replay estimate and 'the budget cannot hold' line (screen, run_log.txt,
+# checkin.txt), then the sessions; the reserve from the REPORTS phase only (9117 s last time: capped at a quarter of the budget); the
+# screen says 'slice run'; no 'Broken pipe' from ship.sh in any of the runs; no 'head -n 1' after a writer in ship.sh
+sed -i '/^slice_reports_secs=/d; /^reports_secs=/d; /^post_secs=/d' "$s7/ship_stamp.txt"; echo 'reports_secs=9117' >> "$s7/ship_stamp.txt"; echo 'slice_reports_secs=9117' >> "$s7/ship_stamp.txt"; echo 'post_secs=9117' >> "$s7/ship_stamp.txt"
+rm -f "$s7/state.ckpt"; echo "$(date '+%Y-%m-%d %H:%M:%S') replay done: 1500 ticks in 900.0 s (2 ticks/s)" >> "$s7/ckpt_log.txt"   # a slow measured replay
+DIARY_HOME="$s7" make --no-print-directory -C "$root" slice SLICE_MINUTES=0.4 NIGHT_SHIP_TICKS=60 SHIP_VERIFY=0 > sl.txt 2>&1 < /dev/null; rcs=$?; cp "$s7/checkin.txt" sl_ck.txt
+[ $rcs = 0 ] && grep -q '^budget 0.4 min: .* reserve 0m06s: reports took 9117s last time, x1.5 + 60s; capped at a quarter of the budget' sl.txt \
+  && grep -q '^replay estimate: 1500 ticks, about 15 min (the last full replay: 1500 ticks in 900.0 s)$' sl.txt && grep -q '^the budget cannot hold: replay first (~15 min), then sessions; checkin.txt late by ~1[45] min$' sl.txt \
+  && grep -q '^the budget cannot hold: ' "$s7/run_log.txt" && grep -q '^budget: the budget cannot hold: replay first' sl_ck.txt && grep -q '^budget: replay estimate: 1500 ticks' sl_ck.txt \
+  && grep -q '^slice run: sessions of 60 ticks' sl.txt && grep -q '^+-- slice run finished ' sl.txt && grep -q '^new sessions: [1-9]' sl_ck.txt \
+  && grep -q '^slice_reports_secs=[0-9]*$' "$s7/ship_stamp.txt" && grep -q '^ship_reports_secs=[0-9]*$' "$s7/ship_stamp.txt" \
+  && ! grep -q 'Broken pipe' sh1.txt sh2.txt sl.txt "$w"/nt/sp*.txt 2>/dev/null && ! grep -n '| *head -n *1' "$root/scripts/ship.sh" | grep -v '^[0-9]*:#' | grep -q . \
+  && ok "make slice without a checkpoint on a 0.4-minute budget: 'replay estimate' and 'the budget cannot hold: replay first (~N min), then sessions; checkin.txt late by ~M min' (screen, run_log.txt, checkin.txt budget: lines), then sessions; reserve 6 s = a quarter of the budget although the reports took 9117 s (post_secs ignored); 'slice run' on the screen and in the box; no 'Broken pipe' in any make ship / slice / night-ship output; ship.sh has no 'head -n 1' after a writer" \
+  || bad "budget / reserve / label / broken pipe ($rcs): $(grep -m 2 -e '^budget' -e 'Broken' sl.txt)"
+grep -q 'state.verified.ckpt' "$root/docs/CHECKPOINT.md" && grep -q 'verify-full due' "$root/docs/CHECKPOINT.md" && grep -q 'old windows' "$root/docs/CHECKPOINT.md" && grep -q 'Build 0.060' "$root/README.md" \
+  && grep -q -- '--verify-full' "$root/data/help.txt" && grep -q -- '--run-label' "$root/data/help.txt" && grep -q 'reports phase' "$root/scripts/ship.sh" \
+  && ok "docs/CHECKPOINT.md (incremental verify, the due rules, the old-window proposal), README (build 0.060), --help and ship.sh describe build 0.060" || bad "0.060 docs"
+cd "$w" || exit 1
 
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="

@@ -301,10 +301,11 @@ else lv_line="last full verify: none on record; make verify-full due"; lv_why=""
 li=""; [ -n "$lv" ] && li="$lv_d 1 ${lv##* }"
 if [ -n "$vi" ]; then set -- $vi; if [ -z "$li" ] || [ "$(printf '%s\n%s\n' "$1 $2" "${li% * *}" | sort | tail -n 1)" = "$1 $2" ]; then li="$1 $2 $3 $4"; fi; fi
 if [ -n "$li" ]; then
-  set -- $li; li_n=$(age "$1 $2"); li_a=$(ago "$li_n"); [ -n "$li_n" ] && [ "$li_n" -ge 7 ] && li_a="$li_a; make verify due (weekly)"
-  if [ "$3" = 1 ]; then li_r="ticks 1-$4, full"; elif [ "$3" = 0 ]; then li_r="ticks 1-$4, full"; else li_r="ticks $(( $3 + 1 ))-$4"; fi
-  li_line="last verify: $1 $2 ($li_r), $li_a"
-else li_line="last verify: none on record; make verify due (weekly)"; fi
+  set -- $li; li_n=$(age "$1 $2"); li_a=$(ago "$li_n"); li_d="$1 $2"   # due: the date without the time (79 columns)
+  [ -n "$li_n" ] && [ "$li_n" -ge 7 ] && { li_a="$li_a; verify due (weekly)"; li_d=$1; }
+  if [ "$3" -le 1 ]; then li_r="ticks 1-$4, full"; elif [ "$3" -ge "$4" ]; then li_r="up to tick $4"; else li_r="ticks $(( $3 + 1 ))-$4"; fi
+  li_line="last verify: $li_d ($li_r), $li_a"
+else li_line="last verify: none on record; verify due (weekly)"; fi
 # 0.060: the replay estimate and 'the budget cannot hold' line of the program (run_log.txt NIGHT entry of this run, or the console)
 bud_l=$( { cat "$tmp/runlog.txt"; [ -f "$con" ] && [ "$con" -nt "$tmp/stamp" ] && cat "$con"; } 2>/dev/null | sed -n 's/^.*\(the budget cannot hold: .*\)$/\1/p' | sed -n 1p)
 est_l=$( { cat "$tmp/runlog.txt"; [ -f "$con" ] && [ "$con" -nt "$tmp/stamp" ] && cat "$con"; } 2>/dev/null | sed -n 's/^.*\(replay estimate: .*\)$/\1/p' | sed -n 1p)
