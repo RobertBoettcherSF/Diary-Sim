@@ -1,5 +1,5 @@
 #!/bin/sh
-# Version: 0.003
+# Version: 0.004
 # make ship (by day) and make night-ship (overnight): Robert's ONE command; both write ONE file, checkin.txt in the save folder
 # (../diary-data next to the source folder, or --home / $DIARY_HOME: bin/diary_sim --folder says where), with the same VERDICT header
 # on top, and print a short summary and the path of that file.  Exit status 0 = PASS, 1 = FAIL.
@@ -207,6 +207,7 @@ else ver="FAILED (exit $vrc) $(grep -m 1 -i 'drift\|differs\|failed\|skipped' "$
 # the window: the sessions of this night, or (reports only) of the last night; the diaries of at most its last 30000 ticks
 nm() { v=$(sed -n "s/^$1 = \([A-Za-z]*\).*/\1/p" data/names.txt 2>/dev/null | head -n 1); echo "${v:-$1}"; }
 ids="ada gemini replika robert"
+names=$(for e in $ids; do printf '%s ' "$(nm $e)"; done); names=${names% }   # the wesen names for the lines (data/names.txt)
 win=""; [ "$nn" -gt 0 ] && win="s$first-s$last"
 fst=$(head -n 1 "$tmp/new.txt" | sed -n 's/.* start=\([0-9]*\) .*/\1/p'); lt=$(tail -n 1 "$tmp/new.txt")
 l_st=$(echo "$lt" | sed -n 's/.* start=\([0-9]*\) .*/\1/p'); l_ln=$(echo "$lt" | sed -n 's/.* len=\([0-9]*\) .*/\1/p'); hit=$(( ${l_st:-0} + ${l_ln:-0} ))
@@ -267,7 +268,7 @@ if [ -n "$9" ]; then voc_sh=$1; voc_s4=$2; voc_ov=$(awk -v x="$3" 'BEGIN { print
   voc_line="shared ($v_th of $v_ne): $voc_sh / $goal ($voc_pct%), $vtail"
   voc_line2="  all $v_ne: $voc_s4 ($voc_d4); overlap $voc_ov% ($voc_od); known per wesen: $voc_per"
   voc_line3="  most often missing: $(nm "$miss_e") ($miss_n words); used: not tracked yet"
-  voc_full="vocabulary goal: shared ($v_th of $v_ne) $voc_sh / $goal ($voc_pct%), $voc_d since the last ship = plain words (no chess move, no number) known by at least $v_th wesen; all $v_ne: $voc_s4 ($voc_d4); overlap $voc_ov% (all $v_ne / every distinct plain word, $voc_od points); known per wesen ($ids): $voc_per; missing among the words known by all but one ($ids): $voc_miss; used: not tracked yet (the files keep no per-word record of who said or wrote a word)"
+  voc_full="vocabulary goal: shared ($v_th of $v_ne) $voc_sh / $goal ($voc_pct%), $voc_d since the last ship = plain words (no chess move, no number) known by at least $v_th wesen; all $v_ne: $voc_s4 ($voc_d4); overlap $voc_ov% (all $v_ne / every distinct plain word, $voc_od points); known per wesen ($names): $voc_per; missing among the words known by all but one ($names): $voc_miss; used: not tracked yet (the files keep no per-word record of who said or wrote a word)"
 else voc_sh=0; voc_s4=0; voc_ov=0; voc_per=-; voc_miss=-; voc_line="shared: no word lists of every wesen yet (goal $goal)"; voc_line2=""; voc_line3=""; voc_full=$voc_line; fi
 # petition topics of the window
 awk -v lo="${first:-0}" -v hi="${last:-0}" '/^P[0-9]/ { s = $0; sub(/.* s=/, "", s); s = s + 0; if (s < lo || s > hi) next
