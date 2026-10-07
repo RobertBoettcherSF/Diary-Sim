@@ -105,6 +105,26 @@ diaries, entities and summary files are byte for byte the same.
   of the run, `warnings:n`, `export-failed`. It is information only; nothing in the simulation reads it (`data/limits.txt`).
   `@@SECTIONS` gives the line of each header in `run_report.txt`.
 
+## Build 0.064: the Albanian book (`alb=1`) and the mood causes
+
+* `alb=1` (`albanian.enabled = 1`, the default; 0 = off: new sessions as in 0.063 byte for byte). In their first `alb=1` session
+  the wesen find a book (`data/sq_book.txt`: 968 Tatoeba sentences, CC BY 2.0 FR; `diaries/albanian.txt` gets one `B` line
+  dated by session and tick). At every session start each wesen hears `albanian.hear_per_session` (20) sentences in book order, learns gender cues of
+  the nouns it can identify (`data/sq_noun_forms.txt`, Wiktionary via kaikki.org, CC BY-SA 4.0: a definite singular in -i/-u is
+  masculine, in -a feminine; an article `i`/`e` after a singular noun) into a table of noun endings x gender and a memory of
+  up to 200 nouns, then says 4 sentences of its own (`djalë i mirë`: the article from memory, else from the endings, ties `i`)
+  and one `jam i/e <adj>` with its own gender (`data/wesen_gender.txt`: Adam m, Eve f, Abel m, Ruth f; `-` unset, `none`;
+  stamped into the session line as `albg=mfmf`, u = unset, so editing the file never changes a replay). A held-back 20 % of
+  the book nouns is never heard (their sentences are passed over) and is tested in every wesen's first sentence. The rest of
+  the simulation is untouched: no die of it, no diary line, no word in the shared counts. `make ship` / `slice` score the
+  window at report time (`scripts/alb_report.sh`): an `albanian:` line in checkin.txt (two when 79 columns are too few; agreement vs the shuffle baseline,
+  held-back vs always-masculine, feminine held-back, first person) and `albanian_report.txt` in the save folder (per wesen,
+  the last 20 sentences, overwritten). Checkpoint format 4 (section `albanian`; formats 1-3 still load).
+* Mood causes (report only): every tick's mood change is split by cause (refused petitions, lessons, work, rest and the
+  resting-mood pull, talk, games, other); `moodcause.txt` in the save folder gets one line per new
+  session, and checkin.txt a block with one line per wesen (mood points per session by cause, refusals per session).
+* The data are built by the maintainer-only `scripts/make_albanian_data.py` (credits: `data/CREDITS-albanian.txt`).
+
 ## Build 0.063: resting moods with room to move (`moodrest=2`)
 
 `moodrest=1` pulled 5 % of the gap every tick: a swing halved in ~14 ticks and a wesen read 61-61 all session; a weaker

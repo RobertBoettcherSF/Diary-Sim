@@ -248,3 +248,33 @@ the integer rounding dead zone (a move only when |gap| >= 17..25).
   74..82, Abel 72..80, Ruth 65..75. Eve and Abel sit at the top of the band: the base model pushes them up (before moodrest
   they were pinned at 97-100), and the 3x pull above 80 plus the soft bound (a gain at 80 keeps 20 %) hold them there.
 
+
+## 18. The Albanian book (`alb=1`) and the mood causes (BUILT, build 0.064, new sessions only)
+Robert's next language step: the wesen learn a real language from a found book, and the test is whether they get the grammatical
+gender of Albanian nouns right, also for nouns they never heard. `albanian.enabled = 1` (the default) gives new sessions `alb=1
+albg=<genders>`; 0 = the 0.063 sessions byte for byte. Sim_Albanian (`sim_albanian.ads`, tunables `albanian.*`):
+* **Book.** The first `alb=1` session finds it (`diaries/albanian.txt` line `B`, dated by session and tick, with the held-back list;
+  no wall clock: the file must replay byte for byte); no god
+  hands it over. `data/sq_book.txt` = 968 Tatoeba sentences (ids kept) with real diacritics (`scripts/make_albanian_data.py`).
+* **Hearing.** At every session start each wesen hears `hear_per_session` (20) sentences in book order, each 1-2 ahead by a die
+  of its own (salts 24001..; no die of the rest of the simulation is touched). `held_pct` (20 %) of the book nouns, chosen by a
+  hash of the lemma, are held back: a sentence with any form of one is passed over.
+* **Learning** (bounded, in memory, checkpoint section `albanian`, format 4): only cues identified through
+  `data/sq_noun_forms.txt` (forms that can only be a noun; `ka`, `dua`, `më` are left out): a definite singular in -i/-u = m,
+  in -a = f, else an article `i`/`e` right after a singular noun. They count into a table per wesen of 96 ending classes (the 64
+  most common last two letters and 32 last letters of the lemmas) x gender, and into a memory of up to `memory_cap` (200) nouns.
+* **Saying.** `say_per_session` (4) sentences noun + article + adjective (`data/sq_adj.txt`, adjectives with one form for both
+  genders); the first uses a held-back noun. The article: memory, else the two-letter class, else the one-letter class (ties
+  and no evidence: `i`). Then `jam i/e <adj>` when the stamped gender is m or f: its own article once it heard `self_min` (3)
+  cues of its gender, `i` before. `data/wesen_gender.txt` (Adam m, Eve f, Abel m, Ruth f) is read when a session begins.
+* **Checking** only at report time (`scripts/alb_report.sh` from `make ship` / `slice`): the article against the gender in
+  `data/sq_nouns.txt`; the shuffle baseline is the expected agreement of the same articles shuffled over the same nouns
+  (share_i x share_m + share_e x share_f); held-back nouns against always-masculine on those nouns; feminine held-back alone;
+  the first-person sentences. Albanian never enters the shared invented-word totals.
+* **Mood causes** (report only, no die, not in the checkpoint): every tick's mood change is split as it happens: refusal (the
+  refused part of a governance answer), lesson (a carried lesson's own mood, learning a word, a debtor's help with work), work,
+  rest (a rest's own mood, the rest model and the resting-mood pull), talk, game (finished chess games), other (explore, wander,
+  bench, petitions, pushed things, grants, heard announcements, the work lever). The end of every NEW session appends one line
+  to `moodcause.txt` in the save folder (a replay never writes; `part=1` when the run began inside the session); the sums equal
+  the mood changes exactly (scenario 68). A per-session file was chosen over checkpoint fields so nothing of the replay changes.
+Checks: scenario 68.
