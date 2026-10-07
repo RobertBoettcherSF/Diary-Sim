@@ -1,0 +1,8 @@
+# diary-sim build 0.064: the gender of each wesen for its Albanian first-person sentences (alb=1 sessions): "Jam i lumtur" (m),
+# "Jam e lumtur" (f).  One line per wesen: name m|f|none|-   (- = unset, none = no gender: no first-person check for either).
+# A new alb=1 session stamps the values into its session line (g=...), so editing this file never changes the replay of a
+# session that already ran.  Set by Robert (0.064).
+adam m
+eve f
+abel m
+ruth f

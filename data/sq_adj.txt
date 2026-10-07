@@ -1,0 +1,12 @@
+# diary-sim build 0.064: Albanian adjectives the wesen use in their own sentences (alb=1): noun + article + adjective,
+# "djalë i mirë" (m), "vajzë e mirë" (f).  Only adjectives whose form is the same for both genders (the article carries it).
+mirë
+bukur
+keq
+vogël
+gjatë
+shkurtër
+lumtur
+fortë
+qetë
+shpejtë
