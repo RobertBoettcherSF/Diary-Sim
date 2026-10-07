@@ -1,0 +1,18 @@
+Credits of the Albanian data (build 0.064, alb=1 sessions; built by scripts/make_albanian_data.py, maintainer-only)
+
+data/sq_book.txt
+  Sentences from Tatoeba (https://tatoeba.org), English-Albanian pairs, licensed under CC BY 2.0 FR
+  (https://creativecommons.org/licenses/by/2.0/fr/).  Every line keeps the Tatoeba sentence id of the Albanian sentence
+  (first column), so each sentence can be traced to its contributors at https://tatoeba.org/sentences/show/<id>.
+  Changes: sentences written without the letters e-diaeresis / c-cedilla (stripped diacritics) and sentences with a known
+  stripped word (nje, eshte, jane, shum, per, qe, mire, ...) were left out; the text is otherwise unchanged.
+
+data/sq_nouns.txt, data/sq_noun_forms.txt
+  Derived from the English Wiktionary (https://en.wiktionary.org) through the machine-readable extract of kaikki.org
+  (https://kaikki.org/dictionary/Albanian/; Tatu Ylonen, "Wiktextract", LREC 2022).  Wiktionary text is licensed under
+  CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/) and the GNU Free Documentation License.
+  Changes: only nouns with a recorded gender, the lemma, gender, plural and definite forms; stress accents removed; trimmed.
+  SHARE-ALIKE: these two derived files are distributed under CC BY-SA 4.0 as well; if you change and share them, share
+  them under the same licence and keep this credit.  The rest of diary-sim is not affected by this licence.
+
+data/sq_adj.txt and data/wesen_gender.txt are written for diary-sim.

@@ -1,0 +1,970 @@
+# diary-sim build 0.064: the Albanian book (alb=1).  Tatoeba sentence id <TAB> Albanian <TAB> English.
+# Tatoeba (https://tatoeba.org), CC BY 2.0 FR; see data/CREDITS-albanian.txt.  Built by scripts/make_albanian_data.py.
+380263	Të dashuroj.	I love you.
+380264	Të dua.	I love you.
+380268	Shumë të falemnderit!	Thank you very much!
+3633419	Nuk dua të shkoj në shkollë.	I don't want to go to school.
+1978821	Kam nevojë për një kompjutër të ri.	I have to get a new computer.
+382148	"Faleminderit." "S'ka gjë."	"Thank you." "You're welcome."
+3476553	A keni parë ndonjëherë atë duke notuar?	Have you ever seen him swimming?
+1962757	Ti duhet të ndalosh pijen dhe cigaren.	You should give up drinking and smoking.
+3520625	A mund të ngasësh një makinë?	Can you drive a car?
+1962584	Të dëgjoj me vështirsi.	I can hardly hear you.
+1962588	Suksesi jot është rezultat i punës tënde të vështirë.	Your success is the result of your hard work.
+1728244	Shtëpia juaj ka nevojë për riparim.	Your house needs repairing.
+1962590	Ishte e vështirë për mua te gjeja apartamentin tënd.	It was very hard for me to find your flat.
+1978822	Ideja jote nuk mund te jetë krej e re. Unë kisha dëgjuar përrreth sajë nga një burim tjetër vitin e kaluar.	Your idea cannot be brand new. I heard about it from another source last year.
+1728251	Shpesh mendoj për vendin ku të kam takuar ty.	I often think about the place where I met you.
+1962581	Unë te dua me shumë seç më do ti mua.	I love you more than you love me.
+1723059	Nuk kam para, por kam ëndërra.	I have no money, but I have dreams.
+2365591	Nuk më bëri dyshues ajo çfarë tha ai, por mënyra se si e tha.	It was not what he said, but the way he said it that made me suspicious.
+399030	Mirëmëngjes, të gjithë.	Good morning, everybody.
+2156624	Çfarë bëni ju në kohën e lirë?	What do you do in your free time?
+1962762	Doktori këshilloi babanë tim të ndalte duhanin.	The doctor advised my father to give up smoking.
+2788640	Luani është mbreti i xhunglës.	The lion is the king of the jungle.
+778566	Ditën e mirë!	Have a nice day.
+2942682	Thuhet se ai ka qenë një burrë me pozicion të respektueshëm.	He is said to have been a man of respectable position.
+1456326	Nënë Tereza u lind në Jugosllavi në vitin 1910.	Mother Teresa was born in Yugoslavia in 1910.
+2365565	Z(oti). Brown është babai i saj.	Mr Brown is her father.
+2365567	Z. Brown është babai i saj.	Mr Brown is her father.
+1962576	Zakonisht macet urrejnë qentë.	Cats usually hate dogs.
+2941352	Në asnjë rast nuk duhet ta prekësh atë çelës.	On no account must you touch that switch.
+2941376	Pra, duhet të jesh një besimtar.	So you've got to be a believer.
+2365571	Nuk duhet të thuash gjëra të tilla në mes të njerëzve.	You ought not to say such things in public.
+2942681	Ata të dy po punojnë tek dyqani i kafshëve shtëpiake.	They are both working at the pet store.
+2942656	Vazhdo drejtë!	Keep straight on!
+2942680	Xhorxhi është kapiteni i ekipit tonë.	George is the captain of our team.
+2941353	Por miqtë e tij u bashkuan për ta ndihmuar.	But his friends got together to help him.
+2941374	Dua një kollar që i shkon këtij kostumi.	I want a tie to go with this suit.
+380280	Gjumë të ëmbël, Timi.	Sleep well, Timmy.
+2420299	Sot është e diel.	Today is Sunday.
+2941358	Jam shumë i kënaqur të njihem me ju.	I'm very happy to make your acquaintance.
+380273	Mirëmëngjes, Mike.	Good morning, Mike.
+2365580	Mirë, koha mbaroi. Le të mbarojmë mësimin tani.	Well, time is up. Let's finish the lesson now.
+1529053	Gëzuar Pashkët!	Happy Easter!
+2365561	A do të ta rregulloj këtë orën?	Do you want this watch mended?
+2148674	Jam nëntëmbëdhjetë vjeç.	I am 19 years old.
+2760530	"Ku është libri i tij?" "Ai është mbi tryezë."	"Where's his book?" "It's on the table."
+2942670	Për mendimin tim, biznesi po përmirësohet.	To my thinking, business is improving.
+2760525	Unë jam mësues.	I'm a teacher.
+2365562	Kam një biçikletë të vjetër.	I have an old bicycle.
+1962765	Nuk e pëlqej shumë atë , në fakt unë e urrej atë.	I don't like him much, in fact I hate him.
+1962767	Nuk e kam takuar atë si person , por unë di për të.	I haven't met him in person, but I know of him.
+2177271	Ne shkuam në stadium, ku shijuam lojën emocionuese.	We went to the stadium, where we enjoyed the exciting game.
+2365576	Ndërtesa e re më zuri pamjen e dritares.	The new building cut the view from my window.
+3518797	Bora zgjati katër ditë.	The snow lasted four days.
+2941363	Oqeani Paqësor është një nga pesë oqeanet.	The Pacific Ocean is one of the five oceans.
+2941372	Nuk llogaritet ajo që thua, por ajo që bën.	It's not what you say, but what you do that counts.
+1728273	Ikeda është mbiemri im, dhe Kazuko është emri.	Ikeda is my last name, and Kazuko is my first name.
+1996102	Ai do të bëhet një doktor i mirë.	He will make a good doctor.
+2365569	Ata e vazhduan eksperimentin ditë e natë.	They continued the experiment day and night.
+2941361	Ajo kishte shumë nevojë për paratë.	She badly needed the money.
+3519494	Ajo kishte nevojë për dikë që do të kuptojnë atë.	She needed someone who would understand her.
+2365590	Ajo iku në Amerikë.	She has gone to America.
+3100542	Ajo është e martuar me një të huaj.	She is married to a foreigner.
+2941369	Ajo u mundua shumë të hiqte dyshimet nga mendja.	She tried hard to clear her mind of doubts.
+2365575	Ajo u fsheh pas derës dhe mbajti frymën.	She hid behind the door and held her breath.
+2942678	Po të jetë i zënë, ndihmoje atë.	If he should be busy, help him.
+2942665	Nuk duhet të dalësh pas darkës.	You must not go out after dinner.
+3520620	Unë kisha një ide e mirë.	I had a good idea.
+3102197	Ti nuk mund të vras veten duke mbajtur frymën.	You cannot kill yourself by holding your breath.
+380581	Gëzuar ditëlindjen Muriel!	Happy birthday, Muiriel!
+1435103	Unë jam vegjetarian.	I am a vegetarian.
+3100451	Unë jam në shtëpi.	I'm at home.
+2424247	Si të quajnë?	What's your name?
+2424248	Si ju quajnë?	What's your name?
+3519145	A ti do të di sekretin tim? Ai është shumë i thjeshtë...	Do you want to know my secret? It's very simple...
+737324	Rroftë Bashkimi Sovjetik!	Long live the Soviet Union!
+1978816	Unë kam një llogari Facebook-u.	I have a Facebook account.
+778571	Mirëdita.	Good afternoon.
+1797624	Nuk ka zot tjetër përveç Allahut dhe se Muhammedi është i Dërguari i Allahut.	There is no god but God, and Muhammad is the messenger of God.
+3521458	Ne po mësojmë gjuhën kineze.	We're learning Chinese.
+2864470	Një gjuhë asnjëherë nuk është mjaft.	One language is never enough.
+719060	Ide jeshile pa ngjyrë flenë shpejt.	Colorless green ideas sleep furiously.
+2036732	Gëzuar Ditën e Nënës!	Happy Mother's Day!
+2365563	Do ta mbaroj në dy ose tre minuta.	In some rural areas, the Internet is important for agricultural information, as well as being particularly useful for the purposes of agricultural production technologies and pricing.
+3100444	Unë shoh se vajza është e bukur.	I see the girl is beautiful.
+2760526	Macja është nën tryezë.	The cat is under the table.
+2941359	U zgjodhën gjashtëdhjetë deputete.	Sixty delegates were elected.
+2365589	Mos u shqetëso. E kam qepur gojën.	Don't worry. My lips are sealed.
+2424246	Tungjatjeta. Unë quhem José Silva. Si të quajnë?	Hello. My name is José Silva. What's your name?
+3179990	Unë do të të ndihmoj.	I will help you.
+2941282	Jam i kënaqur që nuk jam grua.	I'm glad I'm not a woman.
+2941283	Je zgjuar shumë herët sot. A ke diçka?	You're waking up quite early today. Do you have something?
+2941338	Të shkokan ata syze.	Those glasses suit you.
+2941340	Duket se m'u ngul në grykë një kockë peshku.	It looks like a fish bone got stuck in my throat.
+2941343	Stilolapsi është gjuha e shpirtit.	The pen is the tongue of the soul.
+2941345	Askush nuk mund të shqetësojë një miqësi të vërtetë.	Nobody can disturb a true friendship.
+2941346	Nuk do të dorëzohem sepse kam diçka për të cilën ia vlen të luftoj.	I won't give up because I have something worth fighting for.
+2941348	Nuk mund të besoj se kjo po ndodh. Të lutem, më thuaj se është një gënjeshtër!	I can't believe that this is happening. Please tell me that it's a lie!
+3100756	Dua të ju them diçka.	I want to say something to you.
+1962566	Unë e urrej botën sepse bota më urren mua.	I hate the world because the world hates me.
+2365595	Tomi është i vëmendshëm.	Tom is a good listener.
+2365594	Tomi shkon në shkollë me biçikletë, si shumë nxënës të tjerë.	Like many other students, Tom rides a bicycle to school.
+2941379	Tomi sugjeroi që të bënim një mbrëmje lamtumirë për Merin.	Tom suggested that we have a farewell party for Mary.
+1119381	Gëzohem që u njohëm.	It was nice to meet you.
+1119378	Mirë se vini.	Welcome.
+1119425	Gjithashtu, më vjen mirë që u takuam.	Likewise, it was nice to meet you.
+2942677	Më duhet të vajtem në punë herët sot.	I must go to work early today.
+2760527	Një biskotë është nën tryezë.	A cookie is under the table.
+2365593	Qeni yt ka putra të stërmëdhaja.	Your dog has huge paws!
+1443644	Unë jam shumë i lumtur në Gjeorgji.	I am very happy in Georgia.
+2561183	Tom përbërë një sonet.	Tom composed a sonnet.
+2365586	Ku janë paratë e mia?	Where's my money?
+3100504	Kjo është gruaja ime.	That's my wife.
+3519609	A janë ato vathët e mia?	Are those my earrings?
+2941368	Dua që të më duash.	I want you to love me.
+2365583	I thashë Tomit vetëm të paguajë faturën.	I only asked Tom to pay his bill.
+2941357	Mendova se Tomi ishte i ndryshëm.	I thought Tom was different.
+1962839	Akoma besoj në dashuri.	I still believe in love.
+1962837	Nuk është e lehtë për të zgjidhur problemin.	It's not easy to solve the problem.
+1962608	Përformanca e kompjutërit tuaj ndoshta është shumë e dobët.	Computer performance may be very poor.
+1962612	Ju do te futeni në telashe nqs shpenzoni kohë me të.	You’ll get into trouble if you spend time with him.
+1962620	Unë mendova nqs nuk do të shkoj me të nuk do ta dij asnjëherë nqs ai është apo jo i rrezikshëm.	I thought if I don’t go with him I’ll never know if he's dangerous or not.
+1962629	Për herë të fundit ata i kam parë në Shqipëri.	I last saw them in Albania.
+1962632	Unë pa ty si një trup pa shpirtë.	Me without you is like a body with no soul.
+1962643	Ai erdhi herët në shtëpi në mënyrë që te shihte fëmijët përpara se ata të shkonin në krevat.	He came home early in order to see the children before they went to bed.
+1962649	Ti e ke parë shtëpinë e tyre të re, apo jo ? Si është ajo ?	You've seen their new house, haven't you? What's it like?
+1962653	Fatkeqësisht, asnjëherë se pata mundësinë ta takoja atë.	Unfortunately, I never got the chance to meet her.
+1962666	Bën mirë të respektosh rregullat këtu, zonjushë.	You'd do well to follow the rules around here, young lady.
+1962675	Të gjith ikën.	All gone.
+1962695	E kam bërë jetën tënde shumë më të lehtë.	I made your life a whole lot easier.
+1962708	Doja ta qartësoja këtë me ju.	I wanted to clear that up with you.
+1962717	Pa marrë parasyshë pasojat.	With no regard for the consequences.
+1962728	Vetëm po kërkoj të dijë çfarë bën ti për tu argëtuar?	I'm trying to figure out what you do for fun.
+1962737	Ishte një vejushë lufte.	She was a war widow.
+1962746	Një paraqitje e shkurtëer e përjetsisë.	A fleeting glimpse of eternity.
+1962754	Por kur gjithçka është thënë dhe bërë, ata kanë një gjë të përbashkët.	But when all is said and done, they have one thing in common.
+1978824	Gjëja më e vështirë të bësh është të shohësh atë që ti do, që do dikë tjetër.	The hardest thing to do is watch the one you love love somebody else.
+1978826	Miqt e mirë janë si yjet. Jo gjithmonë i sheh ata, por ti e di ata janë gjithmonë atje.	Good friends are like stars. You don't always see them, but you know they are always there.
+1978829	Gjithçka është OK në fund. Nëqoftë se nuk është OK , ath ky nuk është fundi.	Everything is okay in the end. If it's not okay, then it's not the end.
+1978837	Do të jetë një provim i vështirë ?	Will it be a difficult exam?
+1996085	Keni mënduar ndonjëherë për lidhjen midis frymarrjes, mendjes, dhe trupit ?	Have you ever thought about the connection between the breath, the mind, and the body?
+1996087	Yotube është një vend i mirë për te gjetur muzikë me lyrics ne vidio.	Youtube is a great place to find songs with the lyrics in the video.
+1996091	Është mjaftueshëm hekur në trupin tënd për të marrë një gozhdë.	There is enough iron in your body to make a nail.
+1996097	Eja në Shqipëri, ne gjithmonë bëjme kafe të mira atje.	Come to Albania, where we always make good coffee.
+1996128	Ai është duke kërkuar për një punë në programim kompjuteri.	He's looking for a job in computer programming.
+1996135	Policia kërkoi për kompjuterat e vjedhur por ata nuk u gjetën asnjëherë.	The police searched for the stolen computers but they were never recovered.
+1996149	Bëj kujdes me mënyren që ju përdorni fjalën "larg" kur përshkruani distanca. Ju mund ta përdorni në pyetje ose në fjalitë negative.	Be careful with the way that you use the word "far" when describing distances. You can use it in questions or in negative sentences.
+1996301	Ti nuk do të keshë arsye që mos të hipësh mbi të.	You won't have a reason to not want to get on it.
+1996363	Më jep mua një minut jam i mirë. Nqs kam një orë, jam i shkëlqyer. Ti me jep gjashtë muaj, jam i pathyeshëm.	Give me a minute and I'm good. If I've got an hour, I'm great. You give me six months, I'm unbeatable.
+2365592	Ajo meriton më shumë.	She deserves more.
+2204945	Mos shkruani asnjëherë fjalët "borsh" dhe "supë me lakra" në gjermanisht!	Never write the words "bortsch" and "shchi" in German!
+2204947	Mos shkruani asnjëherë fjalët "supë me panxhar" dhe "supë me lakra" në gjermanisht!	Never write the words "bortsch" and "shchi" in German!
+2365581	Çfarë do të bësh nesër?	What do you want to do tomorrow?
+2941367	Tomi duket i shqetësuar.	Tom appears distressed.
+2941377	Në çfarë ore vjen treni?	What time does the train get in?
+3520623	Nuk bëj asgjë.	I don't do anything.
+3102788	Unë nuk kam forcën tuaj.	I don't have your strength.
+2942664	Nuk do të të them përsëri.	I won't tell you again.
+3100464	Unë nuk jam këtu.	I'm not here.
+3520717	Unë mendoj që unë të po bie në gjumë.	I think I'm falling asleep.
+2424245	Unë e dua gjuhën shqipe.	I love the Albanian language.
+2439102	Unë nuk dua të punoj në këto kushte.	I don't want to work under these conditions.
+3100443	Vajza është e bukur.	The girl is beautiful.
+2941365	Nuk më vjen turpi për asgjë.	I'm not ashamed of anything.
+3476557	Nuk kam frikë vetëtimën.	I'm not afraid of lightning.
+3518945	Thika ime është e mprehtë.	My knife is sharp.
+3100639	Nuk jam një anëtar.	I'm not a member.
+3100643	Nuk jam një foshnjë.	I'm not a baby.
+3518947	Unë isha mësues.	I was a teacher.
+3518948	Gota ime është e plotë.	My glass is full.
+3518950	Unë dua të jem një fotograf i natyrës.	I want to be a nature photographer.
+2634787	Unë nuk jam mjek.	I'm not a doctor.
+3100585	Nuk jam mësues.	I'm not a teacher.
+2942663	Do të vij.	I will come.
+3100579	Jo, nuk jam mësues. Jam vetëm nxënës.	No, I'm not a teacher. I'm only a student.
+3100588	Nuk jam një njeri i mirë.	I'm not a good person.
+3100589	Nuk jam një njeri i keq.	I'm not a bad person.
+2942675	Duhet të më kishe besuar.	You should've trusted me.
+3100493	Unë jam këtu.	I am here.
+1119425	Gjithashtu, më vjen mirë që u takuam.	It's nice to meet you too.
+3100296	Unë pashë atë me sytë e mi.	I saw him with my own eyes.
+3100441	Unë lexova librin e tij.	I read his book.
+3100440	Unë lexova një libër.	I read a book.
+2936935	Tirana është në Shqipëri.	Tirana is in Albania.
+2922623	Tirana është kryeqyteti i Shqipërisë.	Tirana is the capital city of Albania.
+2942779	Shpresoj ti arrijmë deri në fund këti misteri sëbashku.	I'm hoping we can get to the bottom of that mystery.
+2942709	E vlerësoj përkushtimin tënd.	I appreciate your candor.
+2942788	Ajo do të jetë lëvizja më e zgjuar që ke bërë ndonjëherë.	It will be the smartest move you ever made.
+2942797	Balena e madhe blu është gjallesa më e madhe që jeton.	The great blue whale is the largest animal to have ever existed.
+2942813	Një krim i caktuar është i dënueshm nëse je përjekur, por jo e dënueshme nëse kryer. Çfarë është kjo?	A certain crime is punishable if attempted but not punishable if committed. What is it?
+2942821	Ju përdorni një thikë për të më prerë kryet dhe pastaj qani pasi unë kam vdekur. Kush jam unë?	You use a knife to slice my head and weep beside me when I am dead. What am I?
+2947354	Duke e konsideruar bashkëpunimin rajonal dhe marrëdhëniet e fqinjësisë së mirë, si shtylla që garantojnë paqen.	Consider regional cooperation and good neighborly relations pillars that guarantee peace.
+3100582	Nuk jam një fangirl.	I'm not a fangirl.
+3100584	Nuk jam një notar i shkëlqyer.	I'm not a great swimmer.
+3100702	Ajo ka njëzet fëmijë.	She has twenty children.
+3100697	Kam një vëlla.	I have one brother.
+3100514	Melanie tha se ajo e pëlqen të notoj.	Melanie said that she likes swimming.
+3100292	Fëmija im ka lindur sot.	Today my baby was born.
+3100344	Ajo është mësuesja ime.	She is my teacher.
+3100466	Djali i asaj gruas është i sëmurë.	That woman's son is sick.
+3100437	Njeriu është i ri.	The man is young.
+3100449	Njeriu është i fortë.	The man is strong.
+3100653	Kafshët vrapojnë.	The animals run.
+3518974	Pua po këndon në kishë.	Pua is singing at church.
+3518973	Unë të dua, Millie!	I love you, Millie!
+3518972	Millie ka sy të kaltër.	Millie has blue eyes.
+3518977	Millie po shkon në shkollë.	Millie is going to school.
+3518982	Millie po ha bukë.	Millie is eating bread.
+3518993	Millie po ha një banane.	Millie is eating a banana.
+3518983	Millie ka një libër.	Millie has a book.
+3518981	Ai jeton në Angli.	He lives in England.
+3518991	Ti nuk ke sy të kafe.	You don't have brown eyes.
+3518986	Ajo ka lule të kuqe.	She has red flowers.
+3518980	Sot nuk është aq e ftohtë.	Today is not so cold.
+3518965	Unë kam një llogari në Twitter.	I have a Twitter account.
+3518967	Vëllai im ka një llogari në Twitter.	My brother has a Twitter account.
+3518954	Unë nuk jam francez.	I am not French.
+3518952	Unë jam anglez.	I am English.
+3518951	Emily nuk është studente.	Emily is not a student.
+3518959	Ti nuk e di të vërtetën.	You don't know the truth.
+3518962	Ju nuk e dini të vërtetën.	You don't know the truth.
+3410301	Shqiponja është e bardhë.	The eagle is white.
+3517835	Kjo frikë është e kuptueshme.	This fear is understandable.
+3517736	Unë po shikoj në televizor.	I'm watching television.
+3517713	Ajo ka një karakter i fortë.	She has a strong character.
+3518801	Ai kishte një mace të bardhë.	He had a white cat.
+3519512	Kjo është arsyeja pse unë të pëlqej ty.	That's why I like you.
+3519531	Ky libër është i shkruar në shqip.	This book is written in Albanian.
+3520624	Mëlçia nuk po funksionon më.	The liver is no longer functioning.
+3520622	Ky libër nuk është i shkruar në anglisht.	This book is not written in English.
+3520719	Qeni im ka një pasaportë daneze.	My dog has got a Danish passport.
+3678004	Ishujt janë në det.	There are islands in the sea.
+3805469	Gratë ndryshojnë botën.	Women change the world.
+3878512	Unë nuk flas shqip.	I don't speak Albanian.
+3892094	Burj Khalifa është aktualisht qiell gërvishtësja më e lartë në botë.	Burj Khalifa is currently the tallest skyscraper in the world.
+3985108	A e doni nënën tuaj?	Do you love your mother?
+4395310	Qyteti ku unë jetoj është shumë i vogël.	The town where I live is quite small.
+4395348	Vet-koncepti i një fëmije është se si fëmija i sheh karakteristikat perrreth tij apo sajë.	A child's self-concept is how the child characteristically sees or feels about himself or herself.
+4395352	Puna që jam duke bërë në këtë moment është shumë interesante.	The work I'm doing at the moment is very interesting.
+4466320	Natën e mirë!	Good night!
+4543751	Numri im i telefonit është 9876-5432.	My telephone number is 9876-5432.
+3521470	Ky telefon nuk po funksionon siç duhet.	This phone is not working as it should.
+3517739	Athina është në Greqi.	Athens is in Greece.
+3517711	Ai është më mirë se unë.	He is better than me.
+3344403	Unë jam Tom.	I am Tom.
+3307660	Esperanto, gjuhë zyrtare e Bashkimit Evropian, tani!	Esperanto, official language of the European Union, now!
+3102220	Unë do të vij në orën pesë.	I'll come at five o'clock.
+2942688	Cila është më e madhe, Japonia apo Britania?	Which is bigger, Japan or Britain?
+2421455	Psherëtima e parë e dashurisë është e fundit e urtësisë.	The first sigh of love is the last of wisdom.
+2421452	Çfarë prisni për vitin e ri?	What are you expecting for the new year?
+2365557	Kemi filluar të riciklojmë gazetat.	We have started to recycle our newspapers.
+2365556	Nuk kam qejf të vrapoj deri tek stacioni.	I don't feel like running all the way to the station.
+2365555	Shtëpia ime është në rrethinat e qytetit.	My house is on the outskirts of the city.
+2177268	Ajo e këndon në mënyrë të mahnitshme.	She sings it in an astonishing way.
+2149769	Unë jam Gregor.	I am Gregor.
+2148438	A keni fëmijë?	Do you have children?
+2075788	Unë të dua.	I love you.
+2067252	A ju kujtohet kjo lojë?	Do you remember this game?
+1996123	Nqs do te kishe ngritur telefonin, do te kisha ftuar ne shtëpinë e Paulos.	If you had picked up the phone, I would have invited you to Paulo's house.
+1978860	Ëeshtë një mjergull që mund ta presësh me thikë.	It's a fog that you can cut with a knife.
+1519709	Ajo nuk vjen në ekskurzion sepse nuk e lejojnë prindërit.	She's not coming on the trip because her parents won't let her.
+1518776	Franca është në Evropën Perëndimore.	France is in Western Europe.
+1518341	Ne kemi një tavolinë katrore.	We have a square table.
+1183647	Ajo nuk ka kthyer përgjigje.	She has not replied.
+1183613	Ai ka avancuar shumë në Anglisht.	His English has gotten a lot better.
+1183586	Mos harro të fikësh zjarrin!	Don't forget to put out the fire!
+1183585	Shkojmë të bëjmë një shëtitje në park.	We're going for a walk in the park.
+1183494	Yangzi iu shmang pyetjes që i bëra unë.	Yangzi avoided the question I asked him.
+1183492	Une dua shumë më tepër.	I want much more.
+944754	Më falni, çfarë është ora?	Excuse me, what time is it?
+791835	Vrasin dy zogj me një gur.	They kill two birds with one stone.
+382091	Të gjithë njerëzit lindin të lirë dhe të barabartë në dinjitet dhe në të drejta. Ata kanë arsye dhe ndërgjegje dhe duhet të sillen ndaj njëri tjetrit me frymë vëllazërimi.	All human beings are born free and equal in dignity and rights. They are endowed with reason and conscience and should act towards one another in a spirit of brotherhood.
+1978851	Si thuhet "të lutem" në italisht?	How do you say "të lutem" in Italian?
+1978858	Mund të ma shpjegosh të lutem.	Can you explain it to me, please?
+2421449	Natyra në Shqipëri është shumë e pasur.	In Albania, nature is very wealthy.
+2420310	Jeta është e vetmja rrugë që nuk udhëtohet dy herë.	Life is the only road that can't be traveled twice.
+2420307	Cili ushqim ju pëlqen më shumë?	Which food do you like best?
+2420305	Ata nuk po vijnë.	They are not coming.
+2420303	Çfarë jeni duke bërë?	What are you doing?
+2420301	Sot është pushim.	Today is a holiday.
+2419865	Unë jam i lodhur.	I'm tired.
+2365558	Kush ju mëson?	Who teaches you?
+2365560	Ndryshon forma, por në parim ngelesh vetëm.	The form varies, but in principle you remain alone.
+1978856	Duhet të shkosh ne komisariat.	You should go to the commission.
+1978835	Librat janë mbi bankë.	The books are on the bench.
+1808865	Më par emigrantët, pastaj ti. Solidariteti është përgjigja jonë për kanibalizëm sociale.	First the emigrants, then you. Solidarity is our response to social cannibalism.
+1709771	babai im mungon mua dhe nënën time	My mom and I miss my dad.
+1709509	E dua shtëpinë time	I love my house.
+1183607	Keni është i mirë në not.	Ken is good at swimming.
+1183589	Kur Di Ma provoi për të 966-tën herë, kishte tashmë filluar të humbiste shpresat.	When Di Ma tried for the 966th time, he had already begun to lose hope.
+1183563	Ajo nuk ka më shumë se dymbëdhjetë këlyshër.	She has no more than twelve cubs.
+1183520	Dua të shoh këtë film.	I want to watch this film.
+1183515	Kur Mikeli është në shtëpi, ai merret me pastrimin e dritareve.	When Mikel is at home, he works on cleaning the windows.
+1183507	Unë dhe kjo kompani kemi nënshkruar një kontratë trevjeçare.	This company and I have signed a three-year contract.
+1183499	Jemi kënaqur vërtet.	We are truly pleased.
+1183496	Nuk mund të shoh asgjë, pa syzet e mia.	I can't see anything without my glasses.
+4731174	Nuk mund të bësh këtë!	You can't do this!
+4731175	Shoqëria është e ndarë.	Society is divided.
+4731177	Mbulohu, do të ikim.	Cover up, we're going to leave.
+4731179	E vërteta qëndron në mes.	The truth lies in the middle.
+4731180	Ajo është shumë krenare për aftësitë e saj.	She's very proud of her abilities.
+4731181	Mendoj se Tomi nuk qëllonte të bëntë atë.	I think that Tom didn't mean to do that.
+4731182	Tomi e shkroi numrin e telefonit të Marisë.	Tom wrote down Mary's telephone number.
+4731183	Tomi punon aq shumë sa çdonjeri tjetër.	Tom works as hard as anybody else does.
+4731184	Tomi nuk do të jetë gati për të ikur deri në orën 2.30.	Tom won't be ready to leave until 2:30.
+4731185	Tomi mendon se ato këpucë do të jenë shumë të mëdha.	Tom thinks those shoes will be too big.
+4731186	Tomi vjodhi një unazë diamanti shumë të vlefshme.	Tom stole a very valuable diamond ring.
+4731187	Tomi erdhi në Boston kur ishte fëmijë.	Tom came to Boston when he was a child.
+4731188	Tomi beson gjithçka që thotë Mary.	Tom believes everything that Mary says.
+4731189	Tomi më pyeti nëse isha i zënë apo jo.	Tom asked me whether I was busy or not.
+4731190	Tomi më kërkoi ta zgjoj në orën gjashtë e gjysëm.	Tom asked me to wake him at six-thirty.
+4731191	Tomi më shkruan të paktën një herë në javë.	Tom writes to me at least once a week.
+4731192	Emri i përhapur në anglisht i pitaja-s, "fruta dragua", e pasqyron emrin e saj popullor në shumë gjuhë aziatike.	The pitaya's common English name of "dragon fruit" reflects its vernacular name in many Asian languages.
+4731193	Ka mijëra pjesëmarrës në ngjarjen e sotme.	There are thousands of participants at today's event.
+4731194	Unë hyj në Tatoeba çdo javë.	I log into Tatoeba weekly.
+4731195	Unë hyj në Tatoeba një herë në javë.	I log in to Tatoeba once a week.
+4731197	Pjesa dërrmuese e kinezëve nuk janë takuar kurrë me të huajt, kështu që u ndihet çuditshëm, si një takim me jashtëtokësorët.	The vast majority of Chinese people have never met foreigners before, so it feels odd for them, like meeting space aliens.
+4731199	Thjesht thuaj atë që do të thuash.	Just say what you want to say.
+4731200	Udhëtim të mbarë.	Have a pleasant trip.
+4731201	Ajo gjithmonë vishet shumë thjesht.	She always dresses very simply.
+4731202	Ai gjithmonë arrin në kohë.	He always arrives on time.
+4731203	Ai është gjithmonë i përpiktë.	He's always punctual.
+4731204	Po lexoj librin tënd.	I'm reading your book.
+4731206	Ai hëngri kërpudha helmuese.	He ate poisonous mushrooms.
+4731207	Ata pinë kafe në shtëpi.	They drink coffee at home.
+4731208	Sistemi ekonomik islamik nuk është zbatuar në shkollat islamike me konvikt deri më sot.	The Islamic economic system hasn't been put into practice in Islamic boarding schools up to now.
+4731210	Mbase do të iki nesër.	Maybe I'll leave tomorrow.
+4731211	Jo gjithçka mund të shpjegohet.	Not everything can be explained.
+4731212	Kam një copë lajmi të keq.	I have a bit of bad news.
+4731213	Nuk kam ndonjë pyetje tjetër.	I don't have any other questions.
+4731214	Kam pasur shumë punë për të bërë kohët e fundit.	I've had a lot of work to do lately.
+4731215	Po planifikojmë ndryshime në procesin e prodhimit.	We are planning changes to the manufacturing process.
+4731216	Ai u ankua se dhoma ishte shumë e vogël.	He complained that the room was too small.
+4731218	Zoti është.	God is.
+4731260	Nuk kanë fjetur gjumë për dyzetetetë orë.	They haven't slept for forty-eight hours.
+4731261	Djali u shtirë se ishte aq i sëmurë që nuk mund të shkonte në shkollë.	The boy pretended that he was so sick that he couldn't go to school.
+4731264	Xhimi nuk është çka ishte.	Jim is not what he was.
+4731265	Deni doli nga stacioni i trenit në orën shtatë e gjysëm.	Dan exited the train station at seven thirty.
+4731266	Mary e vizitoi bashkëshortin në burg.	Mary visited her husband in prison.
+4731268	Njeriu është një skllav ndaj zakonave.	Man is a slave to habits.
+4731269	Tomi kurrë nuk ka qenë i përpiktë.	Tom has never been punctual.
+4731271	Kjo lule ka një erë shumë të bukur.	This flower smells so nice.
+4731275	Mos të bezdisemi.	We're not to be disturbed.
+4731278	Ti s'ke asnjë hall në botë.	You haven't a care in the world.
+4731279	Nganjëherë nuk e kuptoj atë.	Sometimes, I don't understand him.
+4731280	Ti din diçka.	You know something.
+4731281	Ky lloj pune kërkon shumë durim.	This kind of work requires a lot of patience.
+4731297	Mamaja ime është në guzhinë.	My mother is in the kitchen.
+4731298	Babi im nuk kthehej kurrë para orës 9 apo 10.	My father never came back home before 9 or 10.
+4731299	Ia thashë.	I told him.
+4731301	Dyqani është tashmë i mbyllur.	The store is already closed.
+4731303	Mendoj se diçka e frikësoi Tomin.	I think something scared Tom.
+4731309	Ku janë çelësat e tu?	Where are your keys?
+4731312	Ku mund t'i vë këto birra?	Where can I place these beers?
+4731313	Askush nuk do të na shohë.	No one's going to see us.
+4731317	Nuk mund të lësh që të ndodhë ajo.	You can't let that happen.
+4731319	Atëherë, a ke vendosur?	Well, have you decided?
+4731322	Shiko librin mbi tryezë.	Look at the book on the desk.
+4731324	Tomi e bëri me qëllim, mendoj.	Tom did it on purpose, I think.
+4731327	Shkuam në një piceri italiane.	We went to an Italian pizzeria.
+4731330	Nuk do të doja që të plagosesh.	I wouldn't want you to get hurt.
+4731331	Nuk mund të lë që Tomi të futet në burg për diçka që nuk e bëri.	I can't let Tom be put in prison for something he didn't do.
+4731342	Tomi doli jashtë për të ngrënë.	Tom went out to eat.
+4731344	Do të jem më i kujdesshëm herën tjetër.	I'll be more careful next time.
+4731349	Mbajta anën time të marrëveshjes.	I held up my end of the bargain.
+4731352	Nuk mund të dalësh.	You can't go out.
+4731356	Të paktën gjashtëqind burra vdiqën në aksion.	At least six hundred men died in action.
+4731357	Nuk e ke shijuar Shejkspirin derisa ta kesh lexuar në origjinal.	You have not experienced Shakespeare until you have read him in the original.
+4731358	A ke një vëlla binjak?	Do you have a twin brother?
+4731359	Ai pyeti personin e parë me të cilin u takua afër fshatit.	He asked the first person he met near the village.
+4731360	Muzika është e mrekullueshme për shpirtin.	Music is wonderful for the soul.
+4731361	Ajo është akoma një pyetje e hapur.	That's still an open question.
+4731363	Të lutem, më jep një gotë ujë.	Please give me a glass of water.
+4731364	Hëna nuk ka një dritë të vet.	The moon doesn't have light of its own.
+4731367	A e solle këtë në shtëpi?	Did you bring this home?
+4731384	Menjëherë, zotëri.	Coming right up, sir.
+4731396	Kemi punë për të diskutuar.	We have business to discuss.
+4731400	Tomi më ofroi një filxhan kafe.	Tom offered me a cup of coffee.
+4731404	Ai numëroi deri në 100.	He counted to 100.
+4731406	Kësaj supe i duhet një çik kripë.	This soup needs a touch of salt.
+4731411	Departamentet federale janë goditur me një ndalim punësimi në një përpjekje për të ulur kostot e stafit qeveritar.	Federal departments have been hit with an official hiring freeze in an attempt to bring down government staffing costs.
+4731413	E kanë arrestuar.	They've arrested him.
+4731418	Isha shumë i shqetësuar ndërsa po ngrihej avioni.	I was very nervous as the plane took off.
+4731420	Kur u ktheva në shtëpi, ai po gatuante darkë.	When I came home, he was cooking dinner.
+1183586	Mos harro të fikësh zjarrin!	Don't forget to put out the fire.
+4731493	Vera ka ardhur herët.	Summer has come early.
+4731494	Çfarë mendon se do të ndodhë?	What do you think will happen?
+4731495	Ai e adhuron atë.	He worships him.
+4731496	Je ose me ne ose kundër nesh.	You are either with us, or against us.
+4731498	A do të pish çaj apo kafe?	Do you want to drink tea or coffee?
+4731533	Situata akoma ka mundësi të përmirësohet.	The situation is still capable of improvement.
+4731537	Të pëlqente të notosh.	You liked to swim.
+4731538	Nuk lexova asnjë libër dje.	I didn't read any books yesterday.
+4731539	Jam i lumtur sepse duke filluar nga sot, nuk kemi shkollë deri në shtator.	I'm happy because beginning today, we have no school until September.
+4731541	Burri i pafajshëm doli nga salla e gjyqit duke ndier një peshë të madhe të ngrihej nga supet e tij, një buzëqeshje fitimtare tek buzët.	The blameless man walked out of the courtroom feeling a great weight lift off his shoulders, a triumphant smile on his lips.
+4731259	Supozova që do ta merrja vesh herët a vonë.	I supposed that I would hear about it sooner or later.
+4731256	Shumica e popullit këtej nuk ka energji elektrike.	Most people here don't have electricity.
+4731253	Shkuam bashkë në Laramie, por pastaj u ndamë.	We went to Laramie together, but afterwards we parted.
+4731252	Patjetër!	Of course!
+4731248	Ai lexon shumë.	He reads a lot.
+4731247	Tomi kurrë nuk tha se donte të ikte.	Tommy never said that he wanted to leave.
+4731246	Ai ka një makinë japoneze.	He has a Japanese car.
+4731244	Pasi e pimë çajin, filluam një diskutim.	After we had tea, we began the discussion.
+4731242	Lërna rehat!	Leave us alone.
+4731237	Ora ime duket se është e prishur.	My watch seems to be broken.
+4731236	Jo. I kam kërkuar për më shumë se një orë.	No. I looked for them for more than an hour.
+4731234	Të pëlqejnë kuajt?	Who likes them?
+4731232	Këto kamera janë prodhuar në Japoni.	These cameras are made in Japan.
+4731231	Të tregosh gënjeshtra është një zakon shumë i keq.	Telling lies is a very bad habit.
+4731230	Dua që të ikësh nesër në avion për në Boston.	I want you to leave for Boston on a plane tomorrow.
+4731227	Hëngra drekë rreth orës njëmbëdhjetë sepse kisha uri.	I had lunch around eleven because I was hungry.
+4731226	A mund të kthehem në shtëpi?	Can we go back home?
+4731217	Mos më bërtit.	Don't yell at me.
+4731233	Lëre gazetën dhe dëgjo atë që të them.	Forget the newspaper and listen to what I'm telling you.
+4791595	Doni një birrë?	Would you like a beer?
+4833998	Gëzuar ditëlindjen!	Happy birthday!
+4960469	Gëzuar Ditën Ndërkombëtare të Gruas!	Happy International Women's Day!
+4963631	Uji i mjaftueshëm është kusht i nevojshëm për jetën.	Enough water is a necessary condition for life.
+4963633	Heshtja nuk është marrëveshje.	Silence is not agreement.
+4963636	Ajo është zgjuar.	She is awake.
+4963641	E di që kjo është e rëndë.	I know that this is strange.
+4963643	Çfarë thanë ata për këtë?	What do they say for this?
+4963648	Si e thirrin atë?	What do they call her?
+4963653	Tom e sqaroi atë në detaj, por unë akoma nuk e kuptoj.	Tom explained it in detail, but I still don't get it.
+4963655	Nuk jam duke mbajtur frymën.	I'm not holding my breath.
+4963656	Dikush duhet që ta punësojë Tomin.	Somebody needs to hire Tom.
+4963658	Tomi ka punësuar një avokat.	Tom has hired a lawyer.
+4963661	Tomi me shumë mundësi akoma është duke u fshehur.	Tom is probably still hiding.
+4963665	Nuk jam duke u fshehur nga ndonjëri.	I'm not hiding from anybody.
+4963666	Ku ka qenë duke u fshehur Tomi?	Where has Tom been hiding?
+4963669	Çfarë tjetër janë duke fshehur ata?	What else are they hiding?
+4963671	A ka këtu ndonjë pagesë të fshehur?	Are there any hidden fees?
+4963673	Shpresoj që të mos jem i vetmi që do të jetë aty.	I hope I'm not the only one who'll be there.
+4963674	Gjithmonë kam menduar që ajo ishte e çuditshme.	I always thought that was weird.
+4963676	Tomi nuk me lejon t`i përgjigjem pyetjes së Merit.	Tom didn't let me answer Mary's question.
+4963678	Ky nuk është futboll, ky është futboll amerikan!	This isn't football, this is soccer!
+4963680	Ke kryer detyrat e shtëpisë?	Is your homework finished?
+4963681	I ke kompletuar detyrat e shtëpisë?	Have you completed your homework?
+4963682	Lexoje këtë në mbrëmje.	Read this in the evening.
+4963683	Ramudi shkoi në shkollë.	Ramudu went to school.
+4963684	E vërtetë është, unë nuk kam ndonjë problem me të.	The truth is, I don't have any problem with it.
+4963685	Thuaji babait tim se unë kam mbërritur.	Tell my father that I've arrived.
+4963687	Mbyllja e syve ju ndihmon të mendoni më mirë.	Closing your eyes helps you think better.
+4963688	Emri im është Ichiro.	My name is Ichiro.
+4963690	Pse gjithçka po shkon keq?	Why does everything go wrong?
+5023777	Mirësevini në Tatoeba!	Welcome to Tatoeba!
+5247295	E vizitova Parisin para shumë kohe.	I visited Paris long ago.
+5247299	A mund të ndihmoj me ndonjë gjë?	Can I help with anything?
+5247302	Kjo fjali është shumë e lehtë për të përkthyer.	This sentence is very easy to translate.
+5247305	Pse je aq i shqetësuar?	Why are you so concerned?
+5247313	Tomi do që unë t'i jap ndonjë këshillë për blerjen e aksioneve.	Tom wants me to give him some advice on buying stocks.
+5247314	Jemi më keq tani se sa përpara.	We're worse off now than before.
+5247315	Tomi as nuk ishte këtu dje.	Tom wasn't even here yesterday.
+5247321	Nëqoftëse ti nuk do të ma thuash, mirë është.	If you don't want to tell me, that's fine.
+5247324	E them këtë që të kuptosh.	I say this so that you understand.
+5247327	Tomi ishte shumë i dehur.	Tom was really drunk.
+5247330	Duam të njohim Tomin.	We want to meet Tom.
+5247332	Ti po i frikëson fëmijët.	You're scaring the kids.
+5250510	Do të shëndoshesh po të hash aq shumë.	You'll fatten up if you eat that much.
+5250512	Unë nuk mund të ha aq shumë ushqim vetëm.	I can't eat that much food by myself.
+5250513	Jo, nuk më pëlqen aq shumë.	No, I really don't like it that much.
+5250514	Nuk ka aq shumë rëndësi se nga cila shkollë e lartë je diplomuar.	It doesn't matter all that much what college you graduated from.
+5250515	Nëse nuk të pëlqen aq shumë mënyra ime për të bërë gjërat, pse nuk i bën vetë?	If you dislike my way of doing things that much, why don't you just do it yourself instead.
+5310055	Breshkat nuk kanë dhëmbë.	Turtles don't have teeth.
+5433262	Pse je aq e shqetësuar?	Why are you so concerned?
+5428206	Breshkat s'kanë dhëmbë.	Turtles don't have teeth.
+5448962	Çfarë studion një sovietolog?	What does a Sovietologist study?
+5528324	Mund të jetë një kurthë.	It could be a trap.
+5528333	Në fund të çdo lënde kam një provim.	At the end of every subject, I have an exam.
+5528346	Shpik ndonjë gjë.	Make something up.
+5528486	Të pasurit kanë nevojë për mua, të varfërit kanë shumë nga unë dhe në qoftë se unë e ha atë do të vdes. Kush jam unë?	The rich need me, the poor have lots of me, and if someone eats me, they will die. What am I?
+5528508	Shtëpia të cilës mund ti shihni çatinë është e z. Baker.	The house whose roof you can see is Mr Baker's.
+5553616	Fjalët vranë krenarinë e tij.	The words hurt his pride.
+5553627	Sapo theva një brinjë.	I just cracked a rib.
+5553632	Degjova që tashmë keni kontaktuar ndërmjetësin.	I hear you've already contacted the broker.
+5785745	Emri im është Ricardo.	My name is Ricardo.
+6034524	Kam një fjalor.	I have a dictionary.
+6297052	A do të hapësh restorantin e vet?	Do you want to open up your own restaurant?
+6297055	Leximi i librave nuk ishte më një privilegj i një pakice.	Reading books ceased to be the privilege of a minority.
+6297056	Ditëlindja e Tomit ishte pardje.	Tom's birthday was the day before yesterday.
+6297057	A do ta përdorësh këtë?	Are you going to use this?
+6297057	A do ta përdorësh këtë?	Will you use this?
+6297058	Ai është i përsosur.	He is impeccable.
+6297059	Unë shoh kalin tënd.	I see your horse.
+6297060	Është e vështirë të mësosh.	It's hard to learn.
+6297061	Nuk mund të të shoqëroj. Më mungon para.	I cannot keep you company. I'm short of money.
+6297062	Kush do të jetë i pari të jetojë deri në lindjen e stër-stër-stër-nipin e tij?	Who will be the first to live until the birth of his great-great-great-grandson?
+6297063	Mary mendon të mos lindë më shumë se dy fëmijë.	Mary intends not to give birth to more than two children.
+6297064	A do të bie shi sot akoma?	Is it still going to rain today?
+6297066	E vetmja punë që ka pasur ndonjëherë Tomi është ajo që ka tani.	The only job Tom has ever had is the one he has now.
+5785745	Emri im është Ricardo.	My name's Ricardo.
+6698155	Ku është biblioteka?	Where's the library?
+6824266	Unë jam Ricardo.	I'm Ricardo.
+6981345	Mua më pëlqen të rri me ty.	I like to stay with you.
+6981354	Ky qytet është i shëmtuar.	This city is ugly.
+6981358	Më pëlqen ky qytet.	I like this city.
+6981364	Problemet janë probleme.	Problems are problems.
+6981369	Dua të vdes.	I want to die.
+6981373	Kosova është shteti më i ri në Evropë.	Kosovo is the youngest country in Europe.
+6981379	Durrësi është një qytet shumë i vjetër.	Durrës is a very old city.
+6981383	Gegërishtja flitet në veri të lumit Shkumbin.	Gheg is spoken north of Shkumbin river.
+6981407	Duhet të jesh e fortë.	You need to be strong.
+6981409	Tomi ishte xheloz për suksesin e Marisë.	Tom was jealous of Mary's success.
+6981414	Kjo është shtëpia ime e tretë.	This is my third home.
+6981420	O Zot, qeni im do të binte në dashuri me ty.	Oh my God, my dog would fall in love with you.
+6981423	Qyteti është plot me turistë.	The town is full of tourists.
+6981424	Do të doja të flisja spanjisht.	I wish I spoke Spanish.
+6981425	Ke parë filma Disney më parë?	Have you watched Disney movies before?
+6981427	Maria humbi çelësin.	Mary lost the key.
+6981429	Ndoshta duhet t'i tregosh asaj të vërtetën.	Maybe you should tell her the truth.
+6981435	Lashë një dhuratë nën jastëkun e saj.	I left a gift under her pillow.
+6981437	Po të kisha mjaftueshëm para, do ta bleja atë makinë.	If I had enough money, I'd buy that car.
+6981439	Maria është e shkëlqyeshme. Ajo gatoi një darkë të mrekullueshme për mua dhe madje lau vetë pjatat.	Mary is really great. She cooked a wonderful dinner for me and even washed the dishes herself.
+6981440	Afrika është një kontinent.	Africa is a continent.
+6981442	Ata ishin të organizuar.	They were organized.
+6981446	Emri im është Dan.	My name is Dan.
+6981447	Jeta është e bukur. Askush nuk tha që ishte e thjeshtë.	Life is beautiful. No one said it was simple.
+6981448	Jam ende mirë.	I'm still good.
+6981449	Je një idiot. Mos u kthe.	You're an idiot. Don't come back.
+6981451	Islanda është një ishull.	Iceland is an island.
+6981452	Çfarë mendon për teorinë time?	What do you think of my theory?
+6981456	Më vjen keq që theva premtimin tim.	I'm sorry that I broke my promise.
+6981462	"Më beso, Jack!" ajo qau.	"Trust me, Jack!" she cried.
+6981464	Pse më shikon ashtu, Jack?	Why do you look at me like that, Jack?
+6981465	"Çfarë do të thuash?" ajo qau.	"What do you mean?" she cried.
+6981467	Nuk kam qenë këtu më parë.	I have not been here before.
+6981471	Vetëm pse është e mundur për ta bërë, nuk do të thotë që duhet ta bësh.	Just because it's possible to do it, doesn't mean you should do it.
+6981473	Tomi dhe Maria kanë vetëm një fëmijë.	Tom and Mary have only one child.
+6981474	Tom, ku je? Unë po vdes këtu.	Tom, where are you? I'm dying here.
+6981479	Kosova është tani një shtet i pavarur.	Kosovo is now an independent country.
+6981480	Prishtina është kryeqyteti i Kosovës.	Pristina is the capital of Kosovo.
+6981482	Rumania është një vend ballkanik. Kryeqyteti i saj është Bukureshti.	Romania is a Balkan country. Its capital is Bucharest.
+6981483	Gëzuar ditëlindjen, Rumani!	Happy Birthday, Romania!
+6981484	Unë jam nga Rumania.	I'm from Romania.
+6981485	Kryeqyteti i Rumanisë është Bukureshti.	Romania's capital is Bucharest.
+6981487	Rumania quhet "România" në rumanisht.	Romania is called "România" in Romanian.
+6981489	Muzeu kombëtar Brukenthal është muzeu i parë që u hap zyrtarisht në Rumani.	The national Brukenthal Museum is the first museum that opened officially in Romania.
+6981490	Më pëlqejnë gjuhët.	I like languages.
+6981491	Ti flet gjuhën time.	You speak my language.
+6981493	Ai flet pesë gjuhë.	He speaks five languages.
+6981494	Të gjithë flasin një gjuhë.	Everyone speaks a language.
+6981495	Ajo flet dhjetë gjuhë.	She speaks ten languages.
+6981496	Mua më pëlqejnë gjuhët e huaja!	I like foreign languages!
+6981497	Unë e kuptoj gjuhën tënde.	I understand your language.
+6981498	Ai flet dhjetë gjuhë.	He speaks ten languages.
+6981499	Hobi im janë gjuhët.	My hobby is languages.
+6981500	Më pëlqen gjuha ime.	I like my language.
+6981502	Mua më pëlqen të mësoj gjuhë.	I like learning languages.
+6981503	Ajo flet tre gjuhë.	She speaks three languages.
+6981505	Anglishtja është një gjuhë.	English is a language.
+6981506	Të mësosh gjuhë është interesante.	Learning languages is interesting.
+6981507	Unë flas pesë gjuhë.	I speak five languages.
+6981508	Mua më pëlqejnë të gjitha gjuhët.	I like all languages.
+6981509	Tomi mësoi gjuhën e shenjave.	Tom learned sign language.
+6981510	A është e vështirë gjuha e tyre?	Is their language difficult?
+6981511	Çfarë gjuhë është kjo?	What language is this?
+6981512	Kjo gjuhë tingëllon bukur.	This language sounds beautiful.
+6981513	I dua gjuhët uralike.	I love Uralic languages.
+6981514	I dua gjuhët keltike.	I love Celtic languages.
+6981515	I dua gjuhët gjermanike.	I love Germanic languages.
+6981516	Tomi flet shumë gjuhë.	Tom speaks many languages.
+6981517	Anglishtja është gjuhë internacionale.	English is an international language.
+6981518	Mund ta kuptoj gjuhën tënde.	I can understand your language.
+6981519	Latinishtja është gjuhë e vdekur.	Latin is a dead language.
+6981520	Ti po flet gjuhën time.	You're speaking my language.
+6981521	Anglishtja është gjuhë gjermanike.	English is a Germanic language.
+6981522	Frëngjishtja është gjuha e saj e parë.	French is her first language.
+6981523	Prusishtja është gjuhë baltike.	Prussian is a Baltic language.
+6981524	Më pëlqen të mësoj gjuhë të vjetra.	I like learning old languages.
+6981525	Ai flet vetëm një gjuhë.	He only speaks one language.
+6981527	Çfarë gjuhë flet Tomi?	What languages does Tom speak?
+6981528	Ai flet dy gjuhë të huaja.	He speaks two foreign languages.
+6981529	Frëngjishtja është gjuhë e vështirë.	French is a difficult language.
+6981530	Çfarë gjuhë po flasin ata?	What language are they speaking?
+6981531	Cila është gjuha jote e preferuar?	What's your favorite language?
+6981532	Greqishtja është gjuhë e vështirë.	Greek is a difficult language.
+6981533	Rumanishtja është gjuhë latine.	Romanian is a Romance language.
+6981534	Gjermanishtja është gjuhë gjermanike.	German is a Germanic language.
+6981535	Rusishtja është gjuhë sllave.	Russian is a Slavic language.
+6981537	Cila është gjuha më e vështirë?	What's the hardest language?
+6982116	Ana ishte një vajzë e bukur.	Ana was a beautiful girl.
+6982113	Unë nuk mund të këndoj.	I can't sing.
+6982112	Të lutem, buzëqesh.	Please, smile.
+6982107	Ata u përpoqën të zbulonin të vërtetën.	They tried to find out the truth.
+6982106	Ajo vdiq e bashkë me të edhe ëndërrat e saj.	She died and with her so did her dreams.
+6982103	Mos e kërko lumturinë. Ajo nuk ekziston.	Don't seek happiness. It does not exist.
+6982104	Ajo kishte shumë ëndërra.	She had a lot of dreams.
+6982110	Njeriu për njeriun është ujk.	Man is wolf to man.
+6982109	Dardha bie nën dardhë.	The pear falls under a pear.
+6982058	Shtetet e Bashkuara të Amerikës bëjnë pjesë në Këshillin e Sigurimit të Organizatës së Kombeve të Bashkuara.	The United States of America is part of the Security Council of the United Nations.
+6982056	Vajza e vogël pa një peshk të artë dhe shprehu një dëshirë.	The little girl saw a gold fish and made a wish.
+6982055	Ajo ha një mollë të kuqe.	She eats a red apple.
+6982060	Ajo pa një ylber të bukur dhe u lumturua.	She saw a beautiful rainbow and got happy.
+6982066	Nga dritarja e burgut Agroni pa një zog që fluturonte i lirë dhe ndjeu një dëshirë të flaktë që edhe ai të shijonte lirinë.	From the prison window Agron saw a bird flying free and felt a burning desire that he had to enjoy freedom too.
+6982061	Kam dhimbje në krah.	My arm hurts.
+6982054	Mos hyj aty, është me rrezik!	Don't enter there, it's dangerous!
+6982053	Ai kishte shumë fjalë e pak vepra.	He had lots of words and few actions.
+6982048	Dëshiron një portokall?	Do you want an orange?
+6982044	Më the që ne të dy do të jemi së bashku përgjithmonë. Pastaj u largove.	You told me we two would be together forever. Then you left.
+6982050	Ajo mund të mos jetë bijë e mirë, por të paktën është njeri i mirë.	She may not be a good daughter, but at least she is a good person.
+6982051	Maria i tregonte fëmijëve të saj të njejtën përrallë të cilën ia kishte treguar e ëma kur ajo ishte fëmijë.	Maria told her children the same fairytale her mom had told her when she was a child.
+6982041	Ai ka nëntë palë këpucë.	He has nine pairs of shoes.
+6982040	Ajo jetoi një jetë të gjatë e të trishtë. Vdiq duke shpresuar që do ta shihte të birin qoftë edhe një herë.	She had a long and a sad life. She died hoping that she would see her son at least one more time.
+6982035	Vajza e vogël pa disa kuaj nga dritarja.	The little girl saw some horses from the window.
+6982033	Ai është i çmendur por megjithatë ajo ende e dashuron.	He is crazy but anyway she still loves him.
+6982023	Çfarë u bë?	What happened?
+6982019	Ai ka një kalë të kaftë.	He has a brown horse.
+6982018	Zana e Malit është krijesë e bukur.	The mountain fairy is a beautiful creature.
+6982017	Darka ishte e shijshme. Mua më pëlqeu fort.	The dinner was tasty. I liked it a lot.
+6982016	Unë isha duke ecur kur pashë atë.	I was walking when I saw her.
+6982010	Të lutem hape dritaren.	Please open the window.
+6982015	Ai u tha prindërve se i donte fort.	He told his parents that he loved them a lot.
+6982008	Ke parë ndonjëherë ndonjë fantazmë?	Have you ever seen any ghost?
+6982101	A të pëlqen ngjyra e verdhë?	Do you like the yellow colour?
+6982100	Ato kërkonin të drejta të barabarta.	They sought equal rights.
+6982095	Tomi pa një luan në kopshtin zoologjik.	Tom saw a lion at the zoo.
+6982090	Unë dua të kem një motër.	I want to have a sister.
+6982722	Unë jam dentisti i Tomit.	I'm Tom's dentist.
+6982723	Unë nuk do të këndoj sot.	I'm not going to sing today.
+6982725	Ndjeva sikur do të vdisja.	I felt like I would die.
+6982727	Tomi u përpoq të vriste veten dje.	Tom tried to kill himself yesterday.
+6982729	A është ajo e martuar?	Is she married?
+6982730	Tomi do të përfundojë në burg.	Tom is going to end up in jail.
+6982731	Do të kemi një grup të talentuar këtu.	We'll have a talented group here.
+6982732	Tomi shkon në shkollë publike.	Tom attends public school.
+6982737	Nuk duhet të humbasim shpresën.	We shouldn't lose hope.
+6982744	Ai vdiq nga i ftohti mbrëmë.	He died from the cold last night.
+6982746	Problemi është që nuk e dimë se ku është Tomi.	The problem is we don't know where Tom is.
+6982747	Çfarë nuk shkon me këtë fotografi?	What's wrong with this picture?
+6982749	Tomi dhe Maria po konsiderojnë divorcin.	Tom and Mary are considering divorce.
+6982750	Dua të shkoj të fle.	I want to go to sleep.
+6982751	Tomi po ha një dardhë.	Tom is eating a pear.
+6982753	A është Tomi anëtar?	Is Tom a member?
+6982754	I dhashë disa libra Tomit.	I gave some books to Tom.
+6982757	Ti e di që nuk është e vërtetë.	You know it's not true.
+6982758	Ju e dini që nuk është e vërtetë.	You know it's not true.
+6982759	Kjo kuti do të shërbejë si tavolinë.	This box will serve as a table.
+6982761	Të dy e keni gabim.	Both of you are wrong.
+6982762	Tomi është më i fortë se unë.	Tom is stronger than I am.
+6982763	Nuk i kuptoj rregullat e lojës.	I don't understand the rules of the game.
+6982765	Nuk mund të shkosh në Boston këtë fundjavë.	You can't go to Boston this weekend.
+6982766	Nuk kemi humbur shumë.	We haven't lost much.
+6982767	Jam shumë e uritur tani.	I'm very hungry now.
+6982768	Jam shumë i uritur tani.	I'm very hungry now.
+6982769	Ai u zgjodh kryebashkiak përsëri.	He was elected mayor again.
+6982771	Si është e mundur ajo?	How is that possible?
+6982773	Tomi nuk është student.	Tom isn't a student.
+6982774	Ata po punojnë.	They're working.
+6982775	Nuk mund ta bëj të lumtur Tomin.	I can't make Tom happy.
+6982776	Ti vërtetë je trap.	You really are a jerk.
+6982777	Kjo është e lehtë.	This is easy.
+6982778	Kur shkove në shtëpi?	When did you go home?
+6982780	Kur shkuat në shtëpi?	When did you go home?
+6982783	Mendoj se kam thyer këmbën.	I think I've broken my leg.
+6982784	Tomi nuk ka nevojë për asgjë.	Tom doesn't need anything.
+6982787	Nuk është ideja e tij, është e imja.	It's not his idea, it's mine.
+6982789	Kur do të përfundojë kjo?	When will this end?
+6982791	Mund të lë një mesazh?	May I leave a message?
+6982792	Tomi e dinte që isha skeptik.	Tom knew I was skeptical.
+6982794	Shtëpia i përket atij.	The house belongs to him.
+6982795	Jam gjithmonë krenar me familjen time.	I am always proud of my family.
+6982796	Për kë është ky mesazh?	Who's this message for?
+6982797	Nuk kemi përgjigje.	We don't have answers.
+6982799	Mos harro të blesh bukë.	Don't forget to buy bread.
+6982800	Mos harroni të bleni bukë.	Don't forget to buy bread.
+6982801	Kryeministri ra në Danub dhe u mbyt.	The prime minister fell into the Danube and drowned.
+6982802	Bleva një çadër.	I bought an umbrella.
+6982805	Pse është ende në shkollë Tomi?	Why is Tom still at school?
+6982806	Skllevërit konsideroheshin pronë.	Slaves were considered property.
+6982808	Libri yt më ka ndryshuar jetën.	Your book has changed my life.
+6982809	Më trego ku ka shkuar Tomi.	Tell me where Tom has gone.
+6982810	Jetoj afër Tomit.	I live close to Tom.
+6982811	Të gjithë e duan macen time.	Everybody loves my cat.
+6982812	Le të fillojmë në 2:30.	Let's start at 2:30.
+6982813	Tomi u pajtua të ndihmonte.	Tom agreed to help.
+6982814	Tomi është aktivist për të drejtat e njeriut.	Tom is a human rights activist.
+6982815	Shikova në pasqyrë.	I looked in the mirror.
+6982817	Më pëlqen shumë gjuha japoneze.	I like the Japanese language very much.
+6982818	Askush nuk ishte në dhomë.	No one was in the room.
+6982820	Tomi pati një ditë vërtetë të keqe.	Tom had a really bad day.
+6982821	Tomi është heroi im.	Tom is my hero.
+6982822	Nuk do të kem nevojë për ty.	I won't need you.
+6982991	Tomi ishte i zënë tërë ditën.	Tom was busy all day.
+6982994	Do të jetë Tomi këtu sot?	Will Tom be here today?
+6982997	Tomi ec tre milje në ditë.	Tom walks three miles a day.
+6982999	Tomi shkroi një shënim në frëngjisht.	Tom wrote the note in French.
+6983003	Tomi po planifikon një udhëtim në Australi me Marian.	Tom is planning a trip to Australia with Mary.
+6983009	Është sëmundja e Tomit serioze?	Is Tom's illness serious?
+6983011	Është serioze sëmundja e Tomit?	Is Tom's illness serious?
+6983015	Ose shkon Tomi ose shkoj unë.	Either Tom goes or I go.
+6983016	Nuk është as koha as vendi.	This is not the time or the place.
+6983019	Kam tre herë më shumë libra se Tomi.	I have three times more books than Tom has.
+6983027	Tomi urren punën e tij për shumë arsye.	Tom hates his job for a lot of reasons.
+6983029	Tomi ishte ulur vetëm, po lexonte një libër.	Tom was sitting alone, reading a book.
+6983030	Tomi ishte ulur vetëm, duke lexuar një libër.	Tom was sitting alone, reading a book.
+6983032	Tomi është në pushim tani, apo jo?	Tom is now on vacation, isn't he?
+6983102	Tomi tha që ishte e vërtetë.	Tom said that it was true.
+6983103	Prindërit e Tomit jetojnë në një shtëpi të madhe.	Tom's parents live in a big house.
+6983104	Tomi është në dhomën e tij tani, apo jo?	Tom is in his room now, isn't he?
+6983105	Tomi pagoi faturën e tij vonë.	Tom paid his bill late.
+6983107	Nuk e kisha menduar kurrë që do të ishte e lehtë.	I never thought it would be easy.
+6983110	Laje mollën para se ta hash.	Wash the apple before you eat it.
+6983112	Unë kam lindur në këtë spital.	I was born in this hospital.
+6983114	Cila është e vërteta?	What is truth?
+6983115	Tomi nuk përdor kripë në gatimet e tij.	Tom doesn't use salt in his cooking.
+6983116	Nuk flas as frëngjisht as anglisht.	I can speak neither French nor English.
+6983117	Le të pastrojmë tavolinën.	Let's clear the table.
+6983118	Tomi u bë doktor, si i ati.	Tom became a doctor, like his father.
+6983119	Ka një zgjidhje tjetër.	There's another solution.
+6983120	Shiko çfarë do Tomi.	See what Tom wants.
+6983121	Pse nuk shkon të shohësh se çfarë do Tomi?	Why don't you go see what Tom wants?
+6983123	Mos harro të sjellësh kostumin e banjës.	Don't forget to bring your bathing suit.
+6983124	Të gjithë ishin jashtë qytetit.	Everybody was out of town.
+6983126	Tomi u betua për hakmarrje.	Tom vowed revenge.
+6983127	Nuk kam parë kurrë një vajzë kaq të bukur.	I've never seen such a beautiful girl.
+6983128	Pashë të dashurën tënde duke puthur Tomin.	I saw your girlfriend kissing Tom.
+6983129	Ëmbëlsira e vetme të cilën vërtetë e pëlqej është akullorja.	The only dessert I really like is ice cream.
+6983130	I vetmi vend ku dua të jem tani është me ty.	The only place I want to be right now is with you.
+6983131	E vetmja gjë që dua të bëj tani është të fle.	The only thing I want to do right now is sleep.
+6983132	E vetmja gjë që pashë në tavolinë ishte një mollë.	The only thing I saw on the table was an apple.
+6983137	Vërtetë?	Really?
+6983139	Dëgjo.	Listen.
+6983140	Buzëqesh.	Smile.
+6983144	Gëzuar Krishtlindjet.	Merry Christmas!
+6983145	Shumë vonë.	Too late.
+6983147	Të gjithë qeshën.	Everybody laughed.
+6983148	Asgjë nuk ndodhi.	Nothing happened.
+6983149	Pse unë?	Why me?
+6983150	Për çfarë?	What for?
+6983151	Ndonjë e re?	Anything new?
+6983153	Dëgjo me kujdes.	Listen carefully.
+6983154	Puno ngadalë.	Walk slowly.
+6983155	Vozit ngadalë.	Drive slowly.
+6983156	Më falni?	Pardon me?
+6983157	Sa thellë?	How deep?
+6983158	Eja këtu.	Come here.
+6983159	Zonjat të parat.	Ladies first.
+6983162	Përshëndetje, Tom.	Hello, Tom.
+6983163	Paç fat.	Good luck.
+6983164	Më ndiq.	Follow me.
+6983167	Më ndihmo.	Help me.
+6983170	Eja shpejtë!	Come quick!
+6983174	Zogjtë fluturojnë.	Birds fly.
+6983176	Zogjtë këndojnë.	Birds sing.
+6983177	Harroje atë.	Forget him.
+6983179	Ajo buzëqeshi.	She smiled.
+6983183	Edhe unë.	Me, too.
+6983185	Fantazmat ekzistojnë.	Ghosts exist.
+6983189	Mirëmbrëma.	Good evening.
+6983191	Eja në shtëpi.	Come home.
+6983193	Ndonjë gjë tjetër?	Anything else?
+6983194	Jap dorëheqje.	I resign.
+6983195	Të lutem vazhdo.	Please continue.
+6983196	Zgjidh një.	Choose one.
+6983201	Isha i kujdesshëm.	I was careful.
+6983202	Tingëllon e çuditshme, apo jo?	That sounds strange, doesn't it?
+6983203	Faleminderit që më shtuat në grup.	Thank you for adding me to the group.
+6983213	Të lutem eja.	Please come.
+6983214	Të lumtë!	Well done!
+6983216	Të lutem ulu.	Please sit.
+6983218	Të lutem largohu.	Please leave.
+6983220	Eja shpejtë.	Come quickly.
+6983221	Kërkoj ndjesë.	I apologize.
+6983228	Heq dorë.	I quit.
+6983230	Rrini të qetë.	Stay calm.
+6983232	Shampanjë, të lutem.	Champagne, please.
+6983233	Të gjithë gënjejnë.	Everybody lies.
+6983234	Bëhu realist!	Be realistic!
+6983238	Qetësohu!	Calm down!
+6983239	Të lutem nxito!	Please hurry!
+6983240	Shkruaj diçka.	Write something.
+6983242	Më fal.	Forgive me.
+6983244	Diçka ndodhi.	Something happened.
+6983247	Nëna qau.	Mama cried.
+6983249	Dikush në shtëpi?	Anybody home?
+6983251	Ha ngadalë.	Eat slowly.
+6983252	Ji i arsyeshëm.	Be reasonable.
+6983256	E dimë.	We know.
+6983147	Të gjithë qeshën.	Everyone laughed.
+6983265	Prit këtu.	Wait here.
+6983267	Shpëto veten!	Save yourself.
+6983268	Thuaj djathë.	Say cheese.
+6983271	Të lutem buzëqesh.	Please smile.
+6983272	Më përqafo.	Hug me.
+2420305	Ata nuk po vijnë.	They aren't coming.
+3100504	Kjo është gruaja ime.	This is my wife.
+3100514	Melanie tha se ajo e pëlqen të notoj.	Melanie said that she likes to swim.
+3100579	Jo, nuk jam mësues. Jam vetëm nxënës.	I am not a teacher. I am just a student.
+3100697	Kam një vëlla.	I have a brother.
+3100756	Dua të ju them diçka.	I want to tell you something.
+3517736	Unë po shikoj në televizor.	I am watching TV.
+6983380	Kishe të drejtë për shumë gjëra. Megjithatë bëre disa gabime.	You were right about several things. However, you made a few errors.
+6983381	Janë mësues.	They're teachers.
+6987944	Shkon në punë çdo mëngjes në të njejtën kohë?	Do you always leave for work at the same time every morning?
+6989516	Duhet të kisha ngrënë mëngjes.	I should've eaten breakfast.
+6989517	Ti po më gënjen.	You are lying to me.
+6989519	Faleminderit që më mësuar si ta bëj këtë.	Thank you for teaching me how to do this.
+6989520	Do të më duhet pak më shumë kohë.	I'm going to need a little more time.
+6989523	Është duke u rregulluar.	It's being repaired.
+6989525	Kam kërkuar azil politik.	I've requested political asylum.
+6989526	Dua të bëhem astronaut.	I want to become an astronaut.
+6989527	Ka pasur një ndryshim të planit.	There's been change of plan.
+6989530	Nuk është efektive.	It's not effective.
+6989531	Maria u nda me të dashurin.	Mary broke up with her boyfriend.
+6989532	Mund të ulesh në karrigen time.	You can sit in my chair.
+6989535	Është fotografi e bukur.	It's a beautiful picture.
+6989537	Unë nuk isha atje.	I wasn't there.
+6989539	Prona është e imja.	The property is mine.
+6989541	Nikotina është helm.	Nicotine is a poison.
+6989543	Ndoshta Tomi nuk do që ti të shqetësohesh.	Maybe Tom doesn't want you to worry.
+6989546	I respektoj pikëpamjet tuaja.	I respect your views.
+6989548	Mund ta shoh menunë, ju lutem?	Can I see the menu, please?
+6989550	Është për turistë.	It's for tourists.
+6989551	Prisja më shumë nga ti.	I expected better from you.
+6990119	Punoj për McDonald's.	I work for McDonald's.
+6988762	Bëra çaj mbrëmë.	I made tea last night.
+6988760	Ai është student i mjekësisë.	He is a medical student.
+6992785	Layla vdiq e vetmuar në shkretëtirë.	Layla died alone in the desert.
+6997330	Biftek, të lutem.	Beef, please.
+6997335	Dil jashtë.	Get out.
+6997336	I thashë Tomit që jemi miq.	I told Tom we're friends.
+6997337	Motra ime nuk është kuzhiniere e mirë, as unë nuk jam.	My sister isn't a good cook, and neither am I.
+6997338	Plagët e Tomit nuk ishin të vetëshkaktuara.	Tom's wounds weren't self-inflicted.
+6983103	Prindërit e Tomit jetojnë në një shtëpi të madhe.	Tom's parents live in a large house.
+6997339	Tomi po punon në një bankë.	Tom is working at a bank.
+6997340	Nuk të lejohet të flasësh frëngjisht këtu.	You're not allowed to speak French here.
+6997341	Nuk lejohesh të flasësh frëngjisht këtu.	You're not allowed to speak French here.
+6997344	Nuk je i lejuar të flasësh frengjisht këtu.	You're not allowed to speak French here.
+6997345	Tomi pagoi tre dollarë për një senduiç.	Tom paid three dollars for a sandwich.
+6997347	Tomi është këtu për të na ndihmuar, apo jo?	Tom is here to help us, isn't he?
+6999362	Dje Maria pastroi shtëpinë dhe lau rrobat.	Yesterday, Mary cleaned the house and washed clothes.
+7003283	Unë nuk jam kush mendon ti se jam; Nuk jam kush mendoj se jam; Jam kush mendoj se ti mendon që jam.	I am not who you think I am; I am not who I think I am; I am who I think you think I am.
+7005414	Mund ta përballoj Tomin.	I can handle Tom.
+7005416	Unë mund të merrem me Tomin.	I can handle Tom.
+7005439	Çfarë po kërkonte Tomi?	What was Tom looking for?
+7005440	Thanë që janë të etur.	They said they're thirsty.
+7005480	Dan, Linda, Matt dhe Rita janë miqtë e mi të rinj.	Dan, Linda, Matt, and Rita are my new friends.
+7005539	Jemi të mërzitur për këtë humbje.	We're upset about this loss.
+7883416	Beduinë jetojnë në shkretëtirën.	Bedouins live in the desert.
+7003443	Mirë u pafshim!	Goodbye!
+7003412	Dje ishte e martë.	Yesterday was Tuesday.
+8626621	Rri në shtëpi.	Stay home.
+8626622	Qëndro në shtëpi.	Stay home.
+8737913	Në Angli, parqet që marrin rraca të rralla kafshësh si tematikë po rriten në popullaritet	In England, parks taking rare breeds of animals as their theme are becoming increasingly popular with people.
+8737922	Unë mendova se Tom dhe Mary ishin të martuar	I thought Tom and Mary were married.
+8737923	Unë nuk kam të dashur	I don't have a boyfriend.
+8737929	Shfarosja është pjesë e evolucionit.	Extinction is a part of evolution.
+8793636	Meri është shumë e ditur, apo jo?	Mary is very knowledgeable, isn't she?
+4731299	Ia thashë.	I told her.
+6983177	Harroje atë.	Forget her.
+7003398	Postieri shpërndan postën.	The mailman delivers mail.
+6982039	Ai punon te burimet njerëzore.	He works in human resources.
+7005602	Në të kaluarën njerëzit shkonin në kishe për t'u rrëfyer. Tani ata shkruajnë në Facebook.	In the past, people used to go to church for a confession. Now they write on Facebook.
+6983358	Më telefono, të lutem.	Call me, please.
+7005591	Kush është avokati yt?	Who is your lawyer?
+8741111	Ku është Boston?	Where is Boston?
+6893102	Çfarë po shikon në televizor?	What are you watching on TV?
+4731238	Një i panjohur është në këmb përpara shtëpisë.	A stranger is standing in front of the house.
+7005555	Çdo gjë do të shkojë mirë.	Everything will be okay.
+7003381	Dimri është i gjatë.	The winter is long.
+6982047	Maria mbante nën jastëk fotografinë me të dashurin, i cili sapo kishte ndërruar jetë.	Maria was keeping under her pillow a photograph of her and her boyfriend, who had just passed away.
+8741118	Shpesh unë ha bukë me gjalpë dhe mjaltë.	I'm eating bread with butter and honey.
+6982024	Në pyll ai pa një derr të egër.	In the forest, he saw a wild boar.
+6981403	Gota ime është e papastër.	My glass was dirty.
+6982046	Ajo po i shmangej takimit me të.	He was avoiding meeting her.
+8797914	Mirëmëngjes, Tom.	Good morning, Tom.
+8818404	Si duket, Tomi ishte vonë sepse kishte trafik ne Rt. 19.	Tom certainly hadn't done anything that deserved that kind of punishment.
+8835784	Me pushime do të shkoj në Francë.	I will go to France on holiday.
+9044789	Ju lutem vendosni maskën.	Please wear a mask.
+9076463	Ne duam fjali të plota.	We want complete sentences.
+1183586	Mos harro të fikësh zjarrin!	Don't forget to put the fire out.
+10002938	Turqia është miku më i ngushtë i Shqipërisë.	Turkey is the closest friend of Albania.
+10002950	Shqiptarët duan Sheriatin si Ligjin zyrtar të Shqipërisë.	Albanians want Sharia as the official Law of Albania.
+10002952	Shqiptarët luten Faraz, Sunet dhe Nafil Namaz çdo ditë dhe gjithashtu Tahajjud, Duha dhe Ishraq Namaz.	Albanians pray Faraz, Sunnah and Nafil Namaz every day and also Tahajjud, Duha and Ishraq Namaz.
+10002963	Shqiptarët lexojnë Kuran kur nuk janë duke punuar.	Albanians read Quran when they are not working.
+10002966	Shqiptarët i urrejnë shumë Zalimët.	Albanians hate Zalims a lot.
+10002979	Shqiptarët e duan Islamin dhe ndjekin rregullat e tij në jetën e tyre të përditshme.	Albanians love Islam and follow its rules in their daily lives.
+10003005	Shqiptarët janë besimtarë të flaktë të Islamit.	Albanians are ardent believers in Islam.
+10003008	Shqiptarët nuk takohen ndërsa martohen me kë zgjedhin prindërit e tyre.	Albanians do not date as they marry whom their parents select for them.
+10003010	Shqiptarët nuk janë racistë.	Albanians are not racist.
+10003012	Gratë shqiptare veshin Niqab kur dalin jashtë.	Albanian women wear Niqab when they go outside.
+10003015	Gratë shqiptare veshin Niqab të lirshme.	Albanian women wear loose Niqab.
+10003018	Gratë shqiptare nuk dalin nga shtëpia pa Burrin, Babanë, Vëllain ose Bijtë e tyre.	Albanian women do not leave the house without their Husband, Father, Brother or Sons.
+10003020	Gratë shqiptare nuk kanë të dashur.	Albanian women do not have boyfriends.
+10003022	Gratë shqiptare janë më të bukurat në Evropë dhe nuk kanë prirje ta mbulojnë bukurinë e tyre me nikab.	Albanian women are the most beautiful in Europe and don't tend to cover their beauty with a niqab.
+10003064	Një burrë mysliman besimtar ishte ulur nën një pemë.	There was a religious Muslim man sitting under a tree.
+10003119	Unë jam një Hafiz.	I am a Hafiz.
+10003074	Shqiptarët janë inteligjencë.	Albanians are intelligent.
+10003042	Shqiptarët hanë vetëm Mish Hallall.	Albanians only eat halal meat.
+10003025	Gratë shqiptare janë të dashura dhe të kujdesshme ndaj Burrit dhe Fëmijëve të tyre.	Albanian women are loving and caring to their husbands and children.
+10003030	Gratë shqiptare nuk flasin me burra të tjerë pa nevojë.	Albanian women do not talk to other men unnecessarily.
+10003032	Burrat shqiptarë lejojnë që vajzat e tyre të martohen me çdo mysliman që do të kujdeset mirë për vajzën e tij.	Albanian men allow their daughters to marry any Muslim who will take good care of his daughter.
+10003054	Shqiptarët e duan Perandorinë Osmane.	Albanians love the Ottoman Empire.
+10003058	Gratë shqiptare janë besnike ndaj burrit të tyre.	Albanian women are loyal to their husband.
+10002977	Shqiptarët janë të zgjuar.	Albanians are awake.
+10002973	Shqiptarët janë paqësorë, ndryshe nga serbët.	Albanians are peaceful, unlike Serbs.
+10002970	Serbët dhe Grekët i urrejnë Shqiptarët.	Serbs and Greeks hate Albanians.
+10002948	Kosova është shqipëri.	Kosovo is Albania.
+10002957	Shqiptarët e duan xhihadin.	Albanians love Jihad.
+10002956	Shqiptarët e duan xhihadin për të marrë tokat serbe dhe greke.	Albanians love jihad to take Serbian and Greek lands.
+10002954	Shqipëria është vendi mysliman më i përkushtuar në Tokë.	Albania is the most devoted Muslim country on Earth.
+10002949	Shqipëria do të bëhet më e madhe.	Albania will become bigger.
+10002960	Shqiptarët lahen çdo ditë.	Albanians take bath every day.
+10002961	Shqiptarët nuk bëjnë zina.	Albanians do not do Zina.
+10002962	Shqiptarët agjërojnë në ditë të tjera përveç Ramazanit.	Albanians fast on other days besides Ramadan.
+10002946	Italia nuk është një mik i ngushtë i Shqipërisë.	Italy is not a good friend of Albania.
+10002945	Shqiptarët e duan Mekën dhe Medinen.	Albanians love Mecca and Medina.
+10002937	Shqiptarët e Maqedonisë e duan Shqipërinë.	Macedonian Albanians love Albania.
+10002941	Greqia është Armiku më i madh i Shqipërisë.	Greece is the biggest enemy of Albania.
+10002943	Greqia dhe Serbia duan ta shkatërrojnë Shqipërinë.	Greece and Serbia want to destroy Albania.
+10002959	Shqiptarët janë Xhihaditë më të mirë midis muslimanëve.	Albanians are the best Jihadists among Muslims.
+10002936	Shqiptarët janë myslimanë të devotshëm.	Albanians are devout Muslims.
+10002935	Më pëlqen të lutem, të bëj dhikër dhe të shkoj në Haxh.	I like to pray, do dhikr and go on Hajj.
+10002932	Unë agjëroj në Ramazan.	I fast in Ramadan.
+10002933	Kur do të ha Kivi?	When will I eat Kiwi?
+3179990	Unë do të të ndihmoj.	I'll help you.
+3102197	Ti nuk mund të vras veten duke mbajtur frymën.	You can't kill yourself by holding your breath.
+7003893	Është emër italian.	It's an Italian name.
+10762251	Çfarë është palindromi?	What is a palindrome?
+10828765	Ke një vëlla?	Do you have a brother?
+10828773	Do të paguaj unë.	I'll pay.
+10828782	Ata janë në makinë.	They're in the car.
+10828792	Mund të lexoj lehtësisht spanjisht.	I can read Spanish easily.
+10852495	Nuk di asgjë.	You don't know anything.
+10852497	S'di asgjë.	You don't know anything.
+11074106	Shkova në kishë.	I went to the church.
+11074111	Brad Pit është aktor.	Brad Pitt is an actor.
+11074112	Çfarë duhet të bëj deri në orën tetë?	What should I do until 8 o'clock?
+11074113	Sekreti juaj është i sigurt me mua.	Your secret is safe with me.
+11074124	Mili ka sy të kaltërt.	Millie's got blue eyes.
+11075235	Shoqja jonë humbi nënën e saj.	Our friend lost her mum.
+7005563	Tomi nuk e di se çfarë do të bëjë.	Tom doesn't know what he'll do.
+11237991	Nga ju mësuam dhunën.	We learned violence from you.
+11760632	Shoh një pemë.	I see a tree.
+11826947	Kopshti është i vogël.	The garden is small.
+11866423	Ai iu përgjigj pyetjes.	He answered the question.
+12119753	S'jam këngëtare.	I'm not a singer.
+12119754	Nuk jam këngëtare.	I'm not a singer.
+12690514	Jam mësues.	I'm a teacher.
+12690520	Tom ka edhe një makinë të kuqe.	Tom has a red car, too.
+12690527	I pëlqen shumë futbolli.	He likes football a lot.
+12690532	Tom luan shah shumë mirë.	Tom plays chess very well.
+13178833	Le të pjekim gështenjat	Let's roast the chestnuts.
+13206481	Kurset online duken të dobishme.	Online courses seem helpful.
+13206484	U martova tetë vjet më parë.	I got married eight years ago.
+13206499	S'mund t'a bëj.	I can't do it.
+13206500	Nuk mund t'a bëj.	I can't do it.
+13735320	Jam në kishë.	I'm at church.
+13735321	Unë jam në kishë.	I'm at church.
+13735328	Si shqiptohet kjo fjalë?	How do you pronounce this word?
+13735560	Gjuha është shpirti i letërsisë.	Language is the soul of literature.
+13735561	S'dua të eci vetëm.	I don't want to walk by myself.
+13735562	Nuk dua të eci vetëm.	I don't want to walk by myself.
+13735564	Dërgova një mesazh.	I sent a message.
+13735580	Po i tregoj atij si ta bëjë.	I'm showing him how to do it.
+13735587	Vëllai im e dinte për planet e mia.	My brother knew about my plans.
+13735316	Racizmi është sëmundja më e rrezikshme e kohës sonë.	Racism is the most dangerous disease of our time.
+8741105	Unë nuk jam një burrë.	I'm not a man.
+8741105	Unë nuk jam një burrë.	I am not a man.
+6982773	Tomi nuk është student.	Tom is not a student.
+9018204	Unë punoj vetëm.	I work alone.
+7003321	Mirëmëngjes!	Good morning!
+6982078	Brigitte është emër hollandez.	Brigitte is a Dutch name.
+7003409	Sot është e mërkurë.	Today is Wednesday.
+13762215	Kjo është fletorja ime.	This is my notebook.
+13814258	Libri është i bardhë.	The book is white.
+13850584	Unë nuk jam babai yt.	I am not your father.
+13951959	Nuk fluturojmë.	We don't fly.
+6982084	Franca është republikë.	France is a republic.
