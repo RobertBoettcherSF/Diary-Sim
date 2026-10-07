@@ -296,5 +296,12 @@ Robert: improve the current project, no new concepts.
 * **NIGHT_SHIP_FULL=1** (`make night-ship`): `bin/diary_sim --verify-full` first, inside the one budget, then the sessions with
   what is left; a failure: no sessions, VERDICT FAIL. Detached by default, SIGHUP ignored during the verify.
 * checkin.txt lines wrap (never cut); the terminal night box fits 79 columns.
+* **Albanian baselines** (report only, scripts/alb_report.sh): majority gender and the last-letter rule on the held-back nouns;
+  the held-back score of the first 10 alb sessions ever against the last 10 of the window.
+* **Missing-by-one flow** (report only): per wesen, entered (new) / left (by lessons) in the window. Root cause of Abel's flat
+  2108 in 0.064: the carried words are drawn from P_Carry = known by the teacher, missing by one at the learner, no hidden symbol,
+  NOT dormant at the teacher. With active=2 nearly every word of the teacher is dormant (Adam: 20624 of 20934), so only the
+  newest words of the set (still active at the teacher) are teachable: the lessons take the new entries as they come and never
+  reach the dormant backlog. carry=3 (the teacher may teach a word it has dormant) is not built yet: it touches the active model.
 Checks: scenario 69.
 

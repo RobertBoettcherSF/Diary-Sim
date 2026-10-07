@@ -120,6 +120,11 @@ diaries, entities and summary files are byte for byte the same.
   SIGHUP is ignored during the verify, so closing the terminal does not stop it. checkin.txt and the screen show
   `budget: full verify ok in <time> (verify_stamp.txt); sessions got <time>`.
 * checkin.txt head lines wrap at a space instead of being cut; the terminal night box wraps to 79 columns.
+* Albanian (report only): a third `albanian:` line with the baselines on the same held-back nouns (the majority gender,
+  `all-f`/`all-m`, and the last-letter rule `-ë`/`-a` = feminine) and the held-back score of the first 10 `alb=1` sessions ever
+  against the last 10 of the window (learned vs built in); `albanian_report.txt` has the counts.
+* Early signals: `missing-by-one flow` per wesen: words that entered its missing-by-one set in the window (in brackets: new
+  words) and that left it (in brackets: by lessons), from `entities/*/words.txt`.
 
 ## Build 0.064: the Albanian book (`alb=1`) and the mood causes
 
