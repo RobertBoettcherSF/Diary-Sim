@@ -1,5 +1,5 @@
 #!/bin/sh
-# Version: 0.002
+# Version: 0.003
 # The Albanian report (build 0.064, alb=1 sessions; REPORT time only, the simulation never reads it):
 #   scripts/alb_report.sh <save folder> <first session> <last session>
 # Scores the sentences the wesen said in the window (diaries/albanian.txt U and J lines) against the genders of
@@ -18,6 +18,9 @@ awk -v lo="$lo" -v hi="$hi" -v rep="$folder/albanian_report.txt" -v names="$root
           while ((getline l < names) > 0) if (l !~ /^#/ && split(l, a, " = ") == 2) { gsub(/ /, "", a[1]); dn[a[1]] = a[2] } }
   function nm(x) { return (x in dn) ? dn[x] : x }
   function pc(a, b) { return b > 0 ? sprintf("%d%%", 100 * a / b + 0.5) : "-" }
+  # 0.065: the held-back score per session over the whole file (the first sessions ever against the last of the window)
+  /^U S[0-9]/ && /held=1/ { s0 = substr($2, 2) + 0; ge0 = g[$4]; if (ge0 == "m" || ge0 == "f") { if (!(s0 in pn)) so[++ns0] = s0; pn[s0]++
+      pc0[s0] += ($5 == "i" && ge0 == "m") || ($5 == "e" && ge0 == "f") } }
   /^[UJHB] S[0-9]/ { s = substr($2, 2) + 0; if (s < lo || s > hi) next }
   /^B S/ { book = $0 }
   /^H S/ { w = $3; sub(/heard=/, "", $4); heard[w] += $4; sub(/cues=/, "", $5); cues[w] += $5 }
@@ -25,7 +28,8 @@ awk -v lo="$lo" -v hi="$hi" -v rep="$folder/albanian_report.txt" -v names="$root
            ok = (art == "i" && ge == "m") || (art == "e" && ge == "f")
            N++; C += ok; if (art == "i") I++; if (ge == "m") Mn++
            wn[w]++; wc[w] += ok
-           if ($0 ~ /held=1/) { HN++; HC += ok; if (ge == "m") HM++; if (ge == "f") { HF++; HFC += ok }; whn[w]++; whc[w] += ok }
+           if ($0 ~ /held=1/) { HN++; HC += ok; if (ge == "m") HM++; if (ge == "f") { HF++; HFC += ok }; whn[w]++; whc[w] += ok
+             HL += ((n ~ /(ë|a)$/) ? "f" : "m") == ge }   # 0.065: the last-letter rule (-ë / -a feminine, else masculine)
            src = $0; sub(/.* src=/, "", src); sub(/ .*/, "", src); sn[src]++; sc[src] += ok
            last[++nl] = $2 " " nm(w) ": " n " " art " " $6 " (" ge (ok ? ", ok" : ", WRONG") ", " src ($0 ~ /held=1/ ? ", held back" : "") ")" }
   /^J S/ { w = $3; ge = $NF; sub(/g=/, "", ge); ok = ($5 == "i" && ge == "m") || ($5 == "e" && ge == "f"); JN++; JC += ok; jn[w]++; jc[w] += ok
@@ -40,11 +44,20 @@ awk -v lo="$lo" -v hi="$hi" -v rep="$folder/albanian_report.txt" -v names="$root
     if (length(l1) > 77) l1 = sprintf("albanian: %s (shuf %s); held %s (all-m %s)", ag, pc(sh * 100, 100), hb, pc(HM, HN))
     l2 = sprintf("albanian: held-back feminine %s; first person (jam i/e) %d/%d", fm, JC, JN)
     if (length(s1) <= 77) print s1; else { print l1; print l2 }
+    # 0.065: the baselines on the same held-back nouns, and the first sessions ever against the last of the window (learned vs built in)
+    mj = (HM >= HN - HM) ? "m" : "f"; MJ = (HM >= HN - HM) ? HM : HN - HM
+    k = 10; fa = fb = la = lb = 0; nf = nl0 = 0
+    for (i = 1; i <= ns0 && nf < k; i++) { fa += pc0[so[i]]; fb += pn[so[i]]; nf++ }
+    for (i = ns0; i >= 1 && nl0 < k; i--) { if (so[i] > hi) continue; la += pc0[so[i]]; lb += pn[so[i]]; nl0++ }
+    l3 = sprintf("albanian: held-back base all-%s %s, -ë/-a %s; first %d s %s n=%d, last %s n=%d", mj, pc(MJ, HN), pc(HL, HN), nf, pc(fa, fb), fb, pc(la, lb), lb)
+    if (length(l3) > 77) l3 = sprintf("albanian: base all-%s %s, -ë/-a %s; first %d s %s, last %d s %s", mj, pc(MJ, HN), pc(HL, HN), nf, pc(fa, fb), nl0, pc(la, lb))
+    print l3
     printf "# diary-sim albanian report (scripts/alb_report.sh, overwritten each run): sessions %s to %s\n", lo, hi > rep
     print "# scored against data/sq_nouns.txt (Wiktionary genders); neuter / unknown nouns are left out" > rep
     print book > rep
     printf "all: %d sentences, article right %d (%s); shuffle baseline %s (articles i %d, nouns m %d)\n", N, C, pc(C, N), pc(sh * 100, 100), I, Mn > rep
     printf "held-back nouns (never heard): %d, right %d (%s); always-m %s; feminine %d, right %d (%s)\n", HN, HC, pc(HC, HN), pc(HM, HN), HF, HFC, pc(HFC, HF) > rep
+    printf "held-back baselines: all-%s %s, last letter (-ë/-a feminine) %s; held-back score of the first %d alb sessions ever %s (n=%d), of the last %d of the window %s (n=%d)\n", mj, pc(MJ, HN), pc(HL, HN), nf, pc(fa, fb), fb, nl0, pc(la, lb), lb > rep
     printf "first person (jam i/e): %d of %d right\n", JC, JN > rep
     for (x in sn) printf "  by source %s: %d, right %d (%s)\n", x, sn[x], sc[x], pc(sc[x], sn[x]) > rep
     for (w in wn) printf "wesen %s: heard %d sentences (%d cues); said %d, right %d (%s); held-back %d, right %d; jam %d/%d\n", nm(w), heard[w], cues[w], wn[w], wc[w], pc(wc[w], wn[w]), whn[w], whc[w], jc[w], jn[w] > rep
