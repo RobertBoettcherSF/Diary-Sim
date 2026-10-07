@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Version: 0.001
+# Version: 0.002
 # MAINTAINER-ONLY (build 0.064): builds the Albanian data of the alb=1 sessions.  NOT part of Robert's run loop: make, make ship,
 # make slice and make check never call it; its outputs are committed:
 #   data/sq_book.txt        Tatoeba sentence id <TAB> Albanian <TAB> English (the book the wesen find), UTF-8
@@ -66,7 +66,16 @@ def main():
     # nouns
     nouns = {}            # lemma -> (gender, plural, def sg, def pl)
     all_w = set()         # every word with a recorded gender (the count a peer compares)
+    ambiguous = set()     # noun forms left out because another part of speech has them too
     forms_all = {}        # form -> (lemma, kind), first lemma (sorted) wins
+    other = set()         # words and forms of entries that are not nouns (verbs, pronouns, particles, adjectives ...)
+    for line in open(jsonl, encoding="utf-8"):
+        d = json.loads(line)
+        if d.get("pos") in ("noun", "name", "character", "symbol", "suffix", "prefix"):
+            continue
+        other.add(unstress(d.get("word", "")).lower())
+        for f in d.get("forms", []):
+            other.add(unstress(f.get("form", "")).lower())
     for line in open(jsonl, encoding="utf-8"):
         d = json.loads(line)
         if d.get("pos") != "noun":
@@ -99,8 +108,10 @@ def main():
     for lw in sorted(nouns):
         g, pl, ds, dp = nouns[lw]
         for x, k in ((lw, "is"), (ds, "ds"), (pl, "ip"), (dp, "dp")):
-            if x and x not in forms_all:
+            if x and x not in forms_all and x not in other:   # only forms that can only be a noun: "ka", "dua", "më" are not cues
                 forms_all[x] = (lw, k)
+            elif x and x in other:
+                ambiguous.add(x)
     # matches: distinct word forms of the kept sentences that are a noun lemma or a noun form
     book_tokens = collections.Counter(t for r in kept for t in toks(r[3]))
     matched = sorted(t for t in book_tokens if t in forms_all)
@@ -136,6 +147,8 @@ def main():
     print("rows %d, no diacritics %d, with a stripped token %d, kept %d" % (len(rows), len(no_dia), len(has) - len(kept), len(kept)))
     print("(all noun entries with a gender: %d unique words incl. %d capitalised / multi-word ones left out)" % (n_all, n_all - len(nouns)))
     print("nouns with gender %d (m %d, f %d, n %d), kept %d (book %d)" % (len(nouns), gc["m"], gc["f"], gc["n"], len(keep), len(book_lemmas)))
+    loose = sorted(t for t in book_tokens if t in forms_all or t in ambiguous)
+    print("loose: book word forms matching any noun form, also those of other parts of speech: %d" % len(loose))
     print("distinct book word forms %d, matching a noun or form %d (tokens %d)" % (len(book_tokens), len(matched), sum(book_tokens[t] for t in matched)))
 
 

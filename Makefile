@@ -1,4 +1,4 @@
-# Version: 0.051
+# Version: 0.052
 # make ship       ROBERT'S DAY COMMAND (after unzipping over the source folder; the save in ../diary-data stays): REPORTS ONLY, no
 #                 night, no q, seconds: build if needed, then active, wordstat, frustration, evolve on the save as it is, and verify if the
 #                 save has at most SHIP_VERIFY_TICKS (150000) ticks (verify replays the whole history, minutes on a big save; the
@@ -205,7 +205,7 @@ all:
 	@rm -f b~*
 
 version-check:
-	@bad=0; for f in Makefile diary_sim.adb sim_util.ads sim_util.adb sim_world.ads sim_world.adb sim_quit.ads sim_quit.adb sim_menu.ads sim_menu.adb sim_dharma.ads sim_dharma.adb sim_things.ads sim_things.adb sim_ledger.ads sim_ledger.adb sim_store.ads sim_store.adb sim_screen.ads sim_screen.adb sim_chess.ads sim_chess.adb sim_games.ads sim_games.adb sim_robot.ads sim_robot.adb sim_govern.ads sim_govern.adb sim_preport.ads sim_preport.adb sim_next.ads sim_next.adb sim_visit.ads sim_visit.adb sim_chat.ads sim_chat.adb sim_voice.ads sim_voice.adb sim_wordstat.ads sim_wordstat.adb sim_evolve.ads sim_evolve.adb sim_active.ads sim_active.adb sim_trial.ads sim_trial.adb sim_records.ads sim_records.adb sim_ckpt.ads sim_ckpt.adb sim_carry.ads sim_carry.adb; do \
+	@bad=0; for f in Makefile diary_sim.adb sim_util.ads sim_util.adb sim_world.ads sim_world.adb sim_quit.ads sim_quit.adb sim_menu.ads sim_menu.adb sim_dharma.ads sim_dharma.adb sim_things.ads sim_things.adb sim_ledger.ads sim_ledger.adb sim_store.ads sim_store.adb sim_screen.ads sim_screen.adb sim_chess.ads sim_chess.adb sim_games.ads sim_games.adb sim_robot.ads sim_robot.adb sim_govern.ads sim_govern.adb sim_preport.ads sim_preport.adb sim_next.ads sim_next.adb sim_visit.ads sim_visit.adb sim_chat.ads sim_chat.adb sim_voice.ads sim_voice.adb sim_wordstat.ads sim_wordstat.adb sim_evolve.ads sim_evolve.adb sim_active.ads sim_active.adb sim_trial.ads sim_trial.adb sim_records.ads sim_records.adb sim_ckpt.ads sim_ckpt.adb sim_carry.ads sim_carry.adb sim_albanian.ads sim_albanian.adb; do \
 	  head -1 $$f | grep -Eq 'Version: [0-9]+\.[0-9]{3}' || { echo "no version header: $$f"; bad=1; }; done; \
 	  v=$$(head -1 diary_sim.adb | grep -Eo '[0-9]+\.[0-9]{3}'); \
 	  grep -q "Build : constant String := \"$$v\"" diary_sim.adb || { echo "Build constant differs from diary_sim.adb header $$v"; bad=1; }; \

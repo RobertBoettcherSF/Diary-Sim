@@ -121,6 +121,19 @@ format 3 checkpoint loads again and `make verify-full` replays everything byte f
 checkpoint's tick is refused. `make verify` compares the `carry` section like any other; against a format 1 / 2 checkpoint it
 requires the replayed carry state to be zero.
 
+## Format 4: the section "albanian" (build 0.064)
+
+Build 0.064 adds the Albanian of the `alb=1` sessions (`sim_albanian.ads`, docs/EVOLVE.md 18): the session that found the book,
+each wesen's position in the book, its table of noun-ending classes x gender cues (96 x 2 counters), its memory of nouns heard
+with a cue (at most 256 entries), and the sentences heard and said. Format 4 streams it in one new section `albanian` after
+`carry`; every other section is byte for byte what format 3 holds. `Ckpt_Layout_Since` stays 1: formats 1 .. 3 still load, their
+missing sections read as zero (format 1 / 2: no carry and no Albanian state, format 3: no Albanian state), which is what a replay
+builds as long as no `alb=1` session began before the checkpoint's tick; if one did, the checkpoint is refused (`state layout
+changed: format 3 has no Albanian state, alb=1 since session N`) and the start replays. On Robert's save the first `alb=1` session
+begins after his 0.063 checkpoint, so the first 0.064 start loads it (+0 ticks replayed) and writes format 4 at the end of the run.
+`make verify` against a format 1 .. 3 checkpoint requires the replayed Albanian state to be zero. The mood causes of 0.064
+(`moodcause.txt`) are report-only counters of the running session and are not in the checkpoint.
+
 ## The layout guard (make check)
 
 The runtime section heads catch a changed layout at the load, but only as a refusal. So that a forgotten bump is caught before a
@@ -130,6 +143,10 @@ name (the streamed variables, their types, the element types of the vectors, the
 do not count). The recorded value, next to the format number, is:
 
 ckpt_layout: 3 006ad69b266ebca0
+
+Format 4 (build 0.064, the section `albanian`):
+
+ckpt_layout: 4 148981a865bd8474
 
 `make check` (scenario 63) and `make ckpt-layout` compare it with the code: when the code changed and this line did not, the check
 FAILS with `bump Ckpt_Format`. Then:

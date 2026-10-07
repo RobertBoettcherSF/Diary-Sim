@@ -12,3 +12,4 @@ run_report.txt
 debug.txt
 debug.tmp
 obj_small/
+__pycache__/

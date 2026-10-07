@@ -1,4 +1,4 @@
---  Version: 0.063
+--  Version: 0.064
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -28,7 +28,7 @@ pragma Ada_2022;
 
 with Ada.Calendar, Ada.Calendar.Formatting, Ada.Characters.Handling, Ada.Numerics.Elementary_Functions, Ada.Command_Line, Ada.Containers.Indefinite_Hashed_Maps, Ada.Containers.Ordered_Maps, Ada.Containers.Indefinite_Hashed_Sets, Ada.Containers.Vectors, Ada.Directories, Ada.Environment_Variables,
      Ada.Exceptions, Ada.Finalization, Ada.Strings.Fixed, Ada.Streams.Stream_IO, Ada.Strings.Hash, Ada.Strings.Unbounded, Ada.Text_IO,
-     GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Carry, Sim_Ckpt, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chat, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Records, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Trial, Sim_Util, Sim_Visit, Sim_Voice, Sim_Wordstat, Sim_Evolve, Sim_Active, Sim_World;
+     GNAT.OS_Lib, GNAT.Traceback.Symbolic, Sim_Albanian, Sim_Carry, Sim_Ckpt, Sim_Dharma, Sim_Govern, Sim_Ledger, Sim_Next, Sim_Chat, Sim_Chess, Sim_Games, Sim_Menu, Sim_Preport, Sim_Quit, Sim_Records, Sim_Robot, Sim_Screen, Sim_Store, Sim_Things, Sim_Trial, Sim_Util, Sim_Visit, Sim_Voice, Sim_Wordstat, Sim_Evolve, Sim_Active, Sim_World;
 use Ada.Strings.Unbounded, Sim_Util, Sim_World;
 
 procedure Diary_Sim is
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.063";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.064";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -158,7 +158,9 @@ procedure Diary_Sim is
    Ckpt_Magic : constant String := "diary-sim-ckpt ";
    --  0.061, format 3: a section "carry" (Sim_Carry) after "main"; every other section is as in formats 1 and 2, so those still load
    --  (their carry state reads as zero; refused when a carry=1 session began before their tick: Ckpt_Fits).
-   Ckpt_Format : constant := 3;
+   --  0.064, format 4: a section "albanian" (Sim_Albanian) after "carry"; formats 1 .. 3 still load (their Albanian state reads as
+   --  zero; refused when an alb=1 session began before their tick: Ckpt_Fits).
+   Ckpt_Format : constant := 4;
    Ckpt_Layout_Since : constant := 1;
    Replay_Opt : Boolean := False;                    --  --replay: never load the checkpoint (make verify replays anyway)
    Ckpt_Used : Boolean := False;                     --  this run started from the checkpoint
@@ -769,6 +771,18 @@ procedure Diary_Sim is
       return Base;
    end Carry_Choice;
 
+   --  0.064, the mood causes of a session (report only, docs/EVOLVE.md 18): every tick's mood change of a wesen split by cause, as
+   --  it happens; no die, nothing the replay reads or the checkpoint holds.  Start_Life zeroes them, Record_Word_Vote (the end of a
+   --  NEW session) appends one line per session to moodcause.txt in the save folder (part=1: this run began inside the session).
+   type Cause_Kind is (C_Refusal, C_Lesson, C_Work, C_Rest, C_Talk, C_Game, C_Other);
+   Cause_Net : array (Entity_Id, Cause_Kind) of Integer := [others => [others => 0]];
+   Cause_Refusals : array (Entity_Id) of Natural := [others => 0];
+   Cause_Session : Natural := 0;   --  the session Start_Life began in this run (0: none)
+   procedure Note_Cause (E : Entity_Id; K : Cause_Kind; D : Integer) is
+   begin
+      Cause_Net (E, K) := Cause_Net (E, K) + D;
+   end Note_Cause;
+
    function Step (E : Entity_Id; Tick : Int) return String is
       A   : constant Action := Carry_Choice
         (E, Tick, (if Pending_Word (E) /= 0 then Learn else Choose (Seed, E, Tick, St (E).Energy, St (E).Mood, Work_Keep (E))));
@@ -789,6 +803,10 @@ procedure Diary_Sim is
       Chess_Fx, Chess_Nom : Integer := 0;   --  mood of finished chess games, taken at this step
       Gov_Fx, Gov_Nom : Integer := 0;       --  mood of governance decisions, taken at this step
       M_Base, M_After_Base : Integer;
+      --  0.064, the mood causes (report only, Note_Causes): the refused part of Gov_Fx, and what the favour / the work lever
+      --  changed of the action's own mood
+      Ref_Fx, Fav_Adj, Lever_Adj : Integer := 0;
+      Refused : Boolean := False;
 
       procedure Add (Text : String) is
       begin
@@ -1075,7 +1093,9 @@ procedure Diary_Sim is
       end if;
       if Rest_Active and then A = Rest then Rest_Effect (E, Eff_En, Eff_Mo); Led_Phase := Last_Phase; end if;
       if Govern_Active and then A = Work and then Eff_Mo < 0 then   --  a governed lever: work costs less mood (never turns it positive)
+         Lever_Adj := Eff_Mo;
          Eff_Mo := Integer'Min (0, Eff_Mo + Sim_Govern.Off (E, Sim_Govern.Work));
+         Lever_Adj := Eff_Mo - Lever_Adj;
       end if;
       --  carry=1: a learner who owes E a favour helps with the work: it costs E no mood and half the energy that tick
       if Sim_Carry.Active and then A = Work and then (Eff_Mo < 0 or else Eff_En < 0) then
@@ -1085,6 +1105,7 @@ procedure Diary_Sim is
             if D /= 0 and then St (Entity_Id (D)).Energy >= Sim_Carry.Relief_Energy + Sim_Carry.Help_Energy
               and then Roll (Seed, Eid, Tick, 23103, 100) <= Sim_Carry.Spend_Pct
             then
+               Fav_Adj := Integer'Max (0, Eff_Mo) - Eff_Mo;
                Eff_Mo := Integer'Max (0, Eff_Mo);
                Eff_En := Eff_En / 2;
                St (Entity_Id (D)).Energy := Clamp (St (Entity_Id (D)).Energy - Sim_Carry.Help_Energy, E_Min, E_Max);
@@ -1268,6 +1289,7 @@ procedure Diary_Sim is
             S.Mood := S.Mood + Got;
             Gov_Fx := Got;
             Gov_Nom := Want;
+            if Gov < 0 then Ref_Fx := Integer'Max (Gov, Got - Heard); Refused := True; end if;   --  0.064 mood causes: the refusal's part
          end;
       end if;
       if Moodrest_Active then   --  0.062 moodrest=1: soft bounds and the drift to the resting mood (ledger: in the rest-model part)
@@ -1280,6 +1302,22 @@ procedure Diary_Sim is
       end if;
       Sim_Ledger.Add (E, Tick, A, Verb, S.Location, M_Base, M_After_Base - Pre_Mo - M_Base, S.Mood - M_After_Base - Chess_Fx - Gov_Fx,
                       Eff_Mo + Push_Nom + Chess_Nom + Gov_Nom, Led_Phase, Was_Cool, Push_Feel, Chess_Fx, Gov_Fx);
+      declare   --  0.064 mood causes (report only: no die, no stored state; moodcause.txt at the session end)
+         Rest_Fx : constant Integer := M_After_Base - Pre_Mo - M_Base;   --  rest model, moodrest pull, favour, lever, bounds
+         Own : constant Cause_Kind :=
+           (if Carry_To (E) /= 0 or else A = Learn then C_Lesson elsif A = Work then C_Work elsif A = Rest then C_Rest
+            elsif A = Talk then C_Talk else C_Other);
+      begin
+         Note_Cause (E, Own, M_Base);
+         Note_Cause (E, C_Lesson, Fav_Adj);
+         Note_Cause (E, C_Other, Lever_Adj);
+         Note_Cause (E, C_Rest, Rest_Fx - Fav_Adj - Lever_Adj);
+         Note_Cause (E, C_Other, S.Mood - M_After_Base - Chess_Fx - Gov_Fx);   --  the pushed things
+         Note_Cause (E, C_Game, Chess_Fx);
+         Note_Cause (E, C_Refusal, Ref_Fx);
+         Note_Cause (E, C_Other, Gov_Fx - Ref_Fx);   --  grants and heard announcements
+         if Refused then Cause_Refusals (E) := Cause_Refusals (E) + 1; end if;
+      end;
       declare
          Tone : constant List_Id := (if S.Mood <= Tone_Low then Mood_Low elsif S.Mood >= Tone_High then Mood_High
                                      else Mood_Neutral);
@@ -5364,6 +5402,8 @@ procedure Diary_Sim is
       Carry2 : Boolean := False;        --  carry=2 (0.062, with Carry): a lesson is an exchange of several words both ways
       Moodrest : Boolean := False;      --  moodrest=1 (0.062): resting moods, soft bounds (Mood_Rest_Step)
       Moodrest2 : Boolean := False;     --  moodrest=2 (0.063): the drift as a one-point step by a die (Mood_Rest_Step2)
+      Alb : Boolean := False;           --  alb=1 (0.064): the Albanian book, hearing and saying at the session start (Sim_Albanian)
+      Alb_G : String (1 .. 4) := "----";   --  albg= (with Alb): the wesen genders of data/wesen_gender.txt when the session began
    end record;
    package Session_Vectors is new Ada.Containers.Vectors (Positive, Session_Rec);
    Sessions : Session_Vectors.Vector;
@@ -5385,6 +5425,7 @@ procedure Diary_Sim is
       & (if R.World then " world=1" else "") & (if R.Rest then " rest=1" else "") & (if R.Grant then " grant=1" else "")
       & (if R.Symstrict then " symstrict=1" else "") & (if R.Slowfloor then " slowfloor=1" else "")   --  build 0.054, before screen=1: older checks anchor the end
       & (if R.Carry then (if R.Carry2 then " carry=2" else " carry=1") else "") & (if R.Moodrest then (if R.Moodrest2 then " moodrest=2" else " moodrest=1") else "")   --  0.061 / 0.062, before screen=1
+      & (if R.Alb then " alb=1 albg=" & R.Alb_G else "")   --  0.064
       & (if R.Screen then " screen=1" else "") & (if R.Chess then " chess=1" else "") & (if R.Chessrules then " chessrules=2" else "")
       & (if R.Robot then " robot=1" else "") & (if R.Govern then " govern=1" else "") & (if R.Scoin then " scoin=1" else "")
       & (if R.Preport then " preport=1" else "") & (if R.Players4 then " players4=1" else "") & (if R.Nextticks then " nextticks=1" else "") & (if R.Trial then " trial=1" else "") & (if R.Rec2 and then R.Records then " records=2" elsif R.Records then " records=1" else "")
@@ -5449,6 +5490,8 @@ procedure Diary_Sim is
       R.Carry2 := Token (L, "carry") = "2";
       R.Moodrest := Token (L, "moodrest") = "1" or else Token (L, "moodrest") = "2";
       R.Moodrest2 := Token (L, "moodrest") = "2";
+      R.Alb := Token (L, "alb") = "1";
+      if R.Alb and then Token (L, "albg")'Length = 4 then R.Alb_G := Token (L, "albg"); end if;
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
         and then Token (L, "src") in "vote" | "explicit" and then V'Length > 0 and then (R.Visit_Who > 0 or else not R.Visit);
       while OK and then K < 4 loop
@@ -5644,9 +5687,54 @@ procedure Diary_Sim is
       end loop;
    end Load_Sessions;
 
+   --  0.064 alb=1: the Albanian of a session (Sim_Albanian) and its lines of diaries/albanian.txt.  The file is a record written
+   --  once per session (the first run that reaches the session writes it; a replay of an older session recomputes the state but
+   --  leaves the file alone), never read by the simulation; scripts/alb_report.sh scores it for checkin.txt.
+   Alb_Path : constant String := "diaries/albanian.txt";
+   Alb_Disk_Last : Integer := -1;   --  the newest session of the file (-1: not read yet)
+   procedure Alb_Session (R : Session_Rec) is
+      Lines : Str_Vectors.Vector;
+      F : TIO.File_Type;
+   begin
+      Sim_Albanian.Session (Seed, R.N, R.Start, R.Alb_G, Lines);
+      if Preview or else Ledger_Mode then return; end if;
+      if Alb_Disk_Last < 0 then
+         declare
+            Old : Str_Vectors.Vector;
+            Found : Boolean;
+         begin
+            Alb_Disk_Last := 0;
+            Read_Lines (Alb_Path, Old, Found);
+            for L of Old loop
+               if L'Length > 3 and then L (L'First + 1) = ' ' and then L (L'First + 2) = 'S' then
+                  declare
+                     Sp : constant Natural := Fx.Index (L (L'First + 3 .. L'Last), " ");
+                     N : constant Int := To_Num (L (L'First + 3 .. (if Sp = 0 then L'Last else Sp - 1)));
+                  begin
+                     if N > Int (Alb_Disk_Last) then Alb_Disk_Last := Integer (N); end if;
+                  end;
+               end if;
+            end loop;
+         end;
+      end if;
+      if R.N <= Alb_Disk_Last then return; end if;
+      if Ada.Directories.Exists (Alb_Path) then TIO.Open (F, TIO.Append_File, Alb_Path);
+      else
+         TIO.Create (F, TIO.Out_File, Alb_Path);
+         TIO.Put_Line (F, "# diary-sim 0.064 alb=1: B = the book found, H = sentences heard (Tatoeba ids), U = a sentence said "
+                       & "(noun article adjective; src=mem|end2|end1|def; held=1: a held-back noun), J = first person (g = gender)");
+      end if;
+      for L of Lines loop TIO.Put_Line (F, L); end loop;
+      TIO.Close (F);
+      Alb_Disk_Last := R.N;
+   end Alb_Session;
+
    --  A liberated wesen of a new session moves to the location its own dice name (record + effect).
    procedure Start_Life (R : Session_Rec) is
    begin
+      Cause_Net := [others => [others => 0]];   --  0.064 mood causes: a new session
+      Cause_Refusals := [others => 0];
+      Cause_Session := R.N;
       Sim_Ledger.Keep_From (R.Start);   --  0.058: the ledger keeps the ticks of the newest session (and the sums of all)
       Sim_Active.Open (R.N, R.Start, (if R.Active and then R.Screen then R.Active_Level else 0), R.Slowfloor);   --  closes the window of the previous active session (dormancies), opens this one
       Emit_Active_Lines;
@@ -5658,6 +5746,7 @@ procedure Diary_Sim is
       Screen_Active := R.Screen;
       Chess_Active := R.Chess;
       Sim_Carry.Begin_Session (R.Carry, (if R.Carry2 then 2 else 1));
+      if R.Alb then Alb_Session (R); end if;   --  0.064 alb=1: hearing and saying at the session start
       Moodrest_Active := R.Moodrest;
       Moodrest_Level := (if R.Moodrest2 then 2 else 1);
       Sim_Games.Set_Rules (if R.Chessrules then 2 else 0);
@@ -5919,6 +6008,28 @@ procedure Diary_Sim is
       if World_Active then Append (Text, ASCII.LF & World_Line (R.N, Tick)); end if;
       if Rest_Active then Append (Text, ASCII.LF & Rest_Line (R.N, Tick)); end if;
       Append_Text (To_String (Text));   --  W, D x4, C, Y x3 (and L in a world session) in one write
+      if not Preview and then not Ledger_Mode then   --  0.064: the mood causes of this session (report only)
+         declare
+            F : TIO.File_Type;
+            L : Unbounded_String := To_Unbounded_String ("M S" & Img (R.N) & " t=" & Img (Tick) & (if Cause_Session /= R.N then " part=1" else ""));
+         begin
+            for E in Entity_Id loop
+               Append (L, " " & Name (E) & "=");
+               for K in Cause_Kind loop Append (L, Img (Cause_Net (E, K)) & ","); end loop;
+               Append (L, Img (Cause_Refusals (E)) & "," & Img (St (E).Mood));
+            end loop;
+            if Ada.Directories.Exists ("moodcause.txt") then TIO.Open (F, TIO.Append_File, "moodcause.txt");
+            else
+               TIO.Create (F, TIO.Out_File, "moodcause.txt");
+               TIO.Put_Line (F, "# diary-sim 0.064 mood causes (report only): M S<session> t=<end tick> <wesen>=<refusal>,<lesson>,<work>,"
+                             & "<rest>,<talk>,<game>,<other>,<refusals>,<mood at the end>; net mood points of the session by cause");
+            end if;
+            TIO.Put_Line (F, To_String (L));
+            TIO.Close (F);
+         exception
+            when others => if TIO.Is_Open (F) then TIO.Close (F); end if;
+         end;
+      end if;
       Vote_Add (R);
       Rec_End (Tick, To_String (C_Text));   --  records=1: favourites, collective vote, words voted, announcements
       Words_Text := To_Unbounded_String (Msg ("words.line", Img (R.N), Words_Short (R.Tok)));
@@ -5952,6 +6063,8 @@ procedure Diary_Sim is
    function Carry2_Wanted return Boolean is (Limit ("carry.enabled", 2) >= 2);  --  carry=2 (0.062): exchanges (carry.enabled = 1: carry=1)
    function Moodrest_Wanted return Boolean is (Limit ("moodrest.enabled", 2) /= 0);   --  moodrest=1 (0.062) or 2 (0.063)
    function Moodrest2_Wanted return Boolean is (Limit ("moodrest.enabled", 2) >= 2);   --  moodrest=2 (0.063)
+   function Alb_Wanted return Boolean is (Limit ("albanian.enabled", 1) /= 0);   --  alb=1 (0.064): the Albanian book
+   function Alb_G_Now return String is (if Alb_Wanted then Sim_Albanian.Genders_Now else "----");   --  stamped into the session line
 
    function Preport_Wanted return Boolean is (Govern_Wanted and then Limit ("preport.enabled", 1) /= 0);   --  preport=1 needs the governance (the D records)
 
@@ -5974,7 +6087,7 @@ procedure Diary_Sim is
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
                Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => Visit_Mode, Visit_Who => Visit_Who, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted, Carry2 => Carry2_Wanted, Moodrest => Moodrest_Wanted, Moodrest2 => Moodrest2_Wanted);
+               Visit => Visit_Mode, Visit_Who => Visit_Who, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted, Carry2 => Carry2_Wanted, Moodrest => Moodrest_Wanted, Moodrest2 => Moodrest2_Wanted, Alb => Alb_Wanted, Alb_G => Alb_G_Now);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -5991,7 +6104,7 @@ procedure Diary_Sim is
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
                World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => False, Visit_Who => 0, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted, Carry2 => Carry2_Wanted, Moodrest => Moodrest_Wanted, Moodrest2 => Moodrest2_Wanted);
+               Visit => False, Visit_Who => 0, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted, Carry2 => Carry2_Wanted, Moodrest => Moodrest_Wanted, Moodrest2 => Moodrest2_Wanted, Alb => Alb_Wanted, Alb_G => Alb_G_Now);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);
@@ -7682,14 +7795,16 @@ procedure Diary_Sim is
    --  diaries, sessions.txt, the record files, Robert's inputs) is not in it: every start reads them as before (Load_*), and the
    --  restore only sets what the replay of ticks 1 .. tick would have built from them.
    Layout_Error : exception;   --  0.059: a section that does not read back the way this build streams it (message: the section)
-   Sect_Count : constant := 17;   --  the 16 sections of the modules and "end" (0.061: "carry" after "main"; formats 1 and 2 end after "main")
-   Mod_Count : constant := 16;
+   Sect_Count : constant := 18;   --  the 17 sections of the modules and "end" (0.061: "carry" after "main"; formats 1 and 2 end after "main";
+                                  --  0.064: "albanian" after "carry"; format 3 ends after "carry")
+   Mod_Count : constant := 17;
    Sect_At : array (1 .. Sect_Count + 1) of Ada.Streams.Stream_Element_Offset := [others => 0];   --  where each section starts
    --  the bodies of the sections of a payload in memory (bytes From .. To of its stream), from the header (format 1) or the section heads
    type Sect_Bounds is array (1 .. Mod_Count) of Ada.Streams.Stream_Element_Offset;
    type Layout is record
       From, To : Sect_Bounds := [others => 0];
-      Old : Boolean := False;   --  0.061: a format 1 or 2 checkpoint: no section "carry" (Mod_Count); it reads as Sim_Carry.Reset
+      Have : Natural := Mod_Count;   --  the module sections it holds: 15 (formats 1, 2: no "carry"), 16 (format 3: no "albanian"),
+                                     --  17; a missing one reads as the Reset of its module (0.061 / 0.064)
    end record;
    Ckpt_L : Layout;   --  the bodies in Ckpt_Data (Ckpt_Probe)
    Ckpt_Data : aliased Sim_Ckpt.Mem_Stream;   --  the file read by Ckpt_Probe (header and payload)
@@ -7719,10 +7834,12 @@ procedure Diary_Sim is
    function Sect_Name (K : Positive) return String is
      (case K is when 1 => "world", when 2 => "dharma", when 3 => "things", when 4 => "screen", when 5 => "games", when 6 => "robot",
                 when 7 => "govern", when 8 => "preport", when 9 => "next", when 10 => "trial", when 11 => "records", when 12 => "visit",
-                when 13 => "active", when 14 => "ledger", when 15 => "main", when 16 => "carry", when others => "end");
+                when 13 => "active", when 14 => "ledger", when 15 => "main", when 16 => "carry", when 17 => "albanian", when others => "end");
    --  0.061: the sections of a checkpoint of format Fmt and the name of its K-th section (formats 1 and 2: no "carry", K = 16 is "end")
-   function Sect_Count_Of (Fmt : Integer) return Positive is (if Fmt <= 2 then Sect_Count - 1 else Sect_Count);
-   function Sect_Name_Of (Fmt : Integer; K : Positive) return String is (if Fmt <= 2 and then K >= Mod_Count then "end" else Sect_Name (K));
+   --  0.064: format 3 has no "albanian", K = 17 is "end" there
+   function Mods_Of (Fmt : Integer) return Natural is (if Fmt <= 2 then Mod_Count - 2 elsif Fmt = 3 then Mod_Count - 1 else Mod_Count);
+   function Sect_Count_Of (Fmt : Integer) return Positive is (Mods_Of (Fmt) + 1);
+   function Sect_Name_Of (Fmt : Integer; K : Positive) return String is (if K > Mods_Of (Fmt) then "end" else Sect_Name (K));
 
    procedure With_Store (K : Positive; Act : not null access procedure (S : in out Sim_Store.Store)) is
    begin
@@ -7814,7 +7931,8 @@ procedure Diary_Sim is
          when 13 => Sim_Active.State_IO (S, Save);
          when 14 => Sim_Ledger.State_IO (S, Save);
          when 15 => Main_State_IO (S, Save);
-         when others => Sim_Carry.State_IO (S, Save);
+         when 16 => Sim_Carry.State_IO (S, Save);
+         when others => Sim_Albanian.State_IO (S, Save);
       end case;
       if Length (Ckpt_Test_Extra) > 0 and then To_String (Ckpt_Test_Extra) = Sect_Name (K) then   --  tests only: a build with a field more
          declare
@@ -7846,9 +7964,9 @@ procedure Diary_Sim is
       Full : constant Ada.Streams.Stream_Element_Offset := S.Last;
    begin
       for K in 1 .. Mod_Count loop
-         if L.Old and then K = Mod_Count then   --  0.061: a format 1 / 2 checkpoint has no carry state: none was built yet
-            Sim_Carry.Reset;
-            exit;
+         if K > L.Have then   --  0.061 / 0.064: an older checkpoint has no carry (formats 1, 2) or Albanian state: none was built yet
+            if K = 16 then Sim_Carry.Reset; else Sim_Albanian.Reset; end if;
+            goto Next_K;
          end if;
          S.Pos := L.From (K) - 1;
          S.Last := L.To (K);
@@ -7861,6 +7979,7 @@ procedure Diary_Sim is
          end;
          S.Last := Full;
          if S.Pos /= L.To (K) then raise Layout_Error with Sect_Name (K); end if;
+         <<Next_K>>
       end loop;
       S.Pos := Full;
    end All_State_Read;
@@ -7957,7 +8076,7 @@ procedure Diary_Sim is
                L.From (K) := Pay_At + Off (K) + 5;
                L.To (K) := Pay_At + Off (K + 1);
             end loop;
-            L.Old := True;
+            L.Have := NS - 1;
          end;
       else
          declare
@@ -7993,7 +8112,7 @@ procedure Diary_Sim is
                end;
             end loop;
             if P /= Data.Last then Why := To_Unbounded_String (Msg ("ckpt.why.layout", "end")); end if;   --  more sections: a newer layout
-            L.Old := Fmt <= 2;
+            L.Have := Mods_Of (Fmt);
          end;
       end if;
    exception
@@ -8018,13 +8137,16 @@ procedure Diary_Sim is
       end if;
       Parse_Sections (Head, Data, Fmt, Pay_At, L, Why);
       if Length (Why) > 0 then return To_String (Why); end if;
-      if L.Old then   --  0.061: no carry state in formats 1 and 2: only while no carry=1 session began before the checkpoint's tick
-         declare
+      if L.Have < Mod_Count then   --  0.061: no carry state in formats 1 and 2, 0.064: no Albanian state in 1 .. 3: only while no
+         declare                    --  carry=1 / alb=1 session began before the checkpoint's tick
             C : constant Int := Int'Value (Head_Get (Head, "tick"));
          begin
             for R of Sessions loop
-               if R.Carry and then R.Start < C then
+               if L.Have < 16 and then R.Carry and then R.Start < C then
                   return Msg ("ckpt.why.layout", "format " & Img (Fmt) & " has no carry state, carry=1 since session " & Img (R.N));
+               end if;
+               if R.Alb and then R.Start < C then
+                  return Msg ("ckpt.why.layout", "format " & Img (Fmt) & " has no Albanian state, alb=1 since session " & Img (R.N));
                end if;
             end loop;
          end;
@@ -8365,9 +8487,9 @@ procedure Diary_Sim is
          All_State_Write (Now'Access);
          Parse_Sections (Str_Vectors.Empty_Vector, Now, Ckpt_Format, 0, NL, W);
          Sections : for K in 1 .. Mod_Count loop
-            if L.Old and then K = Mod_Count then   --  0.061: a format 1 / 2 checkpoint holds no carry state: the replay built none either
-               if not Sim_Carry.Zero then At_Diff := 1; Diff_K := K; end if;
-               exit Sections;
+            if K > L.Have then   --  0.061 / 0.064: an older checkpoint holds no carry / Albanian state: the replay built none either
+               if (if K = 16 then not Sim_Carry.Zero else not Sim_Albanian.Zero) then At_Diff := 1; Diff_K := K; exit Sections; end if;
+               goto Next_Sect;
             end if;
             declare
                A_Len : constant Ada.Streams.Stream_Element_Offset := L.To (K) - L.From (K) + 1;
@@ -8386,6 +8508,7 @@ procedure Diary_Sim is
                   exit Sections;
                end if;
             end;
+            <<Next_Sect>>
          end loop Sections;
          Sim_Ckpt.Clear (Now);
          Sim_Ckpt.Clear (Ckpt_Data);

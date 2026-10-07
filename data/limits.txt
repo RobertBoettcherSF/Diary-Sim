@@ -599,3 +599,17 @@ moodrest.pull_high_bp = 45
 moodrest.soft = 1
 moodrest.goal_near = 10
 moodrest.goal_pct = 50
+# 0.064 Albanian (alb=1 sessions, Sim_Albanian, docs/EVOLVE.md 18): 0 = new sessions without it.  The wesen find a book of
+# Tatoeba sentences (data/sq_book.txt); at each session start every wesen hears hear_per_session sentences in book order and
+# learns gender cues of the nouns it can identify (data/sq_noun_forms.txt), then says say_per_session sentences of its own
+# (noun + article + adjective) and one "jam i/e ..." (data/wesen_gender.txt).  held_pct percent of the book nouns (by a hash of
+# the lemma) are never heard (their sentences are passed over) and tested in the first sentence each session; memory_cap nouns
+# remembered per wesen (at most 256); self_min cues of its own gender before a wesen uses its own article in "jam ...".
+# Scored at report time only (scripts/alb_report.sh); never part of the shared word counts.  Changing a number changes the
+# replay of the alb=1 sessions (make verify-full).
+albanian.enabled = 1
+albanian.hear_per_session = 20
+albanian.say_per_session = 4
+albanian.held_pct = 20
+albanian.memory_cap = 200
+albanian.self_min = 3

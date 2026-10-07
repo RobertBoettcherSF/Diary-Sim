@@ -235,7 +235,6 @@ arëbërës	m	arëbërës	arëbërësi	arbërësit
 arënx	m	-	arënxi	-
 arëz	f	arëza	arëza	arëzat
 asbest	m	-	asbesti	-
-asgjë	f	asgjëja	-	-
 ashe	f	ashe	ashja	ashet
 ashensor	m	ashensorë	ashensori	ashensorët
 ashk	m	-	ashku	-
@@ -311,7 +310,6 @@ barboriq	m	-	barboriqi	-
 barburiq	m	barburiqë	barburiqi	barburiqët
 bardhec	m	bardhecë	bardheci	bardhecët
 bardhol	m	bardhola	bardholi	bardholat
-bardhë	f	bardha	bardha	bardhat
 bari	m	barinj	bariu	barinjtë
 bark	m	barqe	barku	barqet
 barnatore	m	barnatore	barnatorja	barnatoret
@@ -341,7 +339,6 @@ berk	m	berqe	berku	berqet
 beronjë	f	beronja	beronja	beronjat
 berq	m	berqe	berqi	berqet
 berr	m	berra	berri	berrat
-besimtar	m	-	-	-
 besëtytni	f	besëtytni	besëtytnia	besëtytnitë
 bez	m	-	bezi	-
 bezgë	f	bezga	bezga	bezgat
@@ -353,7 +350,6 @@ bijë	f	bija	bija	bijat
 bilbil	m	bilbila	bilbili	bilbilat
 bile	f	bile	bilja	bilet
 bilur	m	bilure	biluri	biluret
-binjak	m	binjakë	binjaku	binjakët
 biograf	m	biograf	biografi	biografet
 biokimi	f	-	biokimia	-
 bir	m	bij	biri	bijtë
@@ -390,7 +386,6 @@ bollujëse	f	bollujëse	bollujësja	bollujëset
 bors	m	borsa	borsi	borsat
 borxh	m	borxhe	borxhi	borxhet
 borzilok	m	borzilokë	borziloku	borzilokët
-borë	f	borëra	bora	borërat
 bosht	m	boshte	boshti	boshtet
 bosk	m	boskë	bosku	boskët
 bota	f	-	-	-
@@ -445,7 +440,6 @@ busull	f	busulla	busulla	busullat
 butuk	m	butukë	butuku	butukët
 buzagaz	m	buzagaze	buzagazi	buzagazet
 buzë	f	buzë	buza	buzët
-buzëqeshje	f	buzëqeshje	buzëqeshja	buzëqeshjet
 byc	m	bycë	byci	bycët
 byk	m	bykra	byku	bykrat
 bylyk	m	-	bylykë	-
@@ -458,7 +452,6 @@ bërkoq	m	bërkoqa	bërkoqi	bërkoqat
 bërllog	m	bërllogje	bërllogu	bërllogjet
 bërryl	m	bërryla	bërryli	bërrylat
 bërshen	m	bërshenj	bërsheni	bërshenjtë
-bërë	f	-	-	-
 bëz	m	bëze	bëzi	bëzet
 cabok	m	cabokë	caboku	cabokët
 caf	m	cafa	cafi	cafat
@@ -576,7 +569,6 @@ dhuratë	f	dhurata	dhurata	dhuratat
 dhëmb	m	dhëmbë	dhëmbi	dhëmbët
 dhënëse	f	dhënëse	dhënësja	dhënëset
 dialekt	m	dialekte	dialekti	dialektet
-dikë	f	dika	dika	dikat
 dimër	m	dimra	dimri	dimrat
 dinjitet	m	-	dinjiteti	-
 ditë	f	ditë	dita	ditët
@@ -608,7 +600,6 @@ dropullit	m	dropullitë	dropulliti	dropullitët
 dru	m	drurë	druri	drurët
 dry	m	dryna	dryni	drynat
 dryshk	m	dryshqe	dryshku	dryshqet
-dua	m	-	-	-
 duaj	m	duaj	duajt	-
 duhi	f	duhi	duhia	duhitë
 dukagjin	m	-	dukagjini	-
@@ -623,7 +614,6 @@ dynja	f	-	dynjaja	-
 dyqan	m	dyqane	dyqani	dyqanet
 dyshim	m	dyshime	dyshimi	dyshimet
 dëshirë	f	dëshira	dëshira	dëshirat
-ecur	n	-	ecurit	-
 elb	m	-	elbi	-
 elipsë	m	elipsa	elipsa	elipsat
 emigrant	m	emigrantë	emigranti	emigrantët
@@ -634,7 +624,6 @@ energji	f	energji	energjia	energjitë
 erë	f	erëra	era	erërat
 eshk	m	eshqe	eshku	eshqet
 et	f	etje	etja	etjet
-evropian	m	evropianë	evropiani	evropianët
 faj	m	faje	faji	fajet
 fajkua	m	-	fajkoi	-
 faki	m	-	fakini	-
@@ -668,7 +657,6 @@ frikë	f	frika	frika	frikat
 frutë	f	fruta	fruta	frutat
 frymë	f	frymë	fryma	frymët
 fryt	m	-	fryti	-
-ftohtë	n	-	-	-
 fund	m	funde	fundi	fundet
 fundjavë	f	fundjavë	fundjava	fundjavët
 fuqi	f	fuqi	fuqia	fuqitë
@@ -722,7 +710,6 @@ gjyq	m	gjyqe	gjyqi	gjyqet
 gjysami	m	-	gjysamiu	-
 gjysmami	m	gjysmaminj	gjysmamiu	gjysmaminjtë
 gjysmëujk	m	gjysmëujq	gjysmëujku	gjysmëujqit
-gjysëm	f	-	-	-
 gjë	f	gjëra	gjëja	gjërat
 glufë	f	-	glufa	-
 goc	m	gocë	goci	gocët
@@ -736,7 +723,6 @@ grabofç	m	grabofça	grabofçi	grabofçat
 gram	m	-	grami	-
 grazhd	m	grazhde	grazhdi	grazhdet
 grek	m	grekë	greku	grekët
-greke	f	greke	grekja	greket
 gresë	m	gresa	gresa	gresat
 grremç	m	grremça	grremçi	grremçat
 gru	f	-	gruja	-
@@ -760,10 +746,8 @@ gëzof	m	gëzofë	gëzofi	gëzofët
 hajdut	m	hajdutë	hajduti	hajdutët
 hajn	m	hajnë	hajni	hajnët
 hajnjeri	m	-	hajnjeriu	-
-hall	m	halle	-	-
 hallk	m	-	hallku	-
 halës	f	halës	halësi	halësit
-hanë	f	-	-	-
 haps	m	haps	hapsi	hapsit
 harb	f	harbi	harbia	harbit
 harc	m	harca	harci	harcat
@@ -777,11 +761,9 @@ hauz	m	hauze	hauzi	hauzet
 hava	f	-	havaja	-
 havi	f	havi	havia	havitë
 hekur	m	hekura	hekuri	hekurat
-helm	m	helme	-	-
 hep	f	hepa	hepi	hepat
 hernie	f	hernie	hernia	herniet
 herë	f	herë	hera	herët
-heshtje	f	heshtje	heshtja	heshtjet
 hide	f	hide	hidja	hidet
 hie	f	hie	hia	hiet
 hieroglif	m	hieroglife	hieroglifi	hieroglifet
@@ -794,14 +776,12 @@ hoxhë	m	hoxhallarë	hoxha	hoxhallarët
 hroa	f	hroa	hroaja	hroatë
 hu	m	hunj	huri	hunjtë
 huaj	m	huaj	huaji	huajt
-humbje	f	humbje	humbja	humbjet
 huq	m	huqe	huqi	huqet
 hut	m	huta	huti	hutat
 hyj	m	hyj	hyji	hyjtë
 hënë	f	hëna	hëna	hënat
 ilaç	m	ilaçe	ilaçi	ilaçet
 ilirologji	m	ilirologjiilirolog	ilirolog	ilirologët
-im	m	-	imi	-
 imtash	f	imtashë	imtashi	imtashët
 inteligjencë	f	-	-	-
 iqindi	f	iqindi	iqindia	iqinditë
@@ -818,7 +798,6 @@ jeh	m	jehe	jehu	jehet
 jelb	m	-	jelbi	-
 jerevi	f	jerevi	jerevia	jerevitë
 jerm	m	-	jermi	-
-jetë	f	jetë	jeta	jetët
 jevg	m	jevgj	jevgu	jevgjit
 jud	m	-	judi	-
 jug	m	-	jugu	-
@@ -900,7 +879,6 @@ kryebashkiak	m	kryebashkiakë	kryebashkiaku	kryebashkiakët
 kryeqytet	m	kryeqytete	kryeqyteti	kryeqytetet
 kryetreg	m	kryetregje	kryetregu	kryetregjet
 kryq	m	kryqe	kryqi	kryqet
-kthyer	f	kthyera	-	-
 kub	m	kube	kubi	kubet
 kufi	m	kufijt	kufiri	kufijtë
 kujdes	m	kujdese	kujdesi	kujdeset
@@ -931,7 +909,6 @@ lajm	m	lajme	lajmi	lajmet
 lake	m	lakenj	lakeu	lakenjt
 laknëqafe	f	laknëqafe	laknëqafja	laknëqafet
 lakër	f	lakra	lakra	lakrat
-lamtumirë	f	lamtumira	lamtumira	lamtumirat
 lang	f	langu	langje	langjet
 laps	m	lapsa	lapsi	lapsat
 laradash	f	laradashë	laradasha	laradashat
@@ -966,26 +943,21 @@ lym	m	lyme	lymi	lymet
 lëti	m	lëtinjë	lëtiri	-
 lëtirësi	m	lëtiresia	lëtirësia	lëtirësiat
 lëtî	m	lëtîjë	lëtini	-
-lëvizje	f	lëvizje	lëvizja	lëvizjet
 mace	f	mace	macja	macet
-madh	m	-	-	-
 mag	m	magë	magu	magët
 makarona	f	-	makaronat	makaronat
 makinë	f	makina	makina	makinat
 mardha	f	mardha	mardhaja	mardhatë
-marrë	n	marrët	-	-
 marrëdhënie	f	marrëdhënie	marrëdhënia	marrëdhëniet
 marrëzi	f	marrëzi	marrëzia	marrëzitë
 mars	m	-	marsi	-
 martë	f	-	-	-
 maskara	m	maskarenj	maskarai	maskarenjtë
-mbarë	f	-	mbara	-
 mbiemër	m	mbiemra	mbiemri	mbiemrat
 mbret	m	mbretër	mbreti	mbretërit
 mbrëmje	f	mbrëmje	mbrëmja	mbrëmjet
 mbrëmë	f	mbrëmje	mbrëmja	mbrëmjet
 mendja	f	-	-	-
-mes	m	mese	mesi	meset
 mesazh	m	mesazhe	mesazhi	mesazhet
 mi	m	minj	miu	minjtë
 mik	m	miq	miku	miqtë
@@ -1007,7 +979,6 @@ mrac	m	mrace	mraci	mracet
 mreçë	f	mreça	mreça	mreçat
 mriz	m	mrize	mrizi	mrizet
 muaj	m	muaj	muaji	muajtë
-mund	m	-	mundi	-
 mundësi	f	mundësi	mundësia	mundësitë
 murg	m	murgj	murgu	murgjit
 murriz	m	murriza	murrizi	murrizat
@@ -1017,16 +988,13 @@ muzg	m	muzgje	muzgu	muzgjet
 muzikë	f	-	muzika	-
 mylk	m	mylqe	mylku	-
 mys	m	myse	mysi	myset
-mysliman	m	myslimanë	myslimani	myslimanët
 mytesarif	m	mytesarifë	mytesarifi	mytesarifët
 myzhde	f	myzhde	myzhdeja	myzhdetë
-më	f	-	-	-
 mëlçi	f	mëlçi	mëlçia	mëlçitë
 mëmëdhe	m	mëmëdhera	mëmëdheu	mëmëdherat
 mëngjes	m	mëngjese	mëngjesi	mëngjeset
 mënyrë	f	mënyra	mënyra	mënyrat
 mështekën	f	mështekna	mështekna	mështeknat
-mësues	m	mësues	mësuesi	mësuesit
 mësuese	m	mësuese	mësuesja	mësueset
 mëz	m	mëza	mëzi	mëzat
 namaz	m	-	-	-
@@ -1034,10 +1002,8 @@ nao	m	-	naoi	-
 nasip	m	nasipa	nasipi	nasipat
 natyrë	f	-	natyra	-
 natë	f	net	nata	netët
-ndalim	m	ndalime	ndalimi	ndalimet
 ndarës	f	ndarës	ndarësi	ndarësit
 ndjesë	f	ndjesa	ndjesa	ndjesat
-ndodhi	f	ndodhi	ndodhia	ndodhitë
 ndryshim	m	ndryshime	ndryshimi	ndryshimet
 ndërgjegje	f	-	ndërgjegjja	-
 ndërtesë	f	ndërtesa	ndërtesa	ndërtesat
@@ -1054,7 +1020,6 @@ numër	m	numra	numri	numrat
 nusebukur	f	nusebukra	nusebukra	nusebukrat
 nxënës	m	nxënës	nxënësi	nxënësit
 nye	m	neje	neni	nejet
-nën	m	-	-	-
 nëndialekt	m	nëndialekte	nëndialekti	nëndialektet
 nëngrup	m	nëngrupe	nëngrupi	nëngrupet
 nënë	f	nëna	nëna	nënat
@@ -1077,7 +1042,6 @@ pasaportë	f	pasaporta	pasaporta	pasaportat
 pasojë	f	pasoja	pasoja	pasojat
 pasoni	m	pasuni	pasunia	pasunitë
 pasqyrë	f	pasqyra	pasqyra	pasqyrat
-patë	f	pata	pata	patat
 pe	m	penj	peri	penjtë
 pellg	m	pellgje	pellgu	pellgjet
 pemë	f	pemë	pema	pemët
@@ -1108,7 +1072,6 @@ pop	m	popa	popi	popat
 porrc	m	porrce	porrci	porrcet
 porropi	f	porropi	porropia	porropit
 port	m	porte	porti	portet
-portokall	m	portokaj	portokalli	portokajtë
 poçe	f	poçe	poçja	poçet
 prag	m	pragje	pragu	pragjet
 pranga	f	-	prangat	-
@@ -1151,8 +1114,6 @@ racizëm	m	-	racizmi	-
 raft	m	rafte	rafti	raftet
 ramazan	m	-	ramazani	-
 rast	m	raste	rasti	rastet
-re	f	re	reja	retë
-rehat	m	rehati	rehati	-
 republikë	f	republika	republika	republikat
 reshpe	f	reshpe	reshpa	reshpet
 rezultat	m	rezultate	rezultati	rezultatet
@@ -1163,7 +1124,6 @@ rrag	m	rregje	rragu	rregjet
 rrasht	f	rreshtna	rrashti	rreshtnat
 rrege	f	rrege	rrega	rreget
 rregull	m	rregulla	rregulli	rregullat
-rreth	m	rrathë	rrethi	rrathët
 rreze	f	rreze	rrezja	rrezet
 rrezik	m	rreziqe	rreziku	rreziqet
 rriqën	f	rriqna	rriqna	rriqnat
@@ -1180,7 +1140,6 @@ sallë	f	salla	salla	sallat
 sanxhakbej	m	sanxhakbejlerë	sanxhakbeu	sanxhakbejlerët
 selino	f	selino	selinoja	selinotë
 selvi	f	selvi	selvia	selvitë
-shah	m	shahë	shahu	shahët
 shaka	f	shaka	shakaja	shakatë
 shalqi	m	shalqinj	shalqiri	shalqinjtë
 shampanjë	f	-	shampanja	-
@@ -1195,7 +1154,6 @@ shkelb	m	shkelbe	shkelbi	shkelbet
 shkelc	m	shkelca	shkelci	shkelcat
 shkollë	f	shkolla	shkolla	shkollat
 shkretëtirë	f	shkretëtira	shkretëtira	shkretëtirat
-shkuar	f	-	-	-
 shoqe	f	shoqe	shoqja	shoqet
 shoqëri	f	shoqëri	shoqëria	shoqëritë
 shparg	m	shpargje	shpargu	shpargjet
@@ -1205,14 +1163,12 @@ shqa	m	shqe	shqau	shqetë
 shqipe	f	shqipe	shqipja	shqipet
 shqiponjë	f	shqiponja	shqiponja	shqiponjat
 shqiptar	m	shqiptarë	shqiptari	shqiptarët
-shqiptare	f	shqiptare	shqiptarja	shqiptaret
 shqyt	m	shqyte	shqyti	shqytet
 shqënte	m	-	shqëntet	-
 shtalp	m	-	shtalpi	-
 shtator	m	-	shtatori	-
 shteg	m	shtigje	shtegu	shtigjet
 shtet	m	shtete	shteti	shtetet
-shtirë	f	-	shtira	-
 shtreze	f	shtreze	shtërza	shtrezet
 shtyllë	f	shtylla	shtylla	shtyllat
 shtëpi	f	shtëpi	shtëpia	shtëpitë
@@ -1220,10 +1176,8 @@ shtëpâ	m	shtëpâj	shtëpani	shtëpâjt
 shtërg	m	shtërgje	shtërgu	shtërgjet
 shtërpi	m	shtërpinj	shtërpiu	shtërpinjtë
 shumicë	f	shumica	shumica	shumicat
-shumë	f	shuma	shuma	shumat
 shyqyr	m	shyqyre	shyqyri	shyqyret
 shënim	m	shënime	shënimi	shënimet
-shëtitje	f	shëtitje	shëtitja	shëtitjet
 sida	f	-	sida	-
 sintaksë	m	-	sintaksa	-
 sistem	m	sisteme	sistemi	sistemet
@@ -1241,7 +1195,6 @@ sy	m	sy	syri	sytë
 syrgjyn	m	-	syrgjyni	-
 syze	f	-	-	-
 sëmundje	f	sëmundje	sëmundja	sëmundjet
-sëmurë	f	-	-	-
 tabakino	f	tabakino	tabakinoja	tabakinot
 takim	m	takime	takimi	takimet
 tarogzë	m	tarogza	tarogza	tarogzat
@@ -1253,15 +1206,12 @@ televizor	m	-	-	-
 tepe	f	tepe	tepja	tepet
 term	m	terma	terma	termat
 teze	f	teze	tezja	tezet
-thanë	f	thana	thana	thanat
 tharb	m	-	tharbi	-
 thikë	f	thika	thika	thikat
 thind	f	thinda	thinda	thindat
 thopërç	m	thopërç	thopërçi	thopërçit
 thrak	f	thrakë	thraku	thraqet
-thua	m	thonj	thoi	thonjtë
 thupur	f	thupura	thupura	thupurat
-tjetër	m	-	tjetri	-
 tokë	f	toka	toka	tokat
 tombol	f	tombola	tombola	tombolat
 tra	m	trerë	trari	trerët
@@ -1281,7 +1231,6 @@ ujk	m	ujq	ujku	ujqit
 ujë	m	ujëra	uji	ujërat
 ulla	m	ullazër	ullau	-
 unazë	f	unaza	unaza	unazat
-unë	f	-	-	-
 urc	m	-	urci	-
 uri	f	-	uria	-
 ushqim	m	ushqime	ushqimi	ushqimet
@@ -1298,10 +1247,8 @@ vdor	f	-	vdora	-
 ve	f	ve	veja	vetë
 vend	m	vende	vendi	vendet
 vepër	f	vepra	vepra	veprat
-verdhë	n	-	-	-
 veri	m	-	veriu	-
 verë	f	verëra	vera	verërat
-vesh	m	veshë	veshi	veshët
 vig	m	vigje	vigu	vigjet
 vinç	m	vinça	vinçi	vinçat
 virtyt	m	virtyte	virtyti	virtytet
@@ -1314,7 +1261,6 @@ vëllamësi	m	vëllamësi	vëllamësia	vëllamësiat
 xanxë	f	xanxa	xanxa	xanxat
 xexerica	f	-	xexericat	xexericat
 xhaxha	m	xhaxhallarë	xhaxhai	xhaxhallarët
-xheloz	m	xhelozë	-	-
 xhiro	f	xhiro	xhiroja	-
 xhuma	f	xhuma	xhumaja	xhumatë
 xhuxh	m	xhuxhë	xhuxhi	xhuxhët
@@ -1329,7 +1275,6 @@ zanë	f	zana	zana	zanat
 zarbanik	f	zarbanikë	zarbaniku	zarbanikët
 zarf	m	zarfe	zarfi	zarfet
 zelvë	m	zelva	zelva	-
-zgjidhje	f	zgjidhje	zgjidhja	zgjidhjet
 zgjiç	m	zgjiçë	zgjiçi	zgjiçët
 zhapi	m	zhapinj	zhapiu	zhapinjtë
 zhubë	m	zhuba	zhuba	zhubat
@@ -1344,7 +1289,6 @@ zâ	m	-	zâni	-
 zë	m	zëra	zëri	zërat
 zët	m	-	zëti	-
 çadër	f	çadra	çadra	çadrat
-çaj	m	çajra	çaji	çajrat
 çakel	f	çakelë	çakeli	çakelët
 çamçakëz	m	çamçakëzë	çamçakëzi	çamçakëzët
 çapod	m	çapodë	çapodi	çapodët

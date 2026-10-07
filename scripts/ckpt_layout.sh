@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.001
+# Version: 0.002
 # The guard against a forgotten checkpoint format bump (build 0.059, docs/CHECKPOINT.md "The layout guard").
 # A hash over everything that decides the bytes of the state checkpoint's payload: the State_IO procedures of the modules, the
 # section list and Main_State_IO / Sect_IO / All_State_Write / All_State_Read of diary_sim.adb, and the package-level declarations
@@ -51,7 +51,7 @@ line=$(cd "$root" && perl -e '
 ' "$mode")
 hash=$(echo "$line" | sed -n 's/^HASH \([0-9a-f]*\) .*/\1/p'); nb=$(echo "$line" | sed -n 's/^HASH [0-9a-f]* \([0-9]*\) .*/\1/p')
 fmt=$(sed -n 's/^ *Ckpt_Format : constant := \([0-9]*\);.*/\1/p' "$root/diary_sim.adb" | head -n 1)
-[ -n "$hash" ] && [ -n "$fmt" ] && [ "${nb:-0}" -ge 16 ] || { echo "ckpt_layout: FAIL - could not read the State_IO bodies or Ckpt_Format ($line)"; exit 2; }
+[ -n "$hash" ] && [ -n "$fmt" ] && [ "${nb:-0}" -ge 17 ] || { echo "ckpt_layout: FAIL - could not read the State_IO bodies or Ckpt_Format ($line)"; exit 2; }
 [ "$mode" = list ] && echo "$line" | grep -v '^HASH '
 now="ckpt_layout: $fmt $hash"
 [ "$mode" = check ] || { echo "$now"; exit 0; }

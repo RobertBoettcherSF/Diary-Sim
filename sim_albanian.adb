@@ -168,6 +168,7 @@ package body Sim_Albanian is
       T_Held := Nat ("albanian.held_pct", 20, 100);
       T_Cap := Nat ("albanian.memory_cap", 200, Mem_Max);
       T_Self := Nat ("albanian.self_min", 3, 100_000);
+      Lines.Clear;
       Read_Lines (Data_Path ("sq_nouns.txt"), Lines, Ok);
       for L of Lines loop
          if L'Length > 0 and then L (L'First) /= '#' then
@@ -179,6 +180,7 @@ package body Sim_Albanian is
             end if;
          end if;
       end loop;
+      Lines.Clear;
       Read_Lines (Data_Path ("sq_noun_forms.txt"), Lines, Ok);
       for L of Lines loop
          if L'Length > 0 and then L (L'First) /= '#' then
@@ -229,6 +231,7 @@ package body Sim_Albanian is
          end;
       end loop;
       --  the book: per sentence its nouns and its cues
+      Lines.Clear;
       Read_Lines (Data_Path ("sq_book.txt"), Lines, Ok);
       for L of Lines loop
          if L'Length > 0 and then L (L'First) /= '#' then
@@ -276,6 +279,7 @@ package body Sim_Albanian is
             if Nouns (I).Held then Held_List.Append (I); end if;
          end if;
       end loop;
+      Lines.Clear;
       Read_Lines (Data_Path ("sq_adj.txt"), Lines, Ok);
       for L of Lines loop
          if L'Length > 0 and then L (L'First) /= '#' then Adjs.Append (L); end if;
@@ -305,6 +309,7 @@ package body Sim_Albanian is
       Ok : Boolean;
       R : String (1 .. Natural (Entity_Id'Last)) := [others => '-'];
    begin
+      Lines.Clear;
       Read_Lines (Data_Path ("wesen_gender.txt"), Lines, Ok);
       for L of Lines loop
          if L'Length > 0 and then L (L'First) /= '#' then
