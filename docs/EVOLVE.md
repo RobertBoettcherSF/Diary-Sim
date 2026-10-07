@@ -1,5 +1,5 @@
 # Evolutionary pressure on words and on chess (previews built, the rest design)
-Version: 0.009
+Version: 0.010
 
 Build state: **step 1 (`symbols=1`) is built** (build 0.047), **step 1 (`symbols=1`)**, **step 2 (`make evolve` preview)** and **step 3 (`make active` preview)** are built (build 0.048); **the real `active=1` (section 13) is built** (build 0.049); everything else is design only.
 
@@ -278,3 +278,23 @@ albg=<genders>`; 0 = the 0.063 sessions byte for byte. Sim_Albanian (`sim_albani
   to `moodcause.txt` in the save folder (a replay never writes; `part=1` when the run began inside the session); the sums equal
   the mood changes exactly (scenario 68). A per-session file was chosen over checkpoint fields so nothing of the replay changes.
 Checks: scenario 68.
+
+## 19. Fixes of 0.065: `relief=1`, mood causes v=2, the full verify inside the night budget (BUILT, build 0.065, new sessions only)
+Robert: improve the current project, no new concepts.
+* **relief=1** (`relief.enabled = 1`, with carrying): in Carry_Choice a wesen below `carry.relief_energy` rests instead of any
+  action with `Energy_D` below -2 (work, explore, wander, bench), not only instead of teaching. In 0.064 Eve, Abel and Ruth hit
+  energy 0 (explore costs 10, work 8). The session line carries ` relief=1`; Derive_Session_Flags takes it from the last session
+  begun before the checkpoint tick; no new die, no state (the checkpoint format stays 4).
+* **Mood causes v=2** (report only): the moodrest step is split into its soft bounds (`soft`: the shrink of a gain above the middle,
+  of a loss below it) and the drift (`pull`: the one-point step towards the resting mood); granted petitions, the work lever and
+  heard announcements are `grant`; the rest model and the bounds of the action itself go to the action's own column. The ten
+  causes still add up to the session's mood change exactly. `moodcause.txt` lines `M S<n> t=<tick> v=2 <wesen>=<refusal>,
+  <lesson>,<work>,<rest>,<talk>,<game>,<soft>,<pull>,<grant>,<other>,<refusals>,<mood>`; the report reads 0.064 lines too.
+  Finding: the 0.064 "rest" column held the soft bounds and the drift; the large positive part of 0.064's "other" is grants.
+  Adam's drift behaves as specified (15 bp per point of gap: about +35 points per 300-tick session at a gap of ~80), but it is a
+  one-point step at most per tick and far smaller than work (about -250 per session), so he stays below his resting mood.
+* **NIGHT_SHIP_FULL=1** (`make night-ship`): `bin/diary_sim --verify-full` first, inside the one budget, then the sessions with
+  what is left; a failure: no sessions, VERDICT FAIL. Detached by default, SIGHUP ignored during the verify.
+* checkin.txt lines wrap (never cut); the terminal night box fits 79 columns.
+Checks: scenario 69.
+

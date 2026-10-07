@@ -3095,7 +3095,7 @@ cp -r "$c69/off" "$c69/nf"; rm -f "$c69/nf/save/verify_stamp.txt"
 n0=$(grep -c '^S[0-9]' "$c69/nf/save/diaries/sessions.txt")
 DIARY_HOME="$c69/nf/save" NIGHT_SHIP_RESERVE=5 make --no-print-directory -C "$root" night-ship NIGHT_SHIP_FULL=1 NIGHT_SHIP_DETACH=0 NIGHT_SHIP_HOURS=0.006 > nf1.txt 2>&1 < /dev/null; rn1=$?
 n1=$(grep -c '^S[0-9]' "$c69/nf/save/diaries/sessions.txt")
-ok1=0; [ $rn1 = 0 ] && grep -q '^budget: full verify ok in [0-9]*m[0-9]*s (verify_stamp.txt); sessions got the rest: ' "$c69/nf/save/checkin.txt" && grep -q '^full=' "$c69/nf/save/verify_stamp.txt" \
+ok1=0; [ $rn1 = 0 ] && grep -q '^budget: full verify ok in [0-9]*m[0-9]*s (verify_stamp.txt); sessions got [0-9]*m[0-9]*s$' "$c69/nf/save/checkin.txt" && grep -q '^full=' "$c69/nf/save/verify_stamp.txt" \
   && grep -q '^VERDICT: PASS' "$c69/nf/save/checkin.txt" && [ "$n1" -gt "$n0" ] && ok1=1
 f=$(ls "$c69/nf/save/diaries/"*.jsonl | head -1); sed -i '5s/"energy":/"energy":1/' "$f"
 DIARY_HOME="$c69/nf/save" make --no-print-directory -C "$root" night-ship NIGHT_SHIP_FULL=1 NIGHT_SHIP_DETACH=0 NIGHT_SHIP_HOURS=0.006 > nf2.txt 2>&1 < /dev/null; rn2=$?

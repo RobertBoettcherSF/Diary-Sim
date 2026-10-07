@@ -1,6 +1,6 @@
 # The state checkpoint (`state.ckpt`)
 
-Version: 0.006 (build 0.063; the checkpoint itself came with build 0.058, README "The state checkpoint")
+Version: 0.007 (build 0.065; the checkpoint itself came with build 0.058, README "The state checkpoint")
 
 A start used to replay the whole history to rebuild the state in memory: 13 minutes for 300000 ticks, about 35 minutes on Robert's
 774600-tick save, growing every night. `state.ckpt` in the save folder holds the end state of the last run, so a start loads it in
@@ -133,6 +133,8 @@ changed: format 3 has no Albanian state, alb=1 since session N`) and the start r
 begins after his 0.063 checkpoint, so the first 0.064 start loads it (+0 ticks replayed) and writes format 4 at the end of the run.
 `make verify` against a format 1 .. 3 checkpoint requires the replayed Albanian state to be zero. The mood causes of 0.064
 (`moodcause.txt`) are report-only counters of the running session and are not in the checkpoint.
+Build 0.065 keeps format 4: `relief=1` is a session flag (Derive_Session_Flags, like carry=2 and moodrest), and the mood causes
+v=2 stay report-only.
 
 ## The layout guard (make check)
 

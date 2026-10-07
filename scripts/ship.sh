@@ -104,7 +104,7 @@ if [ "$mode" = night-ship ] && [ "${NIGHT_SHIP_FULL:-0}" = 1 ]; then
   cat "$tmp/full.txt" >> "$log" 2>/dev/null
   full_secs=$(( $(date +%s) - tf ))
   left_b=$(awk -v h="${hours:-9}" -v t="$t0" -v n="$(date +%s)" 'BEGIN { printf "%d", t + h * 3600 - n }'); [ "$left_b" -ge 0 ] || left_b=0
-  if [ "$frc" = 0 ]; then full_txt="full verify ok in $(secs $full_secs) (verify_stamp.txt); sessions got the rest: $(secs $left_b)"
+  if [ "$frc" = 0 ]; then full_txt="full verify ok in $(secs $full_secs) (verify_stamp.txt); sessions got $(secs $left_b)"
   else full_bad=1; night=0
     full_txt="full verify: FAILED (exit $frc$(grep -qi drift "$tmp/full.txt" && echo ', DRIFT')) in $(secs $full_secs): no sessions"; fi
   say "$full_txt"

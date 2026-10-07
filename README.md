@@ -105,6 +105,22 @@ diaries, entities and summary files are byte for byte the same.
   of the run, `warnings:n`, `export-failed`. It is information only; nothing in the simulation reads it (`data/limits.txt`).
   `@@SECTIONS` gives the line of each header in `run_report.txt`.
 
+## Build 0.065: fixes without new concepts (`relief=1`, mood causes v=2, `NIGHT_SHIP_FULL=1`)
+
+* `relief=1` (`relief.enabled = 1`, the default, needs carrying; 0 = off: new sessions as in 0.064). Below
+  `carry.relief_energy` (20) a wesen rests instead of every tiring action (work, explore, wander, bench), not only instead of
+  teaching, so nobody runs down to energy 0. Older sessions replay unchanged (the marker is in the session line).
+* Mood causes v=2 (report only): the moodrest soft bounds and the drift to the resting mood are causes of their own; granted
+  petitions, the work lever and heard announcements are `grant`; work, rest, talk etc. hold only the action's own effect.
+  `moodcause.txt` gets `v=2` lines (ten causes; 0.064 lines are still read). checkin.txt: the columns `pull` (drift + soft
+  bound) and `grant`, and a `pull split` line (drift / soft bound per wesen).
+* `make night-ship NIGHT_SHIP_FULL=1`: the full verify FIRST, counted inside the same `NIGHT_SHIP_HOURS` budget from the start of
+  make (verify_stamp.txt on a pass); the sessions get the rest. A failed verify (DRIFT): no sessions, VERDICT FAIL, checkin.txt is
+  still written. It runs detached by default (setsid nohup, as NIGHT_SHIP_DETACH=1; NIGHT_SHIP_DETACH=0 keeps the screen) and
+  SIGHUP is ignored during the verify, so closing the terminal does not stop it. checkin.txt and the screen show
+  `budget: full verify ok in <time> (verify_stamp.txt); sessions got <time>`.
+* checkin.txt head lines wrap at a space instead of being cut; the terminal night box wraps to 79 columns.
+
 ## Build 0.064: the Albanian book (`alb=1`) and the mood causes
 
 * `alb=1` (`albanian.enabled = 1`, the default; 0 = off: new sessions as in 0.063 byte for byte). In their first `alb=1` session

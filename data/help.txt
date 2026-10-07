@@ -268,6 +268,10 @@ moodrest=2 (build 0.063, the default; moodrest.enabled=1: the 0.062 rule):
 the drift to the resting mood is one point a tick with the probability
 moodrest.pull_bp x gap / 10000 (15: a swing fades halfway in ~460 ticks),
 pull_high_bp above the band; moods keep dips and peaks for a session or two.
+relief=1 (build 0.065, relief.enabled=0: off): below carry.relief_energy a
+  wesen rests instead of working (or exploring, wandering, benching).
+make night-ship NIGHT_SHIP_FULL=1 (0.065): the full verify first, inside the
+  same budget, then sessions; a DRIFT: no sessions, VERDICT FAIL.
 Albanian (alb=1 session, build 0.064; albanian.enabled=0: off): the wesen
 find a book of Tatoeba sentences, hear 20 a session in book order, learn the
 gender of nouns from definite endings and articles, and say noun + i/e +
