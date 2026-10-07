@@ -17,7 +17,7 @@ bad() { echo "  FAIL -- $*"; fails=$((fails + 1)); }
 idn() { sed 's/^\([a-z]*\) *=.*/\1 = \1/' "$root/data/names.txt" > "$1/names.txt"; }
 idata="$w/idata"; mkdir -p "$idata"; cp -r "$root/data/." "$idata/"; idn "$idata"
 # screens (and later chess) change the dice of the words: the older scenarios run with them off; their own scenarios switch them on
-sed -i 's/^screen.enabled = .*/screen.enabled = 0/; s/^chess.enabled = .*/chess.enabled = 0/; s/^robot.enabled = .*/robot.enabled = 0/; s/^govern.enabled = .*/govern.enabled = 0/; s/^screen.coin_enabled = .*/screen.coin_enabled = 0/; s/^players4.enabled = .*/players4.enabled = 0/; s/^preport.pause = .*/preport.pause = 0/; s/^chessrules.enabled = .*/chessrules.enabled = 0/; s/^trial.enabled = .*/trial.enabled = 0/; s/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/' "$idata/limits.txt"
+sed -i 's/^relief.enabled = .*/relief.enabled = 0/; s/^screen.enabled = .*/screen.enabled = 0/; s/^chess.enabled = .*/chess.enabled = 0/; s/^robot.enabled = .*/robot.enabled = 0/; s/^govern.enabled = .*/govern.enabled = 0/; s/^screen.coin_enabled = .*/screen.coin_enabled = 0/; s/^players4.enabled = .*/players4.enabled = 0/; s/^preport.pause = .*/preport.pause = 0/; s/^chessrules.enabled = .*/chessrules.enabled = 0/; s/^trial.enabled = .*/trial.enabled = 0/; s/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/; s/^relief.enabled = .*/relief.enabled = 0/' "$idata/limits.txt"
 mkdir -p "$w/ib/bin"; cp "$bin" "$w/ib/bin/"; cp -r "$idata" "$w/ib/data"; bin="$w/ib/bin/diary_sim"   # the binary beside its identity-names data
 lines() { cat "$1"/*.jsonl | wc -l; }
 dups()  { for f in "$1"/*.jsonl; do grep '}}$' "$f" | grep -o '"tick":[0-9]*' | sort | uniq -d; done | wc -l; }
@@ -1560,7 +1560,7 @@ echo "== 48. console: short form by default (no markers, no pointer), run_report
 rm -rf "$w/sh"; mkdir -p "$w/sh/bin"; cp "$bin" "$w/sh/bin/"; cp -r "$root/data" "$w/sh/data"
 # 0.063: without resting moods (moodrest.enabled = 0): the anomaly listing below needs a wesen that ends low, which the old
 # mood model gives in these 500 ticks; resting moods (0.062/0.063) keep every wesen above -50 (scenarios 66, 67 test them)
-sed -i 's/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/' "$w/sh/data/limits.txt"
+sed -i 's/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/; s/^relief.enabled = .*/relief.enabled = 0/' "$w/sh/data/limits.txt"
 sh_run() {   # sh_run HOME 'env prefix' args...: the same two sessions (seed 42, 300 + 200 ticks)
   h=$1; pre=$2; shift 2; mkdir -p "$w/sh/$h"
   ( cd "$w/sh/$h" || exit 1; export DIARY_HOME="$w/sh/$h/save"; env -u DIARY_VERBOSE $pre "$w/sh/bin/diary_sim" --seed 42 --ticks 300 --yes --every 100 "$@" > c1.txt 2>&1
@@ -2425,16 +2425,16 @@ env -u DIARY_VERBOSE "$nb" --active --home "$w/nt/fl_on" > fl_a.txt 2>&1
 # symbols=1 but symbols.strict = 0 (the leak of builds before 0.054: an old blend or coin like 71634866 is taught again), then the default
 rm -rf "$w/nt/ss" "$w/nt/ss_o" "$w/nt/ss_l"; mkdir -p "$w/nt/ss_o/bin" "$w/nt/ss_l/bin"; cp "$nb" "$w/nt/ss_o/bin/"; cp "$nb" "$w/nt/ss_l/bin/"
 cp -r "$root/data" "$w/nt/ss_o/data"; cp -r "$root/data" "$w/nt/ss_l/data"
-sed -i 's/^symbols.enabled = .*/symbols.enabled = 0/; s/^records.enabled = .*/records.enabled = 0/; s/^active.slow_floor = .*/active.slow_floor = 0/; s/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/' "$w/nt/ss_o/data/limits.txt"
-sed -i 's/^symbols.strict = .*/symbols.strict = 0/; s/^active.slow_floor = .*/active.slow_floor = 0/; s/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/' "$w/nt/ss_l/data/limits.txt"   # the rules of build 0.053 (no carrying: 0.061)
+sed -i 's/^symbols.enabled = .*/symbols.enabled = 0/; s/^records.enabled = .*/records.enabled = 0/; s/^active.slow_floor = .*/active.slow_floor = 0/; s/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/; s/^relief.enabled = .*/relief.enabled = 0/' "$w/nt/ss_o/data/limits.txt"
+sed -i 's/^symbols.strict = .*/symbols.strict = 0/; s/^active.slow_floor = .*/active.slow_floor = 0/; s/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/; s/^relief.enabled = .*/relief.enabled = 0/' "$w/nt/ss_l/data/limits.txt"   # the rules of build 0.053 (no carrying: 0.061)
 ( cd "$w/nt/ss_o" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/ss" --seed 2 --ticks 6000 --yes --every 100000 > /dev/null 2>&1 )
 ( cd "$w/nt/ss_l" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/ss" --continuous --session-ticks 3000 --max-sessions 1 > /dev/null 2>&1 )
 sym_after() { awk -v t="$2" '$4 > t && ($2 ~ /^[0-9]+$/ || $2 ~ /^[a-h][1-8][a-h][1-8][qrbn]?$/)' "$1"/entities/*/words.txt | wc -l; }
 ss_c=$(awk '$3 == "coined" && $2 ~ /^[0-9]+$/' "$w/nt/ss"/entities/*/words.txt | wc -l); ss_leak=$(sym_after "$w/nt/ss" 6000)
 rm -rf "$w/nt/ss_c" "$w/nt/ss_l2"; cp -r "$w/nt/ss" "$w/nt/ss_c"; cp -r "$w/nt/ss_l" "$w/nt/ss_l2"; cp -r "$root/data/limits.txt" "$w/nt/ss_l2/data/limits.txt"
-sed -i 's/^symbols.strict = .*/symbols.strict = 0/; s/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/' "$w/nt/ss_l2/data/limits.txt"   # the control: today's rules but symbols.strict = 0
+sed -i 's/^symbols.strict = .*/symbols.strict = 0/; s/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/; s/^relief.enabled = .*/relief.enabled = 0/' "$w/nt/ss_l2/data/limits.txt"   # the control: today's rules but symbols.strict = 0
 # 0.061: test and control without word carrying (its own dice; scenario 65), so the two differ only in symbols.strict
-rm -rf "$w/nt/ss_n"; mkdir -p "$w/nt/ss_n"; cp -r "$root/data" "$w/nt/ss_n/data"; sed -i 's/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/' "$w/nt/ss_n/data/limits.txt"
+rm -rf "$w/nt/ss_n"; mkdir -p "$w/nt/ss_n"; cp -r "$root/data" "$w/nt/ss_n/data"; sed -i 's/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/; s/^relief.enabled = .*/relief.enabled = 0/' "$w/nt/ss_n/data/limits.txt"
 ( cd "$w/nt/ss_l2" && env -u DIARY_VERBOSE bin/diary_sim --home "$w/nt/ss_c" --continuous --session-ticks 3000 --max-sessions 3 > /dev/null 2>&1 )
 ( cd "$w/nt/ss_n" && env -u DIARY_VERBOSE "$nb" --home "$w/nt/ss" --continuous --session-ticks 3000 --max-sessions 3 ) > ss.txt 2>&1; rcs=$?
 ss_new=$(sym_after "$w/nt/ss" 9000); ss_ctl=$(sym_after "$w/nt/ss_c" 9000)
@@ -2701,7 +2701,7 @@ mkdir -p "$c7/a" "$c7/r"; tar -C "$c7/a" -xzf "$root/tests/ckpt059.tar.gz"; tar 
 grep -aq '^build 0.059$' "$c7/a/save/state.ckpt" && head -1 "$c7/a/save/state.ckpt" | grep -q '^diary-sim-ckpt 2$'; f59=$?
 # 0.061: the new sessions run without word carrying (carry.enabled = 0, a data copy): the 0.059 rules; the payload of format 3 is
 # that of 0.059 plus the section "carry" (scenario 65 runs them with carry=1)
-mkdir -p "$c7/nc"; cp -r "$root/data" "$c7/nc/data"; sed -i 's/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/' "$c7/nc/data/limits.txt"
+mkdir -p "$c7/nc"; cp -r "$root/data" "$c7/nc/data"; sed -i 's/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/; s/^relief.enabled = .*/relief.enabled = 0/' "$c7/nc/data/limits.txt"
 r7nc() { ( cd "$c7/nc" && env -u DIARY_VERBOSE "$bin" --home "$@" ); }
 # the lines of k7 without the payload, and the payload length less the carry section (head + body) of a format 3 checkpoint
 k7p() { grep -v '^payload ' "$1"; }
@@ -2781,7 +2781,7 @@ c8="$w/c65"; rm -rf "$c8"; mkdir -p "$c8"; cd "$c8" || exit 1
 # the 0.059 fixture (600 ticks, format 2) continued by 2 sessions: "on" with carrying (a teacher may have any mood here: the young
 # wesen are cheerful), "off" without it (carry.enabled = 0); both from the same data otherwise
 for d in on off; do mkdir -p "$c8/$d"; cp -r "$root/data" "$c8/$d/data"; tar -C "$c8/$d" -xzf "$root/tests/ckpt059.tar.gz"; done
-sed -i 's/^carry.teacher_mood = .*/carry.teacher_mood = 100/; s/^carry.enabled = .*/carry.enabled = 1/; s/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/' "$c8/on/data/limits.txt"; sed -i 's/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/' "$c8/off/data/limits.txt"
+sed -i 's/^carry.teacher_mood = .*/carry.teacher_mood = 100/; s/^carry.enabled = .*/carry.enabled = 1/; s/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/; s/^relief.enabled = .*/relief.enabled = 0/' "$c8/on/data/limits.txt"; sed -i 's/^carry.enabled = .*/carry.enabled = 0/; s/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/; s/^relief.enabled = .*/relief.enabled = 0/' "$c8/off/data/limits.txt"
 r8() { d=$1; shift; ( cd "$c8/$d" && env -u DIARY_VERBOSE "$bin" --home "$c8/$d/save" "$@" < /dev/null ); }
 r8 on --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 > on.txt 2>&1; rcn=$?
 r8 off --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 > off.txt 2>&1; rcf=$?
@@ -2869,7 +2869,7 @@ tar -C "$c9/orig" -xzf "$root/tests/ckpt061.tar.gz"
 # moodrest); c2 = carry=2 alone; mr = moodrest=1 alone (carry=1); both; cap1 = carry=2 with carry.words_cap = 1
 for d in fx c2 mr both both2 cap1; do mkdir -p "$c9/$d"; cp -r "$root/data" "$c9/$d/data"; tar -C "$c9/$d" -xzf "$root/tests/ckpt061.tar.gz"
   sed -i 's/^carry.teacher_mood = .*/carry.teacher_mood = 100/' "$c9/$d/data/limits.txt"; done
-lm() { sed -i "s/^carry.enabled = .*/carry.enabled = $2/; s/^moodrest.enabled = .*/moodrest.enabled = $3/; s/^albanian.enabled = .*/albanian.enabled = 0/" "$c9/$1/data/limits.txt"; }   # 0.064: without alb=1 (scenario 68)
+lm() { sed -i "s/^carry.enabled = .*/carry.enabled = $2/; s/^moodrest.enabled = .*/moodrest.enabled = $3/; s/^albanian.enabled = .*/albanian.enabled = 0/; s/^relief.enabled = .*/relief.enabled = 0/" "$c9/$1/data/limits.txt"; }   # 0.064: without alb=1 (scenario 68)
 lm fx 1 0; lm c2 2 0; lm mr 1 1; lm both 2 1; lm both2 2 1; lm cap1 2 0; sed -i 's/^carry.words_cap = .*/carry.words_cap = 1/' "$c9/cap1/data/limits.txt"
 r9() { d=$1; shift; ( cd "$c9/$d" && env -u DIARY_VERBOSE "$bin" --home "$c9/$d/save" "$@" < /dev/null ); }
 rc9=0; for d in fx c2 mr both both2 cap1; do r9 $d --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 > $d.txt 2>&1 || rc9=1
@@ -2940,7 +2940,7 @@ ca="$w/c67"; rm -rf "$ca"; mkdir -p "$ca/orig"; cd "$ca" || exit 1
 tar -C "$ca/orig" -xzf "$root/tests/ckpt061.tar.gz"
 # m1 = carry=2 moodrest=1 (tests/ckpt061_mr1.expect: what 0.062 gave from the fixture), m2 and m2b = carry=2 moodrest=2
 for d in m1 m2 m2b; do mkdir -p "$ca/$d"; cp -r "$root/data" "$ca/$d/data"; tar -C "$ca/$d" -xzf "$root/tests/ckpt061.tar.gz"; done
-la() { sed -i "s/^carry.teacher_mood = .*/carry.teacher_mood = 100/; s/^carry.enabled = .*/carry.enabled = $2/; s/^moodrest.enabled = .*/moodrest.enabled = $3/; s/^albanian.enabled = .*/albanian.enabled = 0/" "$ca/$1/data/limits.txt"; }   # 0.064: without alb=1
+la() { sed -i "s/^carry.teacher_mood = .*/carry.teacher_mood = 100/; s/^carry.enabled = .*/carry.enabled = $2/; s/^moodrest.enabled = .*/moodrest.enabled = $3/; s/^albanian.enabled = .*/albanian.enabled = 0/; s/^relief.enabled = .*/relief.enabled = 0/" "$ca/$1/data/limits.txt"; }   # 0.064: without alb=1
 la m1 2 1; la m2 2 2; la m2b 2 2
 ra() { d=$1; shift; ( cd "$ca/$d" && env -u DIARY_VERBOSE "$bin" --home "$ca/$d/save" "$@" < /dev/null ); }
 rca=0; for d in m1 m2 m2b; do ra $d --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 > $d.txt 2>&1 || rca=1
@@ -2970,7 +2970,8 @@ echo "== 68. build 0.064: alb=1 (the Albanian book): deterministic, held-back no
 cb="$w/c68"; rm -rf "$cb"; mkdir -p "$cb"; cd "$cb" || exit 1
 # on and on2: alb=1 (the default) twice from scratch; off: albanian.enabled = 0; the same seed and sessions
 for d in on on2 off; do mkdir -p "$cb/$d"; cp -r "$root/data" "$cb/$d/data"; done
-sed -i 's/^albanian.enabled = .*/albanian.enabled = 0/' "$cb/off/data/limits.txt"
+sed -i 's/^albanian.enabled = .*/albanian.enabled = 0/; s/^relief.enabled = .*/relief.enabled = 0/' "$cb/off/data/limits.txt"
+for d in on on2 off; do sed -i "s/^relief.enabled = .*/relief.enabled = 0/" "$cb/$d/data/limits.txt"; done   # 0.065: scenario 68 without relief=1
 rb() { d=$1; shift; ( cd "$cb/$d" && env -u DIARY_VERBOSE "$bin" --home "$cb/$d/save" "$@" < /dev/null ); }
 t0b=$(date +%s%N); for d in on on2 off; do rb $d --continuous --session-ticks 300 --max-sessions 4 --end-check-ticks 0 --seed 42 > $d.txt 2>&1 || echo "rc $d" >> rc.txt; done
 # k7 without the clock of the B line (" ts=")
@@ -3029,8 +3030,8 @@ rb rf --continuous --session-ticks 300 --max-sessions 1 --end-check-ticks 0 > rf
 # the report: one line of at most 79 columns when it fits, else two labelled lines (agreement vs the shuffle baseline, held-back vs always-masculine, feminine held-back,
 # first person), the full report in the save; make ship puts it and the mood causes into checkin.txt
 DIARY_HOME="$cb/on/save" make --no-print-directory -C "$root" ship SHIP_VERIFY=0 > sh.txt 2>&1 < /dev/null; rsh=$?
-al=$(grep '^  albanian: ' "$cb/on/save/checkin.txt" | head -n 1); mcl=$(grep -c '^  [A-Za-z]* *[-+][0-9]*\.[0-9] .* ref/s)$' "$cb/on/save/checkin.txt")
-long=$(awk 'length($0) > 79' "$cb/on/save/checkin.txt" | grep -c -e 'albanian' -e 'ref/s)$' -e '^  causes')
+al=$(grep '^  albanian: ' "$cb/on/save/checkin.txt" | head -n 1); mcl=$(grep -c '^  [A-Za-z]* *[-+][0-9]*\.[0-9] .* \(ref/s)\|[0-9]\.[0-9]\)$' "$cb/on/save/checkin.txt")   # 0.065: the ref/s column without the brackets
+long=$(awk 'length($0) > 79' "$cb/on/save/checkin.txt" | grep -c -e 'albanian' -e 'ref/s)$' -e '^  causes' -e '^  mood causes' -e '^  pull split' -e '^  [A-Z][a-z]* *[-+][0-9]')
 sed -n '/^-\{79\}$/,$p' sh.txt > sum.txt
 [ $rsh = 0 ] && echo "$al" | grep -Eq '^  albanian: agree [0-9]+% n=[0-9]+ \(shuf(fle)? [0-9]+%\); held(-back)? [0-9]+% n=[0-9]+ \(all-m [0-9]+%\)' \
   && grep -Eq '( fem [0-9-]+%? n=[0-9]+; jam [0-9]+/[0-9]+|^  albanian: held-back feminine [0-9-]+%? n=[0-9]+; first person \(jam i/e\) [0-9]+/[0-9]+)$' "$cb/on/save/checkin.txt" && [ "$mcl" = 4 ] && [ "$long" = 0 ] && grep -Eq '^  causes +refuse +lesson ' "$cb/on/save/checkin.txt" \
@@ -3039,8 +3040,8 @@ sed -n '/^-\{79\}$/,$p' sh.txt > sum.txt
   && ok "make ship: checkin.txt '$(echo "$al" | sed 's/^  //')' (<= 79 columns), the mood-cause block (4 wesen); albanian_report.txt with the per-wesen breakdown and the last sentences (S5: 16 + 3 first person, Ruth none); the terminal summary unchanged (<= 22 lines)" \
   || bad "albanian / mood-cause report ($rsh $mcl $long): $al"
 # the mood causes add up: for every wesen and session the causes sum to the change of its end mood (the previous line's last field)
-mcs=$(awk '/^M S[0-9]/ { for (i = 3; i <= NF; i++) { if (split($i, kv, "=") != 2 || kv[1] == "t") continue; n = split(kv[2], v, ","); s = 0; for (j = 1; j <= 7; j++) s += v[j]
-  if (kv[1] in prev) { c++; if (prev[kv[1]] + s != v[9]) bad++ } prev[kv[1]] = v[9] } } END { print c + 0, bad + 0 }' "$cb/on/save/moodcause.txt")
+mcs=$(awk '/^M S[0-9]/ { for (i = 3; i <= NF; i++) { if (split($i, kv, "=") != 2 || kv[1] == "t") continue; n = split(kv[2], v, ","); s = 0; nc = (n >= 12 ? 10 : 7); for (j = 1; j <= nc; j++) s += v[j]   # 0.065 v=2: ten causes
+  if (kv[1] in prev) { c++; if (prev[kv[1]] + s != v[nc + 2]) bad++ } prev[kv[1]] = v[nc + 2] } } END { print c + 0, bad + 0 }' "$cb/on/save/moodcause.txt")
 set -- $mcs
 [ "$(grep -c '^M S[1-5] t=[0-9]* ' "$cb/on/save/moodcause.txt")" = 5 ] && [ "$1" = 16 ] && [ "$2" = 0 ] && cmp -s <(grep -v '^M ' "$cb/off/save/moodcause.txt" | head -1) <(head -1 "$cb/on/save/moodcause.txt") \
   && ok "moodcause.txt: one line per new session (S1-S5); for 4 wesen x 4 sessions the seven causes add up to the change of the end mood exactly; written with alb off too (report only)" \

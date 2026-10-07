@@ -1,5 +1,5 @@
 #!/bin/sh
-# Version: 0.011
+# Version: 0.012
 # make ship (by day) and make night-ship (overnight): Robert's ONE command; both write ONE file, checkin.txt in the save folder
 # (../diary-data next to the source folder, or --home / $DIARY_HOME: bin/diary_sim --folder says where), with the same VERDICT header
 # on top, and print a short summary and the path of that file.  Exit status 0 = PASS, 1 = FAIL.
@@ -486,13 +486,23 @@ else alb_out="  albanian: no alb=1 session in the window (build 0.064 starts the
 # window by cause (refused petitions, lessons, work, rest and the resting-mood pull, talk, games, other) and refusals per session
 mc_out=$(awk -v lo="${first:-0}" -v hi="${last:-0}" -v names="data/names.txt" '
   BEGIN { while ((getline l < names) > 0) if (l !~ /^#/ && split(l, a, " = ") == 2) { gsub(/ /, "", a[1]); dn[a[1]] = a[2] } }
-  /^M S[0-9]/ { s = substr($2, 2) + 0; if (s < lo || s > hi) next; ns++; if ($0 ~ / part=1/) np++
-    for (i = 3; i <= NF; i++) { if (split($i, kv, "=") != 2 || kv[1] == "t") continue; w = kv[1]; if (!(w in seen)) { seen[w] = 1; ord[++nw] = w }
-      k = split(kv[2], v, ","); for (j = 1; j <= 8 && j <= k; j++) sum[w, j] += v[j] } }
+  # 0.065: v=2 lines carry soft bounds, pull and grants apart (refusal lesson work rest talk game soft pull grant other refusals mood);
+  # a 0.064 line (7 causes) counts its causes as they were (pull, soft and grants inside rest / other)
+  /^M S[0-9]/ { s = substr($2, 2) + 0; if (s < lo || s > hi) next; ns++; if ($0 ~ / part=1/) np++; v2 = ($0 ~ / v=2( |$)/); if (!v2) nold++
+    for (i = 3; i <= NF; i++) { if (split($i, kv, "=") != 2 || kv[1] == "t" || kv[1] == "v" || kv[1] == "part") continue; w = kv[1]; if (!(w in seen)) { seen[w] = 1; ord[++nw] = w }
+      k = split(kv[2], v, ",")
+      if (v2) { for (j = 1; j <= 11 && j <= k; j++) sum[w, j] += v[j] }
+      else { for (j = 1; j <= 6 && j <= k; j++) sum[w, j] += v[j]; sum[w, 10] += v[7]; sum[w, 11] += v[8] } } }
   END { if (ns == 0) { print "  mood causes: no session line in moodcause.txt for the window"; exit }
-    printf "  %-6s %6s %6s %6s %6s %6s %6s %6s  mood/session, %d s%s\n", "causes", "refuse", "lesson", "work", "rest", "talk", "game", "other", ns, (np ? " (" np " part)" : "")
+    printf "  mood causes per session (%d s%s%s); pull = drift + soft bound\n", ns, (np ? ", " np " part" : ""), (nold ? ", " nold " of 0.064" : "")
+    printf "  %-6s %6s %6s %6s %6s %6s %6s %6s %6s %6s %5s\n", "causes", "refuse", "lesson", "work", "rest", "talk", "game", "pull", "grant", "other", "ref/s"
     for (i = 1; i <= nw; i++) { w = ord[i]; n = (w in dn) ? dn[w] : w
-      printf "  %-6.6s", n; for (j = 1; j <= 7; j++) printf " %+6.1f", sum[w, j] / ns; printf " (%.1f ref/s)\n", sum[w, 8] / ns } }' "$folder/moodcause.txt" 2>/dev/null)
+      printf "  %-6.6s", n; for (j = 1; j <= 6; j++) printf " %+6.1f", sum[w, j] / ns
+      printf " %+6.1f %+6.1f %+6.1f %5.1f\n", (sum[w, 7] + sum[w, 8]) / ns, sum[w, 9] / ns, sum[w, 10] / ns, sum[w, 11] / ns }
+    t = "  pull split, drift/soft bound per session:"
+    for (i = 1; i <= nw; i++) { w = ord[i]; n = (w in dn) ? dn[w] : w; x = sprintf(" %s %+.1f/%+.1f%s", n, sum[w, 8] / ns, sum[w, 7] / ns, (i < nw ? "," : ""))
+      if (length(t) + length(x) > 79) { print t; t = "   " } t = t x }
+    print t }' "$folder/moodcause.txt" 2>/dev/null)
 [ -n "$mc_out" ] || mc_out="  mood causes: no moodcause.txt yet (build 0.064 writes it at every new session end)"
 # petition topics of the window
 awk -v lo="${first:-0}" -v hi="${last:-0}" '/^P[0-9]/ { s = $0; sub(/.* s=/, "", s); s = s + 0; if (s < lo || s > hi) next

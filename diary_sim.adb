@@ -1,4 +1,4 @@
---  Version: 0.064
+--  Version: 0.065
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.064";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.065";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -656,6 +656,8 @@ procedure Diary_Sim is
    --  back to the resting mood, moodrest.pull_high_pct above the band (adaptation).  Set by Start_Life, derived from the sessions
    --  after a checkpoint load (no state of its own).
    Moodrest_Active : Boolean := False;
+   --  0.065 relief=1 (with carry): below carry.relief_energy a wesen rests instead of working too, not only instead of teaching
+   Relief_Active : Boolean := False;
    --  0.063 moodrest=2: the same resting moods, but the drift is a one-point step taken with the probability rate x gap (a die
    --  of 10000: moodrest.pull_bp basis points per point of gap, pull_high_bp above the band), and the soft bounds round by a
    --  die too; so the expected drift is rate x gap with no rounding dead zone and no state of its own
@@ -683,6 +685,7 @@ procedure Diary_Sim is
       end if;
       return Rest_Mood_Of (E);
    end Rest_Mood;
+   Mr_Soft : Integer := 0;   --  0.065 (report only): the mood of the last rest step after the soft bounds, before the drift
    --  the mood after one tick of moodrest=1: From the mood before the tick, To after it (bounds M_Min .. M_Max)
    function Mood_Rest_Step (E : Entity_Id; From, To : Integer) return Integer is
       Mid : constant Integer := (M_Max + M_Min) / 2;
@@ -693,6 +696,7 @@ procedure Diary_Sim is
       if Soft and then D > 0 and then From > Mid and then M_Max > Mid then M := From + D * (M_Max - From) / (M_Max - Mid);
       elsif Soft and then D < 0 and then From < Mid and then Mid > M_Min then M := From + D * (From - M_Min) / (Mid - M_Min);
       end if;
+      Mr_Soft := M;
       declare
          Diff : constant Integer := Rest_Mood (E) - M;
          Pct : constant Integer := Integer (Int'Max (0, Int'Min (100,
@@ -719,6 +723,7 @@ procedure Diary_Sim is
       if Soft and then D > 0 and then From > Mid and then M_Max > Mid then M := From + Div_Die (D * (M_Max - From), M_Max - Mid, 23105);
       elsif Soft and then D < 0 and then From < Mid and then Mid > M_Min then M := From + Div_Die (D * (From - M_Min), Mid - M_Min, 23105);
       end if;
+      Mr_Soft := M;
       declare
          Gap : constant Integer := Rest_Mood (E) - M;
          Bp : constant Int := Int'Max (0, (if M > Integer (Limit ("moodrest.band_hi", 80)) then Limit ("moodrest.pull_high_bp", 45)
@@ -738,7 +743,7 @@ procedure Diary_Sim is
       Carry_To (E) := 0;
       if not Sim_Carry.Active or else Base = Learn then return Base; end if;
       if St (E).Energy < Sim_Carry.Relief_Energy then
-         return (if Base = Talk then Rest else Base);
+         return (if Base = Talk or else (Relief_Active and then Base = Work) then Rest else Base);
       end if;
       --  0.062: in a moodrest=1 session the moods rest at 60..80, so "mood <= carry.teacher_mood" would stop all teaching: there a
       --  wesen at or below its own resting mood (+ carry.teacher_rest_margin) may teach
@@ -774,7 +779,9 @@ procedure Diary_Sim is
    --  0.064, the mood causes of a session (report only, docs/EVOLVE.md 18): every tick's mood change of a wesen split by cause, as
    --  it happens; no die, nothing the replay reads or the checkpoint holds.  Start_Life zeroes them, Record_Word_Vote (the end of a
    --  NEW session) appends one line per session to moodcause.txt in the save folder (part=1: this run began inside the session).
-   type Cause_Kind is (C_Refusal, C_Lesson, C_Work, C_Rest, C_Talk, C_Game, C_Other);
+   --  0.065 (moodcause v=2): the moodrest soft bounds (C_Soft) and the drift to the resting mood (C_Pull) are causes of their own,
+   --  granted petitions, the work lever and heard announcements are C_Grant; an action's column holds only its own effect.
+   type Cause_Kind is (C_Refusal, C_Lesson, C_Work, C_Rest, C_Talk, C_Game, C_Soft, C_Pull, C_Grant, C_Other);
    Cause_Net : array (Entity_Id, Cause_Kind) of Integer := [others => [others => 0]];
    Cause_Refusals : array (Entity_Id) of Natural := [others => 0];
    Cause_Session : Natural := 0;   --  the session Start_Life began in this run (0: none)
@@ -807,6 +814,7 @@ procedure Diary_Sim is
       --  changed of the action's own mood
       Ref_Fx, Fav_Adj, Lever_Adj : Integer := 0;
       Refused : Boolean := False;
+      Soft_Fx, Pull_Fx : Integer := 0;   --  0.065 mood causes: the soft bounds and the drift of moodrest
 
       procedure Add (Text : String) is
       begin
@@ -1296,6 +1304,8 @@ procedure Diary_Sim is
          declare
             M : constant Integer := (if Moodrest_Level >= 2 then Mood_Rest_Step2 (E, Pre_Mo, S.Mood, Tick) else Mood_Rest_Step (E, Pre_Mo, S.Mood));
          begin
+            Soft_Fx := Integer'Max (M_Min, Integer'Min (M_Max, Mr_Soft)) - S.Mood;
+            Pull_Fx := M - S.Mood - Soft_Fx;
             M_After_Base := M_After_Base + (M - S.Mood);
             S.Mood := M;
          end;
@@ -1303,19 +1313,21 @@ procedure Diary_Sim is
       Sim_Ledger.Add (E, Tick, A, Verb, S.Location, M_Base, M_After_Base - Pre_Mo - M_Base, S.Mood - M_After_Base - Chess_Fx - Gov_Fx,
                       Eff_Mo + Push_Nom + Chess_Nom + Gov_Nom, Led_Phase, Was_Cool, Push_Feel, Chess_Fx, Gov_Fx);
       declare   --  0.064 mood causes (report only: no die, no stored state; moodcause.txt at the session end)
-         Rest_Fx : constant Integer := M_After_Base - Pre_Mo - M_Base;   --  rest model, moodrest pull, favour, lever, bounds
+         --  0.065: the rest model and the bounds of the action itself, without the moodrest soft bounds and drift
+         Rest_Fx : constant Integer := M_After_Base - Pre_Mo - M_Base - Soft_Fx - Pull_Fx;
          Own : constant Cause_Kind :=
            (if Carry_To (E) /= 0 or else A = Learn then C_Lesson elsif A = Work then C_Work elsif A = Rest then C_Rest
             elsif A = Talk then C_Talk else C_Other);
       begin
-         Note_Cause (E, Own, M_Base);
+         Note_Cause (E, Own, M_Base + Rest_Fx - Fav_Adj - Lever_Adj);   --  0.065: the action's own effect only
          Note_Cause (E, C_Lesson, Fav_Adj);
-         Note_Cause (E, C_Other, Lever_Adj);
-         Note_Cause (E, C_Rest, Rest_Fx - Fav_Adj - Lever_Adj);
+         Note_Cause (E, C_Grant, Lever_Adj);
+         Note_Cause (E, C_Soft, Soft_Fx);
+         Note_Cause (E, C_Pull, Pull_Fx);
          Note_Cause (E, C_Other, S.Mood - M_After_Base - Chess_Fx - Gov_Fx);   --  the pushed things
          Note_Cause (E, C_Game, Chess_Fx);
          Note_Cause (E, C_Refusal, Ref_Fx);
-         Note_Cause (E, C_Other, Gov_Fx - Ref_Fx);   --  grants and heard announcements
+         Note_Cause (E, C_Grant, Gov_Fx - Ref_Fx);   --  grants and heard announcements
          if Refused then Cause_Refusals (E) := Cause_Refusals (E) + 1; end if;
       end;
       declare
@@ -5402,6 +5414,7 @@ procedure Diary_Sim is
       Carry2 : Boolean := False;        --  carry=2 (0.062, with Carry): a lesson is an exchange of several words both ways
       Moodrest : Boolean := False;      --  moodrest=1 (0.062): resting moods, soft bounds (Mood_Rest_Step)
       Moodrest2 : Boolean := False;     --  moodrest=2 (0.063): the drift as a one-point step by a die (Mood_Rest_Step2)
+      Relief : Boolean := False;        --  relief=1 (0.065, with Carry): below the relief energy no work either (Carry_Choice)
       Alb : Boolean := False;           --  alb=1 (0.064): the Albanian book, hearing and saying at the session start (Sim_Albanian)
       Alb_G : String (1 .. 4) := "uuuu";   --  albg= (with Alb): the wesen genders of data/wesen_gender.txt when the session began (m f n u)
    end record;
@@ -5426,6 +5439,7 @@ procedure Diary_Sim is
       & (if R.Symstrict then " symstrict=1" else "") & (if R.Slowfloor then " slowfloor=1" else "")   --  build 0.054, before screen=1: older checks anchor the end
       & (if R.Carry then (if R.Carry2 then " carry=2" else " carry=1") else "") & (if R.Moodrest then (if R.Moodrest2 then " moodrest=2" else " moodrest=1") else "")   --  0.061 / 0.062, before screen=1
       & (if R.Alb then " alb=1 albg=" & R.Alb_G else "")   --  0.064
+      & (if R.Relief and then R.Carry then " relief=1" else "")   --  0.065
       & (if R.Screen then " screen=1" else "") & (if R.Chess then " chess=1" else "") & (if R.Chessrules then " chessrules=2" else "")
       & (if R.Robot then " robot=1" else "") & (if R.Govern then " govern=1" else "") & (if R.Scoin then " scoin=1" else "")
       & (if R.Preport then " preport=1" else "") & (if R.Players4 then " players4=1" else "") & (if R.Nextticks then " nextticks=1" else "") & (if R.Trial then " trial=1" else "") & (if R.Rec2 and then R.Records then " records=2" elsif R.Records then " records=1" else "")
@@ -5490,6 +5504,7 @@ procedure Diary_Sim is
       R.Carry2 := Token (L, "carry") = "2";
       R.Moodrest := Token (L, "moodrest") = "1" or else Token (L, "moodrest") = "2";
       R.Moodrest2 := Token (L, "moodrest") = "2";
+      R.Relief := R.Carry and then Token (L, "relief") = "1";
       R.Alb := Token (L, "alb") = "1";
       if R.Alb and then Token (L, "albg")'Length = 4 then R.Alb_G := Token (L, "albg"); end if;
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
@@ -5647,6 +5662,7 @@ procedure Diary_Sim is
       Preport_Active := False;
       Sim_Carry.Reset;
       Moodrest_Active := False;
+      Relief_Active := False;
       Moodrest_Level := 1;
       Preport_End := -1;
       Next_Active := False;
@@ -5749,6 +5765,7 @@ procedure Diary_Sim is
       if R.Alb then Alb_Session (R); end if;   --  0.064 alb=1: hearing and saying at the session start
       Moodrest_Active := R.Moodrest;
       Moodrest_Level := (if R.Moodrest2 then 2 else 1);
+      Relief_Active := R.Relief;
       Sim_Games.Set_Rules (if R.Chessrules then 2 else 0);
       Robot_Active := R.Robot;
       Govern_Active := R.Govern;
@@ -6011,7 +6028,7 @@ procedure Diary_Sim is
       if not Preview and then not Ledger_Mode then   --  0.064: the mood causes of this session (report only)
          declare
             F : TIO.File_Type;
-            L : Unbounded_String := To_Unbounded_String ("M S" & Img (R.N) & " t=" & Img (Tick) & (if Cause_Session /= R.N then " part=1" else ""));
+            L : Unbounded_String := To_Unbounded_String ("M S" & Img (R.N) & " t=" & Img (Tick) & " v=2" & (if Cause_Session /= R.N then " part=1" else ""));
          begin
             for E in Entity_Id loop
                Append (L, " " & Name (E) & "=");
@@ -6023,6 +6040,8 @@ procedure Diary_Sim is
                TIO.Create (F, TIO.Out_File, "moodcause.txt");
                TIO.Put_Line (F, "# diary-sim 0.064 mood causes (report only): M S<session> t=<end tick> <wesen>=<refusal>,<lesson>,<work>,"
                              & "<rest>,<talk>,<game>,<other>,<refusals>,<mood at the end>; net mood points of the session by cause");
+               TIO.Put_Line (F, "# 0.065 lines with v=2: <wesen>=<refusal>,<lesson>,<work>,<rest>,<talk>,<game>,<soft>,<pull>,<grant>,"
+                             & "<other>,<refusals>,<mood at the end> (soft: moodrest soft bounds, pull: drift to the resting mood)");
             end if;
             TIO.Put_Line (F, To_String (L));
             TIO.Close (F);
@@ -6063,6 +6082,7 @@ procedure Diary_Sim is
    function Carry2_Wanted return Boolean is (Limit ("carry.enabled", 2) >= 2);  --  carry=2 (0.062): exchanges (carry.enabled = 1: carry=1)
    function Moodrest_Wanted return Boolean is (Limit ("moodrest.enabled", 2) /= 0);   --  moodrest=1 (0.062) or 2 (0.063)
    function Moodrest2_Wanted return Boolean is (Limit ("moodrest.enabled", 2) >= 2);   --  moodrest=2 (0.063)
+   function Relief_Wanted return Boolean is (Carry_Wanted and then Limit ("relief.enabled", 1) /= 0);   --  relief=1 (0.065)
    function Alb_Wanted return Boolean is (Limit ("albanian.enabled", 1) /= 0);   --  alb=1 (0.064): the Albanian book
    function Alb_G_Now return String is (if Alb_Wanted then Sim_Albanian.Genders_Now else "uuuu");   --  stamped into the session line
 
@@ -6087,7 +6107,7 @@ procedure Diary_Sim is
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
                Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => Visit_Mode, Visit_Who => Visit_Who, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted, Carry2 => Carry2_Wanted, Moodrest => Moodrest_Wanted, Moodrest2 => Moodrest2_Wanted, Alb => Alb_Wanted, Alb_G => Alb_G_Now);
+               Visit => Visit_Mode, Visit_Who => Visit_Who, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted, Carry2 => Carry2_Wanted, Moodrest => Moodrest_Wanted, Moodrest2 => Moodrest2_Wanted, Relief => Relief_Wanted, Alb => Alb_Wanted, Alb_G => Alb_G_Now);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -6104,7 +6124,7 @@ procedure Diary_Sim is
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
                World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => False, Visit_Who => 0, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted, Carry2 => Carry2_Wanted, Moodrest => Moodrest_Wanted, Moodrest2 => Moodrest2_Wanted, Alb => Alb_Wanted, Alb_G => Alb_G_Now);
+               Visit => False, Visit_Who => 0, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted, Carry2 => Carry2_Wanted, Moodrest => Moodrest_Wanted, Moodrest2 => Moodrest2_Wanted, Relief => Relief_Wanted, Alb => Alb_Wanted, Alb_G => Alb_G_Now);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);
@@ -6716,6 +6736,7 @@ procedure Diary_Sim is
       Sim_Carry.Begin_Session (Carry_Wanted, (if Carry2_Wanted then 2 else 1));
       Moodrest_Active := Moodrest_Wanted;
       Moodrest_Level := (if Moodrest2_Wanted then 2 else 1);
+      Relief_Active := Relief_Wanted;
       if Rest_Active then Rest_Begin (Seed); end if;
       Con.Put (To_String (Pending));
       Con.Put_Line (Msg ("preview.head", Img (Seed), Img (Total)));
@@ -8276,11 +8297,13 @@ procedure Diary_Sim is
       Lvl : Positive := 1;
       Mr : Boolean := False;
       Mr2 : Boolean := False;
+      Rf : Boolean := False;
    begin
       for R of Sessions loop
-         if R.Start < C then Lvl := (if R.Carry2 then 2 else 1); Mr := R.Moodrest; Mr2 := R.Moodrest2; end if;
+         if R.Start < C then Lvl := (if R.Carry2 then 2 else 1); Mr := R.Moodrest; Mr2 := R.Moodrest2; Rf := R.Relief; end if;
       end loop;
       Sim_Carry.Set_Level (Lvl);
+      Relief_Active := Rf;
       Moodrest_Active := Mr;
       Moodrest_Level := (if Mr2 then 2 else 1);
    end Derive_Session_Flags;
