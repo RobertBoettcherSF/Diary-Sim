@@ -5403,7 +5403,7 @@ procedure Diary_Sim is
       Moodrest : Boolean := False;      --  moodrest=1 (0.062): resting moods, soft bounds (Mood_Rest_Step)
       Moodrest2 : Boolean := False;     --  moodrest=2 (0.063): the drift as a one-point step by a die (Mood_Rest_Step2)
       Alb : Boolean := False;           --  alb=1 (0.064): the Albanian book, hearing and saying at the session start (Sim_Albanian)
-      Alb_G : String (1 .. 4) := "----";   --  albg= (with Alb): the wesen genders of data/wesen_gender.txt when the session began
+      Alb_G : String (1 .. 4) := "uuuu";   --  albg= (with Alb): the wesen genders of data/wesen_gender.txt when the session began (m f n u)
    end record;
    package Session_Vectors is new Ada.Containers.Vectors (Positive, Session_Rec);
    Sessions : Session_Vectors.Vector;
@@ -6064,7 +6064,7 @@ procedure Diary_Sim is
    function Moodrest_Wanted return Boolean is (Limit ("moodrest.enabled", 2) /= 0);   --  moodrest=1 (0.062) or 2 (0.063)
    function Moodrest2_Wanted return Boolean is (Limit ("moodrest.enabled", 2) >= 2);   --  moodrest=2 (0.063)
    function Alb_Wanted return Boolean is (Limit ("albanian.enabled", 1) /= 0);   --  alb=1 (0.064): the Albanian book
-   function Alb_G_Now return String is (if Alb_Wanted then Sim_Albanian.Genders_Now else "----");   --  stamped into the session line
+   function Alb_G_Now return String is (if Alb_Wanted then Sim_Albanian.Genders_Now else "uuuu");   --  stamped into the session line
 
    function Preport_Wanted return Boolean is (Govern_Wanted and then Limit ("preport.enabled", 1) /= 0);   --  preport=1 needs the governance (the D records)
 
@@ -8668,6 +8668,7 @@ procedure Diary_Sim is
 begin
    Sim_Util.Record_Keys (True);   --  0.059: the numbers read up to the restore point (Start_Keys)
    Sim_Ckpt.Data_Prints (Ada.Directories.Containing_Directory (Data_Path ("limits.txt")), Data_Lines);   --  the rule files Load_Data reads
+   Sim_Albanian.Set_Data_Dir (Ada.Directories.Full_Name (Ada.Directories.Containing_Directory (Data_Path ("limits.txt"))));   --  0.064: before Resolve_Home moves
    Data_Hash := To_Unbounded_String (Sim_Ckpt.Lines_Hash (Data_Lines));
    Ckpt_Test_Extra := To_Unbounded_String (GNAT.OS_Lib.Getenv ("DIARY_TEST_CKPT_EXTRA").all);
    Replay_Wait_Ms := Natural'Value ("0" & GNAT.OS_Lib.Getenv ("DIARY_TEST_REPLAY_MS").all);

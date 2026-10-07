@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  Albanian of diary_sim (alb=1 sessions): see sim_albanian.ads.
 pragma Ada_2022;
 
@@ -16,6 +16,16 @@ package body Sim_Albanian is
    use Ada.Strings.Unbounded;
    use Sim_World;
    use type Interfaces.Unsigned_32;
+
+   Dir_Set : Unbounded_String;
+
+   procedure Set_Data_Dir (Dir : String) is
+   begin
+      Dir_Set := To_Unbounded_String (Dir);
+   end Set_Data_Dir;
+
+   function Alb_Path (File : String) return String is
+     (if Length (Dir_Set) = 0 then Data_Path (File) else To_String (Dir_Set) & "/" & File);
 
    B2_Max : constant := 64;                      --  ending classes of two letters (the most common in sq_nouns.txt)
    B1_Max : constant := 32;                      --  ... and of one letter
@@ -72,6 +82,7 @@ package body Sim_Albanian is
    Lemma_Id : Id_Maps.Map;
    Form_Lemma : Id_Maps.Map;                      --  a form -> its lemma
    Form_Def : Id_Maps.Map;                        --  a definite singular form -> its lemma
+   Held_Text : Id_Maps.Map;                       --  every held-back lemma and every form of one in sq_noun_forms.txt (any use)
    Ending_Id : Id_Maps.Map;                       --  "b2:ar" / "b1:r" -> class
    Book : Sent_Vectors.Vector;
    Cues : Cue_Vectors.Vector;
@@ -160,6 +171,8 @@ package body Sim_Albanian is
       package EC_Vectors is new Ada.Containers.Vectors (Positive, Ending_Count);
       Cnt : Id_Maps.Map;
       ECs : EC_Vectors.Vector;
+      Pair_Form : Str_Vectors.Vector;                 --  the lines of sq_noun_forms.txt: form, and its lemma (Pair_Lemma)
+      Pair_Lemma : Nat_Vectors.Vector;
    begin
       if Loaded then return; end if;
       Loaded := True;
@@ -169,7 +182,7 @@ package body Sim_Albanian is
       T_Cap := Nat ("albanian.memory_cap", 200, Mem_Max);
       T_Self := Nat ("albanian.self_min", 3, 100_000);
       Lines.Clear;
-      Read_Lines (Data_Path ("sq_nouns.txt"), Lines, Ok);
+      Read_Lines (Alb_Path ("sq_nouns.txt"), Lines, Ok);
       for L of Lines loop
          if L'Length > 0 and then L (L'First) /= '#' then
             Split_Tabs (L, Parts);
@@ -181,12 +194,14 @@ package body Sim_Albanian is
          end if;
       end loop;
       Lines.Clear;
-      Read_Lines (Data_Path ("sq_noun_forms.txt"), Lines, Ok);
+      Read_Lines (Alb_Path ("sq_noun_forms.txt"), Lines, Ok);
       for L of Lines loop
          if L'Length > 0 and then L (L'First) /= '#' then
             Split_Tabs (L, Parts);
-            if Natural (Parts.Length) >= 2 and then Lemma_Id.Contains (Parts (2)) and then not Form_Lemma.Contains (Parts (1)) then
-               Form_Lemma.Insert (Parts (1), Lemma_Id.Element (Parts (2)));
+            if Natural (Parts.Length) >= 2 and then Lemma_Id.Contains (Parts (2)) then
+               if not Form_Lemma.Contains (Parts (1)) then Form_Lemma.Insert (Parts (1), Lemma_Id.Element (Parts (2))); end if;
+               Pair_Form.Append (Parts (1));
+               Pair_Lemma.Append (Lemma_Id.Element (Parts (2)));
             end if;
          end if;
       end loop;
@@ -230,9 +245,16 @@ package body Sim_Albanian is
             Nn.Held := Nn.G in 'm' | 'f' and then Natural (Hash32 ("held:" & L) mod 100) < T_Held;
          end;
       end loop;
+      --  a held-back noun is never heard: its lemma and all its forms, in any use (also as another part of speech: "drejtë")
+      for I in 1 .. Natural (Nouns.Length) loop
+         if Nouns (I).Held and then not Held_Text.Contains (To_String (Nouns (I).Lemma)) then Held_Text.Insert (To_String (Nouns (I).Lemma), I); end if;
+      end loop;
+      for I in 1 .. Natural (Pair_Form.Length) loop
+         if Nouns (Pair_Lemma (I)).Held and then not Held_Text.Contains (Pair_Form (I)) then Held_Text.Insert (Pair_Form (I), Pair_Lemma (I)); end if;
+      end loop;
       --  the book: per sentence its nouns and its cues
       Lines.Clear;
-      Read_Lines (Data_Path ("sq_book.txt"), Lines, Ok);
+      Read_Lines (Alb_Path ("sq_book.txt"), Lines, Ok);
       for L of Lines loop
          if L'Length > 0 and then L (L'First) /= '#' then
             Split_Tabs (L, Parts);
@@ -243,6 +265,7 @@ package body Sim_Albanian is
                begin
                   Words_Of (Parts (2), Ws);
                   for I in 1 .. Natural (Ws.Length) loop
+                     if Held_Text.Contains (Ws (I)) then S.Held := True; end if;
                      if Form_Lemma.Contains (Ws (I)) then
                         declare
                            Li : constant Positive := Form_Lemma.Element (Ws (I));
@@ -280,7 +303,7 @@ package body Sim_Albanian is
          end if;
       end loop;
       Lines.Clear;
-      Read_Lines (Data_Path ("sq_adj.txt"), Lines, Ok);
+      Read_Lines (Alb_Path ("sq_adj.txt"), Lines, Ok);
       for L of Lines loop
          if L'Length > 0 and then L (L'First) /= '#' then Adjs.Append (L); end if;
       end loop;
@@ -307,10 +330,10 @@ package body Sim_Albanian is
    function Genders_Now return String is
       Lines : Str_Vectors.Vector;
       Ok : Boolean;
-      R : String (1 .. Natural (Entity_Id'Last)) := [others => '-'];
+      R : String (1 .. Natural (Entity_Id'Last)) := [others => 'u'];
    begin
       Lines.Clear;
-      Read_Lines (Data_Path ("wesen_gender.txt"), Lines, Ok);
+      Read_Lines (Alb_Path ("wesen_gender.txt"), Lines, Ok);
       for L of Lines loop
          if L'Length > 0 and then L (L'First) /= '#' then
             declare
@@ -326,7 +349,7 @@ package body Sim_Albanian is
                   begin
                      for E in Entity_Id loop
                         if Name (E) = Who then
-                           R (Integer (E)) := (if G = "m" then 'm' elsif G = "f" then 'f' elsif G = "none" then 'n' else '-');
+                           R (Integer (E)) := (if G = "m" then 'm' elsif G = "f" then 'f' elsif G = "none" then 'n' else 'u');
                         end if;
                      end loop;
                   end;
@@ -349,7 +372,7 @@ package body Sim_Albanian is
             H : Unbounded_String;
          begin
             for I of Held_List loop Append (H, (if Length (H) > 0 then "," else "") & To_String (Nouns (I).Lemma)); end loop;
-            Lines.Append ("B S" & Img (N) & " t=" & Img (Start) & " ts=" & Stamp & " book=" & Img (Nb) & " nouns="
+            Lines.Append ("B S" & Img (N) & " t=" & Img (Start) & " book=" & Img (Nb) & " nouns="
                           & Img (Natural (Book_List.Length)) & " held=" & Img (Natural (Held_List.Length)) & " " & To_String (H));
          end;
       end if;
@@ -433,7 +456,7 @@ package body Sim_Albanian is
                end;
             end loop;
             declare
-               G : constant Character := (if Genders'Length >= Eid then Genders (Genders'First + Eid - 1) else '-');
+               G : constant Character := (if Genders'Length >= Eid then Genders (Genders'First + Eid - 1) else 'u');
                Own, Seen : Natural := 0;
             begin
                if G in 'm' | 'f' then   --  its own gender's article once it heard enough cues of that gender (else i)

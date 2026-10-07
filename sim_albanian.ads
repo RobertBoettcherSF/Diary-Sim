@@ -1,4 +1,4 @@
---  Version: 0.001
+--  Version: 0.002
 --  Albanian of diary_sim (build 0.064, alb=1 sessions only; older sessions never call it, so they replay byte for byte).
 --  The wesen find a book (data/sq_book.txt, Tatoeba sentences) in their first alb=1 session; nobody hands it over.  At the start
 --  of every alb=1 session each wesen hears a few sentences of it in book order (albanian.hear_per_session, a die of its own per
@@ -23,11 +23,16 @@ package Sim_Albanian is
 
    use Sim_Util;
 
+   --  The data folder of the run (the one Load_Data read, before the start moves into the save folder): the book, the nouns,
+   --  the adjectives and the genders come from there.  Unset: Data_Path.
+   procedure Set_Data_Dir (Dir : String);
+
    procedure Reset;                              --  everything zero (a new save, or a checkpoint without the section)
    function Zero return Boolean;                 --  the state of Reset
    function Found return Natural;                --  the session that found the book (0: not yet)
 
-   --  data/wesen_gender.txt as four characters in Entity_Id order: m, f, n (none) or - (unset); "----" without the file
+   --  data/wesen_gender.txt as four characters in Entity_Id order: m, f, n (none) or u (unset, '-' in the file); "uuuu" without
+   --  the file (letters only: the session line stays [a-z0-9= ])
    function Genders_Now return String;
 
    --  One alb=1 session N starting after tick Start: hearing, learning, saying.  Genders: the stamp of the session line.

@@ -146,7 +146,7 @@ ckpt_layout: 3 006ad69b266ebca0
 
 Format 4 (build 0.064, the section `albanian`):
 
-ckpt_layout: 4 148981a865bd8474
+ckpt_layout: 4 19a90de8111d5f79
 
 `make check` (scenario 63) and `make ckpt-layout` compare it with the code: when the code changed and this line did not, the check
 FAILS with `bump Ckpt_Format`. Then:
