@@ -1,5 +1,5 @@
 #!/bin/sh
-# Version: 0.010
+# Version: 0.011
 # make ship (by day) and make night-ship (overnight): Robert's ONE command; both write ONE file, checkin.txt in the save folder
 # (../diary-data next to the source folder, or --home / $DIARY_HOME: bin/diary_sim --folder says where), with the same VERDICT header
 # on top, and print a short summary and the path of that file.  Exit status 0 = PASS, 1 = FAIL.
@@ -477,6 +477,23 @@ if [ "${n_carry:-0}" -gt 0 ]; then
 else
   carry_line="carry: no carry=1/2 session in the window (builds 0.061/0.062 start them)"; carry_full=$carry_line
 fi
+# 0.064 Albanian (alb=1 sessions): the sentences the wesen said in the window, scored here at report time against the genders of
+# data/sq_nouns.txt (scripts/alb_report.sh; the full breakdown and the last 20 sentences go to albanian_report.txt in the save)
+if [ "${nn:-0}" -gt 0 ] && grep -q ' alb=1' "$tmp/new.txt"; then
+  alb_out=$(scripts/alb_report.sh "$folder" "$first" "$last" 2>/dev/null); alb_out=$(printf '%s\n' "$alb_out" | sed 's/^/  /' | cut -c1-79)
+else alb_out="  albanian: no alb=1 session in the window (build 0.064 starts them)"; fi
+# 0.064 mood causes (report only, moodcause.txt in the save: one line per new session): per wesen the mood points per session of the
+# window by cause (refused petitions, lessons, work, rest and the resting-mood pull, talk, games, other) and refusals per session
+mc_out=$(awk -v lo="${first:-0}" -v hi="${last:-0}" -v names="data/names.txt" '
+  BEGIN { while ((getline l < names) > 0) if (l !~ /^#/ && split(l, a, " = ") == 2) { gsub(/ /, "", a[1]); dn[a[1]] = a[2] } }
+  /^M S[0-9]/ { s = substr($2, 2) + 0; if (s < lo || s > hi) next; ns++; if ($0 ~ / part=1/) np++
+    for (i = 3; i <= NF; i++) { if (split($i, kv, "=") != 2 || kv[1] == "t") continue; w = kv[1]; if (!(w in seen)) { seen[w] = 1; ord[++nw] = w }
+      k = split(kv[2], v, ","); for (j = 1; j <= 8 && j <= k; j++) sum[w, j] += v[j] } }
+  END { if (ns == 0) { print "  mood causes: no session line in moodcause.txt for the window"; exit }
+    printf "  %-6s %6s %6s %6s %6s %6s %6s %6s  mood/session, %d s%s\n", "causes", "refuse", "lesson", "work", "rest", "talk", "game", "other", ns, (np ? " (" np " part)" : "")
+    for (i = 1; i <= nw; i++) { w = ord[i]; n = (w in dn) ? dn[w] : w
+      printf "  %-6.6s", n; for (j = 1; j <= 7; j++) printf " %+6.1f", sum[w, j] / ns; printf " (%.1f ref/s)\n", sum[w, 8] / ns } }' "$folder/moodcause.txt" 2>/dev/null)
+[ -n "$mc_out" ] || mc_out="  mood causes: no moodcause.txt yet (build 0.064 writes it at every new session end)"
 # petition topics of the window
 awk -v lo="${first:-0}" -v hi="${last:-0}" '/^P[0-9]/ { s = $0; sub(/.* s=/, "", s); s = s + 0; if (s < lo || s > hi) next
   t = $0; sub(/.* topic=/, "", t); sub(/ .*/, "", t); n[t]++ } END { for (t in n) print n[t], t }' "$folder/diaries/petitions.txt" 2>/dev/null | sort -k1,1nr -k2 > "$tmp/topics.txt"
@@ -612,6 +629,8 @@ total=$(( $(date +%s) - t0 ))
   if [ "$np" -gt 0 ]; then echo "petition topics${win:+ ($win)}: $topics (of $np)" | cut -c1-79; else echo "petition topics${win:+ ($win)}: none"; fi
   echo "$mood_short" | cut -c1-79
   echo "  $mood_line"
+  echo "$alb_out"
+  echo "$mc_out" | cut -c1-79
   echo "$delta_line" | cut -c1-79
   echo "$grow_line" | cut -c1-79
   if [ "$night" = 1 ]; then echo "wall time: total $(secs $total) (night $(secs $dn), reports $(secs $drep))"; else echo "wall time: total $(secs $total) (no night, reports $(secs $drep))"; fi

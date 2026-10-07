@@ -1,9 +1,9 @@
 #!/bin/sh
-# Version: 0.001
+# Version: 0.002
 # The Albanian report (build 0.064, alb=1 sessions; REPORT time only, the simulation never reads it):
 #   scripts/alb_report.sh <save folder> <first session> <last session>
 # Scores the sentences the wesen said in the window (diaries/albanian.txt U and J lines) against the genders of
-# data/sq_nouns.txt and prints ONE line for checkin.txt (at most 79 columns, a second line only when the first is full):
+# data/sq_nouns.txt and prints ONE line for checkin.txt when it fits (77 columns + the indent), else two labelled lines:
 #   agreement of the article with the noun's gender, against the shuffle baseline (the same articles shuffled over the same
 #   nouns: share_i x share_m + share_e x share_f), and on the held-back nouns (never heard) against always-masculine on those
 #   nouns, the feminine held-back nouns alone, and the first-person sentences "jam i/e ..." (wesen with gender m or f).
@@ -33,9 +33,13 @@ awk -v lo="$lo" -v hi="$hi" -v rep="$folder/albanian_report.txt" -v names="$root
   END {
     if (N == 0) { print "albanian: no sentence said in the window"; exit }
     sh = (I * Mn + (N - I) * (N - Mn)) / (N * N)
-    l1 = sprintf("albanian: agree %s n=%d (shuffle %s); held-back %s n=%d (all-m %s),", pc(C, N), N, pc(sh * 100, 100), pc(HC, HN), HN, pc(HM, HN))
-    l2 = sprintf(" fem %s n=%d; jam %d/%d", pc(HFC, HF), HF, JC, JN)
-    if (length(l1 l2) <= 79) print l1 l2; else { print l1; print "  albanian:" l2 }
+    # one line of at most 77 columns (checkin.txt indents it by two) when it fits, else two labelled lines
+    ag = sprintf("agree %s n=%d", pc(C, N), N); hb = sprintf("%s n=%d", pc(HC, HN), HN); fm = sprintf("%s n=%d", pc(HFC, HF), HF)
+    s1 = sprintf("albanian: %s (shuf %s); held %s (all-m %s); fem %s; jam %d/%d", ag, pc(sh * 100, 100), hb, pc(HM, HN), fm, JC, JN)
+    l1 = sprintf("albanian: %s (shuffle %s); held-back %s (all-m %s)", ag, pc(sh * 100, 100), hb, pc(HM, HN))
+    if (length(l1) > 77) l1 = sprintf("albanian: %s (shuf %s); held %s (all-m %s)", ag, pc(sh * 100, 100), hb, pc(HM, HN))
+    l2 = sprintf("albanian: held-back feminine %s; first person (jam i/e) %d/%d", fm, JC, JN)
+    if (length(s1) <= 77) print s1; else { print l1; print l2 }
     printf "# diary-sim albanian report (scripts/alb_report.sh, overwritten each run): sessions %s to %s\n", lo, hi > rep
     print "# scored against data/sq_nouns.txt (Wiktionary genders); neuter / unknown nouns are left out" > rep
     print book > rep
