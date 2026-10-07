@@ -70,6 +70,9 @@ hm() { date -d "@$1" '+%H:%M' 2>/dev/null || date -r "$1" '+%H:%M' 2>/dev/null |
 cnt() { if [ -f "$1" ]; then grep -c "$2" "$1"; else echo 0; fi; }   # a count, 0 without the file
 # the tick of a checkpoint: its header line "tick N" (0.060: the header is longer than 4 KB on a real save; sed stops at that line)
 ckt() { LC_ALL=C sed -n '/^tick [0-9]/{s/^tick \([0-9]*\).*/\1/p;q;}' "$1" 2>/dev/null; }
+# 0.065: a checkin.txt line longer than 79 columns wraps at a space (the rest indented by 4), never cut
+w79() { awk '{ if (length($0) <= 79) { print; next } n = split($0, a, " "); ind = $0; sub(/[^ ].*/, "", ind); t = ind a[1]
+  for (i = 2; i <= n; i++) { if (length(t) + 1 + length(a[i]) > 79) { print t; t = "    " a[i] } else t = t " " a[i] } print t }'; }
 secs() { s=$1; printf '%dm%02ds' $((s / 60)) $((s % 60)); }
 ses="$folder/diaries/sessions.txt"; rl="$folder/run_log.txt"; con="$folder/night_console.txt"; tr="$folder/trend.txt"
 stampf="$folder/ship_stamp.txt"
@@ -502,7 +505,7 @@ fi
 # 0.064 Albanian (alb=1 sessions): the sentences the wesen said in the window, scored here at report time against the genders of
 # data/sq_nouns.txt (scripts/alb_report.sh; the full breakdown and the last 20 sentences go to albanian_report.txt in the save)
 if [ "${nn:-0}" -gt 0 ] && grep -q ' alb=1' "$tmp/new.txt"; then
-  alb_out=$(scripts/alb_report.sh "$folder" "$first" "$last" 2>/dev/null); alb_out=$(printf '%s\n' "$alb_out" | sed 's/^/  /' | cut -c1-79)
+  alb_out=$(scripts/alb_report.sh "$folder" "$first" "$last" 2>/dev/null); alb_out=$(printf '%s\n' "$alb_out" | sed 's/^/  /' | w79)
 else alb_out="  albanian: no alb=1 session in the window (build 0.064 starts them)"; fi
 # 0.064 mood causes (report only, moodcause.txt in the save: one line per new session): per wesen the mood points per session of the
 # window by cause (refused petitions, lessons, work, rest and the resting-mood pull, talk, games, other) and refusals per session
@@ -631,43 +634,43 @@ if [ -z "$why" ] && [ -z "$warn" ]; then verdict=PASS; elif [ -z "$why" ]; then 
 total=$(( $(date +%s) - t0 ))
 {
   echo "VERDICT: $verdict"
-  echo "$voc_line" | cut -c1-79
-  [ -n "$voc_line2" ] && echo "$voc_line2" | cut -c1-79
-  [ -n "$voc_line3" ] && echo "$voc_line3" | cut -c1-79
+  echo "$voc_line" | w79
+  [ -n "$voc_line2" ] && echo "$voc_line2" | w79
+  [ -n "$voc_line3" ] && echo "$voc_line3" | w79
   echo "build: $build   made: $(date '+%Y-%m-%d %H:%M:%S') (local)   make $mode"
   if [ "$night" = 1 ]; then
     echo "night: $night_txt"
-    [ "$mode" != ship ] && echo "budget: $( [ "$mode" = slice ] && echo "$minutes min" || echo "${hours}h"); stop $(hm $plan_stop), reserve $(secs $reserve); due $(hm $deadline), written $(date '+%H:%M') ($( [ "$(date +%s)" -le "$deadline" ] && echo on time || echo "late $(secs $(( $(date +%s) - deadline )))"))"
-    [ -n "$est_l" ] && echo "budget: $est_l"
-    [ -n "$full_txt" ] && echo "budget: $full_txt" | fold -s -w 79
-    [ -n "$bud_l" ] && echo "budget: $bud_l"
-    echo "stop reason: ${reason:-none}${box_why:+ ($box_why)}"
+    [ "$mode" != ship ] && echo "budget: $( [ "$mode" = slice ] && echo "$minutes min" || echo "${hours}h"); stop $(hm $plan_stop), reserve $(secs $reserve); due $(hm $deadline), written $(date '+%H:%M') ($( [ "$(date +%s)" -le "$deadline" ] && echo on time || echo "late $(secs $(( $(date +%s) - deadline )))"))" | w79
+    [ -n "$est_l" ] && echo "budget: $est_l" | w79
+    [ -n "$full_txt" ] && echo "budget: $full_txt" | w79
+    [ -n "$bud_l" ] && echo "budget: $bud_l" | w79
+    echo "stop reason: ${reason:-none}${box_why:+ ($box_why)}" | w79
     if [ "$nn" -gt 0 ]; then echo "new sessions: $nn (s$first to s$last), active=2: $n_a2/$nn"; else echo "new sessions: 0"; fi
   else
     echo "night: none (reports only); the save: $n_all sessions, $n_ticks ticks"
-    [ -n "$full_txt" ] && echo "budget: $full_txt" | fold -s -w 79
+    [ -n "$full_txt" ] && echo "budget: $full_txt" | w79
     echo "stop reason: none (no night); the last night: ${reason:-none}"
     if [ "$nn" -gt 0 ]; then echo "new sessions: 0; newest: $nn (s$first to s$last), active=2: $n_a2/$nn"; else echo "new sessions: 0"; fi
   fi
   echo "newest sessions symstrict=1: $(yn "$n_strict")   slowfloor=1: $(yn "$n_floor")"
   echo "mint-slow at the floor: $floor"
   echo "chess/number strings learned: since symbols=1: ${ws_sym:--}; $strict_txt"
-  echo "verify: $ver"
-  echo "$lv_line" | cut -c1-79
-  [ -n "$lv_why" ] && echo "$lv_why"
-  echo "$li_line" | cut -c1-79
-  echo "$ck_line" | cut -c1-79
-  echo "reports window: $wtxt" | cut -c1-79
-  echo "roles${win:+ ($win)}: $roles_txt" | cut -c1-79
-  echo "$carry_line" | cut -c1-79
-  echo "$shared_line" | cut -c1-79
-  if [ "$np" -gt 0 ]; then echo "petition topics${win:+ ($win)}: $topics (of $np)" | cut -c1-79; else echo "petition topics${win:+ ($win)}: none"; fi
-  echo "$mood_short" | cut -c1-79
-  echo "  $mood_line"
+  echo "verify: $ver" | w79
+  echo "$lv_line" | w79
+  [ -n "$lv_why" ] && echo "$lv_why" | w79
+  echo "$li_line" | w79
+  echo "$ck_line" | w79
+  echo "reports window: $wtxt" | w79
+  echo "roles${win:+ ($win)}: $roles_txt" | w79
+  echo "$carry_line" | w79
+  echo "$shared_line" | w79
+  if [ "$np" -gt 0 ]; then echo "petition topics${win:+ ($win)}: $topics (of $np)" | w79; else echo "petition topics${win:+ ($win)}: none"; fi
+  echo "$mood_short" | w79
+  echo "  $mood_line" | w79
   echo "$alb_out"
-  echo "$mc_out" | cut -c1-79
-  echo "$delta_line" | cut -c1-79
-  echo "$grow_line" | cut -c1-79
+  echo "$mc_out" | w79
+  echo "$delta_line" | w79
+  echo "$grow_line" | w79
   if [ "$night" = 1 ]; then echo "wall time: total $(secs $total) (night $(secs $dn), reports $(secs $drep))"; else echo "wall time: total $(secs $total) (no night, reports $(secs $drep))"; fi
 } > "$tmp/verdict.txt"
 

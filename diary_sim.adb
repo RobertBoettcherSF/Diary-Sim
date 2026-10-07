@@ -7683,6 +7683,7 @@ procedure Diary_Sim is
    --  The final box, the log entry, the exit status.  Why: q, signal, max_sessions, max_hours, drift, error.
    procedure Night_End (Why : String) is
       Box : Str_Vectors.Vector;
+      Shown : Str_Vectors.Vector;   --  0.065: Box wrapped to 75 columns for the terminal
       Wide : Natural := 0;
    begin
       if not Night_On then return; end if;
@@ -7711,10 +7712,29 @@ procedure Diary_Sim is
       if Q_Dropped and then Why in "max_sessions" | "max_hours" then Box.Append (Msg ("night.box.q_dropped")); end if;
       if Length (Last_Line) > 0 then Box.Append (Msg ("night.box.last", To_String (Last_Line))); end if;
       Box.Append (Msg ("night.box.files"));
-      for L of Box loop Wide := Natural'Max (Wide, L'Length); end loop;
+      --  0.065: on the terminal a box line longer than 75 columns wraps at a space (the rest indented by 2): the box fits 79
+      --  columns; night_console.txt keeps the lines whole
+      for L of Box loop
+         declare
+            Rest : Unbounded_String := To_Unbounded_String (L);
+            Cut : Natural;
+         begin
+            while Length (Rest) > 75 loop
+               Cut := 0;
+               for I in reverse 2 .. 76 loop
+                  if Element (Rest, I) = ' ' then Cut := I; exit; end if;
+               end loop;
+               if Cut = 0 then Cut := 76; end if;
+               Shown.Append (Slice (Rest, 1, Cut - 1));
+               Rest := To_Unbounded_String ("  " & Fx.Trim (Slice (Rest, Cut, Length (Rest)), Ada.Strings.Left));
+            end loop;
+            Shown.Append (To_String (Rest));
+         end;
+      end loop;
+      for L of Shown loop Wide := Natural'Max (Wide, L'Length); end loop;
       Con.Put_Line ("+-- " & Msg ("night.box.title", To_String (Run_Label)) & " "
                     & Fx."*" (Natural'Max (0, Wide - Msg ("night.box.title", To_String (Run_Label))'Length - 2), '-') & "+");
-      for L of Box loop Con.Put_Line ("| " & Fx.Head (L, Wide) & " |"); end loop;
+      for L of Shown loop Con.Put_Line ("| " & Fx.Head (L, Wide) & " |"); end loop;
       Con.Put_Line ("+" & Fx."*" (Wide + 2, '-') & "+");
       declare   --  the same box at the end of night_console.txt (make ship copies it into checkin.txt: the night ran on the terminal)
          F : TIO.File_Type;
