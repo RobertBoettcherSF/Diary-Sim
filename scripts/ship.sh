@@ -1,5 +1,5 @@
 #!/bin/sh
-# Version: 0.013
+# Version: 0.014
 # make ship (by day) and make night-ship (overnight): Robert's ONE command; both write ONE file, checkin.txt in the save folder
 # (../diary-data next to the source folder, or --home / $DIARY_HOME: bin/diary_sim --folder says where), with the same VERDICT header
 # on top, and print a short summary and the path of that file.  Exit status 0 = PASS, 1 = FAIL.
@@ -285,7 +285,7 @@ vrc=$(cat "$tmp/verify.rc"); vt=$(sed -n 's/^verify: OK, \([0-9]*\) ticks.*/\1/p
 vti=$(sed -n 's/^verify: OK (incremental), ticks \([0-9]* to [0-9]*\) .*/\1/p' "$tmp/verify.txt" | sed -n 1p)
 set -- $vti; [ -n "$3" ] && [ "$1" -gt "$3" ] && vti="none:$3"   # nothing new since the verified checkpoint
 lastchk=$(sed -n 's/^verify: \(ok ticks=[0-9]*\)$/\1/p' "$rl" 2>/dev/null | tail -n 1)
-if [ "$vrc" = 0 ] && [ "${vti%%:*}" = none ]; then ver="OK, incremental (no new tick after the verified checkpoint of tick ${vti#none:})"
+if [ "$vrc" = 0 ] && [ "${vti%%:*}" = none ]; then ver="OK, incremental (no new tick after the verified tick ${vti#none:})"   # 0.065: fits 79 columns
 elif [ "$vrc" = 0 ] && [ -n "$vti" ]; then ver="OK, incremental (ticks $vti replayed from the files)"
 elif [ "$vrc" = 0 ]; then ver="OK (${vt:-?} ticks replayed from the files)"
 elif [ "$vrc" = night ]; then ver="OK by the night's end check ($nightchk)"
@@ -671,7 +671,7 @@ total=$(( $(date +%s) - t0 ))
   echo "newest sessions symstrict=1: $(yn "$n_strict")   slowfloor=1: $(yn "$n_floor")"
   echo "mint-slow at the floor: $floor"
   echo "chess/number strings learned: since symbols=1: ${ws_sym:--}; $strict_txt"
-  echo "verify: $ver"
+  echo "verify: $ver" | w79   # 0.065: a long skipped / FAILED line wraps at a space (the prefix stays on the first line)
   echo "$lv_line" | cut -c1-79
   [ -n "$lv_why" ] && echo "$lv_why"
   echo "$li_line" | cut -c1-79

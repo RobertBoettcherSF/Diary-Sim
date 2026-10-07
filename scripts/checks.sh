@@ -2520,7 +2520,7 @@ rm -f "$w/nt/spr/state.verified.ckpt"
 DIARY_HOME="$w/nt/spr" make --no-print-directory -C "$root" ship SHIP_VERIFY_TICKS=10 > sps.txt 2>&1 < /dev/null; rcs=$?
 cp "$ckr" sps_ck.txt
 DIARY_HOME="$w/nt/spd" make --no-print-directory -C "$root" ship SHIP_VERIFY=1 > spv.txt 2>&1 < /dev/null; rcv=$?
-[ "$rci" = 0 ] && grep -q '^verify: OK, incremental (no new tick after the verified checkpoint of tick [0-9]*)$' spi_ck.txt \
+[ "$rci" = 0 ] && grep -q '^verify: OK, incremental (no new tick after the verified tick [0-9]*)$' spi_ck.txt \
   && [ "$rcs" = 0 ] && sed -n 3p sps_ck.txt | grep -q '^VERDICT: PASS$' && grep -q '^verify: skipped ([0-9]* ticks > 10); night end check: ' sps_ck.txt && grep -q '^last full verify: [0-9-]* [0-9:]* ([0-9]* ticks), today$' sps_ck.txt && grep -qF '== make verify (skipped, ' sps_ck.txt \
   && grep -q '^since [0-9-]* [0-9:]*: +0 sessions, spread +0, all 4 +0, overlap +0 pts, top same$' sps_ck.txt && grep -q '^the stamp of the last ship:$' sps_ck.txt \
   && [ "$rcv" != 0 ] && grep -q '^VERDICT: FAIL:.* verify failed;' "$w/nt/spd/checkin.txt" && grep -q '^night: none (reports only)' "$w/nt/spd/checkin.txt" \
