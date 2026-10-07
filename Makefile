@@ -1,4 +1,4 @@
-# Version: 0.052
+# Version: 0.053
 # make ship       ROBERT'S DAY COMMAND (after unzipping over the source folder; the save in ../diary-data stays): REPORTS ONLY, no
 #                 night, no q, seconds: build if needed, then active, wordstat, frustration, evolve on the save as it is, and verify if the
 #                 save has at most SHIP_VERIFY_TICKS (150000) ticks (verify replays the whole history, minutes on a big save; the
@@ -20,6 +20,9 @@
 #                 cannot hold: replay first (~N min), then sessions; checkin.txt late by ~M min", then goes on.  The end check and verify follow SHIP_VERIFY / SHIP_VERIFY_TICKS like make ship
 #                 (no full replay of a big save: make verify by hand).  A closed terminal (SIGHUP) ends the night; the reports still run and
 #                 checkin.txt is still written (the console also goes to ship_log.txt).  NIGHT_SHIP_DETACH=1: run detached, no live screen.
+#                 0.065 NIGHT_SHIP_FULL=1: the full verify FIRST, inside the same budget (verify_stamp.txt on a pass); the sessions
+#                 get the rest; a DRIFT: no sessions, VERDICT FAIL, checkin.txt still written.  Runs detached unless NIGHT_SHIP_DETACH=0
+#                 (SIGHUP is ignored during the verify either way).
 #                 Stop reason max_hours (or max_sessions) = PASS; q still works (FAIL: stopped by hand, the reports still run).
 #                 Reports (both ships) cover the sessions since the last ship stamp; SHIP_FULL=1: the whole save.
 # make slice      THE DAYTIME SLICE (build 0.058): make night-ship with a budget of SLICE_MINUTES (20) MINUTES for the whole job (any
@@ -190,7 +193,7 @@ NIGHT_SHIP_HOURS ?= 9
 # make slice: the daytime form of make night-ship, the budget in minutes (any value: make slice SLICE_MINUTES=10)
 SLICE_MINUTES ?= 20
 SLICE_VERIFY_TICKS ?= 30000
-export SHIP_FULL NIGHT_SHIP_RESERVE NIGHT_SHIP_RESERVE_FACTOR NIGHT_SHIP_RESERVE_MARGIN NIGHT_SHIP_DETACH SHIP_VOCAB_GOAL
+export SHIP_FULL NIGHT_SHIP_FULL NIGHT_SHIP_RESERVE NIGHT_SHIP_RESERVE_FACTOR NIGHT_SHIP_RESERVE_MARGIN NIGHT_SHIP_DETACH SHIP_VOCAB_GOAL
 
 EVERY ?= 100
 

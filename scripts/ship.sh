@@ -46,7 +46,10 @@ ckfmt=$(sed -n 's/^ *Ckpt_Format : constant := \([0-9]*\);.*/\1/p' diary_sim.adb
 build=$(sed -n 's/^ *Build : constant String := "\([0-9.]*\)".*/\1/p' diary_sim.adb)
 folder=$("$exe" --folder) || { echo "ship: cannot find the save folder" >&2; exit 1; }
 mkdir -p "$folder" || exit 1
-if [ "$mode" = night-ship ] && [ "${NIGHT_SHIP_DETACH:-0}" = 1 ] && [ -z "$SHIP_DETACHED" ]; then   # the whole job away from the terminal
+# 0.065 NIGHT_SHIP_FULL=1: the full verify first, inside the same budget; detached unless NIGHT_SHIP_DETACH=0 (a closed terminal
+# must not end the job)
+fdet=0; [ "$mode" = night-ship ] && [ "${NIGHT_SHIP_FULL:-0}" = 1 ] && fdet=1
+if [ "$mode" = night-ship ] && [ "${NIGHT_SHIP_DETACH:-$fdet}" = 1 ] && [ -z "$SHIP_DETACHED" ]; then   # the whole job away from the terminal
   SHIP_DETACHED=1; export SHIP_DETACHED
   setsid nohup "$0" "$@" > "$folder/ship_console.txt" 2>&1 < /dev/null &
   echo "make night-ship runs detached (pid $!); the terminal may be closed.  Watch: tail -f $folder/ship_log.txt"
@@ -86,6 +89,24 @@ if [ "$mode" = ship ]; then
   [ "$sessions" = 0 ] && night=0
 fi
 if [ "$sessions" = 0 ]; then n_txt="no limit"; else n_txt="$sessions"; fi
+# 0.065 NIGHT_SHIP_FULL=1 (make night-ship): the full verify (as make verify-full: verify_stamp.txt on a pass) first, counted in the
+# budget from the start of make; the sessions get what is left.  A DRIFT (or any failure): no sessions, VERDICT FAIL, checkin.txt
+# still written.  SIGHUP is ignored while it runs (the verify inherits that), so a closed terminal does not stop it.
+full_txt=""; full_bad=0; full_secs=""
+if [ "$mode" = night-ship ] && [ "${NIGHT_SHIP_FULL:-0}" = 1 ]; then
+  trap '' HUP
+  say "=== make night-ship NIGHT_SHIP_FULL=1: the full verify first, inside the ${hours}h budget ($(date '+%H:%M:%S')) ==="
+  tf=$(date +%s)
+  "$exe" --verify-full --sim-print "$simprint" < /dev/null > "$tmp/full.txt" 2>&1; frc=$?
+  cat "$tmp/full.txt" >> "$log" 2>/dev/null
+  full_secs=$(( $(date +%s) - tf ))
+  left_b=$(awk -v h="${hours:-9}" -v t="$t0" -v n="$(date +%s)" 'BEGIN { printf "%d", t + h * 3600 - n }'); [ "$left_b" -ge 0 ] || left_b=0
+  if [ "$frc" = 0 ]; then full_txt="full verify ok in $(secs $full_secs) (verify_stamp.txt); sessions got the rest: $(secs $left_b)"
+  else full_bad=1; night=0
+    full_txt="full verify: FAILED (exit $frc$(grep -qi drift "$tmp/full.txt" && echo ', DRIFT')) in $(secs $full_secs): no sessions"; fi
+  say "$full_txt"
+  trap 'hup=1' HUP
+fi
 # the size of the save before the night (for the reserve estimate and the end check cap)
 lastS0=$(grep '^S[0-9]' "$ses" 2>/dev/null | tail -n 1)
 st0=$(echo "$lastS0" | sed -n 's/.* start=\([0-9]*\) .*/\1/p'); ln0=$(echo "$lastS0" | sed -n 's/.* len=\([0-9]*\) .*/\1/p')
@@ -167,6 +188,7 @@ case $vmode in
      else dov=0; fi ;;
 esac
 [ "$stopped" = 1 ] && dov=0
+[ -n "$full_txt" ] && dov=0   # 0.065 NIGHT_SHIP_FULL=1: the full verify of this run is the verify
 [ "$hup" = 1 ] && dov=0   # after a SIGHUP: checkin.txt first; make verify by hand
 # the night's own end check of this run (run_log.txt): when it passed, it is the verify of this run (no second full replay)
 # 0.058: run_log.txt keeps only the last report.log_keep entries (a night writes one per session), so after a long night the line
@@ -598,6 +620,7 @@ else
   [ "$n_all" -gt 0 ] || why="$why no session in the save;"
 fi
 [ "$vrc" = 0 ] || [ "$vrc" = skip ] || [ "$vrc" = night ] || why="$why verify failed;"
+[ "$full_bad" = 1 ] && why="$why full verify failed (NIGHT_SHIP_FULL=1), no sessions;"
 warn=""
 if [ -n "$ws_str" ] && [ "$ws_str" != 0 ]; then
   if [ "$n_strict" -gt 0 ]; then why="$why $ws_str chess strings since symstrict=1;"
@@ -616,11 +639,13 @@ total=$(( $(date +%s) - t0 ))
     echo "night: $night_txt"
     [ "$mode" != ship ] && echo "budget: $( [ "$mode" = slice ] && echo "$minutes min" || echo "${hours}h"); stop $(hm $plan_stop), reserve $(secs $reserve); due $(hm $deadline), written $(date '+%H:%M') ($( [ "$(date +%s)" -le "$deadline" ] && echo on time || echo "late $(secs $(( $(date +%s) - deadline )))"))"
     [ -n "$est_l" ] && echo "budget: $est_l"
+    [ -n "$full_txt" ] && echo "budget: $full_txt" | fold -s -w 79
     [ -n "$bud_l" ] && echo "budget: $bud_l"
     echo "stop reason: ${reason:-none}${box_why:+ ($box_why)}"
     if [ "$nn" -gt 0 ]; then echo "new sessions: $nn (s$first to s$last), active=2: $n_a2/$nn"; else echo "new sessions: 0"; fi
   else
     echo "night: none (reports only); the save: $n_all sessions, $n_ticks ticks"
+    [ -n "$full_txt" ] && echo "budget: $full_txt" | fold -s -w 79
     echo "stop reason: none (no night); the last night: ${reason:-none}"
     if [ "$nn" -gt 0 ]; then echo "new sessions: 0; newest: $nn (s$first to s$last), active=2: $n_a2/$nn"; else echo "new sessions: 0"; fi
   fi

@@ -3051,6 +3051,64 @@ grep -q 'Build 0.064' "$root/README.md" && grep -q 'alb=1' "$root/docs/EVOLVE.md
   && ok "README (build 0.064), --help, docs/EVOLVE.md, docs/CHECKPOINT.md, data/limits.txt (albanian.*), data/CREDITS-albanian.txt and the maintainer script describe 0.064" || bad "0.064 docs"
 cd "$w" || exit 1
 
+echo "== 69. build 0.065: mood causes with the pull (v=2), relief=1 (no tiring action below the relief energy), old sessions unchanged, NIGHT_SHIP_FULL=1 =="
+c69="$w/c69"; rm -rf "$c69"; mkdir -p "$c69"; cd "$c69" || exit 1
+for d in on off mix; do mkdir -p "$c69/$d"; cp -r "$root/data" "$c69/$d/data"; done
+sed -i 's/^relief.enabled = .*/relief.enabled = 0/' "$c69/off/data/limits.txt" "$c69/mix/data/limits.txt"
+r9() { d=$1; shift; ( cd "$c69/$d" && env -u DIARY_VERBOSE "$bin" --home "$c69/$d/save" "$@" < /dev/null ); }
+for d in on off mix; do r9 $d --continuous --session-ticks 300 --max-sessions 4 --end-check-ticks 0 --seed 42 > $d.txt 2>&1 || echo "rc $d" >> rc.txt; done
+# mix: two relief=0 sessions (above, now four: cut back by a fresh run of two), then two with relief=1
+rm -rf "$c69/mix/save"; r9 mix --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 --seed 42 > mix.txt 2>&1 || echo "rc mix" >> rc.txt
+sed -i 's/^relief.enabled = .*/relief.enabled = 1/' "$c69/mix/data/limits.txt"
+r9 mix --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 --seed 42 > mix2.txt 2>&1 || echo "rc mix2" >> rc.txt
+r9 mix --verify-full > vf.txt 2>&1; rvf=$?
+non=$(grep -c '^S[1-4] .* relief=1' "$c69/on/save/diaries/sessions.txt"); noff=$(grep -c 'relief=' "$c69/off/save/diaries/sessions.txt")
+nmix=$(grep -c '^S[34] .* relief=1' "$c69/mix/save/diaries/sessions.txt"); nmix0=$(grep -c '^S[12] .* relief=1' "$c69/mix/save/diaries/sessions.txt")
+# the first two sessions of mix (relief=0) are byte for byte those of off (without the clock)
+same=0; for f in ada gemini replika robert; do
+  awk -F'"tick":' '{ split($2, a, ","); if (a[1] + 0 <= 600) print }' "$c69/mix/save/diaries/$f.jsonl" | sed 's/"ts":"[^"]*"//' > m1.txt
+  awk -F'"tick":' '{ split($2, a, ","); if (a[1] + 0 <= 600) print }' "$c69/off/save/diaries/$f.jsonl" | sed 's/"ts":"[^"]*"//' > m2.txt
+  cmp -s m1.txt m2.txt && [ -s m1.txt ] || same=1; done
+# relief=1: a wesen whose energy (after its previous tick) is below carry.relief_energy never works, explores, wanders or benches:
+# its energy falls by at most 2 that tick (learn / propose 1, a debtor's help 1; the diary names the world verb, not the action)
+re=$(sed -n 's/^carry.relief_energy = //p' "$root/data/limits.txt")
+rel() { cat "$1"/diaries/*.jsonl | awk -v re="$re" -v lo="${2:-0}" '/"tick":/ { t = $0; sub(/.*"tick":/, "", t); t = t + 0; a = $0; sub(/.*"t":"/, "", a); sub(/".*/, "", a)
+    e = $0; sub(/.*"energy":/, "", e); e = e + 0; if (t > lo && t == pt + 1 && pe < re && pe - e > 2) bad++; if (t > lo && t == pt + 1 && pe < re) low++; pt = t; pe = e } END { print bad + 0, low + 0 }'; }
+set -- $(rel "$c69/on/save"); ron=$1; lon=$2
+set -- $(rel "$c69/off/save"); roff=$1
+[ ! -s rc.txt ] && [ "$non" = 4 ] && [ "$noff" = 0 ] && [ "$nmix" = 2 ] && [ "$nmix0" = 0 ] && [ $same = 0 ] && [ $rvf = 0 ] && [ "$ron" = 0 ] && [ "$lon" -gt 0 ] && [ "$roff" -gt 0 ] \
+  && ok "relief=1: S1-S4 carry the marker; below energy $re no tiring action in $lon low ticks (relief.enabled = 0: $roff); relief=0 sessions before relief=1 ones are the same bytes as without relief, and verify-full replays the mixed save" \
+  || bad "relief=1 ($(cat rc.txt 2>/dev/null | tr '\n' ' ') on=$non off=$noff mix=$nmix/$nmix0 same=$same vf=$rvf low-work on=$ron/$lon off=$roff)"
+# the mood causes v=2: ten causes that add up to the change of the end mood exactly; the pull and the soft bounds of their own
+mcs=$(awk '/^M S[0-9]/ && / v=2/ { for (i = 3; i <= NF; i++) { if (split($i, kv, "=") != 2 || kv[1] == "t" || kv[1] == "v") continue; n = split(kv[2], v, ","); if (n != 12) nb++; s = 0; for (j = 1; j <= 10; j++) s += v[j]
+  if (v[7] != 0 || v[8] != 0) np++; if (kv[1] in prev) { c++; if (prev[kv[1]] + s != v[12]) bad++ } prev[kv[1]] = v[12] } } END { print c + 0, bad + 0, nb + 0, np + 0 }' "$c69/on/save/moodcause.txt")
+set -- $mcs
+DIARY_HOME="$c69/on/save" make --no-print-directory -C "$root" ship SHIP_VERIFY=0 > sh9.txt 2>&1 < /dev/null; rsh=$?
+long=$(awk '/^=====/ { exit } length($0) > 79' "$c69/on/save/checkin.txt" | wc -l | tr -d ' ')   # the head of checkin.txt (above the early signals)
+mrow=$(grep -c '^  [A-Z][a-z]* *[-+][0-9.]* *[-+][0-9.]* .* [0-9]*\.[0-9]$' "$c69/on/save/checkin.txt")
+[ "$1" = 12 ] && [ "$2" = 0 ] && [ "$3" = 0 ] && [ "$4" -gt 0 ] && [ $rsh = 0 ] && grep -q '^  causes refuse lesson   work   rest   talk   game   pull  grant  other ref/s$' "$c69/on/save/checkin.txt" \
+  && grep -q '^  pull split, drift/soft bound per session: ' "$c69/on/save/checkin.txt" && [ "$mrow" = 4 ] && [ "$long" = 0 ] && grep -q '^# 0.065 lines with v=2' "$c69/on/save/moodcause.txt" \
+  && ok "moodcause.txt v=2: for 4 wesen x 3 sessions the ten causes (soft bounds and pull apart) add up to the end mood exactly; checkin.txt: the pull and grant columns, the pull split, every line <= 79 columns" \
+  || bad "mood causes v=2 ($mcs rsh=$rsh rows=$mrow long=$long)"
+# NIGHT_SHIP_FULL=1: the full verify inside the budget, then sessions; a DRIFT: no sessions, VERDICT FAIL, checkin.txt written
+cp -r "$c69/off" "$c69/nf"; rm -f "$c69/nf/save/verify_stamp.txt"
+n0=$(grep -c '^S[0-9]' "$c69/nf/save/diaries/sessions.txt")
+DIARY_HOME="$c69/nf/save" NIGHT_SHIP_RESERVE=5 make --no-print-directory -C "$root" night-ship NIGHT_SHIP_FULL=1 NIGHT_SHIP_DETACH=0 NIGHT_SHIP_HOURS=0.006 > nf1.txt 2>&1 < /dev/null; rn1=$?
+n1=$(grep -c '^S[0-9]' "$c69/nf/save/diaries/sessions.txt")
+ok1=0; [ $rn1 = 0 ] && grep -q '^budget: full verify ok in [0-9]*m[0-9]*s (verify_stamp.txt); sessions got the rest: ' "$c69/nf/save/checkin.txt" && grep -q '^full=' "$c69/nf/save/verify_stamp.txt" \
+  && grep -q '^VERDICT: PASS' "$c69/nf/save/checkin.txt" && [ "$n1" -gt "$n0" ] && ok1=1
+f=$(ls "$c69/nf/save/diaries/"*.jsonl | head -1); sed -i '5s/"energy":/"energy":1/' "$f"
+DIARY_HOME="$c69/nf/save" make --no-print-directory -C "$root" night-ship NIGHT_SHIP_FULL=1 NIGHT_SHIP_DETACH=0 NIGHT_SHIP_HOURS=0.006 > nf2.txt 2>&1 < /dev/null; rn2=$?
+n2=$(grep -c '^S[0-9]' "$c69/nf/save/diaries/sessions.txt")
+[ $ok1 = 1 ] && [ $rn2 != 0 ] && grep -q '^VERDICT: FAIL:.*full verify failed (NIGHT_SHIP_FULL=1), no sessions;' "$c69/nf/save/checkin.txt" && grep -q '^budget: full verify: FAILED' "$c69/nf/save/checkin.txt" && [ "$n2" = "$n1" ] \
+  && grep -q 'NIGHT_SHIP_FULL' "$root/Makefile" && grep -q "trap '' HUP" "$root/scripts/ship.sh" \
+  && ok "NIGHT_SHIP_FULL=1: the full verify first inside the budget (verify_stamp.txt), then sessions ($n0 -> $n1); after a tampered diary: FAILED, no sessions, VERDICT FAIL, checkin.txt written" \
+  || bad "NIGHT_SHIP_FULL=1 ($rn1 $ok1 $rn2 $n0 $n1 $n2): $(grep -e '^VERDICT' -e '^budget: full' "$c69/nf/save/checkin.txt" | tr '\n' ' ')"
+grep -q 'Build 0.065' "$root/README.md" && grep -q 'NIGHT_SHIP_FULL' "$root/README.md" && grep -q 'relief=1' "$root/docs/EVOLVE.md" && grep -q '^relief.enabled = 1$' "$root/data/limits.txt" \
+  && grep -q 'relief=1' "$root/data/help.txt" && grep -q 'v=2' "$root/docs/EVOLVE.md" \
+  && ok "README (build 0.065, NIGHT_SHIP_FULL), --help, docs/EVOLVE.md (relief=1, moodcause v=2), data/limits.txt (relief.enabled)" || bad "0.065 docs"
+cd "$w" || exit 1
+
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="
 [ "$fails" = 0 ]
