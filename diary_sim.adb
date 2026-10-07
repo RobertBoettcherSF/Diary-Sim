@@ -656,7 +656,8 @@ procedure Diary_Sim is
    --  back to the resting mood, moodrest.pull_high_pct above the band (adaptation).  Set by Start_Life, derived from the sessions
    --  after a checkpoint load (no state of its own).
    Moodrest_Active : Boolean := False;
-   --  0.065 relief=1 (with carry): below carry.relief_energy a wesen rests instead of working too, not only instead of teaching
+   --  0.065 relief=1 (with carry): below carry.relief_energy a wesen rests instead of working (and of the other tiring actions:
+   --  explore, wander, bench), not only instead of teaching
    Relief_Active : Boolean := False;
    --  0.063 moodrest=2: the same resting moods, but the drift is a one-point step taken with the probability rate x gap (a die
    --  of 10000: moodrest.pull_bp basis points per point of gap, pull_high_bp above the band), and the soft bounds round by a
@@ -743,7 +744,8 @@ procedure Diary_Sim is
       Carry_To (E) := 0;
       if not Sim_Carry.Active or else Base = Learn then return Base; end if;
       if St (E).Energy < Sim_Carry.Relief_Energy then
-         return (if Base = Talk or else (Relief_Active and then Base = Work) then Rest else Base);
+         --  0.065 relief=1: no tiring action either (work, explore, wander, bench: Energy_D below -2), only rest
+         return (if Base = Talk or else (Relief_Active and then Energy_D (Base) < -2) then Rest else Base);
       end if;
       --  0.062: in a moodrest=1 session the moods rest at 60..80, so "mood <= carry.teacher_mood" would stop all teaching: there a
       --  wesen at or below its own resting mood (+ carry.teacher_rest_margin) may teach
