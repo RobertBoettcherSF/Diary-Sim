@@ -3113,7 +3113,8 @@ cd "$w" || exit 1
 # 1. the end of a session under a small stack: Robert's s4072 (1.7 GB save) died with STORAGE_ERROR after 'Saved to': run_report.txt
 # was assembled with a stack copy of each section (the chess block is megabytes).  Here a save whose run_report.txt is bigger than
 # the whole stack (ulimit -s 160) ends a session cleanly: no end-of-session step copies a report onto the stack any more.
-c70="$w/c70"; rm -rf "$c70"; mkdir -p "$c70/big"; cd "$c70" || exit 1
+# The default data (chess on: its section is the big one), not the check's copy with chess off.
+c70="$w/c70"; rm -rf "$c70"; mkdir -p "$c70/big"; cp -r "$root/data" "$c70/big/data"; cd "$c70" || exit 1
 r70() { d=$1; shift; ( cd "$c70/$d" && env -u DIARY_VERBOSE "$bin" --home "$c70/$d/save" "$@" < /dev/null ); }
 r70 big --continuous --session-ticks 20000 --max-sessions 3 --end-check-ticks 0 --seed 42 > big1.txt 2>&1; rb1=$?
 rsz=$(stat -c %s "$c70/big/save/run_report.txt" 2>/dev/null || echo 0)
