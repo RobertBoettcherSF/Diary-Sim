@@ -1,5 +1,5 @@
 #!/bin/sh
-# Version: 0.012
+# Version: 0.013
 # make ship (by day) and make night-ship (overnight): Robert's ONE command; both write ONE file, checkin.txt in the save folder
 # (../diary-data next to the source folder, or --home / $DIARY_HOME: bin/diary_sim --folder says where), with the same VERDICT header
 # on top, and print a short summary and the path of that file.  Exit status 0 = PASS, 1 = FAIL.
@@ -502,6 +502,22 @@ if [ "${n_carry:-0}" -gt 0 ]; then
 else
   carry_line="carry: no carry=1/2 session in the window (builds 0.061/0.062 start them)"; carry_full=$carry_line
 fi
+# 0.065 (report only, entities/*/words.txt): per wesen the words that ENTERED its missing-by-one set in the window (the last of
+# the other three learned it; new = first known by anyone in the window) and that LEFT it (it learned the word: by a lesson =
+# taught, else world / screen / coined), so the early signals show whether the lessons can catch up
+flow_line=$(awk -v lo="${fst:-0}" -v hi="${hit:-0}" -v names="data/names.txt" '
+  BEGIN { while ((getline l < names) > 0) if (l !~ /^#/ && split(l, a, " = ") == 2) { gsub(/ /, "", a[1]); dn[a[1]] = a[2] } }
+  FNR == 1 { e = FILENAME; sub(/\/words.txt$/, "", e); sub(/.*\//, "", e); ord[++ne] = e }
+  /^[0-9]+ / && NF >= 4 { k = e SUBSEP $1; if (!(k in t)) { t[k] = $4 + 0; how[k] = $3; w[$1] = 1 } }
+  END { if (ne != 4 || hi <= lo) exit; out = "missing-by-one flow (ticks " lo + 1 "-" hi "): entered (new) / left (lessons):"
+    for (i = 1; i <= ne; i++) { L = ord[i]; en = nw = lf = ls = 0
+      for (x in w) { ta = -1; first = 1e18; ok = 1
+        for (j = 1; j <= ne; j++) { o = ord[j]; k = o SUBSEP x; if (k in t && t[k] < first) first = t[k]; if (o == L) continue; if (!(k in t)) { ok = 0; break } if (t[k] > ta) ta = t[k] }
+        if (!ok) continue; kl = L SUBSEP x; tl = (kl in t) ? t[kl] : 1e18
+        if (ta > lo && ta <= hi && ta < tl) { en++; if (first > lo) nw++ }
+        if (tl > lo && tl <= hi && ta < tl) { lf++; if (how[kl] == "taught") ls++ } }
+      out = out sprintf(" %s +%d (%d) -%d (%d)%s", (L in dn) ? dn[L] : L, en, nw, lf, ls, (i < ne ? "," : "")) }
+    print out }' "$folder"/entities/*/words.txt 2>/dev/null)
 # 0.064 Albanian (alb=1 sessions): the sentences the wesen said in the window, scored here at report time against the genders of
 # data/sq_nouns.txt (scripts/alb_report.sh; the full breakdown and the last 20 sentences go to albanian_report.txt in the save)
 if [ "${nn:-0}" -gt 0 ] && grep -q ' alb=1' "$tmp/new.txt"; then
@@ -694,6 +710,7 @@ else w1="no night: run_log.txt entries of the last night"; w2="no night: the ses
   echo "roles, per wesen: id name ticks rest% work%"; cat "$tmp/roles.txt"
   echo "roles, per wesen: id name words-taught petitions-filed"; cat "$tmp/teach.txt"
   echo "$carry_full"
+  [ -n "$flow_line" ] && echo "$flow_line"
   echo "$mood_stats" | sed 's/^  //'
   echo "$mood_goal" | sed 's/^  //'
   echo "$shared_line"
