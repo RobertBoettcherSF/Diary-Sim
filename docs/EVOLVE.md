@@ -295,7 +295,7 @@ Robert: improve the current project, no new concepts.
   one-point step at most per tick and far smaller than work (about -250 per session), so he stays below his resting mood.
 * **NIGHT_SHIP_FULL=1** (`make night-ship`): `bin/diary_sim --verify-full` first, inside the one budget, then the sessions with
   what is left; a failure: no sessions, VERDICT FAIL. Detached by default, SIGHUP ignored during the verify.
-* checkin.txt lines wrap (never cut); the terminal night box fits 79 columns.
+* checkin.txt: `known per wesen`, `roles` and the new blocks wrap (not cut); the terminal night box fits 79 columns.
 * **Albanian baselines** (report only, scripts/alb_report.sh): majority gender and the last-letter rule on the held-back nouns;
   the held-back score of the first 10 alb sessions ever against the last 10 of the window.
 * **Missing-by-one flow** (report only): per wesen, entered (new) / left (by lessons) in the window. Root cause of Abel's flat
