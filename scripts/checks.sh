@@ -3109,6 +3109,43 @@ grep -q 'Build 0.065' "$root/README.md" && grep -q 'NIGHT_SHIP_FULL' "$root/READ
   && ok "README (build 0.065, NIGHT_SHIP_FULL), --help, docs/EVOLVE.md (relief=1, moodcause v=2), data/limits.txt (relief.enabled)" || bad "0.065 docs"
 cd "$w" || exit 1
 
+# ---- scenario 70 (0.066) -------------------------------------------------------------------------------------------------
+# 1. the end of a session under a small stack: Robert's s4072 (1.7 GB save) died with STORAGE_ERROR after 'Saved to': run_report.txt
+# was assembled with a stack copy of each section (the chess block is megabytes).  Here a save whose run_report.txt is bigger than
+# the whole stack (ulimit -s 160) ends a session cleanly: no end-of-session step copies a report onto the stack any more.
+c70="$w/c70"; rm -rf "$c70"; mkdir -p "$c70/big"; cd "$c70" || exit 1
+r70() { d=$1; shift; ( cd "$c70/$d" && env -u DIARY_VERBOSE "$bin" --home "$c70/$d/save" "$@" < /dev/null ); }
+r70 big --continuous --session-ticks 20000 --max-sessions 3 --end-check-ticks 0 --seed 42 > big1.txt 2>&1; rb1=$?
+rsz=$(stat -c %s "$c70/big/save/run_report.txt" 2>/dev/null || echo 0)
+( ulimit -s 160; r70 big --continuous --session-ticks 30 --max-sessions 1 --end-check-ticks 0 > big2.txt 2>&1 ); rb2=$?
+( ulimit -s 160; r70 big --frustration > fr.txt 2>&1 ); rfr=$?
+( ulimit -s 160; r70 big --active > ac.txt 2>&1 ); rac=$?
+nsz=$(stat -c %s "$c70/big/save/run_report.txt" 2>/dev/null || echo 0)
+[ $rb1 = 0 ] && [ $rb2 = 0 ] && [ $rfr = 0 ] && [ $rac = 0 ] && [ "$rsz" -gt 163840 ] && [ "$nsz" -gt 163840 ] && head -1 "$c70/big/save/debug.txt" | grep -q '^OK v' \
+  && ok "end of a session under ulimit -s 160 (KiB) with a run_report.txt of $nsz bytes (bigger than the stack): OK; --frustration and --active too" \
+  || bad "small stack ($rb1 $rb2 fr=$rfr ac=$rac size $rsz/$nsz): $(grep -m1 -e STORAGE -e error "$c70/big/save/debug.txt")"
+# 2. a crash names the step: debug.txt 'step:' (the traceback may be empty, as on Robert's GNAT 12)
+mkdir -p "$c70/cr"; r70 cr --ticks=200 --crash-at=150 --seed 42 > cr.txt 2>&1; rcr=$?
+[ $rcr != 0 ] && grep -q '^step: session ticks$' "$c70/cr/save/debug.txt" && grep -q '^at: ' "$c70/cr/save/debug.txt" \
+  && ok "a crash: debug.txt names the step ('step: session ticks') above the 'at:' frames" || bad "crash step ($rcr): $(grep -e '^step' -e '^at' "$c70/cr/save/debug.txt" | tr '\n' ' ')"
+# 3. the next start after a session that saved but crashed in its end reports (sessions.txt has the session, the checkpoint is older):
+# the old binary's crash is simulated by a crash in the first new tick of the following session after the session line was written:
+# the start loads the checkpoint, replays the missing ticks, takes the stored session as done and goes on; verify-full agrees
+mkdir -p "$c70/rc"; r70 rc --continuous --session-ticks 300 --max-sessions 2 --end-check-ticks 0 --seed 42 > rc1.txt 2>&1
+ck1=$(sed -n 's/^tick //p' "$c70/rc/save/state.ckpt" 2>/dev/null | head -1)
+cp "$c70/rc/save/state.ckpt" "$c70/rc/ckpt.keep" 2>/dev/null
+r70 rc --continuous --session-ticks 300 --max-sessions 1 --end-check-ticks 0 > rc2.txt 2>&1
+cp "$c70/rc/ckpt.keep" "$c70/rc/save/state.ckpt" 2>/dev/null   # the end checkpoint of the third session never came (the crash)
+n3=$(grep -c '^S[0-9]' "$c70/rc/save/diaries/sessions.txt")
+r70 rc --continuous --session-ticks 300 --max-sessions 1 --end-check-ticks 0 > rc3.txt 2>&1; rr3=$?
+n4=$(grep -c '^S[0-9]' "$c70/rc/save/diaries/sessions.txt")
+r70 rc --verify-full > rcv.txt 2>&1; rrv=$?
+[ "$n3" = 3 ] && [ "$n4" = 4 ] && [ $rr3 = 0 ] && [ $rrv = 0 ] && grep -q 'start: checkpoint of tick 600 loaded .*(+300 ticks replayed)' rc3.txt && grep -q 'NEW from s4,' rc3.txt \
+  && ! grep -qi -e stale -e drift rc3.txt \
+  && ok "a start after a session whose end checkpoint is missing (S3 stored, checkpoint of tick 600): loads it, replays 300 ticks, goes on with s4; verify-full OK" \
+  || bad "recovery ($n3 $n4 $rr3 $rrv ck=$ck1): $(grep -e 'start:' -e 'NEW from' -e stale rc3.txt | head -3 | tr '\n' ' ')"
+cd "$w" || exit 1
+
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="
 [ "$fails" = 0 ]
