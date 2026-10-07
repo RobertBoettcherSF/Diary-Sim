@@ -1,4 +1,4 @@
---  Version: 0.065
+--  Version: 0.066
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.065";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.066";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -168,6 +168,8 @@ procedure Diary_Sim is
    Ckpt_Seed : Int := -1;
    Ckpt_Off : array (Entity_Id) of Long_Long_Integer := [others => 0];   --  the diary bytes up to the checkpoint's tick
    Ckpt_Why : Unbounded_String;                      --  why it was not used ("missing", "stale (...)")
+   Step_Now : Unbounded_String := To_Unbounded_String ("start");   --  0.066: the step running now (debug.txt "step:" of a crash,
+   --  also when the traceback is empty: GNAT 12 printed no frames for Robert's STORAGE_ERROR after s4072)
    Ckpt_Start_Line : Unbounded_String;               --  the start line (Ckpt_Start_Text): console, the night's status lines and box
    Ckpt_Load_Secs : Duration := 0.0;
    Ckpt_Last_Write : Ada.Calendar.Time := Ada.Calendar.Clock;   --  a night writes it at most every night.ckpt_seconds (and at its end)
@@ -1383,7 +1385,7 @@ procedure Diary_Sim is
       F : SIO.File_Type;
       Line_No : Natural := 0;
       Part : Unbounded_String;   --  a line across two blocks
-      B : Ada.Streams.Stream_Element_Array (1 .. 262_144);
+      B : Ada.Streams.Stream_Element_Array (1 .. 32_768);   --  0.066: was 256 KiB (+ as much again for T): half a MiB of stack
       N : Ada.Streams.Stream_Element_Offset;
       procedure One (L : String) is
          Want : constant Int := Int (Disk_Len (E)) + 1;
@@ -1524,7 +1526,8 @@ procedure Diary_Sim is
          end if;
       end loop;
       return "error: " & Ada.Exceptions.Exception_Name (E) & ": " & Ada.Exceptions.Exception_Message (E)
-        & ASCII.LF & "at: " & To_String (Res);
+        & ASCII.LF & "step: " & To_String (Step_Now)
+        & ASCII.LF & "at: " & (if Length (Res) = 0 then "(no traceback: see step)" else To_String (Res));
    end Error_Brief;
 
    --  A pasted backup in the wrong place: diaries/diaries, Diaries/, DIARIES/ ...
@@ -2230,6 +2233,10 @@ procedure Diary_Sim is
    --  petitions a player decided in one session.  Nothing changes the grant rate: this is a report only.
    procedure Print_Frustration is
       type Nat_Array is array (Positive range <>) of Natural;
+      type Wesen_Nat is array (Entity_Id range <>, Positive range <>) of Natural;
+      type Wesen_Int is array (Entity_Id range <>, Positive range <>) of Int;
+      type Wesen_Bool is array (Entity_Id range <>, Positive range <>) of Boolean;
+      type Player_Nat is array (Positive range <>, Positive range <>) of Natural;
       Lines : Str_Vectors.Vector;
       Found : Boolean;
       Max_S : constant := 5_000;   --  sessions counted: the newest ones (0.057: was the first ones), or the window of --since-session
@@ -2284,17 +2291,27 @@ procedure Diary_Sim is
          return;
       end if;
       declare
-         First, Last : Nat_Array (1 .. N_S) := [others => 0];   --  ticks First .. Last belong to session n
-         type Wesen_Session is array (Entity_Id, 1 .. N_S) of Natural;
-         Refused : Wesen_Session := [others => [others => 0]];
-         Low : array (Entity_Id, 1 .. N_S) of Int := [others => [others => 0]];
-         Seen : array (Entity_Id, 1 .. N_S) of Boolean := [others => [others => False]];
+         --  0.066: the per-session tables on the heap (about 110 bytes a session on the stack before: 440 KB at s4072)
+         Max_P : constant := 16;
+         type Per_Session (N : Natural) is record
+            First, Last : Nat_Array (1 .. N) := [others => 0];   --  ticks First .. Last belong to session n
+            Refused : Wesen_Nat (Entity_Id, 1 .. N) := [others => [others => 0]];
+            Low : Wesen_Int (Entity_Id, 1 .. N) := [others => [others => 0]];
+            Seen : Wesen_Bool (Entity_Id, 1 .. N) := [others => [others => False]];
+            P_Load : Player_Nat (1 .. Max_P, 1 .. N) := [others => [others => 0]];
+         end record;
+         type Per_Session_Ref is access Per_Session;
+         Tables : constant Per_Session_Ref := new Per_Session (N_S);
+         First : Nat_Array renames Tables.First;
+         Last : Nat_Array renames Tables.Last;
+         Refused : Wesen_Nat renames Tables.Refused;
+         Low : Wesen_Int renames Tables.Low;
+         Seen : Wesen_Bool renames Tables.Seen;
+         P_Load : Player_Nat renames Tables.P_Load;
          Tot_Pet, Tot_Grant, Tot_Part, Tot_Ref : array (Entity_Id) of Natural := [others => 0];
          Low_All : array (Entity_Id) of Int := [others => 0];
          Worst, Worst_S : array (Entity_Id) of Natural := [others => 0];
          Players : Str_Vectors.Vector;   --  internal player ids in order of first appearance
-         Max_P : constant := 16;
-         P_Load : array (1 .. Max_P, 1 .. N_S) of Natural := [others => [others => 0]];
          P_Tot, P_Ref : array (1 .. Max_P) of Natural := [others => 0];
          All_Pet, All_Ref : Natural := 0;
          K : Natural := 0;
@@ -9279,6 +9296,7 @@ begin
    if not Quit_Seen then
       Night_Phase := 1;
       S_Start := Ada.Calendar.Clock;
+      Step_Now := To_Unbounded_String ("session ticks");
       for Tick in Int range Int (Verify_To) + 1 .. Ticks loop
          Do_Tick (Tick);
          if Tick_Wait_Ms > 0 then delay Duration (Tick_Wait_Ms) / 1000.0; end if;   --  tests only
@@ -9292,6 +9310,7 @@ begin
          exit when Quit_Seen;
       end loop;
       Loop_End := Ada.Calendar.Clock;
+      Step_Now := To_Unbounded_String ("end of session: word votes and the session save");
    end if;
    if not Quit_Seen and then Ticks > Int (Common)
      and then not (for some R of Word_Votes => R.Tick = Ticks)
@@ -9349,6 +9368,7 @@ begin
       procedure Mark (Name : String) is
       begin
          Marks.Append (Name & ":" & Img (Length (Rep)));
+         Step_Now := To_Unbounded_String ("end of session: report " & Name);
       end Mark;
       D_Files, D_Lines, E_Files, N, Js_Lines : Natural := 0;
       procedure Save (File : String; Content : Unbounded_String) is
@@ -9370,15 +9390,22 @@ begin
          Body_T, Index, Anom, Boxes_T : Unbounded_String;
          Ln : Natural := 3;   --  the next line of run_report.txt (the marker takes lines 1 and 2)
          Items : Str_Vectors.Vector;
-         procedure Sect (Name, Text : String) is
-            Lf : Natural := 0;
+         --  0.066: the section text stays on the heap (an Unbounded_String): the chess block of a big save is megabytes, and
+         --  "== name ==" & Text built a copy of it on the stack (STORAGE_ERROR at the 8 MB default stack, Robert's s4072)
+         procedure Sect (Name : String; Text : Unbounded_String) is
+            Lf : Natural;
          begin
-            if Text'Length = 0 then return; end if;
+            if Length (Text) = 0 then return; end if;
             Append (Index, (if Length (Index) > 0 then "," else "") & Name & "=" & Img (Ln));
-            Append (Body_T, "== " & Name & " ==" & ASCII.LF & Text);
-            for C of Text loop if C = ASCII.LF then Lf := Lf + 1; end if; end loop;
-            if Text (Text'Last) /= ASCII.LF then Append (Body_T, ASCII.LF); Lf := Lf + 1; end if;
+            Append (Body_T, "== " & Name & " ==" & ASCII.LF);
+            Append (Body_T, Text);
+            Lf := Ada.Strings.Unbounded.Count (Text, "" & ASCII.LF);
+            if Element (Text, Length (Text)) /= ASCII.LF then Append (Body_T, ASCII.LF); Lf := Lf + 1; end if;
             Ln := Ln + 1 + Lf;
+         end Sect;
+         procedure Sect (Name, Text : String) is
+         begin
+            Sect (Name, To_Unbounded_String (Text));
          end Sect;
       begin
          Sect ("import", To_String (Import_Block) & ASCII.LF & To_String (Kalpa_Line) & ASCII.LF);
@@ -9390,10 +9417,10 @@ begin
                N_M : constant String := (if I < Natural (Marks.Length) then Marks (I + 1) else "");
                To : constant Natural := (if N_M = "" then Length (Rep) else Natural'Value (N_M (Fx.Index (N_M, ":") + 1 .. N_M'Last)));
             begin
-               if To > From then Sect (M (M'First .. Cut - 1), To_String (Unbounded_Slice (Rep, From + 1, To))); end if;
+               if To > From then Sect (M (M'First .. Cut - 1), Unbounded_Slice (Rep, From + 1, To)); end if;
             end;
          end loop;
-         Sect ("votes", To_String (Console));
+         Sect ("votes", Console);
          Sect ("ledger", Sim_Ledger.Report (Seed, Ledger_From, True) & ASCII.LF);
          Append (Boxes_T, Msg ("debug.attach") & ASCII.LF);
          Append (Boxes_T, Msg ("pet.file", Img (Integer'Min (Petition_Total, Integer (Limit ("propose.file_cap", 40)))),
@@ -9460,9 +9487,11 @@ begin
          end if;
       end Report_Out;
    begin
+      Step_Now := To_Unbounded_String ("end of session: summary");
       Summarize (Seed, Ticks, Votes_Of, Console, Text, Json);
       Save ("summary.txt", Text);
       Save ("summary.jsonl", Json);
+      Step_Now := To_Unbounded_String ("end of session: export check");
       --  Export check: re-open and count what is on disk now.
       for E in Entity_Id loop
          Check_File (Path (E), Natural'Max (Disk_Len (E), Natural (Ticks)), 'd', N, Fails);
@@ -9601,13 +9630,17 @@ begin
             end loop;
          end if;
       end;
+      Step_Now := To_Unbounded_String ("end of session: player_reports.txt");
       if Preport_Active then Save ("player_reports.txt", To_Unbounded_String (Sim_Preport.Boxes (Ticks, Mood_Now, Pets_Now, Next_Extra (Ticks)))); end if;
+      Step_Now := To_Unbounded_String ("end of session: run_report.txt and trend.txt");
       Report_Out;
       if not Ada.Directories.Exists ("run_report.txt") or else Ada.Directories.Size ("run_report.txt") = 0 then
          Append (Rep, Msg ("export.failed", "run_report.txt not written") & ASCII.LF);
          Ada.Command_Line.Set_Exit_Status (1);
       end if;
+      Step_Now := To_Unbounded_String ("end of session: petitions.txt");
       Write_Petitions;
+      Step_Now := To_Unbounded_String ("end of session: debug.txt and the console");
       if Visit_Mode and then Visit_Active then
          Con.Put_Line (Msg ("visit.done", Name (Visit_E), Img (Sim_Visit.Commands), Sgn (Int (Sim_Visit.Bond_Of (Visit_E)))));
       end if;
@@ -9631,6 +9664,7 @@ begin
          elsif Next_Active then for X of Next_Extra (Ticks) loop Con.Put_Line (Sim_World.Show (X)); end loop; end if;
       end if;
    end;
+   Step_Now := To_Unbounded_String ("between sessions");
    exit Sessions_Loop when not Night_On or else Night_After_Session;
 
    --  The next session of a night run starts where this one ended: the world goes on in memory (see Night_Next_Session).

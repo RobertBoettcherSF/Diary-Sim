@@ -1,4 +1,4 @@
---  Version: 0.005
+--  Version: 0.006
 --  See sim_ckpt.ads.
 pragma Ada_2022;
 
@@ -213,8 +213,9 @@ package body Sim_Ckpt is
                H : Hash_T := Hash_Start;
             begin
                if Size > 0 then
-                  declare
-                     B : Stream_Element_Array (1 .. Stream_Element_Offset (Size));
+                  declare   --  0.066: the file on the heap, not the stack (sq_book.txt is 76 KB)
+                     B_Ref : Buffer_Access := new Stream_Element_Array (1 .. Stream_Element_Offset (Size));
+                     B : Stream_Element_Array renames B_Ref.all;
                      Got : Stream_Element_Offset;
                      From : Stream_Element_Offset := 1;
                   begin
@@ -239,6 +240,7 @@ package body Sim_Ckpt is
                            From := I + 1;
                         end if;
                      end loop;
+                     Free (B_Ref);
                   end;
                end if;
                Into.Append (N & " " & Hex (H));
