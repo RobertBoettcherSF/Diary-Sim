@@ -1,5 +1,5 @@
 # Evolutionary pressure on words and on chess (previews built, the rest design)
-Version: 0.010
+Version: 0.011
 
 Build state: **step 1 (`symbols=1`) is built** (build 0.047), **step 1 (`symbols=1`)**, **step 2 (`make evolve` preview)** and **step 3 (`make active` preview)** are built (build 0.048); **the real `active=1` (section 13) is built** (build 0.049); everything else is design only.
 
@@ -278,6 +278,12 @@ albg=<genders>`; 0 = the 0.063 sessions byte for byte. Sim_Albanian (`sim_albani
   to `moodcause.txt` in the save folder (a replay never writes; `part=1` when the run began inside the session); the sums equal
   the mood changes exactly (scenario 68). A per-session file was chosen over checkpoint fields so nothing of the replay changes.
 Checks: scenario 68.
+
+## 20. Fix of 0.066: no stack copies at the end of a session (BUILT, build 0.066, no rule change)
+
+The end-of-session report of s4072 died with STORAGE_ERROR (a stack copy of the chess section of `run_report.txt`). The report
+sections, the diary read buffer, the checkpoint's data file prints and the `--frustration` tables live on the heap now; debug.txt
+names the running step (`step:`). The lesson rule (two-wesen words, dormant teaching) and the Adam talk question move to 0.067.
 
 ## 19. Fixes of 0.065: `relief=1`, mood causes v=2, the full verify inside the night budget (BUILT, build 0.065, new sessions only)
 Robert: improve the current project, no new concepts.

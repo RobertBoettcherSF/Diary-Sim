@@ -3144,6 +3144,8 @@ r70 rc --verify-full > rcv.txt 2>&1; rrv=$?
   && ! grep -qi -e stale -e drift rc3.txt \
   && ok "a start after a session whose end checkpoint is missing (S3 stored, checkpoint of tick 600): loads it, replays 300 ticks, goes on with s4; verify-full OK" \
   || bad "recovery ($n3 $n4 $rr3 $rrv ck=$ck1): $(grep -e 'start:' -e 'NEW from' -e stale rc3.txt | head -3 | tr '\n' ' ')"
+grep -q 'Build 0.066' "$root/README.md" && grep -q 'step: session ticks' "$root/README.md" && grep -q 'Fix of 0.066' "$root/docs/EVOLVE.md" \
+  && ok "README (build 0.066: the crash fix, step:, the restart) and docs/EVOLVE.md" || bad "0.066 docs"
 cd "$w" || exit 1
 
 rm -rf "$w"

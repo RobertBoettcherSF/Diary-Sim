@@ -105,6 +105,18 @@ diaries, entities and summary files are byte for byte the same.
   of the run, `warnings:n`, `export-failed`. It is information only; nothing in the simulation reads it (`data/limits.txt`).
   `@@SECTIONS` gives the line of each header in `run_report.txt`.
 
+## Build 0.066: the end-of-session crash after s4072 (a fix only, no new rules)
+
+* `make slice` / `make night-ship` on a big save (1.7 GB, s4072) stopped with `STORAGE_ERROR: s-intman.adb:136` after
+  `Saved to`: `run_report.txt` was assembled with a stack copy of each section, and the chess section (every game) is megabytes,
+  more than the default 8 MB stack. The report sections now stay on the heap, as do the diary read buffer, the data file prints of
+  the checkpoint and the `--frustration` tables; no `ulimit` is needed. Replayed bytes and the checkpoint format are unchanged.
+* debug.txt of a crash names the step that was running (`step: end of session: report chess`, `step: session ticks` ...),
+  also when the traceback is empty (`at: (no traceback: see step)`).
+* A start after such a crash recovers by itself: the session line is in `sessions.txt`, the end checkpoint is older, so the
+  start loads that checkpoint, replays the missing ticks and goes on with the next session (scenario 70 checks this, and an end
+  of a session under `ulimit -s 160` with a `run_report.txt` bigger than the stack).
+
 ## Build 0.065: fixes without new concepts (`relief=1`, mood causes v=2, `NIGHT_SHIP_FULL=1`)
 
 * `relief=1` (`relief.enabled = 1`, the default, needs carrying; 0 = off: new sessions as in 0.064). Below
