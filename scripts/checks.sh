@@ -3040,7 +3040,7 @@ sed -n '/^-\{79\}$/,$p' sh.txt > sum.txt
   && ok "make ship: checkin.txt '$(echo "$al" | sed 's/^  //')' (<= 79 columns), the mood-cause block (4 wesen); albanian_report.txt with the per-wesen breakdown and the last sentences (S5: 16 + 3 first person, Ruth none); the terminal summary unchanged (<= 22 lines)" \
   || bad "albanian / mood-cause report ($rsh $mcl $long): $al"
 # the mood causes add up: for every wesen and session the causes sum to the change of its end mood (the previous line's last field)
-mcs=$(awk '/^M S[0-9]/ { for (i = 3; i <= NF; i++) { if (split($i, kv, "=") != 2 || kv[1] == "t") continue; n = split(kv[2], v, ","); s = 0; nc = (n >= 12 ? 10 : 7); for (j = 1; j <= nc; j++) s += v[j]   # 0.065 v=2: ten causes
+mcs=$(awk '/^M S[0-9]/ { for (i = 3; i <= NF; i++) { if (split($i, kv, "=") != 2 || kv[1] == "t" || kv[1] == "v") continue; n = split(kv[2], v, ","); s = 0; nc = (n >= 12 ? 10 : 7); for (j = 1; j <= nc; j++) s += v[j]   # 0.065 v=2: ten causes
   if (kv[1] in prev) { c++; if (prev[kv[1]] + s != v[nc + 2]) bad++ } prev[kv[1]] = v[nc + 2] } } END { print c + 0, bad + 0 }' "$cb/on/save/moodcause.txt")
 set -- $mcs
 [ "$(grep -c '^M S[1-5] t=[0-9]* ' "$cb/on/save/moodcause.txt")" = 5 ] && [ "$1" = 16 ] && [ "$2" = 0 ] && cmp -s <(grep -v '^M ' "$cb/off/save/moodcause.txt" | head -1) <(head -1 "$cb/on/save/moodcause.txt") \

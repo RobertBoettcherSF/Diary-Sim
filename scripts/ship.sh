@@ -634,17 +634,17 @@ if [ -z "$why" ] && [ -z "$warn" ]; then verdict=PASS; elif [ -z "$why" ]; then 
 total=$(( $(date +%s) - t0 ))
 {
   echo "VERDICT: $verdict"
-  echo "$voc_line" | w79
+  echo "$voc_line" | cut -c1-79
   [ -n "$voc_line2" ] && echo "$voc_line2" | w79
-  [ -n "$voc_line3" ] && echo "$voc_line3" | w79
+  [ -n "$voc_line3" ] && echo "$voc_line3" | cut -c1-79
   echo "build: $build   made: $(date '+%Y-%m-%d %H:%M:%S') (local)   make $mode"
   if [ "$night" = 1 ]; then
     echo "night: $night_txt"
-    [ "$mode" != ship ] && echo "budget: $( [ "$mode" = slice ] && echo "$minutes min" || echo "${hours}h"); stop $(hm $plan_stop), reserve $(secs $reserve); due $(hm $deadline), written $(date '+%H:%M') ($( [ "$(date +%s)" -le "$deadline" ] && echo on time || echo "late $(secs $(( $(date +%s) - deadline )))"))" | w79
-    [ -n "$est_l" ] && echo "budget: $est_l" | w79
+    [ "$mode" != ship ] && echo "budget: $( [ "$mode" = slice ] && echo "$minutes min" || echo "${hours}h"); stop $(hm $plan_stop), reserve $(secs $reserve); due $(hm $deadline), written $(date '+%H:%M') ($( [ "$(date +%s)" -le "$deadline" ] && echo on time || echo "late $(secs $(( $(date +%s) - deadline )))"))"
+    [ -n "$est_l" ] && echo "budget: $est_l"
     [ -n "$full_txt" ] && echo "budget: $full_txt" | w79
-    [ -n "$bud_l" ] && echo "budget: $bud_l" | w79
-    echo "stop reason: ${reason:-none}${box_why:+ ($box_why)}" | w79
+    [ -n "$bud_l" ] && echo "budget: $bud_l"
+    echo "stop reason: ${reason:-none}${box_why:+ ($box_why)}"
     if [ "$nn" -gt 0 ]; then echo "new sessions: $nn (s$first to s$last), active=2: $n_a2/$nn"; else echo "new sessions: 0"; fi
   else
     echo "night: none (reports only); the save: $n_all sessions, $n_ticks ticks"
@@ -655,22 +655,22 @@ total=$(( $(date +%s) - t0 ))
   echo "newest sessions symstrict=1: $(yn "$n_strict")   slowfloor=1: $(yn "$n_floor")"
   echo "mint-slow at the floor: $floor"
   echo "chess/number strings learned: since symbols=1: ${ws_sym:--}; $strict_txt"
-  echo "verify: $ver" | w79
-  echo "$lv_line" | w79
-  [ -n "$lv_why" ] && echo "$lv_why" | w79
-  echo "$li_line" | w79
-  echo "$ck_line" | w79
-  echo "reports window: $wtxt" | w79
+  echo "verify: $ver"
+  echo "$lv_line" | cut -c1-79
+  [ -n "$lv_why" ] && echo "$lv_why"
+  echo "$li_line" | cut -c1-79
+  echo "$ck_line" | cut -c1-79
+  echo "reports window: $wtxt" | cut -c1-79
   echo "roles${win:+ ($win)}: $roles_txt" | w79
-  echo "$carry_line" | w79
-  echo "$shared_line" | w79
-  if [ "$np" -gt 0 ]; then echo "petition topics${win:+ ($win)}: $topics (of $np)" | w79; else echo "petition topics${win:+ ($win)}: none"; fi
-  echo "$mood_short" | w79
-  echo "  $mood_line" | w79
+  echo "$carry_line" | cut -c1-79
+  echo "$shared_line" | cut -c1-79
+  if [ "$np" -gt 0 ]; then echo "petition topics${win:+ ($win)}: $topics (of $np)" | cut -c1-79; else echo "petition topics${win:+ ($win)}: none"; fi
+  echo "$mood_short" | cut -c1-79
+  echo "  $mood_line"
   echo "$alb_out"
   echo "$mc_out" | w79
-  echo "$delta_line" | w79
-  echo "$grow_line" | w79
+  echo "$delta_line" | cut -c1-79
+  echo "$grow_line" | cut -c1-79
   if [ "$night" = 1 ]; then echo "wall time: total $(secs $total) (night $(secs $dn), reports $(secs $drep))"; else echo "wall time: total $(secs $total) (no night, reports $(secs $drep))"; fi
 } > "$tmp/verdict.txt"
 
