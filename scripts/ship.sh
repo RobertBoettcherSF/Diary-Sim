@@ -1,5 +1,5 @@
 #!/bin/sh
-# Version: 0.014
+# Version: 0.015
 # make ship (by day) and make night-ship (overnight): Robert's ONE command; both write ONE file, checkin.txt in the save folder
 # (../diary-data next to the source folder, or --home / $DIARY_HOME: bin/diary_sim --folder says where), with the same VERDICT header
 # on top, and print a short summary and the path of that file.  Exit status 0 = PASS, 1 = FAIL.
@@ -502,6 +502,17 @@ if [ "${n_carry:-0}" -gt 0 ]; then
 else
   carry_line="carry: no carry=1/2 session in the window (builds 0.061/0.062 start them)"; carry_full=$carry_line
 fi
+# 0.067 (report only, timing.txt of build 0.067+): the wall clock per session phase, averaged over the sessions of the window, and
+# the simulation's own missing-by-one / carryable counts of the last session (carry=0 with miss>0: those words are asleep at every teacher)
+timing_line=$(awk -v lo="${first:-0}" -v hi="${last:-0}" '
+  /^s[0-9]+ / { s = substr($1, 2) + 0; if (s < lo || s > hi) next; n++
+    for (i = 3; i <= NF; i++) { split($i, kv, "="); if (kv[1] == "miss" || kv[1] == "carry" || kv[1] == "words") { lastv[kv[1]] = kv[2]; continue }
+      if (!(kv[1] in sum)) ord[++k] = kv[1]; sum[kv[1]] += kv[2] }
+    lastms = $3; sub(/ms=/, "", lastms) }
+  END { if (!n) { print "timing: no timing.txt lines in the window (builds before 0.067)"; exit }
+    out = sprintf("timing (%d sessions, ms per session, average):", n)
+    for (j = 1; j <= k; j++) out = out sprintf(" %s %d", (ord[j] == "ms" ? "total" : ord[j]), sum[ord[j]] / n)
+    print out "; last session " lastms " ms; last missing-by-one " lastv["miss"] ", carryable " lastv["carry"] }' "$folder/timing.txt" 2>/dev/null)
 # 0.065 (report only, entities/*/words.txt): per wesen the words that ENTERED its missing-by-one set in the window (the last of
 # the other three learned it; new = first known by anyone in the window) and that LEFT it (it learned the word: by a lesson =
 # taught, else world / screen / coined), so the early signals show whether the lessons can catch up
@@ -711,6 +722,7 @@ else w1="no night: run_log.txt entries of the last night"; w2="no night: the ses
   echo "roles, per wesen: id name words-taught petitions-filed"; cat "$tmp/teach.txt"
   echo "$carry_full"
   [ -n "$flow_line" ] && echo "$flow_line"
+  [ -n "$timing_line" ] && echo "$timing_line"
   echo "$mood_stats" | sed 's/^  //'
   echo "$mood_goal" | sed 's/^  //'
   echo "$shared_line"
