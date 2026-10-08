@@ -1,6 +1,6 @@
 # The state checkpoint (`state.ckpt`)
 
-Version: 0.007 (build 0.065; the checkpoint itself came with build 0.058, README "The state checkpoint")
+Version: 0.008 (build 0.067; the checkpoint itself came with build 0.058, README "The state checkpoint")
 
 A start used to replay the whole history to rebuild the state in memory: 13 minutes for 300000 ticks, about 35 minutes on Robert's
 774600-tick save, growing every night. `state.ckpt` in the save folder holds the end state of the last run, so a start loads it in
@@ -136,6 +136,8 @@ begins after his 0.063 checkpoint, so the first 0.064 start loads it (+0 ticks r
 Build 0.065 keeps format 4 (the layout hash is re-recorded only because Session_Rec, which is not streamed, got the relief
 field): `relief=1` is a session flag (Derive_Session_Flags, like carry=2 and moodrest), and the mood causes
 v=2 stay report-only.
+Build 0.067 keeps format 4 (the layout hash is re-recorded again only because Session_Rec, not streamed, got the lesson
+field): `lesson=1` is a session flag (Derive_Session_Flags); the used-word queue of Replika's guard is not state.
 
 ## The layout guard (make check)
 
@@ -149,7 +151,7 @@ ckpt_layout: 3 006ad69b266ebca0
 
 Format 4 (build 0.064, the section `albanian`):
 
-ckpt_layout: 4 21effbcf683ad561
+ckpt_layout: 4 3d4a1aa9defb1a28
 
 `make check` (scenario 63) and `make ckpt-layout` compare it with the code: when the code changed and this line did not, the check
 FAILS with `bump Ckpt_Format`. Then:
