@@ -268,6 +268,7 @@ package body Sim_World is
    package Text_Index_Maps is new Ada.Containers.Indefinite_Hashed_Maps (String, Positive, Ada.Strings.Hash, "=");
    Check_Index : constant Boolean := Ada.Environment_Variables.Exists ("DIARY_CHECK_INDEX");
    Mir_Ok : Boolean := False;
+   Les_Ok : Boolean := False;   --  0.067 lesson=1: the teacher-set histogram Les_Hist is valid (see Les_Word)
    Mir_Known, Mir_Dorm : array (Entity_Id) of U64_Vectors.Vector;
    Mir_Sym, Mir_Sym_T : U64_Vectors.Vector;
    Mir_Plain : U64_Vectors.Vector;   --  0.025: the words that are no chess move and no number (as the vocabulary count of ship.sh)
@@ -336,6 +337,7 @@ package body Sim_World is
    procedure Reindex is
    begin
       Coined_Ok := False;
+      Les_Ok := False;
       Mir_Ok := False;
       Text_Index.Clear;
       Text_Index_N := 0;
@@ -535,6 +537,7 @@ package body Sim_World is
 
    procedure Hide_Symbols (On : Boolean; Strict : Boolean := False) is
    begin
+      if Symbols_Hidden /= On or else Symbols_Strict /= (On and then Strict) then Les_Ok := False; end if;
       Symbols_Hidden := On;
       Symbols_Strict := On and then Strict;
    end Hide_Symbols;
@@ -545,8 +548,59 @@ package body Sim_World is
 
    procedure Use_Dormant (On : Boolean) is
    begin
+      if Dormant_On /= On then Les_Ok := False; end if;
       Dormant_On := On;
    end Use_Dormant;
+
+   --  0.067 lesson=1 (Robert: anyone may teach; the dice weigh the learners and the teachers by their pools, docs/EVOLVE.md 21).
+   --  Les_Hist (L, M) = the number of words whose teachers for learner L are exactly the set M (bit T - 1 of M: T can teach L the
+   --  word: the P_Lesson predicate of Block).  A derived cache like the bit mirrors, a pure function of the state and the flags:
+   --  Learn_Word, Set_Dormant and the Add_* update it word by word (the word's old masks out, the new ones in), Reindex (Init, a
+   --  checkpoint read) and a change of a flag drop it, the next use rebuilds it with one walk of the table.  A pair count or the
+   --  pool of a set of teachers is then a sum over 2 ** (number of wesen) masks: no lexicon scan per lesson or per tick.
+   Ent_N : constant Positive := Natural (Entity_Id'Last) - Natural (Entity_Id'First) + 1;
+   subtype Ent_Mask is Natural range 0 .. 2 ** Ent_N - 1;
+   function Bit_Of (T : Entity_Id) return Ent_Mask is (2 ** (Natural (T) - Natural (Entity_Id'First)));
+   Les_Hist : array (Entity_Id, Ent_Mask) of Natural := [others => [others => 0]];
+
+   function Les_Mask (L : Entity_Id; W : Positive; Plain : Boolean) return Ent_Mask is
+      K : Natural := 0;
+      M : Ent_Mask := 0;
+   begin
+      if not Plain or else Knows (L, W) or else Blocked (W) then return 0; end if;
+      for X in Entity_Id loop
+         if X /= L and then Knows (X, W) then K := K + 1; end if;
+      end loop;
+      if K < Lesson_Min then return 0; end if;
+      for T in Entity_Id loop
+         if T /= L and then Knows (T, W)
+           and then not (Dormant_On and then not Lesson_Dorm and then W <= Natural (Dormant (T).Length) and then Dormant (T) (W))
+         then
+            M := M + Bit_Of (T);
+         end if;
+      end loop;
+      return M;
+   end Les_Mask;
+
+   procedure Les_Word (W : Positive; Add : Boolean) is
+      Plain : constant Boolean := Word_Text (To_String (Table (W).Text));
+   begin
+      for L in Entity_Id loop
+         declare
+            M : constant Ent_Mask := Les_Mask (L, W, Plain);
+         begin
+            if M /= 0 then Les_Hist (L, M) := (if Add then Les_Hist (L, M) + 1 else Les_Hist (L, M) - 1); end if;
+         end;
+      end loop;
+   end Les_Word;
+
+   procedure Les_Build is
+   begin
+      if Les_Ok then return; end if;
+      Les_Hist := [others => [others => 0]];
+      for W in 1 .. Natural (Table.Length) loop Les_Word (W, True); end loop;
+      Les_Ok := True;
+   end Les_Build;
 
    function Is_Dormant (E : Entity_Id; W : Positive) return Boolean is
      (W <= Natural (Dormant (E).Length) and then Dormant (E) (W));
@@ -557,7 +611,10 @@ package body Sim_World is
          Dormant (E).Append (False);
       end loop;
       if Dormant (E) (W) /= On then
+         if Les_Ok and then W > Natural (Table.Length) then Les_Ok := False; end if;
+         if Les_Ok then Les_Word (W, False); end if;
          Dormant (E) (W) := On;
+         if Les_Ok then Les_Word (W, True); end if;
          if Mir_Ok then
             if W <= Natural (Table.Length) then Bit_Set (Mir_Dorm (E), W, On); else Mir_Ok := False; end if;
          end if;
@@ -595,8 +652,13 @@ package body Sim_World is
       while Natural (Known (E).Length) < W loop
          Known (E).Append (False);
       end loop;
-      if not Known (E) (W) then Known_N (E) := Known_N (E) + 1; end if;
-      Known (E) (W) := True;
+      if Les_Ok and then W > Natural (Table.Length) then Les_Ok := False; end if;
+      if Les_Ok and then not Known (E) (W) then Les_Word (W, False); end if;
+      if not Known (E) (W) then
+         Known_N (E) := Known_N (E) + 1;
+         Known (E) (W) := True;
+         if Les_Ok then Les_Word (W, True); end if;
+      end if;
       if Mir_Ok then
          if W <= Natural (Table.Length) then Bit_Set (Mir_Known (E), W, True); else Mir_Ok := False; end if;
       end if;
@@ -651,6 +713,7 @@ package body Sim_World is
       Table.Append (Word_Rec'(Text => To_Unbounded_String (Text), P1 => P1, P2 => P2, Coiner => Positive (By), Sym_Text => Symbol_Text (Text), others => <>));
       if Coined_Ok then Coined_N := Coined_N + 1; end if;
       if Mir_Ok then Mirror_Word (Count); end if;
+      if Les_Ok then Les_Word (Count, True); end if;
       return Count;
    end Add_Coined;
 
@@ -659,6 +722,7 @@ package body Sim_World is
       Table.Append (Word_Rec'(Text => To_Unbounded_String (Text), Kind => Kind, Variant => Variant_Of,
                               Meaning => To_Unbounded_String (Meaning), Symbol => Symbol_Text (Text), Sym_Text => Symbol_Text (Text), others => <>));
       if Mir_Ok then Mirror_Word (Count); end if;
+      if Les_Ok then Les_Word (Count, True); end if;
       return Count;
    end Add_World_Word;
 
@@ -797,13 +861,64 @@ package body Sim_World is
    end Nth_Teachable;
 
    function Missing_By_One (E : Entity_Id) return Natural is (Pick_Count (P_Miss, E, E));
-   function Carry_Count (From, To : Entity_Id) return Natural is (Pick_Count ((if Lesson_Is_On then P_Lesson else P_Carry), From, To));
+   function Lesson_Pair (From, To : Entity_Id) return Natural is
+      N : Natural := 0;
+   begin
+      if From = To then return 0; end if;
+      Les_Build;
+      for M in Ent_Mask loop
+         if (M / Bit_Of (From)) mod 2 = 1 then N := N + Les_Hist (To, M); end if;
+      end loop;
+      if Check_Index and then N /= Pick_Count (P_Lesson, From, To) then raise Program_Error with "index: Lesson_Pair"; end if;
+      return N;
+   end Lesson_Pair;
+   function Carry_Count (From, To : Entity_Id) return Natural is
+     (if Lesson_Is_On then Lesson_Pair (From, To) else Pick_Count (P_Carry, From, To));
    function Nth_Carry (From, To : Entity_Id; N : Positive) return Positive is (Pick_Nth ((if Lesson_Is_On then P_Lesson else P_Carry), From, To, N));
+   function Scan_Lesson_Pool (To : Entity_Id; Teachers : Entity_Set) return Natural is
+      N : Natural := 0;
+   begin
+      Mirror;
+      for I in 0 .. Blocks - 1 loop
+         declare
+            X : U64 := 0;
+         begin
+            for T in Entity_Id loop
+               if T /= To and then Teachers (T) then X := X or Block (P_Lesson, T, To, I); end if;
+            end loop;
+            N := N + Pop (X);
+         end;
+      end loop;
+      return N;
+   end Scan_Lesson_Pool;
+   function Lesson_Pool (To : Entity_Id; Teachers : Entity_Set) return Natural is
+      S : Ent_Mask := 0;
+      N : Natural := 0;
+   begin
+      for T in Entity_Id loop
+         if T /= To and then Teachers (T) then S := S + Bit_Of (T); end if;
+      end loop;
+      if S = 0 then return 0; end if;
+      Les_Build;
+      for M in Ent_Mask loop
+         declare
+            Common : Boolean := False;
+         begin
+            for T in Entity_Id loop
+               if (S / Bit_Of (T)) mod 2 = 1 and then (M / Bit_Of (T)) mod 2 = 1 then Common := True; end if;
+            end loop;
+            if Common then N := N + Les_Hist (To, M); end if;
+         end;
+      end loop;
+      if Check_Index and then N /= Scan_Lesson_Pool (To, Teachers) then raise Program_Error with "index: Lesson_Pool"; end if;
+      return N;
+   end Lesson_Pool;
 
    procedure Use_Lesson (On : Boolean; Min_Knowers : Positive := 2; Dormant_Teacher : Boolean := True) is
    begin
+      if Lesson_Min /= Positive'Min (Ent_N - 1, Min_Knowers) or else Lesson_Dorm /= Dormant_Teacher then Les_Ok := False; end if;
       Lesson_Is_On := On;
-      Lesson_Min := Positive'Min (3, Min_Knowers);
+      Lesson_Min := Positive'Min (Ent_N - 1, Min_Knowers);
       Lesson_Dorm := Dormant_Teacher;
    end Use_Lesson;
    function Lesson_On return Boolean is (Lesson_Is_On);

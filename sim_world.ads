@@ -113,6 +113,10 @@ package Sim_World is
    function Next_Used (E : out Entity_Id) return Natural;
    function Carry_Count (From, To : Entity_Id) return Natural;
    function Nth_Carry (From, To : Entity_Id; N : Positive) return Positive;
+   --  0.067 lesson=1 (Robert: anyone may teach): the words some wesen of Teachers other than To can teach To (the union of their
+   --  lesson pools): the weight of To when the learner of a lesson is rolled.
+   type Entity_Set is array (Entity_Id) of Boolean;
+   function Lesson_Pool (To : Entity_Id; Teachers : Entity_Set) return Natural;
 
    --  ---- personality: Rule 30 + state-driven action weights -------------------------
    --  Each entity has a ring of rule30.width bits (Rule 30: new = left xor (centre or

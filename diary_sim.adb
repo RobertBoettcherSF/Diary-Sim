@@ -721,9 +721,12 @@ procedure Diary_Sim is
    --  dormant at the teacher is teachable and wakes there when it is taught) and the used guard (the first use of a lesson word: a
    --  "used" line in words.txt).  Off: the carry pool and nothing else; older sessions replay unchanged.
    Lesson_Active : Boolean := False;
+   Plan_Tick : Int := -1;            --  0.067 lesson=1: the tick of the lesson plan (Lesson_Plan; -1: none)
+   Plan_T, Plan_L : Natural := 0;    --  its teacher and learner (0: no lesson this tick)
    procedure Lesson_Begin (On : Boolean) is
    begin
       Lesson_Active := On;
+      Plan_Tick := -1;
       Sim_World.Use_Lesson (On, Positive (Int'Max (1, Int'Min (3, Limit ("lesson.min_knowers", 2)))), Limit ("lesson.dormant_teacher", 1) /= 0);
    end Lesson_Begin;
    --  0.063 moodrest=2: the same resting moods, but the drift is a one-point step taken with the probability rate x gap (a die
@@ -805,14 +808,78 @@ procedure Diary_Sim is
       return Clamp (M, M_Min, M_Max);
    end Mood_Rest_Step2;
    Carry_W : array (Entity_Id) of Positive := [others => 1];
+   --  0.067 lesson=1 (Robert, 2026-10-08: anyone may teach; general rules for all wesen alike, no special cases): one lesson plan
+   --  per tick, made from the state at the start of the tick (the first Carry_Choice of the tick).  A die (carry.pull_pct) decides
+   --  whether a lesson happens at all (below carry.session_cap lessons in the session).  Eligible teachers: energy >=
+   --  carry.teacher_energy (no mood condition), no word pending.  Possible learners: energy >= carry.relief_energy, no word pending.
+   --  The learner is rolled weighted by its pool (the words some eligible teacher other than it can teach it), then the teacher
+   --  weighted by its own pool for that learner; the learner's mint-slow die as before.  The weights come from the incremental
+   --  counters of Sim_World (Lesson_Pool, Carry_Count): no lexicon scan.  Plan_T teaches Plan_L in its own step (Carry_Choice).
+   procedure Lesson_Plan (Tick : Int) is
+      Elig : Sim_World.Entity_Set := [others => False];
+      Wl, Wt : array (Entity_Id) of Natural := [others => 0];
+      Sl, Sw : Natural := 0;
+      L : Natural := 0;
+   begin
+      Plan_Tick := Tick;
+      Plan_T := 0;
+      Plan_L := 0;
+      if Sim_Carry.Lessons >= Sim_Carry.Session_Cap or else Roll (Seed, 1, Tick, 23110, 100) > Sim_Carry.Pull_Pct then return; end if;
+      for X in Entity_Id loop
+         Elig (X) := St (X).Energy >= Sim_Carry.Teacher_Energy and then St (X).Energy >= Sim_Carry.Relief_Energy
+           and then Pending_Word (X) = 0;
+      end loop;
+      for X in Entity_Id loop
+         if Pending_Word (X) = 0 and then St (X).Energy >= Sim_Carry.Relief_Energy then Wl (X) := Sim_World.Lesson_Pool (X, Elig); end if;
+         Sl := Sl + Wl (X);
+      end loop;
+      if Sl = 0 then return; end if;
+      declare
+         R : Natural := Roll (Seed, 1, Tick, 23111, Sl);
+      begin
+         for X in Entity_Id loop
+            if L = 0 and then R <= Wl (X) then L := Natural (X); elsif L = 0 then R := R - Wl (X); end if;
+         end loop;
+      end;
+      for X in Entity_Id loop
+         if Elig (X) and then Natural (X) /= L then Wt (X) := Carry_Count (X, Entity_Id (L)); end if;
+         Sw := Sw + Wt (X);
+      end loop;
+      if Sw = 0 or else not Slow_Pass (Seed, Entity_Id (L), Tick, Slow_Lesson) then return; end if;
+      declare
+         R : Natural := Roll (Seed, 1, Tick, 23112, Sw);
+      begin
+         for X in Entity_Id loop
+            if Plan_T = 0 and then R <= Wt (X) then Plan_T := Natural (X); elsif Plan_T = 0 then R := R - Wt (X); end if;
+         end loop;
+      end;
+      Plan_L := L;
+   end Lesson_Plan;
+
    function Carry_Choice (E : Entity_Id; Tick : Int; Base : Action) return Action is
       Eid : constant Positive := Positive (E);
    begin
       Carry_To (E) := 0;
+      if Lesson_Active and then Sim_Carry.Active and then Plan_Tick /= Tick then Lesson_Plan (Tick); end if;
       if not Sim_Carry.Active or else Base = Learn then return Base; end if;
       if St (E).Energy < Sim_Carry.Relief_Energy then
          --  0.065 relief=1: no tiring action either (work, explore, wander, bench: Energy_D below -2), only rest
          return (if Base = Talk or else (Relief_Active and then Energy_D (Base) < -2) then Rest else Base);
+      end if;
+      if Lesson_Active then   --  0.067 lesson=1: the teacher of this tick's plan teaches (Lesson_Plan)
+         if Plan_Tick = Tick and then Plan_T = Natural (E) and then Pending_Word (Entity_Id (Plan_L)) = 0 then
+            declare
+               N : constant Natural := Carry_Count (E, Entity_Id (Plan_L));
+            begin
+               if N > 0 then
+                  Carry_To (E) := Plan_L;
+                  Carry_R (E) := Roll (Seed, Eid, Tick, 23102, N);
+                  Carry_W (E) := Nth_Carry (E, Entity_Id (Plan_L), Carry_R (E));
+                  return Talk;
+               end if;
+            end;
+         end if;
+         return Base;
       end if;
       --  0.062: in a moodrest=1 session the moods rest at 60..80, so "mood <= carry.teacher_mood" would stop all teaching: there a
       --  wesen at or below its own resting mood (+ carry.teacher_rest_margin) may teach

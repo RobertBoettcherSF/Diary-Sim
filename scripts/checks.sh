@@ -1560,7 +1560,7 @@ echo "== 48. console: short form by default (no markers, no pointer), run_report
 rm -rf "$w/sh"; mkdir -p "$w/sh/bin"; cp "$bin" "$w/sh/bin/"; cp -r "$root/data" "$w/sh/data"
 # 0.063: without resting moods (moodrest.enabled = 0): the anomaly listing below needs a wesen that ends low, which the old
 # mood model gives in these 500 ticks; resting moods (0.062/0.063) keep every wesen above -50 (scenarios 66, 67 test them)
-sed -i 's/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/; s/^relief.enabled = .*/relief.enabled = 0/' "$w/sh/data/limits.txt"
+sed -i 's/^moodrest.enabled = .*/moodrest.enabled = 0/; s/^albanian.enabled = .*/albanian.enabled = 0/; s/^relief.enabled = .*/relief.enabled = 0/; s/^lesson.enabled = .*/lesson.enabled = 0/' "$w/sh/data/limits.txt"
 sh_run() {   # sh_run HOME 'env prefix' args...: the same two sessions (seed 42, 300 + 200 ticks)
   h=$1; pre=$2; shift 2; mkdir -p "$w/sh/$h"
   ( cd "$w/sh/$h" || exit 1; export DIARY_HOME="$w/sh/$h/save"; env -u DIARY_VERBOSE $pre "$w/sh/bin/diary_sim" --seed 42 --ticks 300 --yes --every 100 "$@" > c1.txt 2>&1
@@ -2142,6 +2142,7 @@ for fn in ['screens', 'votes', 'petitions', 'dictionary']:
                         if asleep(f[2], int(tok(l, x)), t): blend_bad += 1
 wake_ok = 0
 for e, w, t, by, word in wakes:
+    if by.startswith('teach:') and by[6:] in names: wake_ok += 1; continue   # 0.067 lesson=1: the teacher's word woke in a lesson
     fn = {'K': 'screens', 'V': 'votes', 'P': 'petitions', 'L': 'dictionary'}.get(by[:1])
     l = recs.get((fn, by))
     if l and int(tok(l, 't')) == t and (str(w) in re.split(r'[^0-9]+', l) or re.search(r'\b' + re.escape(word) + r'\b', l)):
@@ -2285,8 +2286,8 @@ for l in open(os.path.join(d, 'diaries/active.txt')):
     if f[4] == 'wake':
         wake_lines += 1
         by = re.search(r' by=(\S+)', l).group(1)
-        if by.startswith('lesson:'):
-            if s not in lv2 or by[7:] not in ('ada', 'gemini', 'replika', 'robert'): bad += 1
+        if by.startswith('lesson:') or by.startswith('teach:'):   # 0.067 lesson=1: teach:<learner> = the teacher's word woke
+            if s not in lv2 or by.split(':', 1)[1] not in ('ada', 'gemini', 'replika', 'robert'): bad += 1
             lesson += 1
         elif by not in keys: bad += 1
     elif f[4] == 'state' and s in lv2:
@@ -3197,7 +3198,7 @@ env -u DIARY_VERBOSE "$bin" --home "$c73/p/save" --continuous --session-ticks 20
 cd "$c73/m" || exit 1
 env -u DIARY_VERBOSE "$bin" --home "$c73/m/save" --continuous --session-ticks 2000 --max-sessions 2 --end-check-ticks 0 --seed 42 < /dev/null > m1.txt 2>&1; r73a=$?
 sed -i 's/^lesson.enabled = .*/lesson.enabled = 1/' "$c73/m/data/limits.txt"
-env -u DIARY_VERBOSE "$bin" --home "$c73/m/save" --continuous --session-ticks 2000 --max-sessions 2 --end-check-ticks 0 < /dev/null > m2.txt 2>&1; r73b=$?
+env -u DIARY_VERBOSE DIARY_CHECK_INDEX=1 "$bin" --home "$c73/m/save" --continuous --session-ticks 2000 --max-sessions 2 --end-check-ticks 0 < /dev/null > m2.txt 2>&1; r73b=$?
 env -u DIARY_VERBOSE "$bin" --home "$c73/m/save" --verify-full > v73.txt 2>&1; r73v=$?
 m73="$c73/m/save"; ls73=$(grep -c '^S.* lesson=1' "$m73/diaries/sessions.txt"); ns73=$(grep -c '^S' "$m73/diaries/sessions.txt")
 first73=$(grep '^S' "$m73/diaries/sessions.txt" | head -2 | grep -c 'lesson=1')
@@ -3206,11 +3207,12 @@ same73=1; for f in "$c73/p/save/diaries/"*.jsonl; do b=$(basename "$f"); n=$(wc 
 wide73=$(awk '{ m=""; c=""; for (i=1;i<=NF;i++) { if ($i ~ /^miss=/) m=substr($i,6); if ($i ~ /^carry=/) c=substr($i,7) }
   split(m, a, ","); split(c, b, ","); for (k=1;k<=4;k++) if (b[k]+0 > a[k]+0) w++ } END { print w+0 }' "$m73/timing.txt")
 used73=$(cat "$m73"/entities/*/words.txt | grep -c ' used$')
+nt73=0; for f in "$m73"/diaries/*.jsonl; do n=$(awk -F'"tick":' '{ split($2, a, ","); if (a[1] + 0 > 4000) print }' "$f" | grep -c "exchanged words with\|carried the word"); [ "$n" -gt 0 ] && nt73=$((nt73 + 1)); done
 [ $r73p = 0 ] && [ $r73a = 0 ] && [ $r73b = 0 ] && [ $r73v = 0 ] && grep -q '^verify: OK' v73.txt && [ "$ns73" = 4 ] && [ "$ls73" = 2 ] && [ "$first73" = 0 ] \
-  && [ "$same73" = 1 ] && [ "$wide73" -gt 0 ] && [ "$used73" -gt 0 ] && grep -q '^lesson.enabled = 1' "$root/data/limits.txt" \
+  && [ "$same73" = 1 ] && [ "$wide73" -gt 0 ] && [ "$used73" -gt 0 ] && [ "$nt73" -ge 2 ] && grep -q '^lesson.enabled = 1' "$root/data/limits.txt" \
   && grep -q 'lesson=1' "$root/README.md" && grep -q 'lesson=1' "$root/docs/EVOLVE.md" \
-  && ok "lesson=1 on sessions 3-4 only (S lines: $ls73 of $ns73), sessions 1-2 as a plain run, verify-full OK; the lesson pool wider than missing-by-one ($wide73 wesen-sessions), $used73 'used' lines" \
-  || bad "lesson=1 ($r73p $r73a $r73b verify=$r73v marks=$ls73/$ns73 first=$first73 same=$same73 wide=$wide73 used=$used73)"
+  && ok "lesson=1 on sessions 3-4 only (S lines: $ls73 of $ns73), sessions 1-2 as a plain run, verify-full OK; the lesson pool wider than missing-by-one ($wide73 wesen-sessions), $used73 'used' lines, $nt73 wesen taught (anyone may teach; the counters agree with the scans: DIARY_CHECK_INDEX=1)" \
+  || bad "lesson=1 ($r73p $r73a $r73b verify=$r73v marks=$ls73/$ns73 first=$first73 same=$same73 wide=$wide73 used=$used73 teachers=$nt73)"
 cd "$w" || exit 1
 
 rm -rf "$w"

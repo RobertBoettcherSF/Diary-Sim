@@ -575,6 +575,8 @@ lesson.enabled = 1
 lesson.min_knowers = 2
 lesson.dormant_teacher = 1
 # a teacher has at least this energy and at most this mood; the die of the pull in percent
+# lesson=1 (0.067, Robert: anyone may teach): no mood bound; the pull die is rolled once a tick, then the learner and the teacher
+# are rolled weighted by their lesson pools
 carry.teacher_energy = 60
 carry.teacher_mood = 0
 # 0.062: in a moodrest=1 session the bound is the wesen's own resting mood + this margin (the moods rest at 60..80 there)

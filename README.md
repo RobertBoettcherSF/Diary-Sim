@@ -132,11 +132,18 @@ diaries, entities and summary files are byte for byte the same.
     (`active.txt`: `wake ... by=teach:<learner>`);
   - Replika's guard: a lesson word counts as shared in `checkin.txt` only after the learner has used it (`words.txt`:
     `<id> <word> used`); `checkin.txt` shows the taught-but-unused count per wesen;
-  - the teachable pool per learner is in `timing.txt` (`carry=`) and in `checkin.txt`.
-  Target choice (the wesen missing the most) and the teacher conditions are as before. The session line carries ` lesson=1`;
-  older sessions replay unchanged. On the box save (40 sessions of 300 ticks each way): 53 lessons without, 848 with;
-  Abel's missing-by-one 1,332 (flat) against 1,332 -> 784; shared (3 of 4) 5,249 against 5,766 (guarded; 7,576 counted raw);
-  about 460 against 465 ms per session. Checks: scenarios 71, 72, 73.
+  - the teachable pool per learner is in `timing.txt` (`carry=`) and in `checkin.txt`;
+  - anyone may teach (Robert, 2026-10-08: one rule for all wesen, no special cases): no mood condition any more; a wesen with
+    energy >= `carry.teacher_energy` (60) and no word pending is a possible teacher (below `carry.relief_energy` a wesen still
+    rests first). Once a tick a die (`carry.pull_pct`, up to `carry.session_cap` lessons a session) decides whether a lesson
+    happens; then the learner is rolled, weighted by its pool (the words some possible teacher can teach it), and the teacher,
+    weighted by its own pool for that learner. The teacher gains the favour and the standing as before. The weights come from
+    counters kept up to date word by word (learn, new word, dormancy), not from a scan of the word lists.
+  The session line carries ` lesson=1`; older sessions (carry=1 and carry=2 with the mood condition and the "missing the most"
+  target) replay unchanged. On the box save (40 sessions of 300 ticks each): 53 lessons without lesson=1, 847 with it (cap 24
+  per session); teachers Adam 450, Eve 183, Abel 200, Ruth 14 (Ruth has energy 60 or more in 7% of the ticks); learners Adam 112,
+  Eve 180, Abel 339, Ruth 216. Missing-by-one at the end 730,418,1332,201 without, 0,279,903,679 with; shared (3 of 4) 5,249
+  without, 5,840 with (guarded); about 460 ms per session without, 420 with. Checks: scenarios 71, 72, 73.
 
 ## Build 0.066: the end-of-session crash after s4072 (a fix only, no new rules)
 

@@ -304,6 +304,21 @@ Checks: scenario 68.
   5,766 (guarded), 4,506 taught words not used yet; time per session the same within noise (460 / 465 ms). The marker
   ` lesson=1` follows ` relief=1` on the S line; Derive_Session_Flags takes it from the last session begun before the
   checkpoint tick; no new state is stored (format 4). Scenario 73.
+* **Anyone may teach** (Robert, 2026-10-08 07:49; general rules, all wesen alike, to let roles emerge). Under lesson=1 the mood
+  condition of the teacher is gone and the lesson is planned once a tick from the state at the start of the tick (Lesson_Plan):
+  a die of 100 against `carry.pull_pct` (and the session cap); possible teachers: energy >= `carry.teacher_energy`, no pending
+  word; possible learners: energy >= `carry.relief_energy`, no pending word. The learner is rolled (salt 23111) weighted by
+  its pool from the possible teachers (Sim_World.Lesson_Pool: the union of their pools), then the teacher (salt 23112) weighted
+  by its pool for that learner (Carry_Count), in entity order; the learner's mint-slow die as before; the word by the old die
+  (23102). The planned teacher teaches in its own step, with the favour and the standing of carry=1. carry=1/2 sessions keep the
+  old rule (mood condition, the target "missing the most"). Speed: Sim_World keeps Les_Hist (learner, teacher set) = the number
+  of words whose possible teachers for that learner are exactly that set (a bit per wesen, 2 ** wesen sets): Learn_Word,
+  Set_Dormant and new words move one word between sets; Reindex or a flag change drops it and the next use rebuilds it once.
+  A pair count or a pool union is a sum over the sets, no lexicon scan (DIARY_CHECK_INDEX=1 compares with the scans). The cache
+  is a pure function of the state, so a replay or a checkpoint start gets the same weights. Box save, 40 sessions: 847 lessons;
+  teachers Adam 450, Eve 183, Abel 200, Ruth 14 (Ruth is at energy 60 or more in 7% of the ticks); learners 112, 180, 339, 216;
+  missing-by-one at the end 0,279,903,679 (lesson=1 with the old teacher rule: 0,784,784,785; without: 730,418,1332,201);
+  shared 5,840 (guarded); 420 ms per session (465 with the old teacher rule, 460 without lesson=1).
 * Open: the tunables (two knowers, dormant teaching) are first guesses for Robert; a writing start whose replay drifts may
   still append its start lines before it stops.
 
