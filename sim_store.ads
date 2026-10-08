@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  A record file of lines that the replay computes (record-first, like diaries/world.txt): every line starts
 --  with a unique key token ("K12", "H3"), and a "t=<tick>" token tells when it happened.  Emit compares a
 --  computed line with the stored line of the same key: equal is fine, different is DRIFT (the caller raises
@@ -51,6 +51,7 @@ private
       Lines  : Str_Vectors_P.Vector;
       Hit    : Bool_Vectors.Vector;
       Index  : Key_Maps.Map;
+      Low    : Natural := 0;   --  0.067: lines 1 .. Low are all matched (Orphan starts after them; it walked every line each session)
    end record;
 
 end Sim_Store;

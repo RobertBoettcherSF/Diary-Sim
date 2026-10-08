@@ -1,4 +1,4 @@
---  Version: 0.002
+--  Version: 0.003
 --  See sim_store.ads.
 pragma Ada_2022;
 
@@ -30,8 +30,14 @@ package body Sim_Store is
       return N;
    end Tick_Of;
 
+   procedure Advance (S : in out Store) is
+   begin
+      while S.Low < Natural (S.Hit.Length) and then S.Hit (S.Low + 1) loop S.Low := S.Low + 1; end loop;
+   end Advance;
+
    procedure Clear (S : in out Store) is
    begin
+      S.Low := 0;
       S.Lines.Clear;
       S.Hit.Clear;
       S.Index.Clear;
@@ -67,6 +73,7 @@ package body Sim_Store is
             I : constant Positive := Key_Maps.Element (C);
          begin
             S.Hit.Replace_Element (I, True);
+            if I = S.Low + 1 then Advance (S); end if;
             if To_String (S.Lines (I)) = Line then
                Result := Same;
             else
@@ -86,6 +93,7 @@ package body Sim_Store is
          S.Lines.Append (To_Unbounded_String (Line));
          S.Hit.Append (True);
          S.Index.Include (Key, Natural (S.Lines.Length));
+         Advance (S);
          Result := Appended;
       else
          Result := Skipped;
@@ -94,7 +102,7 @@ package body Sim_Store is
 
    function Orphan (S : Store; Upto : Int) return String is
    begin
-      for I in 1 .. Natural (S.Lines.Length) loop
+      for I in S.Low + 1 .. Natural (S.Lines.Length) loop
          if not S.Hit (I) and then Tick_Of (To_String (S.Lines (I))) in 0 .. Upto then
             return To_String (S.Lines (I));
          end if;
@@ -107,6 +115,7 @@ package body Sim_Store is
    procedure Mark_First (S : in out Store; N : Natural) is
    begin
       for I in 1 .. Natural'Min (N, Natural (S.Lines.Length)) loop S.Hit.Replace_Element (I, True); end loop;
+      Advance (S);
    end Mark_First;
 
    function Fits (S : Store; N : Natural; Upto : Int) return Boolean is
