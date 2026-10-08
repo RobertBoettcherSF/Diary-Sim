@@ -121,7 +121,7 @@ procedure Diary_Sim is
    Mood_D   : constant array (Action) of Integer := [1, -4, 3, 2, -1, -1, 2, 1];
    Home     : constant array (Action) of Integer := [3, 0, 1, 2, 0, 1, -1, -1];   --  wander: rolled
 
-   Build : constant String := "0.066";   --  = the Version header of this file (make version-check)
+   Build : constant String := "0.067";   --  = the Version header of this file (make version-check)
    Usage_Error, Diary_Error : exception;
    Drift_Error : exception;   --  stored lines or sessions differ from the replay: expected, no traceback
    Seed, Ticks, Every, Seed_Opt, Crash_At, More : Int := -1;   --  More: --more N = N new ticks on top of the disk
@@ -380,6 +380,48 @@ procedure Diary_Sim is
       if D = 0 then return L; end if;
       return L (L'First .. A) & Sim_World.Show (L (A + 1 .. D - 1)) & "-" & Sim_World.Show (L (D + 1 .. B - 1)) & L (B .. L'Last);
    end Game_Names;
+
+   --  0.067: chess_games.txt (save folder): every finished game once, in game order, appended at the session end when it is over
+   --  (and every game before it is).  run_report.txt lists only the games open at the session start and the ones begun since,
+   --  instead of the whole history (Robert's 0.065 save: ~48000 lines rewritten every session).  A report file, not read by a replay.
+   Chess_Logged : Natural := 0;          --  games G1 .. G<Chess_Logged> are in chess_games.txt
+   Chess_Log_Known : Boolean := False;   --  Chess_Logged was read from the file (once per program start)
+   procedure Chess_Log_Start is
+      V : Str_Vectors.Vector;
+      Found : Boolean;
+   begin
+      if Chess_Log_Known then return; end if;
+      Chess_Log_Known := True;
+      Chess_Logged := 0;
+      if not Ada.Directories.Exists ("chess_games.txt") then return; end if;
+      Read_Lines ("chess_games.txt", V, Found);
+      for L of V loop
+         if L'Length > 1 and then L (L'First) = 'G' then Chess_Logged := Chess_Logged + 1; end if;
+      end loop;
+      if Chess_Logged > Sim_Games.Game_Count then   --  a save from another history: start the file again
+         Ada.Directories.Delete_File ("chess_games.txt");
+         Chess_Logged := 0;
+      end if;
+   exception
+      when others => Chess_Logged := 0;
+   end Chess_Log_Start;
+   procedure Chess_Log_Advance is
+      N : Natural := Chess_Logged;
+      F : TIO.File_Type;
+   begin
+      while N < Sim_Games.Game_Count and then not Sim_Games.Is_Running (N + 1) loop N := N + 1; end loop;
+      if N = Chess_Logged then return; end if;
+      if Ada.Directories.Exists ("chess_games.txt") then TIO.Open (F, TIO.Append_File, "chess_games.txt"); else TIO.Create (F, TIO.Out_File, "chess_games.txt"); end if;
+      declare
+         R : constant Str_Vectors.Vector := Sim_Games.Report (True, Chess_Logged + 1);
+      begin
+         for I in 1 .. N - Chess_Logged loop TIO.Put_Line (F, Game_Names (R (I))); end loop;
+      end;
+      TIO.Close (F);
+      Chess_Logged := N;
+   exception
+      when others => if TIO.Is_Open (F) then TIO.Close (F); end if;   --  a report: the next session end tries again
+   end Chess_Log_Advance;
 
    function Rate_Now (E : Entity_Id) return Natural is   --  the recovery rate, with the governed offset (govern=1)
      (Natural'Max (1, Integer (Rate_Pct (E)) + Sim_Govern.Off (E, Sim_Govern.Rate)));
@@ -7164,7 +7206,8 @@ procedure Diary_Sim is
       for D of Ph_Sum loop Total := Total + D; end loop;
       L := To_Unbounded_String ("s" & Img (Session) & " t" & Img (Tick) & " ms=" & Ms (Total));
       for P in Phase_Id loop Append (L, " " & Names (P) & "=" & Ms (Ph_Sum (P))); end loop;
-      Append (L, " words=" & Img (Sim_World.Count));
+      Append (L, " words=" & Img (Sim_World.Count) & " miss=");   --  miss: the simulation's own missing-by-one per wesen (ship.sh counts it from words.txt)
+      for E in Entity_Id loop Append (L, (if E = Entity_Id'First then "" else ",") & Img (Missing_By_One (E))); end loop;
       if Ada.Directories.Exists ("timing.txt") then TIO.Open (F, TIO.Append_File, "timing.txt"); else TIO.Create (F, TIO.Out_File, "timing.txt"); end if;
       TIO.Put_Line (F, To_String (L));
       TIO.Close (F);
@@ -9596,8 +9639,13 @@ begin
          Phase (Ph_Chess);
          Append (Rep, Msg ("chess.rep") & ASCII.LF);
          for C in Sim_Games.Comp_Id loop Append (Rep, Sim_Games.Summary (C) & ASCII.LF); end loop;
+         Chess_Log_Start;
+         if Chess_Logged > 0 then
+            Append (Rep, "games G1 .. G" & Img (Chess_Logged) & ": over before this session, one line each in chess_games.txt" & ASCII.LF);
+         end if;
          Append (Rep, Msg ("chess.head") & ASCII.LF);
-         for L of Sim_Games.Report (True) loop Append (Rep, Game_Names (L) & ASCII.LF); end loop;
+         for L of Sim_Games.Report (True, Chess_Logged + 1) loop Append (Rep, Game_Names (L) & ASCII.LF); end loop;
+         Chess_Log_Advance;
          Phase (Ph_Report);
       end if;
       if Robot_Active then   --  the robot: state, commands and errors per wesen

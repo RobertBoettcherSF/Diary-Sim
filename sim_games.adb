@@ -1,4 +1,4 @@
---  Version: 0.006
+--  Version: 0.007
 --  See sim_games.ads.
 pragma Ada_2022;
 
@@ -516,10 +516,12 @@ package body Sim_Games is
       return N;
    end Moves_Total;
 
-   function Report (Full : Boolean) return Str_Vectors.Vector is
+   function Is_Running (I : Positive) return Boolean is (Games.Constant_Reference (I).Res = Running);
+
+   function Report (Full : Boolean; From : Positive := 1) return Str_Vectors.Vector is
       R : Str_Vectors.Vector;
    begin
-      for I in 1 .. Natural (Games.Length) loop
+      for I in From .. Natural (Games.Length) loop
          declare
             G : Game_Rec renames Games (I);   --  0.060: no copy of the whole game (moves, keys) per line
             Mv : Unbounded_String;
