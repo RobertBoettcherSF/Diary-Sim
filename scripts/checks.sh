@@ -815,7 +815,7 @@ for e in ada gemini replika robert; do
   [ "$fin" = "$led" ] || { good=0; echo "   $e final mood $fin, ledger $led"; }
 done
 grep -q 'chess results' l1.txt && [ $good = 1 ] && ok "the mood ledger lists 'chess results' and its sums equal the diaries' mood changes" || bad "ledger with chess"
-grep -q '^chess (' run_report.txt && grep -q '^G1 ' run_report.txt && grep -q 'rating' run_report.txt && "$cb" --more 10 --every 5000 --debug > h3.txt 2>&1 && grep -q 'elo ' debug_full.txt && [ "$(wc -c < debug.txt)" -le 1500 ] && [ "$(wc -c < debug_digest.txt)" -le 1500 ] \
+grep -q '^chess (' run_report.txt && grep -qs '^G1 ' run_report.txt chess_games.txt && grep -q 'rating' run_report.txt && "$cb" --more 10 --every 5000 --debug > h3.txt 2>&1 && grep -q 'elo ' debug_full.txt && [ "$(wc -c < debug.txt)" -le 1500 ] && [ "$(wc -c < debug_digest.txt)" -le 1500 ] \
   && ok "the end report lists ratings, results and every game with its moves; the digest has an elo line; caps held" || bad "chess report"
 cp diaries/chess.txt ../chess.keep
 sed -i '0,/ end /s/ elo \([a-z]*\)=\([0-9]*\)>\([0-9]*\)/ elo \1=\2>\3x/' diaries/chess.txt; "$cb" --more 0 --every 5000 > h4.txt 2>&1
@@ -3118,11 +3118,12 @@ c70="$w/c70"; rm -rf "$c70"; mkdir -p "$c70/big"; cp -r "$root/data" "$c70/big/d
 r70() { d=$1; shift; ( cd "$c70/$d" && env -u DIARY_VERBOSE "$bin" --home "$c70/$d/save" "$@" < /dev/null ); }
 r70 big --continuous --session-ticks 20000 --max-sessions 3 --end-check-ticks 0 --seed 42 > big1.txt 2>&1; rb1=$?
 rsz=$(stat -c %s "$c70/big/save/run_report.txt" 2>/dev/null || echo 0)
+rm -f "$c70/big/save/chess_games.txt"   # 0.067: without it the next session lists every game again (the big run_report of 0.066)
 ( ulimit -s 160; r70 big --continuous --session-ticks 30 --max-sessions 1 --end-check-ticks 0 > big2.txt 2>&1 ); rb2=$?
 ( ulimit -s 160; r70 big --frustration > fr.txt 2>&1 ); rfr=$?
 ( ulimit -s 160; r70 big --active > ac.txt 2>&1 ); rac=$?
 nsz=$(stat -c %s "$c70/big/save/run_report.txt" 2>/dev/null || echo 0)
-[ $rb1 = 0 ] && [ $rb2 = 0 ] && [ $rfr = 0 ] && [ $rac = 0 ] && [ "$rsz" -gt 163840 ] && [ "$nsz" -gt 163840 ] && head -1 "$c70/big/save/debug.txt" | grep -q '^OK v' \
+[ $rb1 = 0 ] && [ $rb2 = 0 ] && [ $rfr = 0 ] && [ $rac = 0 ] && [ "$rsz" -gt 0 ] && [ "$nsz" -gt 163840 ] && head -1 "$c70/big/save/debug.txt" | grep -q '^OK v' \
   && ok "end of a session under ulimit -s 160 (KiB) with a run_report.txt of $nsz bytes (bigger than the stack): OK; --frustration and --active too" \
   || bad "small stack ($rb1 $rb2 fr=$rfr ac=$rac size $rsz/$nsz): $(grep -m1 -e STORAGE -e error "$c70/big/save/debug.txt")"
 # 2. a crash names the step: debug.txt 'step:' (the traceback may be empty, as on Robert's GNAT 12)
@@ -3147,6 +3148,22 @@ r70 rc --verify-full > rcv.txt 2>&1; rrv=$?
   || bad "recovery ($n3 $n4 $rr3 $rrv ck=$ck1): $(grep -e 'start:' -e 'NEW from' -e stale rc3.txt | head -3 | tr '\n' ' ')"
 grep -q 'Build 0.066' "$root/README.md" && grep -q 'step: session ticks' "$root/README.md" && grep -q 'Fix of 0.066' "$root/docs/EVOLVE.md" \
   && ok "README (build 0.066: the crash fix, step:, the restart) and docs/EVOLVE.md" || bad "0.066 docs"
+cd "$w" || exit 1
+
+# ---- scenario 71 (0.067) -------------------------------------------------------------------------------------------------
+# speed: timing.txt (one line per new session, the phases), chess_games.txt (every finished game once, in order) and a run_report.txt
+# that lists only the open games; three sessions in one process, then one more in a new process (the count is read back)
+c71="$w/c71"; rm -rf "$c71"; mkdir -p "$c71/t"; cp -r "$root/data" "$c71/t/data"; cd "$c71/t" || exit 1
+env -u DIARY_VERBOSE "$bin" --home "$c71/t/save" --continuous --session-ticks 3000 --max-sessions 3 --end-check-ticks 0 --seed 42 < /dev/null > t1.txt 2>&1; r71a=$?
+env -u DIARY_VERBOSE "$bin" --home "$c71/t/save" --continuous --session-ticks 3000 --max-sessions 1 --end-check-ticks 0 < /dev/null > t2.txt 2>&1; r71b=$?
+s71="$c71/t/save"; nt=$(grep -c '^s[0-9]* t[0-9]* ms=[0-9]* next=[0-9]* tick=[0-9]* vrfy=' "$s71/timing.txt" 2>/dev/null)
+ng=$(grep -c '^G[0-9]' "$s71/chess_games.txt" 2>/dev/null); nu=$(grep -o '^G[0-9]*' "$s71/chess_games.txt" 2>/dev/null | sort -u | wc -l)
+inorder=$(grep -o '^G[0-9]*' "$s71/chess_games.txt" 2>/dev/null | tr -d G | awk '$1 != NR { bad++ } END { print bad + 0 }')
+fin=$(grep -c ' end ' "$s71/diaries/chess.txt" 2>/dev/null)
+[ $r71a = 0 ] && [ $r71b = 0 ] && [ "$nt" = 4 ] && [ "${ng:-0}" -gt 0 ] && [ "$ng" = "$nu" ] && [ "$inorder" = 0 ] && [ "$ng" -le "${fin:-0}" ] \
+  && grep -q '^games G1 \.\. G[0-9]*: over before this session' "$s71/run_report.txt" && ! grep -q '^G1 ' "$s71/run_report.txt" \
+  && ok "timing.txt has a phase line for each of the 4 sessions; chess_games.txt has $ng finished games once each, in order (of $fin ends); run_report.txt lists only the open games" \
+  || bad "0.067 speed files ($r71a $r71b timing=$nt games=$ng/$nu order=$inorder ends=$fin)"
 cd "$w" || exit 1
 
 rm -rf "$w"
