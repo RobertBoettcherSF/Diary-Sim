@@ -2286,8 +2286,8 @@ for l in open(os.path.join(d, 'diaries/active.txt')):
     if f[4] == 'wake':
         wake_lines += 1
         by = re.search(r' by=(\S+)', l).group(1)
-        if by.startswith('lesson:') or by.startswith('teach:'):   # 0.067 lesson=1: teach:<learner> = the teacher's word woke
-            if s not in lv2 or by.split(':', 1)[1] not in ('ada', 'gemini', 'replika', 'robert'): bad += 1
+        if by.startswith('lesson:') or by.startswith('teach:'):   # 0.067 lesson=1: teach:<learner> = the teacher's word woke (any level)
+            if (by.startswith('lesson:') and s not in lv2) or by.split(':', 1)[1] not in ('ada', 'gemini', 'replika', 'robert'): bad += 1   # teach: also in active=1 (a use)
             lesson += 1
         elif by not in keys: bad += 1
     elif f[4] == 'state' and s in lv2:
