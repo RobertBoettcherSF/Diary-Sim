@@ -3185,6 +3185,34 @@ s72 > c72.txt
   || bad "verify wrote to the save (night $r72n, ok $r72a, drift $r72b): $(diff a72.txt c72.txt | head -2 | tr '\n' ' ')"
 cd "$w" || exit 1
 
+# ---- scenario 73 (0.067) -------------------------------------------------------------------------------------------------
+# lesson=1: two sessions with lesson.enabled = 0 (no marker), then two with 1 (the marker on the new S lines only); the first two
+# sessions match a plain run byte for byte, the whole save verifies, the lesson pool (timing carry=) is wider than missing-by-one
+# (miss=) once lesson=1 is on (words known by two are teachable to a third), and a lesson word used by its learner gets a
+# "used" line in words.txt (Replika's guard: only then does it count as shared in checkin.txt)
+c73="$w/c73"; rm -rf "$c73"; mkdir -p "$c73/m" "$c73/p"; cp -r "$root/data" "$c73/m/data"; cp -r "$root/data" "$c73/p/data"
+sed -i 's/^lesson.enabled = .*/lesson.enabled = 0/' "$c73/m/data/limits.txt" "$c73/p/data/limits.txt"
+cd "$c73/p" || exit 1
+env -u DIARY_VERBOSE "$bin" --home "$c73/p/save" --continuous --session-ticks 2000 --max-sessions 2 --end-check-ticks 0 --seed 42 < /dev/null > p.txt 2>&1; r73p=$?
+cd "$c73/m" || exit 1
+env -u DIARY_VERBOSE "$bin" --home "$c73/m/save" --continuous --session-ticks 2000 --max-sessions 2 --end-check-ticks 0 --seed 42 < /dev/null > m1.txt 2>&1; r73a=$?
+sed -i 's/^lesson.enabled = .*/lesson.enabled = 1/' "$c73/m/data/limits.txt"
+env -u DIARY_VERBOSE "$bin" --home "$c73/m/save" --continuous --session-ticks 2000 --max-sessions 2 --end-check-ticks 0 < /dev/null > m2.txt 2>&1; r73b=$?
+env -u DIARY_VERBOSE "$bin" --home "$c73/m/save" --verify-full > v73.txt 2>&1; r73v=$?
+m73="$c73/m/save"; ls73=$(grep -c '^S.* lesson=1' "$m73/diaries/sessions.txt"); ns73=$(grep -c '^S' "$m73/diaries/sessions.txt")
+first73=$(grep '^S' "$m73/diaries/sessions.txt" | head -2 | grep -c 'lesson=1')
+same73=1; for f in "$c73/p/save/diaries/"*.jsonl; do b=$(basename "$f"); n=$(wc -l < "$f")
+  head -n "$n" "$m73/diaries/$b" | sed 's/"ts":"[^"]*"//' > h73.txt; sed 's/"ts":"[^"]*"//' "$f" > q73.txt; cmp -s h73.txt q73.txt || same73=0; done
+wide73=$(awk '{ m=""; c=""; for (i=1;i<=NF;i++) { if ($i ~ /^miss=/) m=substr($i,6); if ($i ~ /^carry=/) c=substr($i,7) }
+  split(m, a, ","); split(c, b, ","); for (k=1;k<=4;k++) if (b[k]+0 > a[k]+0) w++ } END { print w+0 }' "$m73/timing.txt")
+used73=$(cat "$m73"/entities/*/words.txt | grep -c ' used$')
+[ $r73p = 0 ] && [ $r73a = 0 ] && [ $r73b = 0 ] && [ $r73v = 0 ] && grep -q '^verify: OK' v73.txt && [ "$ns73" = 4 ] && [ "$ls73" = 2 ] && [ "$first73" = 0 ] \
+  && [ "$same73" = 1 ] && [ "$wide73" -gt 0 ] && [ "$used73" -gt 0 ] && grep -q '^lesson.enabled = 1' "$root/data/limits.txt" \
+  && grep -q 'lesson=1' "$root/README.md" && grep -q 'lesson=1' "$root/docs/EVOLVE.md" \
+  && ok "lesson=1 on sessions 3-4 only (S lines: $ls73 of $ns73), sessions 1-2 as a plain run, verify-full OK; the lesson pool wider than missing-by-one ($wide73 wesen-sessions), $used73 'used' lines" \
+  || bad "lesson=1 ($r73p $r73a $r73b verify=$r73v marks=$ls73/$ns73 first=$first73 same=$same73 wide=$wide73 used=$used73)"
+cd "$w" || exit 1
+
 rm -rf "$w"
 echo "== checks: $fails failure(s) =="
 [ "$fails" = 0 ]

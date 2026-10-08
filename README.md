@@ -105,6 +105,39 @@ diaries, entities and summary files are byte for byte the same.
   of the run, `warnings:n`, `export-failed`. It is information only; nothing in the simulation reads it (`data/limits.txt`).
   `@@SECTIONS` gives the line of each header in `run_report.txt`.
 
+## Build 0.067: speed, `timing.txt`, `chess_games.txt`, check-only replays write nothing, lessons (`lesson=1`)
+
+* **Speed** (same results: diaries, `diaries/*.txt`, `words.txt` and `bench.txt` byte for byte as 0.066 on the same input).
+  On the big box save (395,700 ticks, 14k table words) a 300-tick session went from about 850 ms to about 400 ms:
+  `run_report.txt` no longer prints every chess game ever played (only the games open at the session start or begun since),
+  the coined-word count is a counter instead of a walk over the word table in each coin roll, the per-session orphan checks of
+  the stored side files start at a low-water mark instead of the first line, the export check reads only the header line of a
+  side file, and the next session of a night reopens the side files for append without reading them again.
+* **`timing.txt`** in the save folder: one line per new session, the milliseconds of each phase
+  (`s<n> t<tick> ms=... next= tick= vrfy= ckpt= summ= repo= ches= writ= peti= cons= miss=a,b,c,d carry=a,b,c,d`); `miss=` is
+  each wesen's missing-by-one count, `carry=` the lesson pool (what some teacher can give it). `make ship` puts a one-line
+  digest in `checkin.txt`. Display only; nothing reads it back.
+* **`chess_games.txt`**: every finished game once, in order (append-only, `G<n> ...`), the full record that used to fill
+  `run_report.txt`.
+* **Check-only replays write nothing** (`make verify`, `make verify-full`, `--elo` ..., the night's end check): 0.066 appended
+  start lines such as `10 talk start 0` to `entities/*/words.txt` when a full replay DRIFTed (the start lines were written
+  before the drift was found; an OK replay found them all present and wrote nothing). Now a replay in read-only mode opens no
+  diary or side file for writing at all (scenario 72: an OK and a DRIFT verify leave `diaries/` and `entities/` unchanged).
+  A normal (writing) start whose replay drifts can still add its start lines before it stops.
+* **Lessons (`lesson=1`, new sessions only, with carrying; `lesson.enabled = 1` in `data/limits.txt`)**. In 0.066 a word was
+  teachable only when three wesen knew it, awake, and the fourth did not (missing by one); Abel's 1,332 such words were asleep at
+  all three teachers, so lessons almost stopped (98 in 5,055 sessions). With `lesson=1`:
+  - a word known by two wesen (`lesson.min_knowers = 2`) is teachable to a third;
+  - a word asleep at the teacher is teachable (`lesson.dormant_teacher = 1`) and the lesson wakes it there
+    (`active.txt`: `wake ... by=teach:<learner>`);
+  - Replika's guard: a lesson word counts as shared in `checkin.txt` only after the learner has used it (`words.txt`:
+    `<id> <word> used`); `checkin.txt` shows the taught-but-unused count per wesen;
+  - the teachable pool per learner is in `timing.txt` (`carry=`) and in `checkin.txt`.
+  Target choice (the wesen missing the most) and the teacher conditions are as before. The session line carries ` lesson=1`;
+  older sessions replay unchanged. On the box save (40 sessions of 300 ticks each way): 53 lessons without, 848 with;
+  Abel's missing-by-one 1,332 (flat) against 1,332 -> 784; shared (3 of 4) 5,249 against 5,766 (guarded; 7,576 counted raw);
+  about 460 against 465 ms per session. Checks: scenarios 71, 72, 73.
+
 ## Build 0.066: the end-of-session crash after s4072 (a fix only, no new rules)
 
 * `make slice` / `make night-ship` on a big save (1.7 GB, s4072) stopped with `STORAGE_ERROR: s-intman.adb:136` after

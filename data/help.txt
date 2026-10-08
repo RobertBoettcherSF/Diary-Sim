@@ -270,6 +270,10 @@ moodrest.pull_bp x gap / 10000 (15: a swing fades halfway in ~460 ticks),
 pull_high_bp above the band; moods keep dips and peaks for a session or two.
 relief=1 (build 0.065, relief.enabled=0: off): below carry.relief_energy a
   wesen rests instead of working (or exploring, wandering, benching).
+lesson=1 (build 0.067, lesson.enabled=0: off): a word two wesen know is
+  teachable to a third (lesson.min_knowers), also when it sleeps at the
+  teacher (lesson.dormant_teacher; the lesson wakes it there); it counts as
+  shared only once the learner used it. timing.txt: one line per session.
 make night-ship NIGHT_SHIP_FULL=1 (0.065): the full verify first, inside the
   same budget, then sessions; a DRIFT: no sessions, VERDICT FAIL.
 Albanian (alb=1 session, build 0.064; albanian.enabled=0: off): the wesen

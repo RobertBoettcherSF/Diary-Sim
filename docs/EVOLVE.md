@@ -1,5 +1,5 @@
 # Evolutionary pressure on words and on chess (previews built, the rest design)
-Version: 0.011
+Version: 0.012
 
 Build state: **step 1 (`symbols=1`) is built** (build 0.047), **step 1 (`symbols=1`)**, **step 2 (`make evolve` preview)** and **step 3 (`make active` preview)** are built (build 0.048); **the real `active=1` (section 13) is built** (build 0.049); everything else is design only.
 
@@ -278,6 +278,34 @@ albg=<genders>`; 0 = the 0.063 sessions byte for byte. Sim_Albanian (`sim_albani
   to `moodcause.txt` in the save folder (a replay never writes; `part=1` when the run began inside the session); the sums equal
   the mood changes exactly (scenario 68). A per-session file was chosen over checkpoint fields so nothing of the replay changes.
 Checks: scenario 68.
+
+## 21. Speed, check-only replays, lessons by two knowers (`lesson=1`) (BUILT, build 0.067, new sessions only)
+
+* **Speed, no rule change.** Per-session phases go to `timing.txt` (milliseconds of next, tick, vrfy, ckpt, summ, repo, ches,
+  writ, peti, cons, plus `miss=` and `carry=` per wesen). The hot spots on the box save were the chess section of
+  `run_report.txt` (every game, each session: now only open games; the finished ones are appended once to `chess_games.txt`),
+  the coined-word count (a word-table walk per coin roll: now a counter rebuilt in Reindex), the orphan scans of stored side
+  files (now from a low-water mark in Sim_Store), the export check (only the header line of a side file) and the next session
+  of a night (side files reopened for append without a reread). About 850 -> 400 ms per 300-tick session; the replayed bytes
+  and the checkpoint format (4) are unchanged.
+* **Check-only replays write nothing.** In Ledger_Mode no diary or side file is opened for writing and Ensure does nothing.
+  0.066 wrote start lines (`10 talk start 0`) to `words.txt` only on a DRIFT path: Ensure ran before the drift was found; on
+  the OK path all lines already existed. Scenario 72 covers both paths.
+* **`lesson=1`** (`lesson.enabled`, `lesson.min_knowers`, `lesson.dormant_teacher` in `data/limits.txt`; with `carry=1`/`carry=2`).
+  The lesson pool of a learner L from a teacher T is: T knows the word, L does not, at least `min_knowers` (2) of the three
+  other wesen know it, a plain word (no symbol), not blocked; a word dormant at T is in the pool when `dormant_teacher = 1`
+  and the lesson wakes it at T (Sim_Active.Wake_Teacher: an A line `wake ... by=teach:<learner>`, the window's use event). The
+  target (the wesen missing the most) and the teacher conditions are unchanged; Missing_By_One (the 0.066 rule) is unchanged
+  and still drives the target and `miss=`. Replika's guard: a word that came by a lesson counts toward shared only after the
+  learner has used it; the first use writes `<id> <word> used` to the learner's `words.txt` (the word stats ignore these lines)
+  and `make ship` subtracts the taught-but-unused words from shared and prints them per wesen. Why: in 0.066 Abel's
+  missing-by-one stayed at 1,332 because those words were dormant at all three teachers, so the pool was empty (Carry_Count 0)
+  and lessons almost stopped. Box save, 40 sessions: lessons 53 -> 848, Abel 1,332 -> 784, Adam 731 -> 0, shared 5,249 ->
+  5,766 (guarded), 4,506 taught words not used yet; time per session the same within noise (460 / 465 ms). The marker
+  ` lesson=1` follows ` relief=1` on the S line; Derive_Session_Flags takes it from the last session begun before the
+  checkpoint tick; no new state is stored (format 4). Scenario 73.
+* Open: the tunables (two knowers, dormant teaching) are first guesses for Robert; a writing start whose replay drifts may
+  still append its start lines before it stops.
 
 ## 20. Fix of 0.066: no stack copies at the end of a session (BUILT, build 0.066, no rule change)
 
