@@ -638,12 +638,25 @@ procedure Diary_Sim is
    --  ---- working folder files -------------------------------------------------------
 
    --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (parsing of the '# seed N' header)
-   procedure Open_Side (E : Entity_Id; K : Side_Kind) is
+   --  Reread False (0.067, the next session of a night): Side_Have already holds every line of the file (this process read it and
+   --  wrote the rest), so the file is only opened for appending; it was read whole at every session start.
+   procedure Open_Side (E : Entity_Id; K : Side_Kind; Reread : Boolean := True) is
       P     : constant String := Side_Path (E, K);
       Lines : Str_Vectors.Vector;
       Found : Boolean;
       Mark  : constant String := "# seed ";
    begin
+      if not Reread and then not Ledger_Mode and then not Side_Have (E, K).Is_Empty
+        and then Ada.Directories.Exists (P) and then Ada.Directories.Size (P) > 0
+      then
+         declare
+            Needs_Lf : constant Boolean := not Ends_With_Lf (P);
+         begin
+            TIO.Open (Side_Out (E, K), TIO.Append_File, P);
+            if Needs_Lf then TIO.New_Line (Side_Out (E, K)); end if;
+         end;
+         return;
+      end if;
       if Ada.Directories.Exists (P) and then Ada.Directories.Size (P) > 0 then
          Read_Lines (P, Lines, Found);
          if not Lines.Is_Empty and then Fx.Index (Lines.First_Element, Mark) = 1
@@ -652,13 +665,14 @@ procedure Diary_Sim is
             raise Diary_Error with Msg ("err.entities_seed", P, Lines.First_Element (Mark'Length + 1 .. Lines.First_Element'Last));
          end if;
          for L of Lines loop Side_Have (E, K).Include (L); end loop;
+         if Ledger_Mode then return; end if;   --  0.067: read only (it appended start lines of a drifting replay to words.txt)
          declare
             Needs_Lf : constant Boolean := not Ends_With_Lf (P);
          begin
             TIO.Open (Side_Out (E, K), TIO.Append_File, P);
             if Needs_Lf then TIO.New_Line (Side_Out (E, K)); end if;
          end;
-      else
+      elsif not Ledger_Mode then
          TIO.Create (Side_Out (E, K), TIO.Out_File, P);
          TIO.Put_Line (Side_Out (E, K), Mark & Img (Seed));
          TIO.Put_Line (Side_Out (E, K), Msg (if K = Words_File then "hdr.words" else "hdr.bench"));
@@ -669,7 +683,7 @@ procedure Diary_Sim is
    --  Append Line unless the file already has it; flushed at once.
    procedure Ensure (E : Entity_Id; K : Side_Kind; Line : String) is
    begin
-      if Preview then return; end if;
+      if Preview or else Ledger_Mode then return; end if;   --  0.067: a check-only replay (make verify, the end check) writes nothing
       if not Side_Have (E, K).Contains (Line) then
          TIO.Put_Line (Side_Out (E, K), Line);
          TIO.Flush (Side_Out (E, K));
@@ -5026,7 +5040,7 @@ procedure Diary_Sim is
                end if;
                Verified := Verified + 1;
             else
-               if Preview then
+               if Preview or else Ledger_Mode then
                   Sample (E).Append (Line);
                else
                   TIO.Put_Line (Out_File (E), Line);
@@ -8830,7 +8844,7 @@ procedure Diary_Sim is
       Run_Bench_N := [others => 0];
       for E in Entity_Id loop
          TIO.Open (Out_File (E), TIO.Append_File, Path (E));
-         for K in Side_Kind loop Open_Side (E, K); end loop;
+         for K in Side_Kind loop Open_Side (E, K, Reread => False); end loop;
       end loop;
    end Night_Next_Session;
 
@@ -9188,7 +9202,9 @@ begin
    end loop;
    Cur_Name := To_Unbounded_String ("-");
    for E in Entity_Id loop
-      if Ada.Directories.Exists (Path (E)) then
+      if Ledger_Mode then
+         null;   --  0.067: a check-only replay opens no diary for writing (not even the line feed of a half line)
+      elsif Ada.Directories.Exists (Path (E)) then
          declare
             Needs_Lf : constant Boolean := Ada.Directories.Size (Path (E)) > 0 and then not Ends_With_Lf (Path (E));
          begin
@@ -9324,8 +9340,8 @@ begin
          if not Ledger_Mode then Con.Put_Line (To_String (Import_Block)); end if;
       end;
       if Ledger_Mode then   --  replayed and verified, nothing decided, nothing written: print the ledger
-         for F of Out_File loop TIO.Close (F); end loop;
-         for F of Side_Out loop TIO.Close (F); end loop;
+         for F of Out_File loop if TIO.Is_Open (F) then TIO.Close (F); end if; end loop;
+         for F of Side_Out loop if TIO.Is_Open (F) then TIO.Close (F); end if; end loop;
          if Verify_View then   --  the files of the whole history against the replay: the checks of the end of a run, nothing written
             Verify_Inbox (Last_Done);
             Verify_Edits (Last_Done);
@@ -9426,8 +9442,8 @@ begin
    then
       Record_Word_Vote (Ticks);
    end if;
-   for F of Out_File loop TIO.Close (F); end loop;
-   for F of Side_Out loop TIO.Close (F); end loop;
+   for F of Out_File loop if TIO.Is_Open (F) then TIO.Close (F); end if; end loop;
+   for F of Side_Out loop if TIO.Is_Open (F) then TIO.Close (F); end if; end loop;
    if not Quit_Seen then
       Verify_Inbox (Last_Done);
       Verify_Edits (Last_Done);
