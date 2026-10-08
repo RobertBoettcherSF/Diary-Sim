@@ -1,5 +1,5 @@
 #!/bin/sh
-# Version: 0.015
+# Version: 0.016
 # make ship (by day) and make night-ship (overnight): Robert's ONE command; both write ONE file, checkin.txt in the save folder
 # (../diary-data next to the source folder, or --home / $DIARY_HOME: bin/diary_sim --folder says where), with the same VERDICT header
 # on top, and print a short summary and the path of that file.  Exit status 0 = PASS, 1 = FAIL.
@@ -403,7 +403,20 @@ else sh_all=0; sh_pct=0; sh_pairs="-"; shared_line="shared words: none yet"; fi
 # every distinct plain word known by anyone, in percent; a count can grow while the overlap falls), the known words per wesen and who is missing most often among the words known by all but one.  One read of entities/*/words.txt.  "used" (spoken or
 # written by each knower) is not recorded per word in the files yet.
 goal=${SHIP_VOCAB_GOAL:-40000}
-voc=$(for e in $ids; do f="$folder/entities/$e/words.txt"; [ -f "$f" ] && awk -v e="$e" '!/^#/ && NF >= 2 { print e, $2 }' "$f"; done | sort -u | awk -v ids="$ids" '
+# 0.067 lesson=1, Replika's guard: a word a wesen learned in a lesson of a lesson=1 session (words.txt "taught" at or after the start
+# of the first lesson=1 session) counts for it only once words.txt has its "used" line; such words are counted as taught-but-unused
+les0=$(awk '/^S[0-9]/ && / lesson=1/ { s = $2; sub(/start=/, "", s); print s + 0; exit }' "$folder/diaries/sessions.txt" 2>/dev/null)
+tu_line=""
+if [ -n "$les0" ]; then
+  tu_per=$(for e in $ids; do f="$folder/entities/$e/words.txt"; [ -f "$f" ] && awk -v lo="$les0" '!/^#/ && NF >= 3 {
+      if ($3 == "used") { u[$1] = 1; next } if (!($1 in h)) { h[$1] = $3; t[$1] = $4 + 0; x[$1] = $2 } }
+    END { for (k in h) if (h[k] == "taught" && t[k] >= lo && !(k in u) && x[k] !~ /^[a-h][1-8][a-h][1-8][qrbn]?$/ && x[k] !~ /^[0-9]+$/) n++; print n + 0 }' "$f"; done | paste -sd, -)
+  tu_line="  taught but not used yet (lesson=1, not counted as shared): $tu_per"
+fi
+voc=$(for e in $ids; do f="$folder/entities/$e/words.txt"; [ -f "$f" ] && awk -v e="$e" -v lo="${les0:--1}" '!/^#/ && NF >= 3 {
+    if ($3 == "used") { u[$1] = 1; next } if (!($1 in h)) { h[$1] = $3; t[$1] = $4 + 0; x[$1] = $2 } }
+  !/^#/ && NF == 2 { print e, $2 }
+  END { for (k in h) if (!(lo >= 0 && h[k] == "taught" && t[k] >= lo && !(k in u))) print e, x[k] }' "$f"; done | sort -u | awk -v ids="$ids" '
   function chess(t) { return t ~ /^[a-h][1-8][a-h][1-8][qrbn]?$/ } function num(t) { return t ~ /^[0-9]+$/ }
   BEGIN { ne = split(ids, ord, " "); th = int((3 * ne + 3) / 4) }   # the threshold: ceiling(3/4 of the wesen), 3 of 4 today
   { if (chess($2) || num($2)) next; n[$1]++; c[$2]++; has[$1, $2] = 1; seen[$1] = 1 }
@@ -512,7 +525,7 @@ timing_line=$(awk -v lo="${first:-0}" -v hi="${last:-0}" '
   END { if (!n) { print "timing: no timing.txt lines in the window (builds before 0.067)"; exit }
     out = sprintf("timing (%d sessions, ms per session, average):", n)
     for (j = 1; j <= k; j++) out = out sprintf(" %s %d", (ord[j] == "ms" ? "total" : ord[j]), sum[ord[j]] / n)
-    print out "; last session " lastms " ms; last missing-by-one " lastv["miss"] ", carryable " lastv["carry"] }' "$folder/timing.txt" 2>/dev/null)
+    print out "; last session " lastms " ms; last missing-by-one " lastv["miss"] "; teachable pool per learner " lastv["carry"] }' "$folder/timing.txt" 2>/dev/null)
 # 0.065 (report only, entities/*/words.txt): per wesen the words that ENTERED its missing-by-one set in the window (the last of
 # the other three learned it; new = first known by anyone in the window) and that LEFT it (it learned the word: by a lesson =
 # taught, else world / screen / coined), so the early signals show whether the lessons can catch up
@@ -664,6 +677,7 @@ total=$(( $(date +%s) - t0 ))
   echo "$voc_line" | cut -c1-79
   [ -n "$voc_line2" ] && echo "$voc_line2" | w79
   [ -n "$voc_line3" ] && echo "$voc_line3" | cut -c1-79
+  [ -n "$tu_line" ] && echo "$tu_line" | cut -c1-79
   echo "build: $build   made: $(date '+%Y-%m-%d %H:%M:%S') (local)   make $mode"
   if [ "$night" = 1 ]; then
     echo "night: $night_txt"
@@ -727,6 +741,7 @@ else w1="no night: run_log.txt entries of the last night"; w2="no night: the ses
   echo "$mood_goal" | sed 's/^  //'
   echo "$shared_line"
   echo "$voc_full"
+  [ -n "$tu_line" ] && echo "lesson=1 since tick $les0: words learned in lessons, not used yet, per wesen ($names):${tu_line##*:}"
   echo "petition topics: ${topics_all:-none} (of $np)"
   echo "$mood_line   (moods ${tnames:-?}: ${moods:--})"
   echo "$delta_full"
