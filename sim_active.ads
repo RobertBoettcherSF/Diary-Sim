@@ -1,4 +1,4 @@
---  Version: 0.004
+--  Version: 0.005
 --  active=1 sessions (docs/EVOLVE.md 12 and 13, docs/LEARN.md 12 (a)): every wesen keeps an ACTIVE vocabulary.  The fitness of each
 --  word is counted from the record lines the replay emits (screens K, votes V, petitions P, dictionary L: the same inputs and points as
 --  make evolve), a running average per session.  At the end of an active=1 session a word whose fitness stayed at or under the line
@@ -44,6 +44,8 @@ package Sim_Active is
    function Level return Natural;   --  the level of the open window (0: none)
    --  active=2: a lesson of word W by By (a wesen id) to E, who has W dormant: it wakes ("by=lesson:<teacher>").  False if nothing woke.
    procedure Wake (E : Positive; W : Positive; Tick : Int; By : String; Woke : out Boolean);
+   --  0.067 lesson=1: the teacher E teaches its dormant word W to the learner By: the word is used, it wakes ("by=teach:<learner>").
+   procedure Wake_Teacher (E : Positive; W : Positive; Tick : Int; By : String; Woke : out Boolean);
    --  A record line that was just emitted (K, V, P, L): its uses count for the open window; a dormant word that is used wakes.
    procedure Note_Line (Line : String);
    --  The new lines of diaries/active.txt (without the key "A<n>", starting with "t=<tick>").

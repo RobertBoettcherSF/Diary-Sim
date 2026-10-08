@@ -717,6 +717,15 @@ procedure Diary_Sim is
    --  0.065 relief=1 (with carry): below carry.relief_energy a wesen rests instead of working (and of the other tiring actions:
    --  explore, wander, bench), not only instead of teaching
    Relief_Active : Boolean := False;
+   --  0.067 lesson=1 (with carry, docs/EVOLVE.md 21): the lesson pool of Sim_World (a word known by two wesen reaches a third; a word
+   --  dormant at the teacher is teachable and wakes there when it is taught) and the used guard (the first use of a lesson word: a
+   --  "used" line in words.txt).  Off: the carry pool and nothing else; older sessions replay unchanged.
+   Lesson_Active : Boolean := False;
+   procedure Lesson_Begin (On : Boolean) is
+   begin
+      Lesson_Active := On;
+      Sim_World.Use_Lesson (On, Positive (Int'Max (1, Int'Min (3, Limit ("lesson.min_knowers", 2)))), Limit ("lesson.dormant_teacher", 1) /= 0);
+   end Lesson_Begin;
    --  0.063 moodrest=2: the same resting moods, but the drift is a one-point step taken with the probability rate x gap (a die
    --  of 10000: moodrest.pull_bp basis points per point of gap, pull_high_bp above the band), and the soft bounds round by a
    --  die too; so the expected drift is rate x gap with no rounding dead zone and no state of its own
@@ -1010,6 +1019,14 @@ procedure Diary_Sim is
       --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (pick indices stay inside 1 .. count)
       --  In a world session the pupil is a wesen on the same or a neighbouring cell (none: no lesson) and the
       --  word may drift into a dialect variant on its way (Sim_Things.Mutate).
+      procedure Teacher_Wake (T : Entity_Id; W : Positive; To : Entity_Id) is
+         Woke : Boolean;
+      begin
+         if not Lesson_Active then return; end if;
+         Sim_Active.Wake_Teacher (Positive (T), W, Tick, Name (To), Woke);
+         if Woke then Emit_Active_Lines; end if;
+      end Teacher_Wake;
+
       procedure Teach is
          P : Entity_Id := Entity_Id ((Integer (E) - 1 + Roll (Seed, Eid, Tick, 3, 3)) mod 4 + 1);
          Adj : Natural := 0;
@@ -1022,6 +1039,7 @@ procedure Diary_Sim is
                Pending_Word (L) := W;
                Pending_From (L) := E;
                Did_Teach := True;
+               Teacher_Wake (E, W, L);   --  0.067 lesson=1: a word asleep at the teacher wakes (it is used)
                Use_Word (E, W);
                Sim_Carry.Carried (E, L);
                if Sim_Carry.Level < 2 then
@@ -1046,6 +1064,7 @@ procedure Diary_Sim is
                         end;
                      end loop;
                      for X of Ws loop
+                        Teacher_Wake (E, X, L);
                         Learn_Word (L, X, Natural (E));
                         if Knows (L, X) then Ensure (L, Words_File, Words_Line (X, "taught", Tick, Name (E))); end if;
                         Use_Word (E, X);
@@ -1059,6 +1078,7 @@ procedure Diary_Sim is
                         for J in 0 .. Natural'Min (K2, N2) - 1 loop Ws.Append (Nth_Carry (L, E, (R2 - 1 + J) mod N2 + 1)); end loop;
                      end;
                      for X of Ws loop
+                        Teacher_Wake (L, X, E);   --  the learner gives back: its own dormant word wakes
                         Learn_Word (E, X, Natural (L));
                         if Knows (E, X) then Ensure (E, Words_File, Words_Line (X, "taught", Tick, Name (L))); end if;
                         Use_Word (L, X);
@@ -1222,7 +1242,7 @@ procedure Diary_Sim is
                Sim_Active.Wake (Positive (E), W, Tick, Name (Pending_From (E)), Woke);   --  active=2: a lesson of a dormant word wakes it
                if Woke then
                   Emit_Active_Lines;
-                  Use_Word (E, W);
+                  Use_Word (E, W, Note => False);   --  waking a lesson word is no use of it (0.067 guard)
                   Add (Msg ("detail.woke", Word (W), Name (Pending_From (E))));
                   Pending_Word (E) := 0;
                   Did_Learn := True;
@@ -3518,7 +3538,7 @@ procedure Diary_Sim is
          Read_Lines ("entities/" & Name (E) & "/words.txt", Lines, Found);
          if Found then
             for L of Lines loop
-               if L'Length > 0 and then L (L'First) /= '#' and then Num (Nth (L, 1)) > 0 and then Nth (L, 2) /= "" then
+               if L'Length > 0 and then L (L'First) /= '#' and then Num (Nth (L, 1)) > 0 and then Nth (L, 2) /= "" and then Nth (L, 3) /= "used" then   --  0.067: a used line is no new word
                   Sim_Wordstat.Add_Word (Positive (E), Num (Nth (L, 1)), Nth (L, 2), Nth (L, 3), Num (Nth (L, 4)), Nth (L, 5));
                   Any_Words := True;
                end if;
@@ -5030,6 +5050,17 @@ procedure Diary_Sim is
          declare
             Line : constant String := Step (E, Tick);
          begin
+            if Lesson_Active then   --  0.067 lesson=1: the first uses of lesson words ("used" lines of words.txt, written once)
+               loop
+                  declare
+                     U_E : Entity_Id;
+                     U_W : constant Natural := Sim_World.Next_Used (U_E);
+                  begin
+                     exit when U_W = 0;
+                     Ensure (U_E, Words_File, Img (U_W) & " " & Word (U_W) & " used");
+                  end;
+               end loop;
+            end if;
             Emit_Screen_Lines (Tick);
             Emit_Chess_Lines (Tick);
             Emit_Robot_Lines (Tick);
@@ -5509,6 +5540,7 @@ procedure Diary_Sim is
       Moodrest : Boolean := False;      --  moodrest=1 (0.062): resting moods, soft bounds (Mood_Rest_Step)
       Moodrest2 : Boolean := False;     --  moodrest=2 (0.063): the drift as a one-point step by a die (Mood_Rest_Step2)
       Relief : Boolean := False;        --  relief=1 (0.065, with Carry): below the relief energy no work either (Carry_Choice)
+      Lesson : Boolean := False;        --  lesson=1 (0.067, with Carry): the lesson pool (two-wesen words, dormant at the teacher) and the used guard
       Alb : Boolean := False;           --  alb=1 (0.064): the Albanian book, hearing and saying at the session start (Sim_Albanian)
       Alb_G : String (1 .. 4) := "uuuu";   --  albg= (with Alb): the wesen genders of data/wesen_gender.txt when the session began (m f n u)
    end record;
@@ -5534,6 +5566,7 @@ procedure Diary_Sim is
       & (if R.Carry then (if R.Carry2 then " carry=2" else " carry=1") else "") & (if R.Moodrest then (if R.Moodrest2 then " moodrest=2" else " moodrest=1") else "")   --  0.061 / 0.062, before screen=1
       & (if R.Alb then " alb=1 albg=" & R.Alb_G else "")   --  0.064
       & (if R.Relief and then R.Carry then " relief=1" else "")   --  0.065
+      & (if R.Lesson and then R.Carry then " lesson=1" else "")   --  0.067
       & (if R.Screen then " screen=1" else "") & (if R.Chess then " chess=1" else "") & (if R.Chessrules then " chessrules=2" else "")
       & (if R.Robot then " robot=1" else "") & (if R.Govern then " govern=1" else "") & (if R.Scoin then " scoin=1" else "")
       & (if R.Preport then " preport=1" else "") & (if R.Players4 then " players4=1" else "") & (if R.Nextticks then " nextticks=1" else "") & (if R.Trial then " trial=1" else "") & (if R.Rec2 and then R.Records then " records=2" elsif R.Records then " records=1" else "")
@@ -5599,6 +5632,7 @@ procedure Diary_Sim is
       R.Moodrest := Token (L, "moodrest") = "1" or else Token (L, "moodrest") = "2";
       R.Moodrest2 := Token (L, "moodrest") = "2";
       R.Relief := R.Carry and then Token (L, "relief") = "1";
+      R.Lesson := R.Carry and then Token (L, "lesson") = "1";
       R.Alb := Token (L, "alb") = "1";
       if R.Alb and then Token (L, "albg")'Length = 4 then R.Alb_G := Token (L, "albg"); end if;
       OK := To_Num (L (L'First + 1 .. Sp - 1)) > 0 and then R.Start >= 0 and then R.Len > 0
@@ -5757,6 +5791,7 @@ procedure Diary_Sim is
       Sim_Carry.Reset;
       Moodrest_Active := False;
       Relief_Active := False;
+      Lesson_Begin (False);
       Moodrest_Level := 1;
       Preport_End := -1;
       Next_Active := False;
@@ -5860,6 +5895,7 @@ procedure Diary_Sim is
       Moodrest_Active := R.Moodrest;
       Moodrest_Level := (if R.Moodrest2 then 2 else 1);
       Relief_Active := R.Relief;
+      Lesson_Begin (R.Lesson);
       Sim_Games.Set_Rules (if R.Chessrules then 2 else 0);
       Robot_Active := R.Robot;
       Govern_Active := R.Govern;
@@ -6177,6 +6213,7 @@ procedure Diary_Sim is
    function Moodrest_Wanted return Boolean is (Limit ("moodrest.enabled", 2) /= 0);   --  moodrest=1 (0.062) or 2 (0.063)
    function Moodrest2_Wanted return Boolean is (Limit ("moodrest.enabled", 2) >= 2);   --  moodrest=2 (0.063)
    function Relief_Wanted return Boolean is (Carry_Wanted and then Limit ("relief.enabled", 1) /= 0);   --  relief=1 (0.065)
+   function Lesson_Wanted return Boolean is (Carry_Wanted and then Limit ("lesson.enabled", 1) /= 0);   --  lesson=1 (0.067)
    function Alb_Wanted return Boolean is (Limit ("albanian.enabled", 1) /= 0);   --  alb=1 (0.064): the Albanian book
    function Alb_G_Now return String is (if Alb_Wanted then Sim_Albanian.Genders_Now else "uuuu");   --  stamped into the session line
 
@@ -6201,7 +6238,7 @@ procedure Diary_Sim is
       if Explicit then
          R := (N => Next_N, Start => Int (Common), Len => Int'Max (0, Ticks - Int (Common)), Votes => V, By_Vote => False,
                Dharma => True, World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => Visit_Mode, Visit_Who => Visit_Who, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted, Carry2 => Carry2_Wanted, Moodrest => Moodrest_Wanted, Moodrest2 => Moodrest2_Wanted, Relief => Relief_Wanted, Alb => Alb_Wanted, Alb_G => Alb_G_Now);
+               Visit => Visit_Mode, Visit_Who => Visit_Who, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted, Carry2 => Carry2_Wanted, Moodrest => Moodrest_Wanted, Moodrest2 => Moodrest2_Wanted, Relief => Relief_Wanted, Lesson => Lesson_Wanted, Alb => Alb_Wanted, Alb_G => Alb_G_Now);
          if R.Len > 0 then
             Append_Session (R);
             Start_Life (R);
@@ -6218,7 +6255,7 @@ procedure Diary_Sim is
       else
          R := (N => Next_N, Start => Int (Common), Len => Decided (V), Votes => V, By_Vote => True, Dharma => True,
                World => World_Wanted, Rest => Rest_Wanted, Grant => Grant_Wanted, Screen => Screen_Wanted, Chess => Chess_Wanted, Robot => Robot_Wanted, Govern => Govern_Wanted, Scoin => Scoin_Wanted, Records => Records_Wanted, Rec2 => Rec2_Wanted, Preport => Preport_Wanted, Players4 => Players4_Wanted, Nextticks => Nextticks_Wanted, Chessrules => Chessrules_Wanted, Trial => Trial_Wanted,
-               Visit => False, Visit_Who => 0, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted, Carry2 => Carry2_Wanted, Moodrest => Moodrest_Wanted, Moodrest2 => Moodrest2_Wanted, Relief => Relief_Wanted, Alb => Alb_Wanted, Alb_G => Alb_G_Now);
+               Visit => False, Visit_Who => 0, Chat => Chat_Wanted, Symbols => Symbols_Wanted, Symstrict => Symstrict_Wanted, Active => Active_Wanted, Active_Level => Active_Level_Wanted, Slowfloor => Slowfloor_Wanted, Carry => Carry_Wanted, Carry2 => Carry2_Wanted, Moodrest => Moodrest_Wanted, Moodrest2 => Moodrest2_Wanted, Relief => Relief_Wanted, Lesson => Lesson_Wanted, Alb => Alb_Wanted, Alb_G => Alb_G_Now);
          Ticks := Int (Common) + R.Len;
          Append_Session (R);
          Start_Life (R);
@@ -6831,6 +6868,7 @@ procedure Diary_Sim is
       Moodrest_Active := Moodrest_Wanted;
       Moodrest_Level := (if Moodrest2_Wanted then 2 else 1);
       Relief_Active := Relief_Wanted;
+      Lesson_Begin (Lesson_Wanted);
       if Rest_Active then Rest_Begin (Seed); end if;
       Con.Put (To_String (Pending));
       Con.Put_Line (Msg ("preview.head", Img (Seed), Img (Total)));
@@ -8458,12 +8496,14 @@ procedure Diary_Sim is
       Mr : Boolean := False;
       Mr2 : Boolean := False;
       Rf : Boolean := False;
+      Ls : Boolean := False;
    begin
       for R of Sessions loop
-         if R.Start < C then Lvl := (if R.Carry2 then 2 else 1); Mr := R.Moodrest; Mr2 := R.Moodrest2; Rf := R.Relief; end if;
+         if R.Start < C then Lvl := (if R.Carry2 then 2 else 1); Mr := R.Moodrest; Mr2 := R.Moodrest2; Rf := R.Relief; Ls := R.Lesson; end if;
       end loop;
       Sim_Carry.Set_Level (Lvl);
       Relief_Active := Rf;
+      Lesson_Begin (Ls);
       Moodrest_Active := Mr;
       Moodrest_Level := (if Mr2 then 2 else 1);
    end Derive_Session_Flags;

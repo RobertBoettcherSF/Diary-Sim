@@ -1,4 +1,4 @@
---  Version: 0.020
+--  Version: 0.021
 --  The shared world of diary_sim: the four entities, the vocabulary (base
 --  words, who knows what, coined words), the bench kernels and the final votes.
 --  One world per run; Init rebuilds it from scratch, so a replay from tick 1
@@ -101,6 +101,16 @@ package Sim_World is
    --  0.021 (word carrying): the words known by every wesen but E that E lacks (no chess move, no number: the count of ship.sh),
    --  and the ones of them From can teach To (From knows them awake, no hidden symbol), in table order.
    function Missing_By_One (E : Entity_Id) return Natural;
+   --  0.067 lesson=1 sessions (docs/EVOLVE.md 21): Carry_Count / Nth_Carry give the LESSON POOL instead: the words From knows (awake
+   --  or dormant: teaching wakes it) and To lacks that at least Min_Knowers of the wesen other than To know (2: a word of two wesen
+   --  reaches a third; 3 = the old all-but-one), plain words only (no chess move, no number), no hidden symbol.  Dormant_Teacher
+   --  False: a word asleep at From stays out (as carry=1).  Off: the old carry pool.  Missing_By_One (the target) is unchanged.
+   procedure Use_Lesson (On : Boolean; Min_Knowers : Positive := 2; Dormant_Teacher : Boolean := True);
+   function Lesson_On return Boolean;
+   --  0.067 lesson=1, Replika's guard: a word E learned in a lesson is USED when E later teaches it on, gives it back or coins / blends
+   --  with it (the Use_Word calls with Note).  The first such use of a lesson word is queued (lesson=1 only); Next_Used drains the
+   --  queue (0: empty) and the caller writes the "used" line of words.txt.
+   function Next_Used (E : out Entity_Id) return Natural;
    function Carry_Count (From, To : Entity_Id) return Natural;
    function Nth_Carry (From, To : Entity_Id; N : Positive) return Positive;
 
@@ -180,7 +190,7 @@ package Sim_World is
    --  Rolled with its own salt (960) from hash (seed, entity, tick): no existing dice are used,
    --  so old diaries stay valid.  0: the entity knows no word.
    --  PROOF-LATER: Importance 3/10, Urgency 2/10, SPARK2 (weight sums, cumulative pick)
-   procedure Use_Word (E : Entity_Id; W : Positive; Amount : Positive := 1);
+   procedure Use_Word (E : Entity_Id; W : Positive; Amount : Positive := 1; Note : Boolean := True);
    function Favourite (Seed : Int; E : Entity_Id; Tick : Int; Mood : Integer) return Natural;
    --  records=1 sessions: the word vote and the coinage leave out words that are no words (the numeric chess moves, "4815", "e2e4")
    --  and never run a coined word together with its own part ("waitbroken" + "broken"); off in older sessions (their dice stay valid).

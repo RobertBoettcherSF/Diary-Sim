@@ -1,4 +1,4 @@
---  Version: 0.004
+--  Version: 0.005
 --  See the spec.  Counting only: integer arithmetic, no dice, no clock, no files.
 pragma Ada_2022;
 
@@ -366,6 +366,13 @@ package body Sim_Active is
       Woke := Window and then Cur_Level = 2 and then W <= Count and then Knows (X, W) and then Is_Dormant (X, W) and then not Is_Symbol (W);
       if Woke then Event (X, W, Use_K, Img (Tick), "lesson:" & By); end if;
    end Wake;
+
+   procedure Wake_Teacher (E : Positive; W : Positive; Tick : Int; By : String; Woke : out Boolean) is
+      X : constant Entity_Id := Entity_Id (E);
+   begin
+      Woke := Window and then W <= Count and then Knows (X, W) and then Is_Dormant (X, W) and then not Is_Symbol (W);
+      if Woke then Event (X, W, Use_K, Img (Tick), "teach:" & By); end if;
+   end Wake_Teacher;
 
    procedure Drain (Into : in out Str_Vectors.Vector) is
    begin

@@ -1,4 +1,4 @@
---  Version: 0.025
+--  Version: 0.026
 pragma Ada_2022;
 
 with Sim_Ckpt;
@@ -354,7 +354,10 @@ package body Sim_World is
       return 64;
    end Nth_Bit;
 
-   type Pick_Kind is (P_Known, P_Usable, P_Teach, P_Miss, P_Carry);
+   type Pick_Kind is (P_Known, P_Usable, P_Teach, P_Miss, P_Carry, P_Lesson);
+   Lesson_Is_On : Boolean := False;
+   Lesson_Min : Positive := 2;
+   Lesson_Dorm : Boolean := True;
 
    --  0.025: the words every wesen but T knows (and T does not), counted only if they are words (Word_Text).
    function Miss_Block (T : Entity_Id; I : Natural) return U64 is
@@ -383,6 +386,23 @@ package body Sim_World is
                return Kf and ((not Kt) or Dt) and (not Bl) and (not Df);
             end;
          when P_Miss => return Miss_Block (To, I);
+         when P_Lesson =>   --  0.067 lesson=1: From knows it (asleep or not), To lacks it, at least Lesson_Min of the others know it
+            declare
+               O : array (1 .. 3) of U64 := [others => 0];
+               N : Natural := 0;
+               Df : constant U64 := (if Dormant_On and then not Lesson_Dorm then Get (Mir_Dorm (From), I) else 0);
+               Bl : constant U64 := (if Symbols_Hidden then Get (Mir_Sym, I) or (if Symbols_Strict then Get (Mir_Sym_T, I) else 0) else 0);
+               Enough : U64;
+            begin
+               for X in Entity_Id loop
+                  if X /= To then N := N + 1; O (N) := Get (Mir_Known (X), I); end if;
+               end loop;
+               Enough := (case Lesson_Min is
+                            when 1 => O (1) or O (2) or O (3),
+                            when 2 => (O (1) and O (2)) or (O (1) and O (3)) or (O (2) and O (3)),
+                            when others => O (1) and O (2) and O (3));
+               return Kf and (not Get (Mir_Known (To), I)) and Get (Mir_Plain, I) and Enough and (not Bl) and (not Df);
+            end;
          when P_Carry =>   --  what From can carry to To: missing by one at To, not asleep at From, no hidden symbol
             declare
                Df : constant U64 := (if Dormant_On then Get (Mir_Dorm (From), I) else 0);
@@ -478,13 +498,40 @@ package body Sim_World is
    function Knows (E : Entity_Id; W : Positive) return Boolean is
      (W <= Natural (Known (E).Length) and then Known (E) (W));
 
-   procedure Use_Word (E : Entity_Id; W : Positive; Amount : Positive := 1) is
+   --  0.067 lesson=1: the first uses of lesson words, waiting for words.txt (Next_Used); a word is queued at most once per process
+   --  (Used_Seen), the line itself is written once (the caller's Ensure).  No simulation state: nothing reads it back.
+   type Used_Rec is record
+      E : Entity_Id := 1;
+      W : Positive := 1;
+   end record;
+   package Used_Vectors is new Ada.Containers.Vectors (Positive, Used_Rec);
+   Used_Queue : Used_Vectors.Vector;
+   Used_Seen : array (Entity_Id) of U64_Vectors.Vector;
+
+   procedure Use_Word (E : Entity_Id; W : Positive; Amount : Positive := 1; Note : Boolean := True) is
    begin
       while Natural (Freq (E).Length) < W loop
          Freq (E).Append (0);
       end loop;
       Freq (E).Replace_Element (W, Freq (E).Element (W) + Amount);
+      if Note and then Lesson_Is_On and then W <= Natural (Taught (E).Length) and then Taught (E) (W) /= 0
+        and then (Interfaces.Shift_Right (Get (Used_Seen (E), (W - 1) / 64), (W - 1) mod 64) and 1) = 0
+      then
+         Bit_Set (Used_Seen (E), W, True);
+         Used_Queue.Append (Used_Rec'(E => E, W => W));
+      end if;
    end Use_Word;
+
+   function Next_Used (E : out Entity_Id) return Natural is
+      R : Used_Rec;
+   begin
+      E := 1;
+      if Used_Queue.Is_Empty then return 0; end if;
+      R := Used_Queue.First_Element;
+      Used_Queue.Delete_First;
+      E := R.E;
+      return R.W;
+   end Next_Used;
 
    procedure Hide_Symbols (On : Boolean; Strict : Boolean := False) is
    begin
@@ -557,7 +604,7 @@ package body Sim_World is
          Taught (E).Append (0);
       end loop;
       if From /= 0 then Taught (E) (W) := From; end if;
-      Use_Word (E, W, 2);
+      Use_Word (E, W, 2, Note => False);   --  learning is no use (0.067 lesson=1 guard)
    end Learn_Word;
 
    function Coined_By (W : Positive) return String is
@@ -750,8 +797,16 @@ package body Sim_World is
    end Nth_Teachable;
 
    function Missing_By_One (E : Entity_Id) return Natural is (Pick_Count (P_Miss, E, E));
-   function Carry_Count (From, To : Entity_Id) return Natural is (Pick_Count (P_Carry, From, To));
-   function Nth_Carry (From, To : Entity_Id; N : Positive) return Positive is (Pick_Nth (P_Carry, From, To, N));
+   function Carry_Count (From, To : Entity_Id) return Natural is (Pick_Count ((if Lesson_Is_On then P_Lesson else P_Carry), From, To));
+   function Nth_Carry (From, To : Entity_Id; N : Positive) return Positive is (Pick_Nth ((if Lesson_Is_On then P_Lesson else P_Carry), From, To, N));
+
+   procedure Use_Lesson (On : Boolean; Min_Knowers : Positive := 2; Dormant_Teacher : Boolean := True) is
+   begin
+      Lesson_Is_On := On;
+      Lesson_Min := Positive'Min (3, Min_Knowers);
+      Lesson_Dorm := Dormant_Teacher;
+   end Use_Lesson;
+   function Lesson_On return Boolean is (Lesson_Is_On);
 
    --  ---- personality -------------------------------------------------------------------
 
