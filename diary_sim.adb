@@ -1,4 +1,4 @@
---  Version: 0.066
+--  Version: 0.067
 --  diary_sim v1: four independent entities, one diary line per tick each.
 --  Every random choice is hash (seed, entity, tick, salt): no RNG stream, so
 --  any tick can be recomputed alone.  Diaries are append-only JSONL.  Every run
@@ -7138,6 +7138,40 @@ procedure Diary_Sim is
    Sess_Total, Last_Dur : Duration := 0.0;      --  wall time of the finished sessions / of the last one
    S_Start, Last_Paint, Last_Poll, Last_Size : Ada.Calendar.Time := Night_T0;
    Loop_End : Ada.Calendar.Time := Night_T0;   --  0.057: when the tick loop of the session ended (trend.txt secs= loop= tps=; the rest is the end report)
+   --  0.067: wall clock per phase of a session (timing.txt in the save folder, one line per session; not a replay file, nothing
+   --  reads it back).  Phase (P) closes the running phase and starts P; Phase_Line writes the line of the session and starts afresh.
+   type Phase_Id is (Ph_Next, Ph_Ticks, Ph_Verify, Ph_Ckpt, Ph_Summary, Ph_Report, Ph_Chess, Ph_Write, Ph_Petitions, Ph_Console);
+   Ph_Sum : array (Phase_Id) of Duration := [others => 0.0];
+   Ph_Cur : Phase_Id := Ph_Next;
+   Ph_T : Ada.Calendar.Time := Night_T0;
+   procedure Phase (P : Phase_Id) is
+      Now : constant Ada.Calendar.Time := Ada.Calendar.Clock;
+   begin
+      Ph_Sum (Ph_Cur) := Ph_Sum (Ph_Cur) + Ada.Calendar."-" (Now, Ph_T);
+      Ph_Cur := P;
+      Ph_T := Now;
+   end Phase;
+   procedure Phase_Line (Session, Tick : Int) is
+      Total : Duration := 0.0;
+      L : Unbounded_String;
+      F : TIO.File_Type;
+      function Ms (D : Duration) return String is (Img (Int (D * 1000.0)));
+      Names : constant array (Phase_Id) of String (1 .. 4) :=
+        [Ph_Next => "next", Ph_Ticks => "tick", Ph_Verify => "vrfy", Ph_Ckpt => "ckpt", Ph_Summary => "summ", Ph_Report => "repo",
+         Ph_Chess => "ches", Ph_Write => "writ", Ph_Petitions => "peti", Ph_Console => "cons"];
+   begin
+      Phase (Ph_Cur);
+      for D of Ph_Sum loop Total := Total + D; end loop;
+      L := To_Unbounded_String ("s" & Img (Session) & " t" & Img (Tick) & " ms=" & Ms (Total));
+      for P in Phase_Id loop Append (L, " " & Names (P) & "=" & Ms (Ph_Sum (P))); end loop;
+      Append (L, " words=" & Img (Sim_World.Count));
+      if Ada.Directories.Exists ("timing.txt") then TIO.Open (F, TIO.Append_File, "timing.txt"); else TIO.Create (F, TIO.Out_File, "timing.txt"); end if;
+      TIO.Put_Line (F, To_String (L));
+      TIO.Close (F);
+      Ph_Sum := [others => 0.0];
+   exception
+      when others => Ph_Sum := [others => 0.0];   --  the timing is a nicety
+   end Phase_Line;
    Last_Line : Unbounded_String;
    Recent : Str_Vectors.Vector;                 --  the status lines of the sessions (shown below the header on a terminal)
 
@@ -9296,6 +9330,7 @@ begin
    if not Quit_Seen then
       Night_Phase := 1;
       S_Start := Ada.Calendar.Clock;
+      Phase (Ph_Ticks);
       Step_Now := To_Unbounded_String ("session ticks");
       for Tick in Int range Int (Verify_To) + 1 .. Ticks loop
          Do_Tick (Tick);
@@ -9310,6 +9345,7 @@ begin
          exit when Quit_Seen;
       end loop;
       Loop_End := Ada.Calendar.Clock;
+      Phase (Ph_Verify);
       Step_Now := To_Unbounded_String ("end of session: word votes and the session save");
    end if;
    if not Quit_Seen and then Ticks > Int (Common)
@@ -9334,6 +9370,7 @@ begin
       Verify_Visit (Last_Done);
       Verify_Chat (Last_Done);
       Verify_Active (Last_Done);
+      Phase (Ph_Ckpt);
       if not Night_On or else Night_Ckpt_Due then Ckpt_Write; end if;   --  0.058: the state of this session end (a night: see Night_Ckpt_Due)
    end if;
    if Quit_Seen and then Last_Done > Int (Common) then Ckpt_Write; end if;   --  a clean stop inside the session: the state of its last tick
@@ -9487,6 +9524,7 @@ begin
          end if;
       end Report_Out;
    begin
+      Phase (Ph_Summary);
       Step_Now := To_Unbounded_String ("end of session: summary");
       Summarize (Seed, Ticks, Votes_Of, Console, Text, Json);
       Save ("summary.txt", Text);
@@ -9509,6 +9547,7 @@ begin
                                        Img (Ticks), Img (Common), Img (Written), Img (Verified),
                                        Img (Warnings)) & ASCII.LF & Msg ("report.cols") & ASCII.LF);
       Marks.Append ("report:0");
+      Phase (Ph_Report);
       for E in Entity_Id loop
          Append (Rep, Fx.Head (Name (E), 10) & Fx.Tail (Img (Start_Known (E)), 8) & " ->" & Fx.Tail (Img (Known_Count (E)), 6)
                  & Fx.Tail (Img (Run_Learn (E)), 9) & Fx.Tail (Img (Run_Coin (E)), 7) & Fx.Tail (Img (Run_Bench_N (E)), 6)
@@ -9554,10 +9593,12 @@ begin
       end if;
       if Chess_Active then   --  chess: ratings and results per competitor, then every game with its moves
          Mark ("chess");
+         Phase (Ph_Chess);
          Append (Rep, Msg ("chess.rep") & ASCII.LF);
          for C in Sim_Games.Comp_Id loop Append (Rep, Sim_Games.Summary (C) & ASCII.LF); end loop;
          Append (Rep, Msg ("chess.head") & ASCII.LF);
          for L of Sim_Games.Report (True) loop Append (Rep, Game_Names (L) & ASCII.LF); end loop;
+         Phase (Ph_Report);
       end if;
       if Robot_Active then   --  the robot: state, commands and errors per wesen
          Mark ("robot");
@@ -9632,14 +9673,17 @@ begin
       end;
       Step_Now := To_Unbounded_String ("end of session: player_reports.txt");
       if Preport_Active then Save ("player_reports.txt", To_Unbounded_String (Sim_Preport.Boxes (Ticks, Mood_Now, Pets_Now, Next_Extra (Ticks)))); end if;
+      Phase (Ph_Write);
       Step_Now := To_Unbounded_String ("end of session: run_report.txt and trend.txt");
       Report_Out;
       if not Ada.Directories.Exists ("run_report.txt") or else Ada.Directories.Size ("run_report.txt") = 0 then
          Append (Rep, Msg ("export.failed", "run_report.txt not written") & ASCII.LF);
          Ada.Command_Line.Set_Exit_Status (1);
       end if;
+      Phase (Ph_Petitions);
       Step_Now := To_Unbounded_String ("end of session: petitions.txt");
       Write_Petitions;
+      Phase (Ph_Console);
       Step_Now := To_Unbounded_String ("end of session: debug.txt and the console");
       if Visit_Mode and then Visit_Active then
          Con.Put_Line (Msg ("visit.done", Name (Visit_E), Img (Sim_Visit.Commands), Sgn (Int (Sim_Visit.Bond_Of (Visit_E)))));
@@ -9665,6 +9709,8 @@ begin
       end if;
    end;
    Step_Now := To_Unbounded_String ("between sessions");
+   if Ticks > Int (Common) then Phase_Line (Int (Session_N), Ticks); end if;
+   Phase (Ph_Next);
    exit Sessions_Loop when not Night_On or else Night_After_Session;
 
    --  The next session of a night run starts where this one ended: the world goes on in memory (see Night_Next_Session).
