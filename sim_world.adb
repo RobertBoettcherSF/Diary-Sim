@@ -1,4 +1,4 @@
---  Version: 0.024
+--  Version: 0.025
 pragma Ada_2022;
 
 with Sim_Ckpt;
@@ -328,8 +328,14 @@ package body Sim_World is
       Mir_Ok := True;
    end Mirror;
 
+   --  0.067: Coined_Total was a walk over the whole word table at every call, and Coin (every coin roll of every wesen) and the
+   --  screen blends ask it: O(lexicon) inside the tick loop.  Now a count, rebuilt by one walk after Init / a checkpoint read.
+   Coined_N : Natural := 0;
+   Coined_Ok : Boolean := False;
+
    procedure Reindex is
    begin
+      Coined_Ok := False;
       Mir_Ok := False;
       Text_Index.Clear;
       Text_Index_N := 0;
@@ -596,6 +602,7 @@ package body Sim_World is
    function Add_Coined (Text : String; P1, P2 : Natural; By : Entity_Id) return Positive is
    begin
       Table.Append (Word_Rec'(Text => To_Unbounded_String (Text), P1 => P1, P2 => P2, Coiner => Positive (By), Sym_Text => Symbol_Text (Text), others => <>));
+      if Coined_Ok then Coined_N := Coined_N + 1; end if;
       if Mir_Ok then Mirror_Word (Count); end if;
       return Count;
    end Add_Coined;
@@ -641,11 +648,18 @@ package body Sim_World is
       return N;
    end Coined_Count_By;
 
-   function Coined_Total return Natural is
+   function Scan_Coined_Total return Natural is
       N : Natural := 0;
    begin
       for R of Table loop if R.Coiner /= 0 then N := N + 1; end if; end loop;
       return N;
+   end Scan_Coined_Total;
+
+   function Coined_Total return Natural is
+   begin
+      if not Coined_Ok then Coined_N := Scan_Coined_Total; Coined_Ok := True; end if;
+      if Check_Index and then Coined_N /= Scan_Coined_Total then raise Program_Error with "index: Coined_Total"; end if;
+      return Coined_N;
    end Coined_Total;
 
    function Parents (W : Positive) return String is
@@ -1367,6 +1381,7 @@ package body Sim_World is
       procedure IO is new Sim_Ckpt.IO (Petition_Vectors.Vector);
       procedure IO is new Sim_Ckpt.IO (Weight_Array);
    begin
+      if not Save then Coined_Ok := False; end if;   --  0.067: the table is read back: count the coined words again
       IO (S, Save, Table);
       IO (S, Save, Symbols_Hidden);
       IO (S, Save, Symbols_Strict);

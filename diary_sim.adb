@@ -5411,6 +5411,25 @@ procedure Diary_Sim is
          Lines := Expect;   --  of its own diary (it wrote every line of this run; the older ones were read and compared at its start)
          return;
       end if;
+      if Kind = 's' then   --  0.067: a side file needs only its header line (it was read whole every session: bench.txt, words.txt, sessions.txt)
+         declare
+            F : TIO.File_Type;
+         begin
+            TIO.Open (F, TIO.In_File, P);
+            declare
+               First : constant String := (if TIO.End_Of_File (F) then "" else TIO.Get_Line (F));
+            begin
+               TIO.Close (F);
+               if First /= "# seed " & Img (Seed) then Append (Fails, " " & P & " has no '# seed " & Img (Seed) & "' header;"); end if;
+               Lines := (if First'Length > 0 then 1 else 0);
+            end;
+         exception
+            when others =>
+               if TIO.Is_Open (F) then TIO.Close (F); end if;
+               Append (Fails, " " & P & " could not be read;");
+         end;
+         return;
+      end if;
       Read_Lines (P, V, Found);
       for L of V loop
          if (if Kind = 'd' then Complete (L) else L'Length > 0) then Lines := Lines + 1; end if;
