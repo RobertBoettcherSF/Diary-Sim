@@ -1381,7 +1381,6 @@ package body Sim_World is
       procedure IO is new Sim_Ckpt.IO (Petition_Vectors.Vector);
       procedure IO is new Sim_Ckpt.IO (Weight_Array);
    begin
-      if not Save then Coined_Ok := False; end if;   --  0.067: the table is read back: count the coined words again
       IO (S, Save, Table);
       IO (S, Save, Symbols_Hidden);
       IO (S, Save, Symbols_Strict);
