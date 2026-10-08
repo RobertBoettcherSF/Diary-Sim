@@ -7208,6 +7208,17 @@ procedure Diary_Sim is
       for P in Phase_Id loop Append (L, " " & Names (P) & "=" & Ms (Ph_Sum (P))); end loop;
       Append (L, " words=" & Img (Sim_World.Count) & " miss=");   --  miss: the simulation's own missing-by-one per wesen (ship.sh counts it from words.txt)
       for E in Entity_Id loop Append (L, (if E = Entity_Id'First then "" else ",") & Img (Missing_By_One (E))); end loop;
+      Append (L, " carry=");   --  per learner: the most words one other wesen can carry to it now (awake at the teacher, no symbol)
+      for E in Entity_Id loop
+         declare
+            Best : Natural := 0;
+         begin
+            for O in Entity_Id loop
+               if O /= E then Best := Natural'Max (Best, Carry_Count (O, E)); end if;
+            end loop;
+            Append (L, (if E = Entity_Id'First then "" else ",") & Img (Best));
+         end;
+      end loop;
       if Ada.Directories.Exists ("timing.txt") then TIO.Open (F, TIO.Append_File, "timing.txt"); else TIO.Create (F, TIO.Out_File, "timing.txt"); end if;
       TIO.Put_Line (F, To_String (L));
       TIO.Close (F);
