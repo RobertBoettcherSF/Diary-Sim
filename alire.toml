@@ -1,0 +1,14 @@
+name = "diary_sim"
+description = "Four wesen write diaries, trade words and grow a language: a deterministic language-development simulation"
+version = "0.67.0"
+licenses = "MIT"
+authors = ["Robert Boettcher"]
+maintainers = ["Robert Boettcher"]
+maintainers-logins = ["RobertBoettcherSF"]
+website = "https://github.com/RobertBoettcherSF/Diary-Sim"
+tags = ["simulation", "language", "procedural", "diary"]
+executables = ["diary_sim"]
+project-files = ["diary_sim.gpr"]
+
+[[depends-on]]
+gnat = ">=12"

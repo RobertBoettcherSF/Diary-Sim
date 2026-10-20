@@ -370,9 +370,11 @@ ckpt-layout:
 check: version-check all
 	$(TIMED) scripts/checks.sh
 
-# make test (0.060): the smoke test in seconds (layout guard, a fresh save with verify-full and verify, the 0.059 checkpoint fixture)
+# make test (0.060): the smoke test in seconds (layout guard, a fresh save with verify-full and verify, the 0.059 checkpoint fixture);
+# since the GitHub layout also the unit tests (tests/unit) and one pass/fail summary, exit 1 on a failure (scripts/test_all.sh).
+# make test FULL=1 adds the full scenario checks (make check).
 test: version-check all
-	$(TIMED) scripts/smoke_test.sh
+	$(TIMED) scripts/test_all.sh
 
 small:
 	mkdir -p obj_small bin
@@ -384,4 +386,4 @@ footprint:
 	$(TIMED) scripts/footprint.sh
 
 clean:
-	rm -rf obj obj_small bin diaries diaries_old_* entities summary.txt summary.jsonl run_report.txt run_report_prev.txt run_log.txt trend.txt night_console.txt ship_log.txt ship_console.txt night_verify.txt voice_log.txt debug.txt debug.tmp debug_digest.txt debug_digest.prev debug_full.txt last_error.txt
+	rm -rf obj obj_small bin alire diaries diaries_old_* entities summary.txt summary.jsonl run_report.txt run_report_prev.txt run_log.txt trend.txt night_console.txt ship_log.txt ship_console.txt night_verify.txt voice_log.txt debug.txt debug.tmp debug_digest.txt debug_digest.prev debug_full.txt last_error.txt

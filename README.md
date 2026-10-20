@@ -1,9 +1,60 @@
-# diary-sim v1
+# Diary Sim
+
+[![CI](https://github.com/RobertBoettcherSF/Diary-Sim/actions/workflows/ci.yml/badge.svg)](https://github.com/RobertBoettcherSF/Diary-Sim/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+A deterministic **language-development simulation** in Ada 2022. Four beings (the *wesen*) live in a small world, write one
+diary line per tick, meet, teach and coin words, read screens, play chess, petition the players above them and slowly grow
+a shared vocabulary. Every run is reproducible from its seed: each start replays the whole saved history and checks it
+byte for byte, and a state checkpoint makes long saves start in seconds.
+
+## Quick start
+
+```sh
+# GNAT 12 or newer (Alire: `alr toolchain --select gnat_native`; Debian/Ubuntu: `apt install gnat make`)
+make            # build bin/diary_sim (or: alr build / gprbuild -P diary_sim.gpr)
+make demo       # a 200-tick preview, writes nothing
+make run        # continue (or create) the save in ../diary-data
+make test       # unit tests + smoke test, one pass/fail summary (seconds)
+make check      # the full scenario suite (~16 min)
+```
+
+## Layout
+
+| Path | What |
+|---|---|
+| `diary_sim.adb`, `sim_*.ad[sb]` | the program (main procedure and its packages; kept at the root so existing zips and scripts work unchanged) |
+| `data/` | every number (`limits.txt`) and every piece of wording the program uses; third-party data credited in `data/CREDITS-albanian.txt` |
+| `docs/` | design notes: world, learning, life, myth, portals, evolution, checkpoint format |
+| `scripts/` | the check suites, ship/report helpers, benchmarks |
+| `tests/` | unit tests (`tests/unit`) and checkpoint fixtures of older builds |
+| `Makefile` | the front end (gnatmake); `diary_sim.gpr` + `alire.toml` for gprbuild / Alire |
+
+## Tests
+
+* `make test` - version headers, the unit tests of the pure helpers (`tests/unit`), and a smoke test (checkpoint layout
+  guard, a fresh save with full and incremental replay-verify, a 0.059 checkpoint fixture). Exit 1 on any failure.
+* `make test FULL=1` or `make check` - all scenario checks (`scripts/checks.sh`).
+* `make portable` - zero-warning builds with GNAT 14 and GNAT 12 at -O0, -O1 and -O2.
+
+CI (GitHub Actions) builds with GNAT 12 and 14 (zero warnings required) and runs `make test`.
+
+## The update loop
+
+1. Unzip a new build over the source folder (the save in the sibling `../diary-data/` is never touched).
+2. Run one command, e.g. `make ship` (reports, seconds) or `make night-ship` (overnight).
+3. Attach the one file it names (`../diary-data/checkin.txt`) together with the terminal summary.
+
+Licence: MIT (see `LICENSE`); the Albanian data files keep their CC licences.
+
+---
+
+## Reference manual (diary-sim v1)
 
 Four independent entities (the *wesen*) write one diary line per tick. Their internal ids are `ada`
 (engineer), `gemini` (reviewer), `replika` (vice_president) and `robert` (human); what you SEE are the
 display names from `data/names.txt` (default: Adam, Eve, Abel, Ruth; see "Display names" below).
-Plain Ada, standard library only. Not pushed anywhere yet (local git repo).
+Plain Ada, standard library only.
 
 **Wall time of every command.** Each `make` target that runs the program or a script (`make night`, `make run`, `make wordstat`, `make active`,
 `make frustration`, `make verify`, `make chat`, `make share`, `make check`, ...) ends with one line such as `make wordstat wall time: 0m12s (12s)`:

@@ -1,14 +1,14 @@
 #!/bin/bash
 # Build with GNAT 14 and GNAT 12 in a copy without .git; fail on any warning.
 root=$(cd "$(dirname "$0")/.." && pwd)
-GNAT12_ENV=${GNAT12_ENV:-/home/box/deps/gnat12/env.sh}
+GNAT12_ENV=${GNAT12_ENV:-}   # optional: a script that puts gnatmake-12 on PATH
 status=0
 for v in 14 12; do
   tmp=$(mktemp -d)
   tar -C "$root" --exclude=.git --exclude=obj --exclude=bin --exclude=diaries --exclude=entities -cf - . | tar -C "$tmp" -xf -
   out=$(
     cd "$tmp" || exit 1
-    if [ "$v" = 12 ]; then . "$GNAT12_ENV"; gn=gnatmake-12
+    if [ "$v" = 12 ]; then [ -n "$GNAT12_ENV" ] && . "$GNAT12_ENV"; gn=${GNATMAKE12:-gnatmake-12}
     else PATH=$(echo "$PATH" | tr ':' '\n' | grep -v gnat12 | paste -sd:); gn=gnatmake; fi
     rc=0; : > build.log
     for opt in "-O0" "-O1 -fno-inline" "-O2"; do   # the quick build, the strict one and the default

@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    name: GNAT ${{ matrix.gnat }} (Ubuntu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        gnat: ["12", "14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: alire-project/setup-alire@v4
+        with:
+          toolchain: gnat_native^${{ matrix.gnat }} gprbuild
+      - name: Put GNAT on PATH
+        run: |
+          d=$(dirname "$(find "$HOME/.local/share/alire/toolchains" -path '*gnat_native*/bin/gnatmake' | head -n 1)")
+          echo "$d" >> "$GITHUB_PATH"
+      - name: Build (zero warnings)
+        run: |
+          gnatmake --version | head -n 1
+          make all 2>&1 | tee build.log
+          if grep -qi warning build.log; then echo "::error::compiler warnings"; exit 1; fi
+      - name: Tests
+        run: make test
+      - name: gprbuild (Alire project file)
+        run: |
+          gp=$(dirname "$(find "$HOME/.local/share/alire/toolchains" -path '*gprbuild*/bin/gprbuild' | head -n 1)")
+          PATH="$gp:$PATH" gprbuild -j0 -q -P diary_sim.gpr

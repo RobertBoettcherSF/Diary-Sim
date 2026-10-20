@@ -1,15 +1,34 @@
+# build output
 obj/
+obj_small/
 bin/
+alire/
+config/
+b~*
+*.ali
+*.o
+# what a run writes when the save folder is the source folder
 diaries/
 diaries_old_*/
 entities/
 summary.txt
 summary.jsonl
 last_error.txt
-b~*
-*.tmp
-run_report.txt
+run_report*.txt
+run_log.txt
+trend.txt
+*_console.txt
+ship_log.txt
+night_verify.txt
+voice_log.txt
 debug.txt
 debug.tmp
-obj_small/
+debug_digest.*
+debug_full.txt
+*.tmp
 __pycache__/
+# the save folder (beside the source) and release zips
+diary-data/
+demo_run/
+*.zip
+share-*.tar.gz
