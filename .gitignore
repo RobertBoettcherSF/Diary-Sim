@@ -2,6 +2,8 @@
 obj/
 obj_small/
 bin/
+wasm/obj/
+toolchain/
 alire/
 config/
 b~*

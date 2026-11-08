@@ -19,6 +19,27 @@ make test       # unit tests + smoke test, one pass/fail summary (seconds)
 make check      # the full scenario suite (~16 min)
 ```
 
+## Browser demo
+
+The public preview also runs in the browser. Ada, compiled to WebAssembly with AdaWebPack 24 (the same GNAT LLVM toolchain as the spectrum-analyzer and symmetry-visualizations demos), executes the real `Do_Tick` loop. JavaScript only draws the transcript. The scenario text embedded in the module is the public `data/*.txt` rules. One HTML file contains the module, so it works from a download and from GitHub Pages. There is no backend.
+
+Live page, after Pages is enabled (Settings → Pages → Source: GitHub Actions; the workflow is `.github/workflows/pages.yml`):
+
+https://robertboettchersf.github.io/Diary-Sim/
+
+```sh
+# once: sudo apt install rpm2cpio cpio lld curl clang
+# Alire on PATH, then the script selects gnat_native=14.2.1 for libgnat-14
+tools/get-toolchain.sh
+make wasm          # python3 tools/build_wasm.py → wasm/obj/diary_sim.wasm and docs/index.html
+make all           # native bin/diary_sim, if it is not already built
+make wasm-check    # node tools/check_wasm.mjs — native and wasm transcripts for seed 42/200 and seed 7/50
+```
+
+Open `docs/index.html` (or the Pages URL) and press **Start**. The defaults are seed 42 and 200 ticks, the same command as `make demo` (`bin/diary_sim --preview --ticks 200`, seed 42). Seed and ticks can be changed before another Start. Reset reloads the page.
+
+The browser build is the in-memory preview only. It does not save diaries, open the terminal menu, spawn a shell, or run an Albanian session. The light WebAssembly runtime does not propagate exceptions, task, or delay; those paths are outside the preview. The native CLI and `make test` are unchanged.
+
 ## Layout
 
 | Path | What |
