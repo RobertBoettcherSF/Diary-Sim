@@ -1,5 +1,8 @@
 name: Pages
 
+# Uploads the files already in docs/. This workflow cannot enable GitHub Pages:
+# the default token has no administration scope, and no step changes settings.
+
 on:
   push:
     branches: [main]

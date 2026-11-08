@@ -10,8 +10,15 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const wasmPath = resolve(process.argv[2] || (root + "/wasm/obj/diary_sim.wasm"));
 const binPath = resolve(process.argv[3] || (root + "/bin/diary_sim"));
 const cases = [
-  { seed: 42, ticks: 200 },
-  { seed: 7, ticks: 50 },
+  { seed: 42n, ticks: 200 },
+  { seed: 7n, ticks: 50 },
+  { seed: 0n, ticks: 30 },
+  { seed: 1n, ticks: 25 },
+  { seed: 99n, ticks: 40 },
+  { seed: 2147483647n, ticks: 20 },
+  { seed: 2147483648n, ticks: 20 },
+  { seed: 999999999999999n, ticks: 15 },
+  { seed: 42n, ticks: 2000 },
 ];
 
 function u32(memory, addr) {

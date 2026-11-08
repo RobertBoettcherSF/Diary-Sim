@@ -80,17 +80,17 @@
 <body>
 <header>
   <h1>Diary Sim</h1>
-  <p class="lede">Four beings live one deterministic day at a time: they write, meet, teach, and coin words. Ada, compiled to WebAssembly, runs that simulation. This page only draws what it prints. Press Start.</p>
+  <p class="lede">This page runs the in-memory preview, the same one as <code>make demo</code>. Ada does that preview. It is not the terminal program: nothing is saved, and there is no menu. Press Start.</p>
 </header>
 <main>
   <div class="controls">
     <button id="start" type="button">Start</button>
-    <label>Seed <input id="seed" type="number" value="42" step="1"></label>
+    <label>Seed <input id="seed" type="text" inputmode="numeric" value="42" maxlength="15" autocomplete="off" spellcheck="false"></label>
     <label>Ticks <input id="ticks" type="number" value="200" min="1" max="2000" step="1"></label>
     <button id="reset" type="button">Reset</button>
   </div>
   <p id="status" role="status"></p>
-  <p id="empty">Nothing has run yet. Start uses seed 42 and 200 ticks, the same preview as <code>make demo</code>.</p>
+  <p id="empty">Nothing has run yet. Start uses seed 42 and 200 ticks, the same preview as <code>make demo</code>. Ticks run from 1 to 2000. A seed is a whole number from 0 up to 15 digits.</p>
   <div id="result" hidden></div>
   <details id="raw-wrap" hidden>
     <summary>Full transcript from the simulation</summary>
@@ -219,14 +219,28 @@ function present(text) {
   emptyEl.hidden = true;
 }
 
+function parseSeed(raw) {
+  const text = String(raw).trim();
+  if (!/^[0-9]{1,15}$/.test(text)) return null;
+  return BigInt(text);
+}
+
+function parseTicks(raw) {
+  const text = String(raw).trim();
+  if (!/^[0-9]+$/.test(text)) return null;
+  const n = Number(text);
+  if (!Number.isInteger(n) || n < 1 || n > 2000) return null;
+  return n;
+}
+
 async function run() {
-  const seed = Number(seedInput.value);
-  const ticks = Number(ticksInput.value);
-  if (!Number.isInteger(seed)) {
-    setStatus("Seed needs to be a whole number.", true);
+  const seed = parseSeed(seedInput.value);
+  const ticks = parseTicks(ticksInput.value);
+  if (seed === null) {
+    setStatus("Seed needs to be a whole number from 0 up to 15 digits, with no sign.", true);
     return;
   }
-  if (!Number.isInteger(ticks) || ticks < 1 || ticks > 2000) {
+  if (ticks === null) {
     setStatus("Ticks needs to be a whole number from 1 to 2000.", true);
     return;
   }

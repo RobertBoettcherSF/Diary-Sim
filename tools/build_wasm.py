@@ -403,8 +403,50 @@ end Ada.Text_IO;
     print(f"embedded {len(files)} data files into {path} ({path.stat().st_size} bytes)")
 
 
+def guard_preview_rewrites(source: str) -> None:
+    """Line rewrites are only for save, night, and chat handlers.
+
+    Load_Data, Step, Do_Tick, and Run_Preview still raise on a real preview
+    failure. A bare ``raise;`` anywhere else has to be named here so a new
+    one inside the preview cannot be turned into ``null`` unnoticed.
+    """
+    lines = source.splitlines()
+
+    def enclosing(idx: int) -> str:
+        for j in range(idx, -1, -1):
+            match = re.match(r"   (?:procedure|function) (\w+)", lines[j])
+            if match:
+                return match.group(1)
+        return "?"
+
+    bare = [enclosing(i) for i, line in enumerate(lines) if re.search(r"\braise\s*;", line.split("--", 1)[0])]
+    allowed = {"Load_Diary_From", "Chat_Live_Lines"}
+    unexpected = [name for name in bare if name not in allowed]
+    if unexpected or not bare:
+        raise SystemExit("unexpected bare raise; in " + ", ".join(unexpected or ["<none>"]))
+    regions = {}
+    for name in ("Load_Data", "Step", "Do_Tick", "Run_Preview"):
+        start = next((i for i, line in enumerate(lines) if re.match(rf"   (?:procedure|function) {name}\b", line)), None)
+        if start is None:
+            raise SystemExit(f"preview procedure {name} not found")
+        end = next((j for j in range(start + 1, len(lines)) if re.match(rf"   end {name};", lines[j])), None)
+        if end is None:
+            raise SystemExit(f"end of {name} not found")
+        regions[name] = (start, end)
+    risky = re.compile(
+        r"\braise\s*;|\bdelay\b[^;]*;|(?:Act_Of|Of_K|Used_Of|Fit|Mark|Cnt)'Access|"
+        r"Exception_(?:Message|Name|Information)"
+    )
+    for name, (start, end) in regions.items():
+        for n in range(start, end + 1):
+            code = lines[n].split("--", 1)[0]
+            if risky.search(code):
+                raise SystemExit(f"{name} line {n + 1} is on the preview path and would be rewritten: {lines[n].strip()}")
+
+
 def transform_text(text: str) -> str:
     import re
+    guard_preview_rewrites(text)
     text = re.sub(
         r"   type Pipe_Guard is new Ada\.Finalization\.Limited_Controlled with null record;.*?   pragma Unreferenced \(Guard\);\n",
         "   --  Pipe guard omitted in the WASM build (nested finalizers need trampolines).\n",
@@ -451,10 +493,12 @@ def transform_text(text: str) -> str:
     # The save/night tail of the main (after the preview return) trips an
     # illegal-instruction bug in this GNAT-LLVM.  The browser entry returns
     # from Run_Preview and does not execute that tail.  Do_Tick stays.
+    # Run has no "when others" handler: a failure in the preview entry
+    # reaches the last-chance handler instead of returning a blank success.
     marker = "   if Preview then\n      Run_Preview;\n      return;\n   end if;\n"
     if marker not in stmts:
         raise SystemExit("preview return marker missing from the main statements")
-    stmts = stmts.split(marker, 1)[0] + marker + "exception\n   when others =>\n      null;\n"
+    stmts = stmts.split(marker, 1)[0] + marker
     return (
         head
         + "package body Diary_Core is\n"

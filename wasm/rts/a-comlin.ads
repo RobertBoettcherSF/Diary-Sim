@@ -6,7 +6,7 @@ package Ada.Command_Line is
    function Command_Name return String;
    function Argument_Count return Natural;
    function Argument (Number : Positive) return String;
-   procedure Set_Seed (Value : Integer);
+   procedure Set_Seed (Value : Long_Long_Integer);
    procedure Set_Ticks (Value : Integer);
    pragma Export (C, Set_Seed, "ds_set_seed");
    pragma Export (C, Set_Ticks, "ds_set_ticks");

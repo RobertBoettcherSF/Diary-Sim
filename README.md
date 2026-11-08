@@ -21,11 +21,11 @@ make check      # the full scenario suite (~16 min)
 
 ## Browser demo
 
-The public preview also runs in the browser. Ada, compiled to WebAssembly with AdaWebPack 24 (the same GNAT LLVM toolchain as the spectrum-analyzer and symmetry-visualizations demos), executes the real `Do_Tick` loop. JavaScript only draws the transcript. The scenario text embedded in the module is the public `data/*.txt` rules. One HTML file contains the module, so it works from a download and from GitHub Pages. There is no backend.
+`docs/index.html` is a real in-memory preview, the same loop as `make demo`. It is not the terminal program. Ada, compiled to WebAssembly with AdaWebPack 24, runs `Load_Data`, `Run_Preview`, and `Do_Tick`. JavaScript only draws the transcript. The scenario text inside the module is the public `data/*.txt` rules. The file contains the module, so opening it from disk needs no server and no network. There is no backend.
 
-Live page, after Pages is enabled (Settings → Pages → Source: GitHub Actions; the workflow is `.github/workflows/pages.yml`):
+Press **Start**. The defaults are seed 42 and 200 ticks (`bin/diary_sim --preview --ticks 200`, and the seed is 42 when `--seed` is omitted). Each Start builds a new module instance. Reset reloads the page. A seed is a whole number from 0 through 15 digits, the same shape `Number` accepts for `--seed`. Ticks on the page are 1 through 2000, so one click cannot run without a bound.
 
-https://robertboettchersf.github.io/Diary-Sim/
+What the page does not do: save diaries, open the menu, spawn a shell, read or write the live filesystem, take terminal input, or run an Albanian session. The light runtime does not propagate exceptions, task, or `delay`. Those show up in save, night, and chat handlers, which this preview does not call. A failure inside `Do_Tick` or `Run_Preview` stops the run; it is not turned into an empty success. The wasm calendar does not advance, and the preview transcript does not print timestamps. The native CLI and `make test` are unchanged.
 
 ```sh
 # once: sudo apt install rpm2cpio cpio lld curl clang
@@ -33,12 +33,10 @@ https://robertboettchersf.github.io/Diary-Sim/
 tools/get-toolchain.sh
 make wasm          # python3 tools/build_wasm.py → wasm/obj/diary_sim.wasm and docs/index.html
 make all           # native bin/diary_sim, if it is not already built
-make wasm-check    # node tools/check_wasm.mjs — native and wasm transcripts for seed 42/200 and seed 7/50
+make wasm-check    # node tools/check_wasm.mjs — native and wasm transcripts, including a 2000-tick run
 ```
 
-Open `docs/index.html` (or the Pages URL) and press **Start**. The defaults are seed 42 and 200 ticks, the same command as `make demo` (`bin/diary_sim --preview --ticks 200`, seed 42). Seed and ticks can be changed before another Start. Reset reloads the page.
-
-The browser build is the in-memory preview only. It does not save diaries, open the terminal menu, spawn a shell, or run an Albanian session. The light WebAssembly runtime does not propagate exceptions, task, or delay; those paths are outside the preview. The native CLI and `make test` are unchanged.
+`.github/workflows/pages.yml` only uploads the `docs/` directory. It does not change repository settings. The default token cannot turn GitHub Pages on. After an owner sets Pages to **Source: GitHub Actions**, the site would be https://robertboettchersf.github.io/Diary-Sim/ . Until that setting exists, the workflow cannot publish.
 
 ## Layout
 
@@ -46,7 +44,7 @@ The browser build is the in-memory preview only. It does not save diaries, open 
 |---|---|
 | `diary_sim.adb`, `sim_*.ad[sb]` | the program (main procedure and its packages; kept at the root so existing zips and scripts work unchanged) |
 | `data/` | every number (`limits.txt`) and every piece of wording the program uses; third-party data credited in `data/CREDITS-albanian.txt` |
-| `docs/` | design notes: world, learning, life, myth, portals, evolution, checkpoint format |
+| `docs/` | design notes (world, learning, life, myth, portals, evolution, checkpoint format) and `docs/index.html`, the in-memory browser preview |
 | `scripts/` | the check suites, ship/report helpers, benchmarks |
 | `tests/` | unit tests (`tests/unit`) and checkpoint fixtures of older builds |
 | `Makefile` | the front end (gnatmake); `diary_sim.gpr` + `alire.toml` for gprbuild / Alire |
