@@ -228,6 +228,14 @@ menu: all
 demo: all
 	$(TIMED) bin/diary_sim --preview --ticks 200 $(if $(SECTION),--debug-section $(SECTION),$(if $(DEBUG),--debug,))
 
+# Browser preview. tools/get-toolchain.sh once (AdaWebPack 24), then this.
+# Writes wasm/obj/diary_sim.wasm and docs/index.html (wasm embedded).
+wasm:
+	python3 tools/build_wasm.py
+
+wasm-check:
+	node tools/check_wasm.mjs
+
 say: all
 	$(TIMED) bin/diary_sim --say "$${PLAYER:-$${WESEN:-all}}" --text "$$TEXT" $(if $(AS),--as "$$AS",)
 

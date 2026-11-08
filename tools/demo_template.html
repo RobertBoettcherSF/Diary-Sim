@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diary Sim</title>
+<meta name="description" content="Diary Sim in the browser. Ada runs the simulation. This page only draws the result.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230e6b52'/%3E%3C/svg%3E">
+<style>
+  :root {
+    color-scheme: light;
+    --paper: #f3efe6;
+    --ink: #1c1915;
+    --muted: #5c564c;
+    --line: #e3d9c8;
+    --card: #fffdf8;
+    --start: #0e6b52;
+    --start-ink: #f7fffb;
+    --adam: #8a4b08;
+    --eve: #1d6a4f;
+    --abel: #1e4d8c;
+    --ruth: #8a2f5a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 17px/1.45 "Iowan Old Style", Palatino, Georgia, serif;
+  }
+  header, main { width: min(1080px, calc(100% - 2rem)); margin: 0 auto; }
+  header { padding: 2.2rem 0 0.4rem; }
+  h1 { font-size: 2.4rem; font-weight: 600; letter-spacing: -0.03em; margin: 0 0 0.35rem; }
+  .lede { margin: 0; max-width: 42rem; color: var(--muted); }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 0.75rem 1rem; align-items: end;
+    margin: 1.4rem 0 1rem; padding: 1rem; background: var(--card);
+    border: 1px solid var(--line); border-radius: 14px;
+  }
+  label { display: flex; flex-direction: column; gap: 0.25rem; font: 600 0.78rem/1.2 system-ui, sans-serif; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+  input {
+    font: 1rem/1.2 ui-monospace, monospace; color: var(--ink);
+    width: 7rem; padding: 0.55rem 0.6rem; border: 1px solid var(--line); border-radius: 8px; background: #fff;
+  }
+  button {
+    font: 600 1rem/1 system-ui, sans-serif; border-radius: 10px; border: 1px solid transparent;
+    padding: 0.75rem 1.15rem; cursor: pointer;
+  }
+  button:disabled { opacity: 0.55; cursor: wait; }
+  #start { background: var(--start); color: var(--start-ink); font-size: 1.15rem; padding: 0.85rem 1.7rem; }
+  #start:hover:not(:disabled) { background: #0b5743; }
+  #reset { background: transparent; color: var(--ink); border-color: var(--line); }
+  #status { min-height: 1.4rem; margin: 0 0 1rem; color: var(--muted); font: 0.95rem/1.4 system-ui, sans-serif; }
+  #status.error { color: #8d1d1d; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; }
+  article, .block {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 0.85rem 1rem;
+  }
+  article h2, .block h2 { margin: 0 0 0.45rem; font-size: 1.05rem; }
+  .who { font: 700 0.78rem/1 system-ui, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; }
+  .who[data-who="Adam"] { color: var(--adam); }
+  .who[data-who="Eve"] { color: var(--eve); }
+  .who[data-who="Abel"] { color: var(--abel); }
+  .who[data-who="Ruth"] { color: var(--ruth); }
+  .tick { color: var(--muted); font: 0.85rem/1.3 system-ui, sans-serif; }
+  .act { font-weight: 600; }
+  article p { margin: 0.35rem 0 0.7rem; }
+  article p:last-child { margin-bottom: 0; }
+  .stack { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.75rem; }
+  pre {
+    margin: 0; white-space: pre-wrap; font: 0.86rem/1.35 ui-monospace, monospace;
+  }
+  .maps { white-space: pre; overflow-x: auto; }
+  details { margin: 1rem 0 2.5rem; }
+  summary { cursor: pointer; font: 600 0.95rem/1.4 system-ui, sans-serif; }
+  .footnote { color: var(--muted); font: 0.9rem/1.4 system-ui, sans-serif; margin: 0.6rem 0 0; }
+  #empty { color: var(--muted); margin: 0.2rem 0 2rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Diary Sim</h1>
+  <p class="lede">This page runs the in-memory preview, the same one as <code>make demo</code>. Ada does that preview. It is not the terminal program: nothing is saved, and there is no menu. Press Start.</p>
+</header>
+<main>
+  <div class="controls">
+    <button id="start" type="button">Start</button>
+    <label>Seed <input id="seed" type="text" inputmode="numeric" value="42" maxlength="15" autocomplete="off" spellcheck="false"></label>
+    <label>Ticks <input id="ticks" type="number" value="200" min="1" max="2000" step="1"></label>
+    <button id="reset" type="button">Reset</button>
+  </div>
+  <p id="status" role="status"></p>
+  <p id="empty">Nothing has run yet. Start uses seed 42 and 200 ticks, the same preview as <code>make demo</code>. Ticks run from 1 to 2000. A seed is a whole number from 0 up to 15 digits.</p>
+  <div id="result" hidden></div>
+  <details id="raw-wrap" hidden>
+    <summary>Full transcript from the simulation</summary>
+    <pre id="raw"></pre>
+  </details>
+</main>
+<script>
+"use strict";
+const WASM_BASE64 = "@@WASM_BASE64@@";
+
+const startBtn = document.getElementById("start");
+const resetBtn = document.getElementById("reset");
+const seedInput = document.getElementById("seed");
+const ticksInput = document.getElementById("ticks");
+const statusEl = document.getElementById("status");
+const emptyEl = document.getElementById("empty");
+const resultEl = document.getElementById("result");
+const rawWrap = document.getElementById("raw-wrap");
+const rawEl = document.getElementById("raw");
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+function setStatus(text, isError) {
+  statusEl.textContent = text;
+  statusEl.classList.toggle("error", !!isError);
+}
+
+function readExc(ex) {
+  try {
+    const view = new DataView(ex.memory.buffer);
+    const n = view.getUint32(ex.ds_exc_len.value, true);
+    const line = view.getUint32(ex.ds_exc_line.value, true);
+    const file = new TextDecoder().decode(new Uint8Array(ex.memory.buffer, ex.ds_exc.value, n));
+    return file ? (file + ":" + line) : "";
+  } catch (e) {
+    return "";
+  }
+}
+
+function present(text) {
+  const lines = text.replace(/\n$/, "").split("\n");
+  const diary = [];
+  const petitions = [];
+  let banner = "";
+  let kalpa = "";
+  let words = "";
+  let coined = "";
+  let taught = "";
+  let fav = "";
+  let disagree = "";
+  let closing = "";
+  let mode = "";
+  const mill = [];
+  const votes = [];
+  for (const line of lines) {
+    if (!banner && line.startsWith("demo preview:")) { banner = line; continue; }
+    if (line.startsWith("a first bare")) { kalpa = line; continue; }
+    const petition = line.match(/^P(\d+)\s+tick=(\d+)\s+from=(\S+)\s+topic=(\S+)\s+wish=(.*)$/);
+    if (petition) {
+      petitions.push({ n: petition[1], tick: petition[2], who: petition[3], topic: petition[4], wish: petition[5] });
+      continue;
+    }
+    const entry = line.match(/^(\S+)\s+(\d+)\s+([^:]+):\s*(.*)$/);
+    if (entry) {
+      diary.push({ who: entry[1], tick: entry[2], act: entry[3], text: entry[4] });
+      continue;
+    }
+    if (line.startsWith("words known:")) { words = line.slice("words known:".length).trim(); continue; }
+    if (line.startsWith("coined:")) { coined = line.slice("coined:".length).trim(); continue; }
+    if (line.startsWith("taught:")) { taught = line.slice("taught:".length).trim(); continue; }
+    if (line.startsWith("treadmill")) { mode = "mill"; mill.push(line); continue; }
+    if (line.startsWith("votes ")) { mode = "votes"; votes.push(line); continue; }
+    if (line.startsWith("favourite location:")) { mode = ""; fav = line; continue; }
+    if (line.startsWith("biggest disagreement:")) { disagree = line; continue; }
+    if (line.startsWith("nothing was written")) { closing = line; continue; }
+    if (mode === "mill") mill.push(line);
+    else if (mode === "votes") votes.push(line);
+  }
+
+  const byWho = new Map();
+  for (const item of diary) {
+    if (!byWho.has(item.who)) byWho.set(item.who, []);
+    byWho.get(item.who).push(item);
+  }
+  const cards = [...byWho.entries()].map(([who, items]) => {
+    const body = items.map((item) =>
+      `<p><span class="tick">tick ${esc(item.tick)}</span> <span class="act">${esc(item.act)}</span><br>${esc(item.text)}</p>`
+    ).join("");
+    return `<article><h2 class="who" data-who="${esc(who)}">${esc(who)}</h2>${body}</article>`;
+  }).join("");
+
+  const petitionHtml = petitions.map((item) =>
+    `<p><span class="tick">P${esc(item.n)} · tick ${esc(item.tick)} · ${esc(item.who)} · ${esc(item.topic)}</span><br>${esc(item.wish)}</p>`
+  ).join("");
+
+  const parts = [];
+  if (banner) parts.push(`<p class="footnote">${esc(banner)}</p>`);
+  if (kalpa) parts.push(`<div class="block"><h2>Opening vote</h2><p>${esc(kalpa)}</p></div>`);
+  if (cards) parts.push(`<div class="grid">${cards}</div>`);
+  if (petitionHtml) parts.push(`<div class="block"><h2>Petitions</h2>${petitionHtml}</div>`);
+  if (words || coined || taught) {
+    parts.push(`<div class="block"><h2>Language</h2>`
+      + (words ? `<p><span class="tick">Known</span><br>${esc(words)}</p>` : "")
+      + (coined ? `<p><span class="tick">Coined</span><br>${esc(coined)}</p>` : "")
+      + (taught ? `<p><span class="tick">Taught</span><br>${esc(taught)}</p>` : "")
+      + `</div>`);
+  }
+  if (mill.length) parts.push(`<div class="block"><h2>Where they are</h2><pre class="maps">${esc(mill.join("\n"))}</pre></div>`);
+  if (votes.length) parts.push(`<div class="block"><h2>Location votes</h2><pre class="maps">${esc(votes.join("\n"))}</pre></div>`);
+  if (fav || disagree) {
+    parts.push(`<div class="block"><h2>What the votes add up to</h2>`
+      + (fav ? `<p>${esc(fav)}</p>` : "")
+      + (disagree ? `<p>${esc(disagree)}</p>` : "")
+      + `</div>`);
+  }
+  if (closing) parts.push(`<p class="footnote">${esc(closing)}</p>`);
+  parts.push(`<p class="footnote">Browser preview only: no diary is saved, and the terminal menu is not part of this page. Reset loads the page again.</p>`);
+  resultEl.innerHTML = `<div class="stack">${parts.join("")}</div>`;
+  resultEl.hidden = false;
+  rawEl.textContent = text;
+  rawWrap.hidden = false;
+  emptyEl.hidden = true;
+}
+
+function parseSeed(raw) {
+  const text = String(raw).trim();
+  if (!/^[0-9]{1,15}$/.test(text)) return null;
+  return BigInt(text);
+}
+
+function parseTicks(raw) {
+  const text = String(raw).trim();
+  if (!/^[0-9]+$/.test(text)) return null;
+  const n = Number(text);
+  if (!Number.isInteger(n) || n < 1 || n > 2000) return null;
+  return n;
+}
+
+async function run() {
+  const seed = parseSeed(seedInput.value);
+  const ticks = parseTicks(ticksInput.value);
+  if (seed === null) {
+    setStatus("Seed needs to be a whole number from 0 up to 15 digits, with no sign.", true);
+    return;
+  }
+  if (ticks === null) {
+    setStatus("Ticks needs to be a whole number from 1 to 2000.", true);
+    return;
+  }
+  startBtn.disabled = true;
+  setStatus("Running the Ada simulation…");
+  let live = null;
+  try {
+    const bytes = Uint8Array.from(atob(WASM_BASE64), (c) => c.charCodeAt(0));
+    const { instance } = await WebAssembly.instantiate(bytes, {});
+    live = instance;
+    const ex = instance.exports;
+    ex.adainit();
+    ex.ds_set_seed(seed);
+    ex.ds_set_ticks(ticks);
+    ex._ada_diary_sim();
+    const ptr = ex.ds_out_ptr();
+    const len = ex.ds_out_len();
+    const text = new TextDecoder().decode(new Uint8Array(ex.memory.buffer, ptr, len));
+    if (!text) {
+      setStatus("The simulation returned no text.", true);
+      return;
+    }
+    present(text);
+    setStatus("Done. Seed " + seed + ", " + ticks + " ticks.");
+  } catch (err) {
+    const where = live ? readExc(live.exports) : "";
+    setStatus("The simulation stopped" + (where ? " (" + where + ")" : "") + ". " + (err && err.message ? err.message : ""), true);
+    console.error(err);
+  } finally {
+    startBtn.disabled = false;
+  }
+}
+
+startBtn.addEventListener("click", () => { run(); });
+resetBtn.addEventListener("click", () => { location.reload(); });
+for (const input of [seedInput, ticksInput]) {
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") run();
+  });
+}
+</script>
+</body>
+</html>
